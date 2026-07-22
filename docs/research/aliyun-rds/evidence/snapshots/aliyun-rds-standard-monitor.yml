@@ -1,0 +1,360 @@
+- generic [ref=f6e1]:
+  - link "跳转至主内容" [ref=f6e2] [cursor=pointer]:
+    - /url: "#app"
+  - generic:
+    - generic:
+      - dialog "展开产品面板":
+        - navigation "产品与服务" [ref=f6e3]:
+          - generic [ref=f6e4]:
+            - generic "我的资源" [ref=f6e5] [cursor=pointer]:
+              - generic [ref=f6e6]:
+                - generic [ref=f6e7]: 
+                - generic [ref=f6e9]: 我的资源
+            - generic "我的收藏" [ref=f6e10] [cursor=pointer]:
+              - generic [ref=f6e11]:
+                - generic [ref=f6e12]: 
+                - generic [ref=f6e14]: 我的收藏
+            - generic "产品与服务" [ref=f6e15] [cursor=pointer]:
+              - generic [ref=f6e16]:
+                - generic [ref=f6e17]: 
+                - generic [ref=f6e19]: 产品与服务
+            - generic [ref=f6e21]:
+              - button "全部" [ref=f6e22] [cursor=pointer]
+              - button "人工智能与机器学习" [ref=f6e23] [cursor=pointer]
+              - button "计算" [ref=f6e24] [cursor=pointer]
+              - button "容器" [ref=f6e25] [cursor=pointer]
+              - button "存储" [ref=f6e26] [cursor=pointer]
+              - button "网络与CDN" [ref=f6e27] [cursor=pointer]
+              - button "安全" [ref=f6e28] [cursor=pointer]
+              - button "中间件" [ref=f6e29] [cursor=pointer]
+              - button "数据库" [ref=f6e30] [cursor=pointer]
+              - button "大数据计算" [ref=f6e31] [cursor=pointer]
+              - button "媒体服务" [ref=f6e32] [cursor=pointer]
+              - button "企业服务与云通信" [ref=f6e33] [cursor=pointer]
+              - button "域名与网站" [ref=f6e34] [cursor=pointer]
+              - button "终端用户计算" [ref=f6e35] [cursor=pointer]
+              - button "物联网" [ref=f6e36] [cursor=pointer]
+              - button "开发工具" [ref=f6e37] [cursor=pointer]
+              - button "迁移与运维管理" [ref=f6e38] [cursor=pointer]
+              - button "云市场" [ref=f6e39] [cursor=pointer]
+              - button "支持与服务" [ref=f6e40] [cursor=pointer]
+        - main "我的资源" [ref=f6e41]:
+          - generic [ref=f6e42]:
+            - generic [ref=f6e43]: 我的资源
+            - generic [ref=f6e45]:
+              - generic [ref=f6e47]:
+                - generic [ref=f6e48]: 最近访问
+                - generic [ref=f6e50]
+              - generic [ref=f6e65]:
+                - generic [ref=f6e66]
+                - generic [ref=f6e87]
+                - generic [ref=f6e124]
+                - generic [ref=f6e148]
+                - generic [ref=f6e171]
+                - generic [ref=f6e189]
+                - generic [ref=f6e207]
+          - text:                                                                                                                                                                                                                                                       
+          - button "收起产品面板" [ref=f6e229] [cursor=pointer]:
+            - generic [ref=f6e230]: 
+        - button "收起产品面板" [ref=f6e231] [cursor=pointer]
+      - text:        
+      - generic [ref=f6e232]:
+        - button "展开产品面板" [ref=f6e234] [cursor=pointer]:
+          - button [ref=f6e235]
+        - link "前往官网" [ref=f6e239] [cursor=pointer]:
+          - /url: //www.aliyun.com
+        - link "前往控制台首页" [ref=f6e250] [cursor=pointer]:
+          - /url: //home.console.aliyun.com
+          - generic [ref=f6e251]:
+            - generic [ref=f6e252]: 
+            - generic [ref=f6e254]: 工作台
+        - generic [ref=f6e255]:
+          - button [ref=f6e258] [cursor=pointer]:
+            - textbox "搜索..." [ref=f6e269]
+          - navigation [ref=f6e270]:
+            - link "文档" [ref=f6e272] [cursor=pointer]:
+              - /url: //help.aliyun.com/product/26090.html
+            - link [ref=f6e276] [cursor=pointer]:
+              - /url: //www.aliyun.com/ai-assistant/?options=%7B%22displayMode%22%3A%22side%22%7D
+            - button "费用" [ref=f6e285] [cursor=pointer]:
+              - link "费用" [ref=f6e286]:
+                - /url: //usercenter2.aliyun.com
+            - button "备案" [ref=f6e289] [cursor=pointer]:
+              - link "备案" [ref=f6e290]:
+                - /url: //beian.aliyun.com
+            - button "工单" [ref=f6e293] [cursor=pointer]:
+              - link "工单" [ref=f6e294]:
+                - /url: //smartservice.console.aliyun.com/service/list?entrance=100&product=rds
+            - button "" [ref=f6e297] [cursor=pointer]:
+              - button "" [ref=f6e298]
+            - button " 42" [ref=f6e303] [cursor=pointer]:
+              - link " 42" [ref=f6e304]:
+                - /url: //notifications.console.aliyun.com/#/innerMsg/unread/0
+                - generic [ref=f6e305]
+            - text:       
+            - generic [ref=f6e313] [cursor=pointer]:
+              - generic [ref=f6e314]:
+                - generic "14142*****@qq.com" [ref=f6e315]
+                - generic [ref=f6e316]: 主账号
+              - img "avatar" [ref=f6e317]
+      - complementary [ref=f6e318]:
+        - button "RDS AI助手" [ref=f6e321] [cursor=pointer]
+        - generic [ref=f6e324]:
+          - separator [ref=f6e325]
+          - generic [ref=f6e326]:
+            - link "配置清单" [ref=f6e327] [cursor=pointer]:
+              - /url: //www.aliyun.com/price/cpq/detail?isDefault=true
+              - generic [ref=f6e328]: 
+            - superscript: "1"
+          - button "" [ref=f6e330] [cursor=pointer]
+          - button "云命令行（Cloud Shell）" [ref=f6e333] [cursor=pointer]:
+            - generic [ref=f6e334]: 
+          - button "偏好设置" [ref=f6e336] [cursor=pointer]:
+            - generic [ref=f6e337]: 
+          - button "提交您的宝贵建议" [ref=f6e339] [cursor=pointer]:
+            - generic [ref=f6e340]: 
+          - button "联系我们" [ref=f6e344] [cursor=pointer]:
+            - generic [ref=f6e345]: 
+        - button "隐藏侧边栏" [ref=f6e347] [cursor=pointer]:
+          - generic [ref=f6e348]: 
+  - generic [ref=f6e350]:
+    - generic:
+      - listbox [ref=f6e352]:
+        - listitem [ref=f6e353]:
+          - heading "Breadcrumb" [level=2] [ref=f6e354]:
+            - navigation "Breadcrumb" [ref=f6e356]:
+              - list [ref=f6e357]:
+                - listitem [ref=f6e358]
+                - listitem [ref=f6e361]
+        - list [ref=f6e363]:
+          - option "概览" [ref=f6e364] [cursor=pointer]:
+            - link "概览" [ref=f6e367]:
+              - /url: /dashboard/cn-shenzhen
+          - option "实例列表" [ref=f6e371] [cursor=pointer]:
+            - link "实例列表" [ref=f6e374]:
+              - /url: /rdsList/cn-shenzhen
+          - option "RDS AI助手" [ref=f6e378] [cursor=pointer]:
+            - link "RDS AI助手" [ref=f6e381]:
+              - /url: /rdsCopilotFree/cn-shenzhen
+          - option "AI能力中心 " [ref=f6e385]:
+            - listitem [ref=f6e386] [cursor=pointer]:
+              - generic [ref=f6e387]:
+                - generic [ref=f6e388]: AI能力中心
+                - generic [ref=f6e392]: 
+            - listbox [ref=f6e393]:
+              - option "总览" [ref=f6e394] [cursor=pointer]:
+                - link "总览" [ref=f6e397]:
+                  - /url: /rdsAiCenter/cn-shenzhen
+              - option "Agent 开发 Supabase" [ref=f6e401] [cursor=pointer]:
+                - link "Agent 开发 Supabase" [ref=f6e404]:
+                  - /url: /rdsSupabase/cn-shenzhen
+              - option [disabled] [ref=f6e411]:
+                - generic [ref=f6e412]: AI Agent
+              - option "RDS Agent Hermes" [ref=f6e1212] [cursor=pointer]:
+                - link "RDS Agent Hermes" [ref=f6e1213]:
+                  - /url: /aiAppMarketList/cn-shenzhen
+              - option [disabled] [ref=f6e424]:
+                - generic [ref=f6e425]: Agent 数据服务
+              - option "ContextDB 上下文服务" [ref=f6e430] [cursor=pointer]:
+                - link "ContextDB 上下文服务" [ref=f6e433]:
+                  - /url: /contextDb/cn-shenzhen
+              - option "Agent 可观测服务" [ref=f6e440] [cursor=pointer]:
+                - link "Agent 可观测服务" [ref=f6e443]:
+                  - /url: /rdsObservability/cn-shenzhen
+          - option "备份管理" [ref=f6e447] [cursor=pointer]:
+            - link "备份管理" [ref=f6e450]:
+              - /url: /backupManage/cn-shenzhen
+          - option "参数模板" [ref=f6e454] [cursor=pointer]:
+            - link "参数模板" [ref=f6e457]:
+              - /url: /paramGroup/cn-shenzhen/paramGroups/custom
+          - option "白名单模板" [ref=f6e461] [cursor=pointer]:
+            - link "白名单模板" [ref=f6e464]:
+              - /url: /whitelistGroups/cn-shenzhen
+          - option "回收站（0）" [ref=f6e468] [cursor=pointer]:
+            - link "回收站（0）" [ref=f6e471]:
+              - /url: /recyclelist/cn-shenzhen/lock
+          - separator [ref=f6e475]
+          - option "最近访问实例 " [ref=f6e476]:
+            - listitem [ref=f6e477] [cursor=pointer]:
+              - generic [ref=f6e478]:
+                - generic [ref=f6e479]: 最近访问实例
+                - generic [ref=f6e484]: 
+            - listbox
+          - separator [ref=f6e485]
+          - option "运维与监控 " [ref=f6e486]:
+            - listitem [ref=f6e487] [cursor=pointer]:
+              - generic [ref=f6e488]:
+                - generic [ref=f6e489]: 运维与监控
+                - generic [ref=f6e493]: 
+            - listbox [ref=f6e494]:
+              - option "安全检测" [ref=f6e495] [cursor=pointer]:
+                - link "安全检测" [ref=f6e498]:
+                  - /url: /securityCenter/cn-shenzhen
+              - option "性能监测" [ref=f6e502] [cursor=pointer]:
+                - link "性能监测" [ref=f6e505]:
+                  - /url: /performanceCenter/cn-shenzhen
+          - separator [ref=f6e509]
+          - option "事件中心" [ref=f6e510] [cursor=pointer]:
+            - link "事件中心" [ref=f6e513]:
+              - /url: /eventManage/cn-shenzhen
+          - option "任务中心" [ref=f6e517] [cursor=pointer]:
+            - link "任务中心" [ref=f6e520]:
+              - /url: /jobCenter/cn-shenzhen
+          - separator [ref=f6e524]
+          - option "自助服务" [ref=f6e525] [cursor=pointer]:
+            - link "自助服务" [ref=f6e528]:
+              - /url: /selfServiceCenter/cn-shenzhen
+          - option "数据集成" [ref=f6e532] [cursor=pointer]:
+            - link "数据集成" [ref=f6e535]:
+              - /url: /dataIntegrate/cn-shenzhen/portals
+          - option "全球多活数据库集群" [ref=f6e539] [cursor=pointer]:
+            - link "全球多活数据库集群" [ref=f6e542]:
+              - /url: /globalDataBase/pgm-wz9t7bv5jsk55jh1
+          - option "应用解决方案" [ref=f6e549] [cursor=pointer]:
+            - link "应用解决方案" [ref=f6e552]:
+              - /url: /yunMarket
+          - option "帮助文档 " [ref=f6e556] [cursor=pointer]:
+            - link "帮助文档 " [ref=f6e559]:
+              - /url: https://help.aliyun.com/product/26090.html
+              - generic [ref=f6e560]:
+                - generic [ref=f6e561]: 帮助文档
+                - generic [ref=f6e563]: 
+      - generic: 
+    - generic [ref=f6e568]:
+      - row [ref=f6e570]:
+        - gridcell [ref=f6e571]:
+          - navigation "Breadcrumb" [ref=f6e572]:
+            - list [ref=f6e573]:
+              - listitem [ref=f6e574]:
+                - generic [ref=f6e575]: 云数据库RDS
+                - generic [ref=f6e577]: /
+              - listitem [ref=f6e578]:
+                - generic [ref=f6e579]: 实例列表
+                - generic [ref=f6e581]: /
+              - listitem [ref=f6e582]:
+                - generic [ref=f6e583]: 监控与报警
+        - gridcell " RDS PostgreSQL开发运维建议" [ref=f6e584]:
+          - list [ref=f6e586]:
+            - listitem [ref=f6e587]:
+              - heading " RDS PostgreSQL开发运维建议" [level=3] [ref=f6e591]:
+                - link " RDS PostgreSQL开发运维建议" [ref=f6e592] [cursor=pointer]:
+                  - /url: https://help.aliyun.com/document_detail/281785.html
+      - generic [ref=f6e596]:
+        - heading " test  运行中" [level=3] [ref=f6e597]:
+          - generic [ref=f6e598]:
+            - generic [ref=f6e599] [cursor=pointer]: 
+            - generic [ref=f6e603]:
+              - heading "test" [level=3] [ref=f6e604]
+              - generic [ref=f6e606]:
+                - generic [ref=f6e607]: 
+                - generic [ref=f6e608]: 运行中
+        - generic [ref=f6e610]:
+          - generic:
+            - generic:
+              - generic:
+                - generic
+          - generic [ref=f6e611]:
+            - link "登录数据库" [ref=f6e614] [cursor=pointer]:
+              - /url: https://dms.aliyun.com/?regionId=cn-shenzhen&dbType=postgresql&instanceId=pgm-wz9t7bv5jsk55jh1&instanceSource=RDS
+            - link "操作指引" [ref=f6e618] [cursor=pointer]:
+              - /url: https://help.aliyun.com/document_detail/26151.html
+            - button "HTAP加速" [ref=f6e622] [cursor=pointer]
+            - link "迁移数据库" [ref=f6e626] [cursor=pointer]:
+              - /url: https://rdsnext.console.aliyun.com/detail/pgm-wz9t7bv5jsk55jh1/dataTransmission?region=cn-shenzhen&modName=migrate
+            - button "重启实例" [ref=f6e630] [cursor=pointer]
+            - button "备份实例" [ref=f6e634] [cursor=pointer]
+            - button "加入全球多活数据库" [ref=f6e640] [cursor=pointer]
+            - button "任务中心" [ref=f6e644] [cursor=pointer]
+            - button "修改实例" [ref=f6e648] [cursor=pointer]
+            - button "" [ref=f6e652] [cursor=pointer]
+      - row "视角： DAS标准视角 - PostgreSQL指标大盘  数据粒度 列数： 2列 动态排序 光标联动  cpu_usage cpu_user_usage cpu_sys_usage mem_usage available_mem_usage available_mem  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading" [ref=f6e890]:
+        - gridcell [ref=f6e656]:
+          - listbox [ref=f6e660]:
+            - option "基本信息" [ref=f6e661] [cursor=pointer]:
+              - link "基本信息" [ref=f6e664]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/basicInfo?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "账号管理" [ref=f6e669] [cursor=pointer]:
+              - link "账号管理" [ref=f6e672]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/account/list?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "数据库管理" [ref=f6e677] [cursor=pointer]:
+              - link "数据库管理" [ref=f6e680]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/dataManage/databaseList?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "白名单与安全组" [ref=f6e685] [cursor=pointer]:
+              - link "白名单与安全组" [ref=f6e688]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/whiteListAndSecurityGroup?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "数据库连接" [ref=f6e693] [cursor=pointer]:
+              - link "数据库连接" [ref=f6e696]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/link/instanceLink?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "数据库代理" [ref=f6e701] [cursor=pointer]:
+              - link "数据库代理" [ref=f6e704]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/dataProxy?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "RDS Agent OpenClaw Hermes" [ref=f6e709] [cursor=pointer]:
+              - link "RDS Agent OpenClaw Hermes" [ref=f6e712]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/rdsAgent?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+                - generic [ref=f6e717]
+            - option "监控与报警" [ref=f6e721] [cursor=pointer]:
+              - link "监控与报警" [ref=f6e724]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/monitorAlarm?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "备份恢复" [ref=f6e729] [cursor=pointer]:
+              - link "备份恢复" [ref=f6e732]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/backupRestore/list?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "数据安全性" [ref=f6e737] [cursor=pointer]:
+              - link "数据安全性" [ref=f6e740]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/security?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "服务可用性" [ref=f6e745] [cursor=pointer]:
+              - link "服务可用性" [ref=f6e748]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/availability?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "日志管理" [ref=f6e753] [cursor=pointer]:
+              - link "日志管理" [ref=f6e756]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/log?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "参数设置" [ref=f6e762] [cursor=pointer]:
+              - link "参数设置" [ref=f6e765]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/paramSetting?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "数据迁移及同步" [ref=f6e770] [cursor=pointer]:
+              - link "数据迁移及同步" [ref=f6e773]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/dataTransmission?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "一键上云/容灾搭建 NEW" [ref=f6e778] [cursor=pointer]:
+              - link "一键上云/容灾搭建 NEW" [ref=f6e781]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/upperCloud?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+                - generic [ref=f6e782]
+            - option "插件管理" [ref=f6e787] [cursor=pointer]:
+              - link "插件管理" [ref=f6e790]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/pluginManage?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "大版本升级" [ref=f6e795] [cursor=pointer]:
+              - link "大版本升级" [ref=f6e798]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/versionUpgrade?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "SQL翻译" [ref=f6e803] [cursor=pointer]:
+              - link "SQL翻译" [ref=f6e806]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/sqlTranslate?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+            - option "自治服务 " [ref=f6e811]:
+              - listitem [ref=f6e812] [cursor=pointer]:
+                - generic [ref=f6e813]
+              - listbox [ref=f6e821]:
+                - option "一键诊断" [ref=f6e822] [cursor=pointer]
+                - option "性能趋势" [ref=f6e826] [cursor=pointer]
+                - option "慢SQL" [ref=f6e830] [cursor=pointer]
+                - option "SQL洞察和审计" [ref=f6e834] [cursor=pointer]
+                - option "安全审计" [ref=f6e838] [cursor=pointer]
+            - option "操作审计" [ref=f6e842] [cursor=pointer]:
+              - link "操作审计" [ref=f6e845]:
+                - /url: /detail/pgm-wz9t7bv5jsk55jh1/operationEvent?spm=5176.28369458.0.0.36961450Jepyio&region=cn-shenzhen&DedicatedHostGroupId=
+        - gridcell "视角： DAS标准视角 - PostgreSQL指标大盘  数据粒度 列数： 2列 动态排序 光标联动  cpu_usage cpu_user_usage cpu_sys_usage mem_usage available_mem_usage available_mem  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading  Loading" [ref=f6e891]:
+          - generic [ref=f6e852]:
+            - row [ref=f6e858]:
+              - gridcell [ref=f6e859]:
+                - generic [ref=f6e861]
+            - generic [ref=f6e895]:
+              - banner [ref=f6e896]:
+                - alert [ref=f6e897]
+                - generic [ref=f6e903]
+              - generic [ref=f6e939]:
+                - banner [ref=f6e940]
+                - generic [ref=f6e942]
+  - iframe [ref=f6e884]:
+    - generic: "{\"successResponse\":false,\"code\":\"ServiceNotSupported\",\"message\":\"Could not find target Api\",\"requestId\":\"0a06dff517840098886835315e59a0\"}"
+  - iframe [ref=f6e885]:
+    
+  - iframe [ref=f6e886]:
+    - generic: "{\"successResponse\":false,\"code\":\"ServiceNotSupported\",\"message\":\"Could not find target Api\",\"requestId\":\"0a06dff517840098901815389e59a0\"}"
+  - iframe [ref=f6e887]:
+    
