@@ -31,6 +31,7 @@
 | [`docs/design/02-alert-rule-model-draft.md`](design/02-alert-rule-model-draft.md) | 告警规则配置模型，定义规则、告警实例、状态、No Data、通知等 | **v1.0** |
 | [`docs/design/03-monitor-platform-ia-draft.md`](design/03-monitor-platform-ia-draft.md) | 监控平台信息架构，定义页面树、页面职责和排障路径 | **v1.0** |
 | [`docs/design/04-metric-storage-model.md`](design/04-metric-storage-model.md) | R2 · 指标存储选型与数据模型：选型结论、schema、分区与保留、查询纪律、事务边界 | **v1.0** |
+| [`docs/design/05-backend-code-structure.md`](design/05-backend-code-structure.md) | R2 · 后端代码结构与模块边界：目录树、依赖方向、接缝白名单、错误模型、启动形态 | **v1.0** |
 
 ### 2.1 四条跨文档不变式
 
