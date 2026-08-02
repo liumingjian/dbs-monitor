@@ -30,6 +30,7 @@
 | [`docs/design/01-pg-mvp-metric-dictionary.md`](design/01-pg-mvp-metric-dictionary.md) | PG MVP 指标字典，定义指标口径、来源、采样、告警适用性 | **v1.0** |
 | [`docs/design/02-alert-rule-model-draft.md`](design/02-alert-rule-model-draft.md) | 告警规则配置模型，定义规则、告警实例、状态、No Data、通知等 | **v1.0** |
 | [`docs/design/03-monitor-platform-ia-draft.md`](design/03-monitor-platform-ia-draft.md) | 监控平台信息架构，定义页面树、页面职责和排障路径 | **v1.0** |
+| [`docs/design/04-metric-storage-model.md`](design/04-metric-storage-model.md) | R2 · 指标存储选型与数据模型：选型结论、schema、分区与保留、查询纪律、事务边界 | **v1.0** |
 
 ### 2.1 四条跨文档不变式
 
