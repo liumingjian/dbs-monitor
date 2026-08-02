@@ -36,6 +36,7 @@
 | [`docs/design/07-api-contract-and-codegen.md`](design/07-api-contract-and-codegen.md) | R2 · API 契约组织与代码生成流水线：spec 拆分与生成流水线、资源与 URL 模型、空状态码表、枚举穷尽性、认证授权、实时性 | **v1.0** |
 | [`docs/design/08-frontend-stack-and-ui.md`](design/08-frontend-stack-and-ui.md) | R2 · 前端技术栈与 UI 体系：UI 组件体系、图表库与领域组件、数据获取层、路由、状态归属三桶、目录结构、状态视觉词汇、测试策略 | **v1.0** |
 | [`docs/design/09-packaging-and-deployment.md`](design/09-packaging-and-deployment.md) | R2 · 打包、部署与运行形态：交付物形态、自建 PG 与双架构、运行形态与自举、Agent 分发、首次启动、升级与回滚、资源基线与前置检查 | **v1.0** |
+| [`docs/design/10-ai-guardrails-and-verification.md`](design/10-ai-guardrails-and-verification.md) | R2 · AI 开发护栏与验证闭环：两层验证闭环、本地开发环境、强制测试清单与准入判据、`CLAUDE.md` 边界与两份草案、不变式的可执行化、强制点与工作方式 | **v1.0** |
 
 ### 2.1 四条跨文档不变式
 
