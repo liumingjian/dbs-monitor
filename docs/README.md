@@ -33,6 +33,7 @@
 | [`docs/design/04-metric-storage-model.md`](design/04-metric-storage-model.md) | R2 · 指标存储选型与数据模型：选型结论、schema、分区与保留、查询纪律、事务边界 | **v1.0** |
 | [`docs/design/05-backend-code-structure.md`](design/05-backend-code-structure.md) | R2 · 后端代码结构与模块边界：目录树、依赖方向、接缝白名单、错误模型、启动形态 | **v1.0** |
 | [`docs/design/06-metric-dictionary-and-collection-plan.md`](design/06-metric-dictionary-and-collection-plan.md) | R2 · 指标字典载体与采集计划：载体形态、采集任务模型、能力枚举与三态、PG13–17 矩阵、采集管线分层、可扩展性边界 | **v1.0** |
+| [`docs/design/07-api-contract-and-codegen.md`](design/07-api-contract-and-codegen.md) | R2 · API 契约组织与代码生成流水线：spec 拆分与生成流水线、资源与 URL 模型、空状态码表、枚举穷尽性、认证授权、实时性 | **v1.0** |
 
 ### 2.1 四条跨文档不变式
 
