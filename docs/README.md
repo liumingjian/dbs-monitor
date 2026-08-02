@@ -1,20 +1,22 @@
 # 文档索引
 
 > 本索引用于后续 `/wayfinder` 或其他调研/设计会话快速定位材料。  
-> 当前阶段：PostgreSQL 监控平台方向探索与 MVP 设计草案。
+> 当前阶段：**R1（PostgreSQL MVP 产品/设计规格）已完成**，三份规格文档为 v1.0。下一条路线为 R2 系统架构骨架与技术选型。
 
 ---
 
 ## 1. 推荐阅读顺序
 
 ```text
-1. docs/research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md
+1. docs/design/00-decision-index.md          ← R2 开工前必读
    ↓
-2. docs/design/01-pg-mvp-metric-dictionary.md
+2. docs/research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md
    ↓
-3. docs/design/02-alert-rule-model-draft.md
+3. docs/design/01-pg-mvp-metric-dictionary.md
    ↓
-4. docs/design/03-monitor-platform-ia-draft.md
+4. docs/design/02-alert-rule-model-draft.md
+   ↓
+5. docs/design/03-monitor-platform-ia-draft.md
 ```
 
 ---
@@ -23,10 +25,20 @@
 
 | 文档 | 作用 | 状态 |
 |---|---|---|
+| [`docs/design/00-decision-index.md`](design/00-decision-index.md) | R1 决策索引：十项决策的结论、理由与**被否决的方案** | v1.0，R1 结束后冻结 |
 | [`docs/research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md`](research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md) | 阿里云 RDS PostgreSQL 监控与报警页面可行性调研 | 已完成 |
-| [`docs/design/01-pg-mvp-metric-dictionary.md`](design/01-pg-mvp-metric-dictionary.md) | PG MVP 指标字典，定义指标口径、来源、采样、告警适用性 | v0.1 草案 |
-| [`docs/design/02-alert-rule-model-draft.md`](design/02-alert-rule-model-draft.md) | 告警规则配置模型，定义规则、告警实例、状态、No Data、通知等 | v0.1 草案 |
-| [`docs/design/03-monitor-platform-ia-draft.md`](design/03-monitor-platform-ia-draft.md) | 监控平台信息架构，定义页面树、页面职责和排障路径 | v0.1 草案 |
+| [`docs/design/01-pg-mvp-metric-dictionary.md`](design/01-pg-mvp-metric-dictionary.md) | PG MVP 指标字典，定义指标口径、来源、采样、告警适用性 | **v1.0** |
+| [`docs/design/02-alert-rule-model-draft.md`](design/02-alert-rule-model-draft.md) | 告警规则配置模型，定义规则、告警实例、状态、No Data、通知等 | **v1.0** |
+| [`docs/design/03-monitor-platform-ia-draft.md`](design/03-monitor-platform-ia-draft.md) | 监控平台信息架构，定义页面树、页面职责和排障路径 | **v1.0** |
+
+### 2.1 四条跨文档不变式
+
+后续路线修改任何一份规格前，应先确认不破坏以下四条（详见决策索引 §4）：
+
+1. **告警状态五档**（`OK / PENDING / FIRING / NO_DATA / RECOVERED`），压制是正交轴。
+2. **实例健康 = 未恢复告警的最坏归并 + 已暂停 override**，单一来源。
+3. **三档全局角色**，可见性不收窄、写能力收窄，凭据永不回显。
+4. **三条采集状态内置规则**不可删除、不可停用，严重级别下限 `warning`。
 
 ---
 
@@ -86,16 +98,20 @@ docs/research/aliyun-rds/evidence/
 
 ---
 
-## 4. 后续 `/wayfinder` 建议
+## 4. 路线进度
 
-后续如果继续使用 `/wayfinder`，建议优先围绕以下待确认问题建图或开票：
+总目标：建成可运行的 PG MVP 监控系统。
 
-1. MVP 指标字典中“待确认事项”的逐项决策。
-2. 告警模型中的 No Data、维护窗口、恢复阈值语义确认。
-3. 信息架构中全局告警 / 实例级告警边界确认。
-4. 标准监控与增强监控是否拆成独立页面。
-5. 慢查询数据源是否进入 MVP。
-6. Agent 指标口径：宿主机、容器还是数据库进程。
+| 路线 | 内容 | 状态 |
+|---|---|---|
+| **R1** | 产品 / 设计 MVP 规格 | **已完成** —— 见 [R1 地图](https://github.com/liumingjian/dbs-monitor/issues/1) |
+| **R2** | 系统架构骨架与技术选型 | **进行中** —— 见 [R2 地图](https://github.com/liumingjian/dbs-monitor/issues/15) |
+| R3 | 采集与数据模型 | 待开始 |
+| R4 | 告警评估引擎 | 待开始 |
+| R5 | 前端与交互实现 | 待开始 |
+| R6 | 接入、部署与集成运维 | 待开始 |
+
+R2 开工前请先读 [`docs/design/00-decision-index.md`](design/00-decision-index.md)——它记录了 R1 十项决策的理由与**被否决的方案**，避免重新引入已经排除掉的设计（加权健康评分、静默对象、根因抑制、实例级授权等）。
 
 ---
 
