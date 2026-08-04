@@ -1,0 +1,24 @@
+/api/agent/v1/report:
+  post:
+    tags: [agent]
+    operationId: reportAgentMetrics
+    x-required-role: AGENT
+    security:
+      - agentToken: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/agent.yaml#/AgentReport }
+    responses:
+      '204': { description: Accepted }
+      '401':
+        description: Invalid token
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '400':
+        description: Invalid timestamp
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

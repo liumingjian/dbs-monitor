@@ -1,0 +1,27 @@
+import { describe, expect, it } from 'vitest'
+import { parseTimeRange, serializeTimeRange } from './timeRange'
+
+describe('time range search', () => {
+  it('round-trips absolute RFC3339 values', () => {
+    const value = {
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+    }
+    expect(parseTimeRange(serializeTimeRange(value))).toEqual(value)
+  })
+
+  it('returns an explained invalid state when the end is not after the start', () => {
+    expect(parseTimeRange({
+      from: '2026-08-03T01:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+    })).toEqual({
+      error: '结束时间必须晚于开始时间',
+    })
+  })
+
+  it('returns an explained invalid state for malformed links', () => {
+    expect(parseTimeRange({ from: 'last-hour', to: 'bad' })).toEqual({
+      error: '时间范围必须是绝对 RFC3339 时间',
+    })
+  })
+})

@@ -1,0 +1,21 @@
+Error:
+  type: object
+  required: [error]
+  properties:
+    error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, INTERNAL]
+        message:
+          type: string
+        field_errors:
+          type: array
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: { type: string }
+              message: { type: string }

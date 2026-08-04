@@ -1,0 +1,27 @@
+/api/v1/login:
+  post:
+    tags: [auth]
+    operationId: createSession
+    x-required-role: READONLY
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [username, password]
+            properties:
+              username: { type: string }
+              password: { type: string }
+    responses:
+      '204':
+        description: Logged in
+        headers:
+          Set-Cookie:
+            required: true
+            schema: { type: string }
+      '401':
+        description: Invalid credentials
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

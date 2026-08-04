@@ -1,0 +1,22 @@
+Unavailability:
+  type: string
+  enum:
+    - NO_SAMPLES_YET
+    - NO_DATA_IN_RANGE
+    - STALE
+    - COLLECTION_PAUSED
+    - COLLECTION_FAILED
+    - DB_UNREACHABLE
+    - AGENT_OFFLINE
+    - PERMISSION_DENIED
+    - EXTENSION_MISSING
+    - FEATURE_DISABLED
+    - VERSION_UNSUPPORTED
+    - NOT_APPLICABLE_ROLE
+    - COUNTER_RESET
+AlertStatus:
+  type: string
+  enum: [OK, PENDING, FIRING, NO_DATA, RECOVERED]
+CapabilityStatus:
+  type: string
+  enum: [PRESENT, MISSING, NOT_APPLICABLE, UNKNOWN]

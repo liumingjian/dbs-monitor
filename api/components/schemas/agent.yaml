@@ -1,0 +1,16 @@
+AgentReport:
+  type: object
+  required: [instance_id, timestamp, metrics]
+  properties:
+    instance_id: { type: string, format: uuid }
+    timestamp: { type: string, format: date-time }
+    metrics:
+      type: array
+      items:
+        type: object
+        required: [metric, value]
+        properties:
+          metric:
+            type: string
+            enum: [host.cpu.usage_percent]
+          value: { type: number }

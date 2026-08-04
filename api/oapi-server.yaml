@@ -1,0 +1,9 @@
+package: api
+output: internal/api/server.gen.go
+generate:
+  models: true
+  strict-server: true
+  std-http-server: true
+output-options:
+  skip-prune: true
+  nullable-type: true

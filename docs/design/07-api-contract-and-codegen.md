@@ -56,6 +56,8 @@ api/
 
 **待钉死的事实（本票无法实测）**：**oapi-codegen v2 与 `openapi-typescript` 对跨文件 `$ref` 的解析能力**。决策会话所在环境无 Go 工具链。此项作为 [T11](https://github.com/liumingjian/dbs-monitor/issues/29) 首次 `make gen` 的显式验证项。**退路**：任一侧不支持 ⇒ 在 `make gen` 前加一步 redocly bundle，产出 `api/openapi.bundled.yaml` 作为生成器输入并入库；拆分的源文件布局不变。
 
+**T11 实测回写（2026-08-03）**：`oapi-codegen v2.5.0` 对当前拆分 spec 的外部 `$ref` 报 `unrecognized external reference ... please provide --import-mapping`；`openapi-typescript 7.13.0` 可消费 bundle。已按本节预授权退路在 `make gen` 前加入 `@redocly/cli 2.20.3 bundle`，入库 `api/openapi.bundled.yaml`；拆分源文件布局不变。重复生成已做逐字节稳定性验证。
+
 ---
 
 ## 2. D2 · 生成器与生成物

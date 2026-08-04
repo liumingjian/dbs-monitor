@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: dbs-monitor API
+  version: 0.1.0
+servers:
+  - url: /
+tags:
+  - name: instances
+  - name: metrics
+  - name: auth
+  - name: agent
+paths:
+  /api/v1/login:
+    $ref: paths/auth.yaml#/~1api~1v1~1login
+  /api/v1/instances:
+    $ref: paths/instances.yaml#/~1api~1v1~1instances
+  /api/v1/instances/{id}:
+    $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}
+  /api/v1/instances/{id}/metrics/series:
+    $ref: paths/metrics.yaml#/~1api~1v1~1instances~1{id}~1metrics~1series
+  /api/agent/v1/report:
+    $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
+components:
+  securitySchemes:
+    agentToken:
+      type: http
+      scheme: bearer
+  schemas:
+    Unavailability:
+      $ref: components/enums.yaml#/Unavailability
+    AlertStatus:
+      $ref: components/enums.yaml#/AlertStatus
+    CapabilityStatus:
+      $ref: components/enums.yaml#/CapabilityStatus
+    InstanceInput:
+      $ref: components/schemas/instances.yaml#/InstanceInput
+    Instance:
+      $ref: components/schemas/instances.yaml#/Instance
+    InstanceCreated:
+      $ref: components/schemas/instances.yaml#/InstanceCreated
+    MetricSeriesResponse:
+      $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
+    AgentReport:
+      $ref: components/schemas/agent.yaml#/AgentReport
+    Error:
+      $ref: components/errors.yaml#/Error
