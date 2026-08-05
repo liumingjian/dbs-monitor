@@ -109,7 +109,7 @@ docs/research/aliyun-rds/evidence/
 
 | 文档 | 说明 |
 |---|---|
-| [`docs/validation/t11-linux-amd64-progress.md`](validation/t11-linux-amd64-progress.md) | Native Linux amd64 validation evidence; T11 remains open while upgrade and rollback paths are absent |
+| [`docs/validation/t11-linux-amd64-progress.md`](validation/t11-linux-amd64-progress.md) | Native Linux amd64 validation evidence; T11 acceptance complete, with upgrade/rollback and PG13–17 matrix deferred to R3 |
 
 ---
 

@@ -6,7 +6,7 @@
 
 ## 结论
 
-当前 Windows 环境只完成了前端和环境诊断，尚未满足 T11 的后端、真 PostgreSQL、E2E、RT-C 和 Linux 交付验收。T11 issue 保持 open，详细进度评论见 [T11 · Walking skeleton 实现](https://github.com/liumingjian/dbs-monitor/issues/29#issuecomment-5176770898)。
+当前 Windows 环境只完成了前端和环境诊断；后续原生 Linux amd64 验证已在提交 [e17a81d](https://github.com/liumingjian/dbs-monitor/commit/e17a81d) 完成 T11 验收。升级/回滚和 PG13–17 矩阵已正式延期到 R3，详细结论见 [Linux 验证记录](t11-linux-amd64-progress.md) 和 [T11 resolution 评论](https://github.com/liumingjian/dbs-monitor/issues/29)。
 
 后续目标环境应是原生 Linux amd64。当前 Windows 的 `PROCESSOR_ARCHITECTURE=AMD64` 只证明 x86-64/amd64 ABI；虚拟 CPU 报告为 Intel Broadwell，因此不应将本次结果称为 AMD 实体 CPU 验证。
 
@@ -35,7 +35,9 @@
 - Docker Desktop 4.85.0 安装器在 Windows Server 2019 上失败。安装日志位于系统的 `C:\ProgramData\DockerDesktop\install-log-admin.txt`，失败原因为该 Windows 版本不在 Docker Desktop 支持的 Windows 10/11 版本范围内。
 - Redocly/openapi-typescript 的首次 npx 下载也因代理下载链路超时而停止；仓库内已有生成文件未被覆盖。
 
-## Linux amd64 后续清单
+## Linux amd64 后续清单（历史交接清单，已完成）
+
+以下清单是 Windows 环境交接时的原始计划；原生 Linux amd64 已完成其中的 T11 范围。升级/回滚脚本与 PG13–17 矩阵不在 T11 范围内，按上述决定延期到 R3。
 
 在原生 Linux amd64 机器上继续，不要用 qemu 代替原生 PG 构建：
 
@@ -43,10 +45,10 @@
 2. 确认 Go 1.23+、GNU Make、Node/npm、Docker/Compose 或可用的 PostgreSQL 17，以及 `curl`、`psql`、`python3` 等脚本依赖。
 3. 使用真 PostgreSQL 17 启动平台库，执行 `make gen`，确认跨文件 `$ref`、oapi-codegen、openapi-typescript、sqlc 生成物和漂移门全部通过。
 4. 执行 `make check`，记录完整耗时；按 T9 要求，未全绿不能宣称 T11 完成。
-5. 执行 `make check-full`，覆盖真实构建、Playwright smoke、Linux amd64/arm64 交叉编译和安装脚本路径。
-6. 在原生 Linux amd64 上执行 `make package-binaries-linux-amd64` 和 `make package-linux-amd64`，验证离线包、首启和升级/回滚脚本；打包脚本要求非 root 构建用户。
+5. 执行 `make check-full`，覆盖 T11 范围内的真实构建、Playwright smoke 和 Linux amd64/arm64 交叉编译；PG13–17 矩阵与生命周期发布验证延期到 R3。
+6. 在原生 Linux amd64 上执行 `make package-binaries-linux-amd64` 和 `make package-linux-amd64`，验证离线包和首启；升级/回滚脚本延期到 R3。打包脚本要求非 root 构建用户。
 7. 按 `scripts/rt-c/README.md` 准备一次 disposable PostgreSQL 17 RT-C 环境，执行 T1 查询延迟、T2 分区容量、T3 控制面劣化和缺失分区 SQLSTATE 实测；不要用小样本结果替代参考基线。
-8. 将命令、版本、耗时、P95、磁盘占用、归档路径和失败日志追加到 [T11 · Walking skeleton 实现](https://github.com/liumingjian/dbs-monitor/issues/29)，全部验收项完成后再 resolve issue。
+8. 将命令、版本、耗时、P95、磁盘占用、归档路径和失败日志追加到 [T11 · Walking skeleton 实现](https://github.com/liumingjian/dbs-monitor/issues/29)；T11 范围已完成，R3 延期项单独记录。
 
 ## 参考
 

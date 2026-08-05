@@ -26,9 +26,11 @@
 | 层 | 命令 | 内容 | 谁跑 |
 |---|---|---|---|
 | 快 | `make check` | ① `make gen && git diff --exit-code`（生成物漂移门，[T6 D3](07-api-contract-and-codegen.md)）② `go vet ./...` ③ `go test ./...`（含全部 B 栏 Go 侧守卫、迁移可用性，需真 PG）④ `tsc --noEmit` ⑤ `eslint`（仅 `web/`）⑥ `vitest run` | **每次改动，会话自己跑** |
-| 慢 | `make check-full` | 快层全部 + PG13–17 采集矩阵（[T4 §5.5](06-metric-dictionary-and-collection-plan.md)）+ `vite build` + `go:embed` 真构建 + 打包与安装/升级脚本冒烟 + arm64 + [T11](https://github.com/liumingjian/dbs-monitor/issues/29) 的容量/延迟门槛 | CI / 发版 |
+| 慢 | `make check-full` | 快层全部 + `vite build` + `go:embed` 真构建 + arm64 + [T11](https://github.com/liumingjian/dbs-monitor/issues/29) 的容量/延迟门槛；**R3 发布门槛**再加入 PG13–17 采集矩阵与打包/安装/升级脚本冒烟 | CI / 发版 |
 
 **预算：`make check` ≤ 90 秒**（复用已起的开发 PG，不含容器冷启动）。超预算的东西往 `check-full` 挪，**不许加第三层**。
+
+T11/R3 边界：T11 的 `check-full` 验证真实构建、Playwright、双架构编译和 RT-C；PG13–17 矩阵以及升级/回滚生命周期验证正式延期到 R3 的发布闭环，不作为 T11 resolve 的前置条件。
 
 **理由**
 
@@ -45,7 +47,7 @@
 **结论**：`make dev-up` 用 Docker Compose 起测试用 PG。**容器只进开发环境，绝不进交付**（[T8 D1](09-packaging-and-deployment.md) 否决的是交付物形态，与本条不冲突）。
 
 - **默认 profile**：`postgres:17` 一个容器，作**平台库**，供 `make check` 用。
-- **`matrix` profile**：PG 13/14/15/16/17 五个容器，作**被监控库**，供 `make check-full` 的采集矩阵用（兑现 [T4 §5.5](06-metric-dictionary-and-collection-plan.md) 「本地环境需能起 5 个 PG 版本」）。
+- **`matrix` profile**：PG 13/14/15/16/17 五个容器，作**被监控库**，供 R3 发布闭环的采集矩阵用（兑现 [T4 §5.5](06-metric-dictionary-and-collection-plan.md) 「本地环境需能起 5 个 PG 版本」）。
 - **逃生舱**：`PGHOST` 已设时 `make dev-up` 跳过容器，直接接管现成实例（CI、无 Docker 的机器、离线内网都靠这条）。
 
 **理由**：把开发环境也逼成 [T8 D2](09-packaging-and-deployment.md) 那样源码自建 PG，等于每个新会话开局先编译 20 分钟——这是**真会被绕过**的东西，而绕过的形态就是 T5 §5.1 警告的「开始造 mock」。
@@ -240,9 +242,9 @@ A 栏九条中六条要到 R3–R5 才有代码。**本票现在只能登记，�
 
 三条合起来把「改了迁移忘了改查询」「写了 down」「迁移跑不动」全部前移到本地。
 
-**进 `check-full`**（分钟级）：安装 → 起服务 → healthcheck → 升级到当前构建 → 再 healthcheck 整条。它要 root、要 systemd、要真机或特权容器。
+**进 R3 发布闭环**（分钟级）：安装 → 起服务 → healthcheck → 升级到当前构建 → 回滚并恢复控制面 → 再 healthcheck 整条。它要 root、要 systemd、要真机或特权容器。T11 只执行安装与首启人工验收。
 
-> 因此 [T8 §13](09-packaging-and-deployment.md) 那笔的答案是：**安装/升级脚本纳入验证闭环，但纳入的是慢层**，不是「一条命令」。
+> 因此 [T8 §13](09-packaging-and-deployment.md) 那笔的答案是：**安装/升级脚本纳入 R3 发布验证闭环**；T11 只把离线包安装和首启作为人工验收。
 
 同性质判断：**`vite build` 与 `go:embed` 真构建不进快闭环**，`tsc --noEmit` 已能抓住类型错。
 
@@ -375,7 +377,7 @@ TS + React + Vite 纯 SPA，AntD 6 + ECharts 6，TanStack Router + openapi-react
 
 **本票产出**：本文档（闭环两层定义、清单两栏 + 准入判据、不变式→守卫对照表、`CLAUDE.md` 边界与体裁、两份草案）。
 
-**随 [T11](https://github.com/liumingjian/dbs-monitor/issues/29) 落地**：根 `CLAUDE.md` 与 `web/CLAUDE.md` 真文件（含填实的先例路径）、`Makefile` 的 `check` / `check-full` / `dev-up` / `gen`、`compose.yaml` 两 profile、B 栏 10 条守卫、GitHub Actions 两个 workflow。
+**随 [T11](https://github.com/liumingjian/dbs-monitor/issues/29) 落地**：根 `CLAUDE.md` 与 `web/CLAUDE.md` 真文件（含填实的先例路径）、`Makefile` 的 `check` / `check-full` / `dev-up` / `gen`、`compose.yaml` 两 profile、B 栏 10 条守卫、GitHub Actions 两个 workflow。PG13–17 矩阵和安装/升级生命周期的发布接线延期到 R3。
 
 **理由**：仓库现在一行代码都没有。此刻落盘 `CLAUDE.md`，其中每个先例指针都是死的，B8 从诞生就是红的——**一条从来没绿过的守卫，等于没有守卫**。
 

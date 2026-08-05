@@ -27,4 +27,4 @@ systemctl status dbs-monitor-postgres dbs-monitor-server
 ss -ltnp
 ```
 
-Restart `dbs-monitor-server` and confirm its new journal entries do not print another initial password. Agent platform distribution, upgrades, high availability, credential encryption, and runtime disk-watermark behavior are intentionally outside T11.
+Restart `dbs-monitor-server` and confirm its new journal entries do not print another initial password. Agent platform distribution, upgrades, rollback, high availability, credential encryption, and runtime disk-watermark behavior are intentionally outside T11 and deferred to R3. The T11 archive is a walking-skeleton package, not the complete production upgrade package.

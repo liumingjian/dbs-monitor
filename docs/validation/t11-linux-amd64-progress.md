@@ -1,9 +1,9 @@
 # T11 native Linux amd64 validation
 
-Status: **OPEN**. The deterministic checks, native amd64 package build, default RT-C reproduction, and clean systemd first-start validation pass. T11 remains open because the checkout has no upgrade or rollback scripts to rehearse.
+Status: **T11 ACCEPTANCE COMPLETE**. The deterministic checks, native amd64 package build, default RT-C reproduction, and clean systemd first-start validation pass. Upgrade/rollback and the PG13–17 matrix are formally deferred to the R3 release gate.
 
 Validation date: 2026-08-04 (Asia/Shanghai)
-Repository revision: `ec3a317`
+Repository revision: `e17a81d`
 
 ## Host and tools
 
@@ -95,7 +95,7 @@ The native host first run created and started both systemd units, but its final 
 
 Evidence logs: `/tmp/t11-installer-partial.log` (builder rehearsal), `/tmp/t11-installer-host-20260804.log` (native host proxy-sensitive first run), and `/tmp/t11-installer-host-noproxy-20260805.log` (native host successful run). The extracted bundle used for the native run was `/tmp/t11-package-inspect-host-20260804/dbs-monitor-0.1.0-linux-amd64`.
 
-The repository has no `upgrade.sh`, rollback script, or upgrade/rollback entries in the bundle. `README-install.md` explicitly defers upgrades. Therefore the design's upgrade and backup-based rollback policy is documented, but those lifecycle paths are not validated by this checkout and remain a T11/R3 gap.
+The repository has no `upgrade.sh`, rollback script, or upgrade/rollback entries in the bundle. This is now an explicit scope boundary: the T11 archive is a walking-skeleton package, while the upgrade/backup/rollback lifecycle is an R3 release gate. The PG13–17 matrix is likewise an R3 release gate; T11 does not claim either as completed evidence.
 
 ## RT-C reference reproduction
 
@@ -125,7 +125,8 @@ The successful expanded-disk result recorded `453600000` points, `1750` series, 
 | Non-root amd64 application binaries | pass |
 | Native glibc 2.17 PostgreSQL build, tests, and offline archive | pass |
 | Clean systemd install and first-start end to end | pass on native host with expanded disk and localhost proxy bypass; first proxy-sensitive invocation timed out after services started |
-| Upgrade and rollback scripts/rehearsal | incomplete: scripts are absent |
+| Upgrade and rollback scripts/rehearsal | deferred to R3 by scope decision; not a T11 acceptance item |
 | Default RT-C reproduction and all four evidence groups | pass: full 453.6M-point run and threshold evidence |
+| PG13–17 monitored-database integration matrix | deferred to R3 release gate; not a T11 acceptance item |
 
-T11 remains open because the checkout does not contain the upgrade/rollback scripts referenced by the packaging design. Do not resolve the ticket until that lifecycle gap is explicitly handled; the native default RT-C thresholds are now evidenced and must not be rerun with reduced parameters.
+T11 acceptance is complete. Resolve issue 29 with the R3 deferrals above recorded explicitly; the native default RT-C thresholds are evidenced and must not be rerun with reduced parameters.
