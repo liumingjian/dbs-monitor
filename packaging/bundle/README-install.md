@@ -28,3 +28,7 @@ ss -ltnp
 ```
 
 Restart `dbs-monitor-server` and confirm its new journal entries do not print another initial password. Agent platform distribution, upgrades, rollback, high availability, credential encryption, and runtime disk-watermark behavior are intentionally outside T11 and deferred to R3. The T11 archive is a walking-skeleton package, not the complete production upgrade package.
+
+## Platform host availability
+
+The package does not provide external monitoring for a complete platform-host outage. If the host, its storage, or both systemd services are unavailable, the platform cannot report that failure itself. Before delivery, connect this installation to the customer's existing host or infrastructure monitoring and explicitly document that dependency.

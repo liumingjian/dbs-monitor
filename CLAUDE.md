@@ -3,6 +3,16 @@
 PostgreSQL 私有化监控平台。Go 后端 + Agent，TS/React SPA（`go:embed` 进主二进制）。
 本文件预算 150 行，只写违反后 `make check` 不会红的规则。
 
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues 是本仓库的 issue tracker，`ready-for-agent` 表示可交给无人值守实现。见 `docs/agents/issue-tracker.md`。
+
+### Domain docs
+
+本仓库是 single-context，先读 `CONTEXT.md` 与相关 `docs/design/` 决策。见 `docs/agents/domain.md`。
+
 开工前必读：`docs/design/00-decision-index.md`。
 决策文档在 `docs/design/`；推翻任何一条须新开决策记录，不原地改写。
 

@@ -46,6 +46,8 @@ T11/R3 边界：T11 的 `check-full` 验证真实构建、Playwright、双架构
 
 **代价**：`make check` 依赖一个已起的 PG（见 D2），不是纯离线命令。这是 [T5 §5.1](05-backend-code-structure.md) 「不造 mock」的直接推论，已被上游接受。
 
+> **收口增补 2026-08-05：RT-C 去向。** RT-C 是分钟级容量 / 延迟实测，不接入每次 `check-full`；当前由人工按 `scripts/rt-c/run.sh` 的完整参数执行，作为 R3 发布门槛接管。`check-full` 仍负责 T11 的构建、E2E 与双架构编译。
+
 ---
 
 ## 2. D2 · 本地开发环境：Docker Compose，两个 profile
@@ -54,7 +56,7 @@ T11/R3 边界：T11 的 `check-full` 验证真实构建、Playwright、双架构
 
 - **默认 profile**：`postgres:17` 一个容器，作**平台库**，供 `make check` 用。
 - **`matrix` profile**：PG 13/14/15/16/17 五个容器，作**被监控库**，供 R3 发布闭环的采集矩阵用（兑现 [T4 §5.5](06-metric-dictionary-and-collection-plan.md) 「本地环境需能起 5 个 PG 版本」）。
-- **逃生舱**：`PGHOST` 已设时 `make dev-up` 跳过容器，直接接管现成实例（CI、无 Docker 的机器、离线内网都靠这条）。
+- **逃生舱**：`PGHOST_EXTERNAL` 已设时 `make dev-up` 跳过容器，直接接管现成实例（CI、无 Docker 的机器、离线内网都靠这条）。`PGHOST` 保持默认的 `localhost`，不作为逃生舱开关。
 
 **理由**：把开发环境也逼成 [T8 D2](09-packaging-and-deployment.md) 那样源码自建 PG，等于每个新会话开局先编译 20 分钟——这是**真会被绕过**的东西，而绕过的形态就是 T5 §5.1 警告的「开始造 mock」。
 
@@ -92,7 +94,7 @@ T11/R3 边界：T11 的 `check-full` 验证真实构建、Playwright、双架构
 | A8 | 每个指标恰好被一个采集任务产出 | [T4 §3.3](06-metric-dictionary-and-collection-plan.md) | R3 |
 | A9 | **枚举码表 golden 快照** | 本票新增，见下 | **T11** |
 
-**A9 的理由**（本票主动加的一条）：[T2 §4](04-metric-storage-model.md) 那句「码值一经发布只增不改，改了没有任何东西会报错」原计划只写进 `CLAUDE.md`。**写进 `CLAUDE.md` 的纪律拦不住手滑**；一个 golden 文件把它升级成一道门——改码表 = 测试红 = 必须显式更新 golden = 一次有意识的行为。成本约 20 行。覆盖：`Unavailability` 13 码（[T6 §8.3](07-api-contract-and-codegen.md)）、告警五状态、能力四档、非数值指标的枚举编码（[T2 §4](04-metric-storage-model.md)）、三条内置采集状态规则（见 D7）。
+**A9 的理由**（本票主动加的一条）：[T2 §4](04-metric-storage-model.md) 那句「码值一经发布只增不改」原计划只写进 `CLAUDE.md`。**写进 `CLAUDE.md` 的纪律拦不住手滑**；一个 golden 文件把它升级成一道门——改码表 = 测试红 = 必须显式更新 golden = 一次有意识的行为。成本约 20 行。覆盖：`Unavailability` 13 码（[T6 §8.3](07-api-contract-and-codegen.md)）、告警五状态、能力四档、已实现的非数值指标编码（`internal/metric/enum_test.go`；复制状态在 R3 实现时追加）、三条内置采集状态规则（见 D7）。
 
 ### 3.3 B 栏 · 结构守卫（不是表驱动单测，但同样跑在 `make check` 里）
 
