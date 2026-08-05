@@ -10,6 +10,8 @@
 
 后续目标环境应是原生 Linux amd64。当前 Windows 的 `PROCESSOR_ARCHITECTURE=AMD64` 只证明 x86-64/amd64 ABI；虚拟 CPU 报告为 Intel Broadwell，因此不应将本次结果称为 AMD 实体 CPU 验证。
 
+**范围决定：Windows 支持与真实 AMD 物理 CPU 验证均放弃，不是递延。** 本路线的交付目标是原生 Linux amd64 / arm64；Windows 环境不进入支持矩阵，虚拟化 Intel CPU 也不替代真实 AMD 物理机证据。若未来要支持 Windows 或要求 AMD 物理机认证，须另开路线与验收标准。
+
 ## 当前代码状态
 
 - 分支：`feat/t11-walking-skeleton`。

@@ -68,7 +68,7 @@ func (service *Service) collectTarget(ctx context.Context, target instance.ListC
 				if writeErr != nil {
 					return writeErr
 				}
-				if _, writeErr = tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 0)", seriesID, now); writeErr != nil {
+				if _, writeErr = tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, now, metric.NonNumericMetricEncodings["pg.availability.reachable"]["unreachable"]); writeErr != nil {
 					return writeErr
 				}
 				return instance.New(tx).SetCollectFailure(ctx, instance.SetCollectFailureParams{
@@ -114,7 +114,7 @@ func (service *Service) collectTarget(ctx context.Context, target instance.ListC
 				metricID string
 				value    float64
 			}{
-				{"pg.availability.reachable", 1},
+				{"pg.availability.reachable", metric.NonNumericMetricEncodings["pg.availability.reachable"]["reachable"]},
 				{"pg.connection.total", connectionTotal},
 			} {
 				seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{

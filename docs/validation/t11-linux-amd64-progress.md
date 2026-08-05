@@ -38,6 +38,8 @@ The development PostgreSQL container was healthy before running the checks. Depe
 | `make check` | pass: vet, Go tests, typecheck, ESLint, 21 Vitest tests | 1m54.378s |
 | `make check-full` | pass: check, build, Playwright 1/1, amd64 and arm64 cross-builds | 1m20.510s |
 
+> R2 收口复测（2026-08-05，本机 macOS arm64，缓存已热）：`make check` pass，real 29.35s。该行只用于当前护栏预算观察，不作为原生 Linux amd64 验收证据。
+
 The production build emitted the existing large JavaScript chunk warning (1,578.79 kB, gzip 518.75 kB); it did not fail the build. The final E2E run used the installed Playwright Chromium 1234 browser.
 
 The first `make check-full` attempt failed after 4m08.509s because the host `HTTPS_PROXY` intercepted the readiness request to `127.0.0.1`, and the required Playwright browser was not yet installed. The readiness probe now uses `curl --noproxy '*'`; the final check-full run is green with the proxy variables still present. This is the only tracked E2E fix in this validation.
@@ -100,6 +102,8 @@ The repository has no `upgrade.sh`, rollback script, or upgrade/rollback entries
 ## RT-C reference reproduction
 
 A disposable, migrated `t11_rt_c` database was created on the PostgreSQL 17.10 container. The first post-expansion attempt used the existing development container and the exact reference script, but a PostgreSQL backend exited with code 2 during day 19 after 36:47.37. The container recovered, reported `OOMKilled=false`, and still had about 480 GiB free; no row or threshold evidence from that partial run was accepted. Its log is `/tmp/t11-rt-c-full.log`.
+
+The root cause of that first day-19 backend exit code 2 was not isolated. It remains a known unresolved RT-C incident; the clean same-architecture retry below is the accepted evidence, and does not retroactively explain the first failure.
 
 A clean retry used a same-architecture `postgres:17` container with a 1 GiB shared-memory mount, no qemu, a fresh migrated database, and no diagnostic SQL during loading. The exact reference script was run with `RT_C_CONFIRM=load-450m-points` and `RT_C_DATA_PATH` equal to the server's reported `/var/lib/postgresql/data`. The run started at `2026-08-04T14:59:06Z`, completed in `1:04:19`, and exited `0`. Its immutable result directory is `/tmp/t11-rt-c-results-20260804-isolated`; the host log and timing files are `/tmp/t11-rt-c-isolated-20260804.log` and `/tmp/t11-rt-c-isolated-time-20260804.txt`.
 

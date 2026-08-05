@@ -7,7 +7,7 @@ TS + React + Vite 纯 SPA，AntD 6 + ECharts 6，TanStack Router + openapi-react
 
 服务端状态 → TanStack Query；URL 状态 → search params；组件局部 → `useState`。
 不引入 Redux / Zustand / Jotai / MobX / Valtio。
-不用 `createContext` 手搓全局 store；当前没有 `createContext` 白名单文件。
+不用 `createContext` 手搓全局 store；`createContext` 白名单：无（新增须登记完整仓库相对路径）。
 `step` 可进 URL，但渲染永远用响应回传的粒度值。
 
 ## 缺数不是 0

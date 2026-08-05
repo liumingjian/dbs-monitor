@@ -173,17 +173,17 @@ db.InTx(ctx, func(tx pgx.Tx) error {
 
 「AI 会话写 Go」最典型的熵增，是为每个包造一个 interface + 一个 mock。判据：**一个实现只是假想接缝，两个实现才是真接缝。**
 
-允许存在的 interface **只有这五个**：
+允许存在的 interface **当前是四个手写接缝，加上生成的 `DBTX`**：
 
 | 接缝 | 第二个实现 | 依据 |
 |---|---|---|
 | `pgconn.Dialer` | 未来「经 Agent 隧道拨号」 | T1 D3 明文预留（隧道强制端到端 TLS） |
 | `collect.Collector` | 未来下沉到 Agent 侧 | T1 D1 **唯一**预留接缝 |
 | `clock.Clock` | 测试用 fake | §6 |
-| `notify.Channel` | 邮件 / Webhook / … | `02-alert-rule-model-draft.md` §3.7 |
+| `notify.Channel` | 邮件 / Webhook / … | `02-alert-rule-model-draft.md` §3.7；**随 R4 落地** |
 | sqlc `DBTX` | `pgxpool` 与 `pgx.Tx` | 生成物自带，§4 |
 
-**其余领域包之间一律直接 import 具体类型，不定义 interface。** 由 `arch_test.go` 断言 `internal/` 下的 interface 声明集合等于该白名单；新增必须先改白名单（强制一次显式论证）。
+**其余领域包之间一律直接 import 具体类型，不定义 interface。** 由 `arch_test.go` 断言 `internal/` 下的 interface 声明集合等于该白名单；新增必须先改白名单（强制一次显式论证）。当前 `notify/` 尚未落地，因此守卫实际为 4 个手写接缝 + `DBTX`。
 
 理由：
 

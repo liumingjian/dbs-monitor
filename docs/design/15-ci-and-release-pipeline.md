@@ -64,3 +64,5 @@
 | 去向 | 内容 |
 |---|---|
 | 后续执行路线（CI 落地） | 两个 workflow（PR 门 `make check`；默认分支 `check-full` + 发布线）、团队 runner 接入、四组合构建脚本、Environment 审批与 Release 归档配置 |
+
+> **收口增补 2026-08-05：P1 拆分。** 本轮先落地 PR 门与默认分支 / 手动入口的 `check-full` workflow；发布线的四组合原生 runner、Environment 审批和 Release 归档仍待团队 runner 就绪后由下游接手。
