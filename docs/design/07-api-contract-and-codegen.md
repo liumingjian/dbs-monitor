@@ -56,6 +56,8 @@ api/
 
 **待钉死的事实（本票无法实测）**：**oapi-codegen v2 与 `openapi-typescript` 对跨文件 `$ref` 的解析能力**。决策会话所在环境无 Go 工具链。此项作为 [T11](https://github.com/liumingjian/dbs-monitor/issues/29) 首次 `make gen` 的显式验证项。**退路**：任一侧不支持 ⇒ 在 `make gen` 前加一步 redocly bundle，产出 `api/openapi.bundled.yaml` 作为生成器输入并入库；拆分的源文件布局不变。
 
+**T11 实测回写（2026-08-03）**：`oapi-codegen v2.5.0` 对当前拆分 spec 的外部 `$ref` 报 `unrecognized external reference ... please provide --import-mapping`；`openapi-typescript 7.13.0` 可消费 bundle。已按本节预授权退路在 `make gen` 前加入 `@redocly/cli 2.20.3 bundle`，入库 `api/openapi.bundled.yaml`；拆分源文件布局不变。重复生成已做逐字节稳定性验证。
+
 ---
 
 ## 2. D2 · 生成器与生成物
@@ -205,6 +207,8 @@ GET /api/v1/instances/{id}/metrics/series
 **c) 排序单参数白名单。** `sort=-started_at`（`-` 前缀为降序）。每个端点在 spec 里列出**允许的排序字段枚举**，不是自由字符串——否则等于把列名暴露成 API，并诱发注入面。
 
 **d) 实时快照类端点豁免 b/c。** 活跃会话、锁等待、阻塞链是**当下快照**，没有 `from/to`，也不分页——阻塞链分页会把一条链切断。这类端点返回整个快照 + **服务端硬上限**（如活跃会话最多 500 行），并在响应里带 `"truncated": true`。
+
+**e) 请求跨度与 30 天保留边界。**（收口增补 2026-08-05，承 [T2](04-metric-storage-model.md) §10 移交「请求跨度超出 30 天保留边界时如何表现由 T6 定」，本票 v1.0 漏接。）请求窗口**允许**超出保留边界：不校验、不报错、不静默收窄 `from`/`to`。超出部分没有样本，自然表现为 D6 第 5 条的「桶不出现在数组里」，与其他「没采到」共用同一语义；响应回传的 `from`/`to` 仍是请求值——可分享链接要求 URL 语义稳定，后端不得改写窗口。**不为此新增 HTTP 错误码或 `Unavailability` 码**：「原始数据只保留 30 天」是交付文档声明的产品事实（地图约束 5），不是每次响应都要解释的异常；且 `Unavailability` 是封闭 13 码（D8.3），为一条时间边界开口不值得。`granularity=raw` 的 ≤6h 上限是另一条独立约束，不受本条影响。
 
 ---
 

@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  monitored-pg13:
+    image: postgres:13
+    profiles: [matrix]
+    environment: &monitored-env
+      POSTGRES_DB: monitored
+      POSTGRES_USER: monitored
+      POSTGRES_PASSWORD: monitored
+    ports: ["55433:5432"]
+  monitored-pg14:
+    image: postgres:14
+    profiles: [matrix]
+    environment: *monitored-env
+    ports: ["55434:5432"]
+  monitored-pg15:
+    image: postgres:15
+    profiles: [matrix]
+    environment: *monitored-env
+    ports: ["55435:5432"]
+  monitored-pg16:
+    image: postgres:16
+    profiles: [matrix]
+    environment: *monitored-env
+    ports: ["55436:5432"]
+  monitored-pg17:
+    image: postgres:17
+    profiles: [matrix]
+    environment: *monitored-env
+    ports: ["55437:5432"]

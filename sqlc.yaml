@@ -1,0 +1,34 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: migrations
+    queries: internal/instance/queries.sql
+    gen:
+      go:
+        package: instance
+        out: internal/instance
+        sql_package: pgx/v5
+  - engine: postgresql
+    schema: migrations
+    queries: internal/alerting/queries.sql
+    gen:
+      go:
+        package: alerting
+        out: internal/alerting
+        sql_package: pgx/v5
+  - engine: postgresql
+    schema: migrations
+    queries: internal/httpapi/queries.sql
+    gen:
+      go:
+        package: httpapi
+        out: internal/httpapi
+        sql_package: pgx/v5
+  - engine: postgresql
+    schema: migrations
+    queries: internal/metric/queries.sql
+    gen:
+      go:
+        package: metric
+        out: internal/metric
+        sql_package: pgx/v5

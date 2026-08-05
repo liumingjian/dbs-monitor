@@ -1,0 +1,65 @@
+/api/v1/instances:
+  get:
+    tags: [instances]
+    operationId: listInstances
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Instances
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/instances.yaml#/Instance }
+  post:
+    tags: [instances]
+    operationId: createInstance
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/instances.yaml#/InstanceInput }
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/instances.yaml#/InstanceCreated }
+/api/v1/instances/{id}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [instances]
+    operationId: getInstance
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Instance
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/instances.yaml#/Instance }
+  put:
+    tags: [instances]
+    operationId: updateInstance
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/instances.yaml#/InstanceInput }
+    responses:
+      '200':
+        description: Updated
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/instances.yaml#/Instance }
+  delete:
+    tags: [instances]
+    operationId: deleteInstance
+    x-required-role: PLATFORM_ADMIN
+    responses:
+      '204': { description: Deleted }

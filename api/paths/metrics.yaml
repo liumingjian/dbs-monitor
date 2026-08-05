@@ -1,0 +1,35 @@
+/api/v1/instances/{id}/metrics/series:
+  get:
+    tags: [metrics]
+    operationId: getMetricSeries
+    x-required-role: READONLY
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - name: metric
+        in: query
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+            enum: [pg.availability.reachable, pg.connection.total, host.cpu.usage_percent]
+      - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+      - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+      - name: step
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [auto, 15s, 1m, 5m, raw]
+          default: auto
+    responses:
+      '200':
+        description: Metric series
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/metrics.yaml#/MetricSeriesResponse }
+      '400':
+        description: Invalid time range or step
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

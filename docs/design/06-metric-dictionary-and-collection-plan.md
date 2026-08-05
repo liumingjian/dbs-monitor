@@ -229,6 +229,8 @@ RT-A 查明的版本差异总共两条，**且两条都卡在 PG12→13 这一�
 - 它比单测慢，**多半进不了 [T9](https://github.com/liumingjian/dbs-monitor/issues/27) 那条「快到每次改动都愿意跑」的闭环**，需要分层：快闭环跑单测，矩阵进 CI；
 - 本地开发环境需能起 5 个 PG 版本 —— [T9](https://github.com/liumingjian/dbs-monitor/issues/27) 定「一条命令起干净环境」时要吃下这条。
 
+T11 的 walking-skeleton 验收不包含这条矩阵。它保留为 R3 发布门槛：R3 必须在五个真实 PG 版本上执行每个采集 Task，并断言列名、类型和行数形状；T11 resolve 不把矩阵结果冒充为已完成证据。
+
 ### 5.6 连接类型不可互换
 
 被监控库的连接与平台自带库的连接**在类型上不可互换**（如 `TargetConn` 之于 `db.DBTX`），让「把采集 SQL 误发到平台库」或反之**写不出来**。

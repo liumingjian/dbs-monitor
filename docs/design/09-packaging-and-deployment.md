@@ -81,10 +81,16 @@
 
 | 架构 | 实测范围 |
 |---|---|
-| `amd64` | **全量**：RT-C §7 门槛 T1/T2/T3 + PG13–17 集成矩阵 |
+| `amd64` | **T11 全量**：RT-C §7 门槛 T1/T2/T3；**R3 发布门槛**再加 PG13–17 集成矩阵 |
 | `arm64` | **冒烟 + 一次容量抽样**：端到端切片全绿 + `pg_total_relation_size` 复核 |
 
 理由：性能门槛判定的是**存储模型选型**（窄表 + 原生分区）是否成立，这是架构无关的结构性结论；arm64 需要验证的是「能跑、数字不离谱」。**arm64 抽样与 amd64 偏离超过一个量级，才升级为全量复跑。**
+
+### 3.2 T11 与 R3 的交付边界
+
+T11 的 walking-skeleton 验收只判断选型与首启地基是否成立：原生 amd64 的 RT-C 全量门槛、真实构建、离线 tar、安装和首启行为。升级/回滚脚本及 PG13–17 被监控库集成矩阵不阻塞 T11 resolve，统一延期为 R3 的发布门槛。
+
+R3 必须补齐并实测：`upgrade.sh`、控制面备份与恢复回滚流程，以及 PG13/14/15/16/17 五个真实库上每个采集 Task 的列名、类型和行数形状矩阵。R3 交付前不得把 T11 的 walking-skeleton 包宣称为完整生产升级包。
 
 ---
 
@@ -227,6 +233,8 @@ down 迁移属于「写了但从来没测过、却在真正需要它的那个凌
 
 **真值回写路径**：T11 实测完成后，用实测值替换交付文档中的推算值。**本票的数字带「推算」标签，不假装是结论**，避免被后续会话当作既定事实引用。
 
+> **真值回写（2026-08-05，兑现本节预写的回写路径）**：T11 原生 Linux amd64 门槛实测（`docs/validation/t11-linux-amd64-progress.md`）：30 天全量 30 个分区共 **49,112,432,640 bytes（≈49.1 GB）= 200 GB 交付磁盘的 24.556%**——替换上文「取上界 45」的推算；RT-C 门槛 T2（30 天全量 > 交付磁盘 30% 则推翻）**PASS**，200 GB 交付规格与「不足即硬拒绝」行为不变。内存 / CPU 基线仍为推算，无实测。
+
 **明确移交，不在本票解决**：**运行期的磁盘水位保护**（盘将满时是告警、自动缩短保留期、还是拒绝写入）归地图迷雾中的「平台自身的可观测性」，且与 [T12](https://github.com/liumingjian/dbs-monitor/issues/30) 的背压语义相邻；在此草率定一条很可能与那边冲突。
 
 ---
@@ -247,8 +255,8 @@ down 迁移属于「写了但从来没测过、却在真正需要它的那个凌
 
 | 产物 | 内容 |
 |---|---|
-| `dbs-monitor-<version>-linux-amd64.tar.gz` | 平台二进制（前端已 embed）、自建 `pgsql/`（PG 17，glibc 2.17 构建）、两个架构的 Agent 二进制、`install.sh` / `upgrade.sh`、systemd unit 模板、交付文档 |
-| `dbs-monitor-<version>-linux-arm64.tar.gz` | 同上，`pgsql/` 为 glibc 2.28 构建 |
+| `dbs-monitor-<version>-linux-amd64.tar.gz` | **R3 完整交付目标**：平台二进制（前端已 embed）、自建 `pgsql/`（PG 17，glibc 2.17 构建）、两个架构的 Agent 二进制、`install.sh` / `upgrade.sh`、systemd unit 模板、交付文档 |
+| `dbs-monitor-<version>-linux-arm64.tar.gz` | **R3 完整交付目标**：同上，`pgsql/` 为 glibc 2.28 构建 |
 
 **交付前置检查清单**（安装脚本执行 + 交付文档并列声明）：
 
@@ -257,6 +265,7 @@ down 迁移属于「写了但从来没测过、却在真正需要它的那个凌
 3. 平台机与全部被监控主机**时钟同步**（**Agent 安装期硬检查，±5s**）；
 4. 已确定平台对外访问地址（证书 SAN，安装时输入）；
 5. 平台机到被监控 PG 的网络可达（服务端直连采集，[T1](https://github.com/liumingjian/dbs-monitor/issues/19) D2）；被监控主机到平台的 HTTPS 可达（Agent push）。
+6. 被监控 PG 大版本在 **13–17** 范围内。（收口增补 2026-08-05，承 [T4](06-metric-dictionary-and-collection-plan.md) §9 移交「PG13–17 支持矩阵渗入安装前置检查」，本票 v1.0 漏接。）执行点分两处：**交付文档与本清单并列声明**；**机器门在平台的实例接入校验**——PG12 及以下接入即拒（[T4](06-metric-dictionary-and-collection-plan.md) §5.1），`install.sh` 在平台机上触达不到被监控库，不承担该检查。接入校验的实现随 R3；截至本增补，`packaging/bundle/install.sh` 与交付文档均未声明该门，以本条为准补齐。
 
 ---
 
@@ -264,7 +273,7 @@ down 迁移属于「写了但从来没测过、却在真正需要它的那个凌
 
 | 去向 | 内容 |
 |---|---|
-| [T9 · AI 开发护栏与验证闭环](https://github.com/liumingjian/dbs-monitor/issues/27) | ① `migrations/` 只写 up（D9.2）落成可机械检查的规则；② 安装/升级脚本是否纳入「一条命令」的验证闭环 |
+| [T9 · AI 开发护栏与验证闭环](https://github.com/liumingjian/dbs-monitor/issues/27) | ① `migrations/` 只写 up（D9.2）落成可机械检查的规则；② R3 将安装/升级脚本接入发布验证闭环 |
 | [T11 · Walking skeleton 实现](https://github.com/liumingjian/dbs-monitor/issues/29) | ① 实测门槛按 D3.1 分级（amd64 全量 / arm64 冒烟 + 容量抽样）；② 资源基线真值回写（D10）；③ socket-only + peer 认证下 pgx 连接串形态的实测 |
 | [T12 · 采集并发限流、超时与背压](https://github.com/liumingjian/dbs-monitor/issues/30) | 运行期磁盘水位保护的归属（D10 移交），需与背压语义对齐 |
 | [T13 · 凭据加密存储、轮换与吊销](https://github.com/liumingjian/dbs-monitor/issues/31) | ① 平台与 PG 同用户 ⇒ 平台进程被攻破即拿到全部密文（D5），须在威胁模型中正面处理；② D6 本地通知快照文件中的凭据密文，其密钥来源与主线一致 |
@@ -275,11 +284,11 @@ down 迁移属于「写了但从来没测过、却在真正需要它的那个凌
 
 | 事实 | 状态 |
 |---|---|
-| 磁盘 / 内存 / CPU 基线 | **全部为推算**，无一手实测；T11 回写（D10） |
+| 磁盘 / 内存 / CPU 基线 | **磁盘已实测**：30 天全量 49.1 GB = 200 GB 的 24.556%（2026-08-05 回写，见 D10 回写块）；**内存 / CPU 仍为推算** |
 | 自建 PG 在 glibc 2.17 / 2.28 构建容器下的实际可重定位性与 `make check` 通过情况 | 未实测，构建流水线首次搭建时验证 |
-| arm64 下 PG 原生分区的性能表现 | 未实测，按 D3.1 只做容量抽样 |
-| 整包 tar 的实际体积 | 未知（自带 PG 为主要贡献者）。按 [T7 D2](08-frontend-stack-and-ui.md)，前端体积不作为任何决策依据 |
-| PG 17 在信创发行版（麒麟 V10 / UOS / openEuler）上的实际运行验证 | 未做。按 D3「不做发行版清单」，只承诺 glibc 下限；首次交付时抽验 |
+| arm64 下 PG 原生分区的性能表现 | **仍无证据**（2026-08-05 收口登记为显式欠账）：T11 只有 arm64 交叉编译通过（`make check-full`）；D3.1 要求的 arm64 **冒烟 + 容量抽样无验证文档**（提交 `ec3a317` 信息称完成 ARM 验证，但证据缺失）。随 R3 release gates 补做 |
+| 整包 tar 的实际体积 | **已实测**（2026-08-05 回写）：amd64 整包 **24,025,391 bytes（≈23 MB）**，解压 **59 MB**（含 PG 17.6；`docs/validation/t11-linux-amd64-progress.md`）。按 [T7 D2](08-frontend-stack-and-ui.md)，前端体积不作为任何决策依据 |
+| PG 17 在信创发行版（麒麟 V10 / UOS / openEuler）上的实际运行验证 | **麒麟 V10 已抽验**（2026-08-05 回写）：T11 原生验证宿主即 Kylin Linux Advanced Server V10 (Sword)，整包安装、首启与门槛全量在其上跑通（同上文档）。UOS / openEuler 未验，维持「不做发行版清单」 |
 
 ---
 

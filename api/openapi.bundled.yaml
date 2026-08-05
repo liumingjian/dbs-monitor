@@ -1,0 +1,435 @@
+openapi: 3.0.3
+info:
+  title: dbs-monitor API
+  version: 0.1.0
+servers:
+  - url: /
+tags:
+  - name: instances
+  - name: metrics
+  - name: auth
+  - name: agent
+paths:
+  /api/v1/login:
+    post:
+      tags:
+        - auth
+      operationId: createSession
+      x-required-role: READONLY
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '204':
+          description: Logged in
+          headers:
+            Set-Cookie:
+              required: true
+              schema:
+                type: string
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances:
+    get:
+      tags:
+        - instances
+      operationId: listInstances
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Instances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Instance'
+    post:
+      tags:
+        - instances
+      operationId: createInstance
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstanceInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceCreated'
+  /api/v1/instances/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - instances
+      operationId: getInstance
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Instance'
+    put:
+      tags:
+        - instances
+      operationId: updateInstance
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstanceInput'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Instance'
+    delete:
+      tags:
+        - instances
+      operationId: deleteInstance
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '204':
+          description: Deleted
+  /api/v1/instances/{id}/metrics/series:
+    get:
+      tags:
+        - metrics
+      operationId: getMetricSeries
+      x-required-role: READONLY
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum:
+                - pg.availability.reachable
+                - pg.connection.total
+                - host.cpu.usage_percent
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: step
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - auto
+              - 15s
+              - 1m
+              - 5m
+              - raw
+            default: auto
+      responses:
+        '200':
+          description: Metric series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricSeriesResponse'
+        '400':
+          description: Invalid time range or step
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/agent/v1/report:
+    post:
+      tags:
+        - agent
+      operationId: reportAgentMetrics
+      x-required-role: AGENT
+      security:
+        - agentToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentReport'
+      responses:
+        '204':
+          description: Accepted
+        '400':
+          description: Invalid timestamp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    agentToken:
+      type: http
+      scheme: bearer
+  schemas:
+    Unavailability:
+      type: string
+      enum:
+        - NO_SAMPLES_YET
+        - NO_DATA_IN_RANGE
+        - STALE
+        - COLLECTION_PAUSED
+        - COLLECTION_FAILED
+        - DB_UNREACHABLE
+        - AGENT_OFFLINE
+        - PERMISSION_DENIED
+        - EXTENSION_MISSING
+        - FEATURE_DISABLED
+        - VERSION_UNSUPPORTED
+        - NOT_APPLICABLE_ROLE
+        - COUNTER_RESET
+    AlertStatus:
+      type: string
+      enum:
+        - OK
+        - PENDING
+        - FIRING
+        - NO_DATA
+        - RECOVERED
+    CapabilityStatus:
+      type: string
+      enum:
+        - PRESENT
+        - MISSING
+        - NOT_APPLICABLE
+        - UNKNOWN
+    InstanceInput:
+      type: object
+      required:
+        - name
+        - host
+        - port
+        - database
+        - username
+        - password
+      properties:
+        name:
+          type: string
+          minLength: 1
+        host:
+          type: string
+          minLength: 1
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        database:
+          type: string
+          minLength: 1
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+    Instance:
+      type: object
+      required:
+        - id
+        - name
+        - host
+        - port
+        - database
+        - username
+        - alert_status
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        host:
+          type: string
+        port:
+          type: integer
+        database:
+          type: string
+        username:
+          type: string
+        alert_status:
+          $ref: '#/components/schemas/AlertStatus'
+    InstanceCreated:
+      type: object
+      required:
+        - instance
+        - agent_token
+      properties:
+        instance:
+          $ref: '#/components/schemas/Instance'
+        agent_token:
+          type: string
+          description: Returned once when the instance is created.
+    MetricSeriesResponse:
+      type: object
+      required:
+        - from
+        - to
+        - step
+        - metrics
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        step:
+          type: string
+        metrics:
+          type: array
+          items:
+            type: object
+            required:
+              - metric
+              - unit
+              - unavailability
+              - series
+            properties:
+              metric:
+                type: string
+              unit:
+                type: string
+              unavailability:
+                nullable: true
+                allOf:
+                  - $ref: '#/components/schemas/Unavailability'
+              series:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - labels
+                    - points
+                  properties:
+                    labels:
+                      type: object
+                      additionalProperties:
+                        type: string
+                    points:
+                      type: array
+                      items:
+                        type: array
+                        minItems: 2
+                        maxItems: 2
+                        items:
+                          type: number
+                          nullable: true
+                          x-go-type: '*float64'
+    AgentReport:
+      type: object
+      required:
+        - instance_id
+        - timestamp
+        - metrics
+      properties:
+        instance_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        metrics:
+          type: array
+          items:
+            type: object
+            required:
+              - metric
+              - value
+            properties:
+              metric:
+                type: string
+                enum:
+                  - host.cpu.usage_percent
+              value:
+                type: number
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_FAILED
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - INTERNAL
+            message:
+              type: string
+            field_errors:
+              type: array
+              items:
+                type: object
+                required:
+                  - field
+                  - message
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
