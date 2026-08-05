@@ -125,6 +125,8 @@
 
 **顺带定下**：骨架做一个**最简新建实例表单**（host / port / db / user / password），它是双 schema 的产地。与 T6「实例写端 R2 只做最小可用」一致。
 
+> **T13 回写**：[凭据加密存储、轮换与吊销](13-credential-encryption-rotation-and-revocation.md) 已将这笔 R3 欠账收敛为版本化 AES-256-GCM 主密钥、独立 PG 凭据写入、Agent 显式登记及令牌生命周期。T11 的明文实现仍是已验收的 walking skeleton；R3 在生产发布声明前替换它，不回改或伪装 T11 的历史结论。
+
 ---
 
 ## 6. D6 · 分区机制进骨架

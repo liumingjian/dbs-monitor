@@ -19,3 +19,19 @@ _Avoid_: Database healthy, collector connected
 **Collection-source integrity watermark**:
 The latest time at which every enabled and applicable collection task for a source had satisfied its most recent due obligation. One successful task cannot advance the watermark while another due task is failed, skipped, or backed off.
 _Avoid_: Latest sample time, any-task success time
+
+**PG credential**:
+The username and password the server uses to authenticate to one monitored PostgreSQL instance. The username is part of the credential but is not secret; the password is.
+_Avoid_: Connection string, DSN
+
+**Agent enrollment**:
+The configuration fact that an instance is expected to have an Agent. Explicit token issuance starts enrollment, and only disabling the Agent ends it.
+_Avoid_: Token exists, Agent online
+
+**Agent token revocation**:
+Invalidating an Agent bearer token while preserving Agent enrollment and the expectation that the Agent remains online.
+_Avoid_: Disable Agent
+
+**Agent disablement**:
+Ending Agent enrollment for an instance while preserving its historical host samples. It makes Agent-only metrics and rules structurally not applicable.
+_Avoid_: Revoke token, Agent offline
