@@ -1,7 +1,7 @@
 # 文档索引
 
 > 本索引用于后续 `/wayfinder` 或其他调研/设计会话快速定位材料。  
-> 当前阶段：**R1（PostgreSQL MVP 产品/设计规格）已完成**，三份规格文档为 v1.0。下一条路线为 R2 系统架构骨架与技术选型。
+> 当前阶段：**R1 已完成并冻结；R2（系统架构骨架与技术选型）决策层已收口**——17 张子票全部关闭，决策文档 `04`–`15` 均为 v1.0，walking skeleton（T11）已验收（升级/回滚、PG13–17 矩阵、release gates 递延 R3）。正在进行收口合入与 `/to-spec` 前置准备。
 
 ---
 
@@ -40,7 +40,9 @@
 | [`docs/design/11-walking-skeleton-slice.md`](design/11-walking-skeleton-slice.md) | R2 · Walking skeleton 切片定义与验收标准：两条采集通路的切法、告警与前端的深度、鉴权与凭据、分区机制、验收标准三层、禁止清单、推翻选型的处理规则 | **v1.0** |
 | [`docs/design/12-collection-concurrency-timeouts-and-backpressure.md`](design/12-collection-concurrency-timeouts-and-backpressure.md) | R2 · 采集并发、超时与背压：中央调度、双连接生命周期、超时与退避、能力探测份额、任务状态与完整性水位、自观测边界 | **v1.0** |
 | [`docs/design/13-credential-encryption-rotation-and-revocation.md`](design/13-credential-encryption-rotation-and-revocation.md) | R2 · 凭据加密、轮换与吊销：威胁模型、PG 密文、Agent 登记与令牌生命周期、主密钥、备份恢复和回显边界 | **v1.0** |
-| [`docs/validation/t11-windows-amd64-progress.md`](validation/t11-windows-amd64-progress.md) | T11 · Windows amd64 环境验证进度、Docker Desktop 兼容性结论与 Linux amd64 后续验收清单 | **进行中** |
+| [`docs/design/14-platform-observability-and-diagnostics.md`](design/14-platform-observability-and-diagnostics.md) | R2 · 平台自身运行可观测性与诊断出口：journal + 只读诊断 API、四态平台健康快照、非递归告警边界、磁盘分级保护、故障注入验收 | **v1.0** |
+| [`docs/design/15-ci-and-release-pipeline.md`](design/15-ci-and-release-pipeline.md) | R2 · CI 与发布流水线：GitHub Actions 唯一规范执行者、PR 门与 `check-full`、tag + 精确提交校验 + 人工审批发布、四组合构建矩阵、留痕规则 | **v1.0** |
+| [`docs/validation/t11-windows-amd64-progress.md`](validation/t11-windows-amd64-progress.md) | T11 · Windows amd64 环境验证记录、Docker Desktop 兼容性结论与 Linux amd64 后续验收清单 | 已完成（T11 已验收） |
 
 ### 2.1 四条跨文档不变式
 
