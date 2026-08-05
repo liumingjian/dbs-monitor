@@ -35,3 +35,11 @@ _Avoid_: Disable Agent
 **Agent disablement**:
 Ending Agent enrollment for an instance while preserving its historical host samples. It makes Agent-only metrics and rules structurally not applicable.
 _Avoid_: Revoke token, Agent offline
+
+**Platform user**:
+An operator account that signs in to the control plane, carrying exactly one of the three global roles. A platform user is not a notification contact: creating one never creates a contact, and a contact does not require a user. Users are disabled, never deleted, so recorded actions stay attributable.
+_Avoid_: Contact, member
+
+**Instance removal**:
+Deleting an instance's configuration and credentials immediately, closing all its unresolved alerts with an attributed reason, and letting its samples expire through retention. Re-onboarding the same database yields a new instance that inherits nothing.
+_Avoid_: Archive instance, soft delete
