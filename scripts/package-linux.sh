@@ -52,8 +52,10 @@ tar -xf "$pg_archive" -C "$work/source" --strip-components=1
   cd "$work/source"
   CPPFLAGS="-I$zlib_prefix/include" LDFLAGS="-L$zlib_prefix/lib" LIBS="$zlib_prefix/lib/libz.a" \
     ./configure --prefix="$install_prefix" --without-icu --without-openssl --without-readline --without-perl --without-python --without-tcl
+  # PostgreSQL 17's generated headers must exist before parallel submakes start.
+  make -C src/backend generated-headers
   make -j"$(getconf _NPROCESSORS_ONLN)"
-  make check
+  env -u MAKELEVEL make check
   make install DESTDIR="$work/stage"
 )
 

@@ -105,6 +105,12 @@ docs/research/aliyun-rds/evidence/
 | [`extracted-text/aliyun-rds-tabs-innertext.json`](research/aliyun-rds/evidence/extracted-text/aliyun-rds-tabs-innertext.json) | 各 tab 页面 innerText 提取结果 |
 | [`extracted-text/aliyun-rds-current-innertext.txt`](research/aliyun-rds/evidence/extracted-text/aliyun-rds-current-innertext.txt) | 当前页面 innerText 提取结果 |
 
+### 3.4 T11 validation
+
+| 文档 | 说明 |
+|---|---|
+| [`docs/validation/t11-linux-amd64-progress.md`](validation/t11-linux-amd64-progress.md) | Native Linux amd64 validation evidence; T11 remains open while upgrade and rollback paths are absent |
+
 ---
 
 ## 4. 路线进度

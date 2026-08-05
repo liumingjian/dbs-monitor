@@ -30,7 +30,7 @@ server_pid=$!
 
 ready=0
 for _ in $(seq 1 60); do
-  if curl --silent --fail --cacert "$cert_dir/ca.crt" https://127.0.0.1:18443/login >/dev/null 2>&1; then
+  if curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" https://127.0.0.1:18443/login >/dev/null 2>&1; then
     ready=1
     break
   fi
