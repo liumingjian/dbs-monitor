@@ -12,42 +12,40 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/api"
 )
 
-func TestCounterRates(t *testing.T) {
+func TestCalculateCounterRates(t *testing.T) {
 	tests := []struct {
 		name     string
 		previous counterSnapshot
 		current  counterSnapshot
 		want     rateSnapshot
-		wantDisk bool
-		wantNet  bool
 	}{
 		{
 			name:     "rates use the actual sample interval",
 			previous: counterSnapshot{sampledAt: time.Unix(100, 0), diskOps: 100, diskBytes: 1_000, networkBytes: 2_000},
 			current:  counterSnapshot{sampledAt: time.Unix(110, 0), diskOps: 130, diskBytes: 1_500, networkBytes: 2_700},
-			want:     rateSnapshot{diskIOPS: 3, diskThroughput: 50, networkThroughput: 70},
-			wantDisk: true, wantNet: true,
+			want: rateSnapshot{
+				diskCountersValid: true, networkCountersValid: true,
+				diskIOPS: 3, diskBytesPerSecond: 50, networkBytesPerSecond: 70,
+			},
 		},
 		{
 			name:     "disk reset does not produce a negative spike",
 			previous: counterSnapshot{sampledAt: time.Unix(100, 0), diskOps: 100, diskBytes: 1_000, networkBytes: 2_000},
 			current:  counterSnapshot{sampledAt: time.Unix(110, 0), diskOps: 10, diskBytes: 100, networkBytes: 2_700},
-			want:     rateSnapshot{networkThroughput: 70},
-			wantDisk: false, wantNet: true,
+			want:     rateSnapshot{networkCountersValid: true, networkBytesPerSecond: 70},
 		},
 		{
 			name:     "out of order counters are not treated as reset",
 			previous: counterSnapshot{sampledAt: time.Unix(110, 0), diskOps: 130, diskBytes: 1_500, networkBytes: 2_700},
 			current:  counterSnapshot{sampledAt: time.Unix(100, 0), diskOps: 100, diskBytes: 1_000, networkBytes: 2_000},
-			want:     rateSnapshot{}, wantDisk: false, wantNet: false,
+			want:     rateSnapshot{},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, diskOK, networkOK := counterRates(tt.previous, tt.current)
-			if got != tt.want || diskOK != tt.wantDisk || networkOK != tt.wantNet {
-				t.Fatalf("counterRates() = (%+v, %v, %v), want (%+v, %v, %v)", got, diskOK, networkOK, tt.want, tt.wantDisk, tt.wantNet)
+			if got := calculateCounterRates(tt.previous, tt.current); got != tt.want {
+				t.Fatalf("calculateCounterRates() = %+v, want %+v", got, tt.want)
 			}
 		})
 	}
@@ -122,7 +120,7 @@ func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
 	service := NewService(client, Config{Instance: instanceID}, "1.2.3", "/")
 	now := time.Now().UTC()
 	if err := service.RunOnce(context.Background(), now); err == nil {
-		t.Fatal("first report succeeded, want connection failure response")
+		t.Fatal("first report succeeded, want server error response")
 	}
 	if err := service.RunOnce(context.Background(), now.Add(10*time.Second)); err != nil {
 		t.Fatalf("second report: %v", err)

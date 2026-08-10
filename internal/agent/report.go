@@ -53,27 +53,30 @@ type counterSnapshot struct {
 }
 
 type rateSnapshot struct {
-	diskIOPS          float64
-	diskThroughput    float64
-	networkThroughput float64
+	diskCountersValid     bool
+	networkCountersValid  bool
+	diskIOPS              float64
+	diskBytesPerSecond    float64
+	networkBytesPerSecond float64
 }
 
-func counterRates(previous, current counterSnapshot) (rateSnapshot, bool, bool) {
+func calculateCounterRates(previous, current counterSnapshot) rateSnapshot {
 	elapsed := current.sampledAt.Sub(previous.sampledAt).Seconds()
 	if elapsed <= 0 {
-		return rateSnapshot{}, false, false
+		return rateSnapshot{}
 	}
-	rates := rateSnapshot{}
-	diskOK := current.diskOps >= previous.diskOps && current.diskBytes >= previous.diskBytes
-	if diskOK {
+	rates := rateSnapshot{
+		diskCountersValid:    current.diskOps >= previous.diskOps && current.diskBytes >= previous.diskBytes,
+		networkCountersValid: current.networkBytes >= previous.networkBytes,
+	}
+	if rates.diskCountersValid {
 		rates.diskIOPS = float64(current.diskOps-previous.diskOps) / elapsed
-		rates.diskThroughput = float64(current.diskBytes-previous.diskBytes) / elapsed
+		rates.diskBytesPerSecond = float64(current.diskBytes-previous.diskBytes) / elapsed
 	}
-	networkOK := current.networkBytes >= previous.networkBytes
-	if networkOK {
-		rates.networkThroughput = float64(current.networkBytes-previous.networkBytes) / elapsed
+	if rates.networkCountersValid {
+		rates.networkBytesPerSecond = float64(current.networkBytes-previous.networkBytes) / elapsed
 	}
-	return rates, diskOK, networkOK
+	return rates
 }
 
 type Collector struct {
@@ -131,15 +134,15 @@ func (collector *Collector) Collect(ctx context.Context, sampledAt time.Time) (s
 		{Metric: api.AgentMetricMetricHostDiskFreeBytes, Value: float64(diskUsage.Free)},
 	}}
 	if collector.previous != nil {
-		rates, diskOK, networkOK := counterRates(*collector.previous, current)
-		if diskOK {
+		rates := calculateCounterRates(*collector.previous, current)
+		if rates.diskCountersValid {
 			result.metrics = append(result.metrics,
 				api.AgentMetric{Metric: api.AgentMetricMetricHostDiskIops, Value: rates.diskIOPS},
-				api.AgentMetric{Metric: api.AgentMetricMetricHostDiskThroughputBytesPerSec, Value: rates.diskThroughput},
+				api.AgentMetric{Metric: api.AgentMetricMetricHostDiskThroughputBytesPerSec, Value: rates.diskBytesPerSecond},
 			)
 		}
-		if networkOK {
-			result.metrics = append(result.metrics, api.AgentMetric{Metric: api.AgentMetricMetricHostNetworkBytesPerSec, Value: rates.networkThroughput})
+		if rates.networkCountersValid {
+			result.metrics = append(result.metrics, api.AgentMetric{Metric: api.AgentMetricMetricHostNetworkBytesPerSec, Value: rates.networkBytesPerSecond})
 		}
 	}
 	collector.previous = &current
@@ -159,23 +162,23 @@ func NewService(client *api.ClientWithResponses, config Config, version, dataPat
 }
 
 func (service *Service) RunOnce(ctx context.Context, now time.Time) error {
-	collected, err := service.collector.Collect(ctx, now.UTC())
+	now = now.UTC()
+	collected, err := service.collector.Collect(ctx, now)
 	if err != nil {
 		return err
 	}
 	service.buffer.add(collected)
-	pending := service.buffer.pending(now.UTC())
-	current := pending[len(pending)-1]
+	pending := service.buffer.pending(now)
 	body := api.AgentReport{
 		AgentVersion: service.version,
 		InstanceId:   service.config.Instance,
-		Timestamp:    current.sampledAt,
-		Metrics:      current.metrics,
+		Timestamp:    collected.sampledAt,
+		Metrics:      collected.metrics,
 	}
 	if len(pending) > 1 {
 		backfill := make([]api.AgentSample, 0, len(pending)-1)
-		for _, buffered := range pending[:len(pending)-1] {
-			backfill = append(backfill, api.AgentSample{Timestamp: buffered.sampledAt, Metrics: buffered.metrics})
+		for _, pendingSample := range pending[:len(pending)-1] {
+			backfill = append(backfill, api.AgentSample{Timestamp: pendingSample.sampledAt, Metrics: pendingSample.metrics})
 		}
 		body.Backfill = &backfill
 	}
