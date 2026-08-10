@@ -12,7 +12,7 @@ import (
 )
 
 const adminExists = `-- name: AdminExists :one
-SELECT EXISTS (SELECT 1 FROM app_user WHERE role = 'PLATFORM_ADMIN')
+SELECT EXISTS (SELECT 1 FROM app_user WHERE enabled AND role = 'PLATFORM_ADMIN')
 `
 
 func (q *Queries) AdminExists(ctx context.Context) (bool, error) {
@@ -55,6 +55,54 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 	return err
 }
 
+const createUser = `-- name: CreateUser :one
+INSERT INTO app_user (id, username, password_hash, role)
+VALUES ($1, $2, $3, $4)
+RETURNING id, username, role, enabled, created_at
+`
+
+type CreateUserParams struct {
+	ID           pgtype.UUID
+	Username     string
+	PasswordHash []byte
+	Role         string
+}
+
+type CreateUserRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.ID,
+		arg.Username,
+		arg.PasswordHash,
+		arg.Role,
+	)
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteUserSessions = `-- name: DeleteUserSessions :exec
+DELETE FROM user_session WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSessions, userID)
+	return err
+}
+
 const getAgentTokenHash = `-- name: GetAgentTokenHash :one
 SELECT agent_token_hash FROM instance WHERE id = $1
 `
@@ -64,6 +112,33 @@ func (q *Queries) GetAgentTokenHash(ctx context.Context, id pgtype.UUID) ([]byte
 	var agent_token_hash []byte
 	err := row.Scan(&agent_token_hash)
 	return agent_token_hash, err
+}
+
+const getCurrentUser = `-- name: GetCurrentUser :one
+SELECT id, username, role, enabled, created_at
+FROM app_user
+WHERE id = $1
+`
+
+type GetCurrentUserRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetCurrentUser(ctx context.Context, id pgtype.UUID) (GetCurrentUserRow, error) {
+	row := q.db.QueryRow(ctx, getCurrentUser, id)
+	var i GetCurrentUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getInstanceAlertStatus = `-- name: GetInstanceAlertStatus :one
@@ -77,27 +152,32 @@ func (q *Queries) GetInstanceAlertStatus(ctx context.Context, instanceID pgtype.
 	return status, err
 }
 
-const getSessionRole = `-- name: GetSessionRole :one
-SELECT u.role
+const getSessionUser = `-- name: GetSessionUser :one
+SELECT u.id, u.role
 FROM user_session session
 JOIN app_user u ON u.id = session.user_id
-WHERE session.token_hash = $1 AND session.expires_at > $2
+WHERE session.token_hash = $1 AND session.expires_at > $2 AND u.enabled
 `
 
-type GetSessionRoleParams struct {
+type GetSessionUserParams struct {
 	TokenHash []byte
 	ExpiresAt pgtype.Timestamptz
 }
 
-func (q *Queries) GetSessionRole(ctx context.Context, arg GetSessionRoleParams) (string, error) {
-	row := q.db.QueryRow(ctx, getSessionRole, arg.TokenHash, arg.ExpiresAt)
-	var role string
-	err := row.Scan(&role)
-	return role, err
+type GetSessionUserRow struct {
+	ID   pgtype.UUID
+	Role string
+}
+
+func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) (GetSessionUserRow, error) {
+	row := q.db.QueryRow(ctx, getSessionUser, arg.TokenHash, arg.ExpiresAt)
+	var i GetSessionUserRow
+	err := row.Scan(&i.ID, &i.Role)
+	return i, err
 }
 
 const getUserForLogin = `-- name: GetUserForLogin :one
-SELECT id, password_hash, role FROM app_user WHERE username = $1
+SELECT id, password_hash, role FROM app_user WHERE username = $1 AND enabled
 `
 
 type GetUserForLoginRow struct {
@@ -110,5 +190,197 @@ func (q *Queries) GetUserForLogin(ctx context.Context, username string) (GetUser
 	row := q.db.QueryRow(ctx, getUserForLogin, username)
 	var i GetUserForLoginRow
 	err := row.Scan(&i.ID, &i.PasswordHash, &i.Role)
+	return i, err
+}
+
+const getUserForUpdate = `-- name: GetUserForUpdate :one
+SELECT id, username, role, enabled, created_at
+FROM app_user
+WHERE id = $1
+FOR UPDATE
+`
+
+type GetUserForUpdateRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetUserForUpdate(ctx context.Context, id pgtype.UUID) (GetUserForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getUserForUpdate, id)
+	var i GetUserForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserPassword = `-- name: GetUserPassword :one
+SELECT password_hash FROM app_user WHERE id = $1 AND enabled
+`
+
+func (q *Queries) GetUserPassword(ctx context.Context, id pgtype.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getUserPassword, id)
+	var password_hash []byte
+	err := row.Scan(&password_hash)
+	return password_hash, err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, username, role, enabled, created_at
+FROM app_user
+ORDER BY username
+`
+
+type ListUsersRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersRow
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Role,
+			&i.Enabled,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockEnabledPlatformAdmins = `-- name: LockEnabledPlatformAdmins :many
+SELECT id
+FROM app_user
+WHERE enabled AND role = 'PLATFORM_ADMIN'
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *Queries) LockEnabledPlatformAdmins(ctx context.Context) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, lockEnabledPlatformAdmins)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setUserEnabled = `-- name: SetUserEnabled :one
+UPDATE app_user
+SET enabled = $2
+WHERE id = $1
+RETURNING id, username, role, enabled, created_at
+`
+
+type SetUserEnabledParams struct {
+	ID      pgtype.UUID
+	Enabled bool
+}
+
+type SetUserEnabledRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) SetUserEnabled(ctx context.Context, arg SetUserEnabledParams) (SetUserEnabledRow, error) {
+	row := q.db.QueryRow(ctx, setUserEnabled, arg.ID, arg.Enabled)
+	var i SetUserEnabledRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const setUserPassword = `-- name: SetUserPassword :execrows
+UPDATE app_user
+SET password_hash = $2
+WHERE id = $1
+`
+
+type SetUserPasswordParams struct {
+	ID           pgtype.UUID
+	PasswordHash []byte
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserPassword, arg.ID, arg.PasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setUserRole = `-- name: SetUserRole :one
+UPDATE app_user
+SET role = $2
+WHERE id = $1
+RETURNING id, username, role, enabled, created_at
+`
+
+type SetUserRoleParams struct {
+	ID   pgtype.UUID
+	Role string
+}
+
+type SetUserRoleRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) (SetUserRoleRow, error) {
+	row := q.db.QueryRow(ctx, setUserRole, arg.ID, arg.Role)
+	var i SetUserRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
 	return i, err
 }

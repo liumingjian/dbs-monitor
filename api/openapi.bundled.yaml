@@ -9,6 +9,7 @@ tags:
   - name: metrics
   - name: auth
   - name: agent
+  - name: users
 paths:
   /api/v1/login:
     post:
@@ -242,6 +243,193 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/me:
+    get:
+      tags:
+        - users
+      operationId: getCurrentUser
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /api/v1/users:
+    get:
+      tags:
+        - users
+      operationId: listUsers
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      tags:
+        - users
+      operationId: createUser
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateInput'
+      responses:
+        '201':
+          description: User created; the generated password is returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreated'
+        '400':
+          description: Invalid username or role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Username already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/users/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - users
+      operationId: updateUserStatus
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserStatusInput'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Guard rejected the change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/users/{id}/role:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - users
+      operationId: updateUserRole
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRoleInput'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Guard rejected the change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/users/{id}/password:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - users
+      operationId: resetUserPassword
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Password reset; the generated password is returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordIssued'
+        '400':
+          description: Self-reset is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/password:
+    put:
+      tags:
+        - users
+      operationId: changeOwnPassword
+      x-required-role: READONLY
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeInput'
+      responses:
+        '204':
+          description: Password changed
+        '400':
+          description: Invalid old password or new password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     agentToken:
@@ -434,6 +622,88 @@ components:
                   - host.network.bytes_per_sec
               value:
                 type: number
+    Role:
+      type: string
+      enum:
+        - READONLY
+        - ALERT_ADMIN
+        - PLATFORM_ADMIN
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - role
+        - enabled
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    UserCreateInput:
+      type: object
+      required:
+        - username
+        - role
+      properties:
+        username:
+          type: string
+          minLength: 1
+        role:
+          $ref: '#/components/schemas/Role'
+    UserCreated:
+      type: object
+      required:
+        - user
+        - initial_password
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        initial_password:
+          type: string
+          description: Generated password returned only in this response.
+    UserStatusInput:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+    UserRoleInput:
+      type: object
+      required:
+        - role
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+    PasswordIssued:
+      type: object
+      required:
+        - password
+      properties:
+        password:
+          type: string
+          description: Generated password returned only in this response.
+    PasswordChangeInput:
+      type: object
+      required:
+        - old_password
+        - new_password
+      properties:
+        old_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 12
     Error:
       type: object
       required:

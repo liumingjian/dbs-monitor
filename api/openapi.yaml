@@ -9,6 +9,7 @@ tags:
   - name: metrics
   - name: auth
   - name: agent
+  - name: users
 paths:
   /api/v1/login:
     $ref: paths/auth.yaml#/~1api~1v1~1login
@@ -20,6 +21,18 @@ paths:
     $ref: paths/metrics.yaml#/~1api~1v1~1instances~1{id}~1metrics~1series
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
+  /api/v1/me:
+    $ref: paths/users.yaml#/~1api~1v1~1me
+  /api/v1/users:
+    $ref: paths/users.yaml#/~1api~1v1~1users
+  /api/v1/users/{id}/status:
+    $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1status
+  /api/v1/users/{id}/role:
+    $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1role
+  /api/v1/users/{id}/password:
+    $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1password
+  /api/v1/password:
+    $ref: paths/users.yaml#/~1api~1v1~1password
 components:
   securitySchemes:
     agentToken:
@@ -42,5 +55,21 @@ components:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
     AgentReport:
       $ref: components/schemas/agent.yaml#/AgentReport
+    Role:
+      $ref: components/schemas/users.yaml#/Role
+    User:
+      $ref: components/schemas/users.yaml#/User
+    UserCreateInput:
+      $ref: components/schemas/users.yaml#/UserCreateInput
+    UserCreated:
+      $ref: components/schemas/users.yaml#/UserCreated
+    UserStatusInput:
+      $ref: components/schemas/users.yaml#/UserStatusInput
+    UserRoleInput:
+      $ref: components/schemas/users.yaml#/UserRoleInput
+    PasswordIssued:
+      $ref: components/schemas/users.yaml#/PasswordIssued
+    PasswordChangeInput:
+      $ref: components/schemas/users.yaml#/PasswordChangeInput
     Error:
       $ref: components/errors.yaml#/Error

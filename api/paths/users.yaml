@@ -1,0 +1,154 @@
+/api/v1/me:
+  get:
+    tags: [users]
+    operationId: getCurrentUser
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Current user
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/users.yaml#/User }
+/api/v1/users:
+  get:
+    tags: [users]
+    operationId: listUsers
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Users
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/users.yaml#/User }
+  post:
+    tags: [users]
+    operationId: createUser
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/users.yaml#/UserCreateInput }
+    responses:
+      '201':
+        description: User created; the generated password is returned once.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/users.yaml#/UserCreated }
+      '400':
+        description: Invalid username or role
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '409':
+        description: Username already exists
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/users/{id}/status:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  put:
+    tags: [users]
+    operationId: updateUserStatus
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/users.yaml#/UserStatusInput }
+    responses:
+      '200':
+        description: Updated user
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/users.yaml#/User }
+      '400':
+        description: Guard rejected the change
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: User not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/users/{id}/role:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  put:
+    tags: [users]
+    operationId: updateUserRole
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/users.yaml#/UserRoleInput }
+    responses:
+      '200':
+        description: Updated user
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/users.yaml#/User }
+      '400':
+        description: Guard rejected the change
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: User not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/users/{id}/password:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  post:
+    tags: [users]
+    operationId: resetUserPassword
+    x-required-role: PLATFORM_ADMIN
+    responses:
+      '200':
+        description: Password reset; the generated password is returned once.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/users.yaml#/PasswordIssued }
+      '400':
+        description: Self-reset is not allowed
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: User not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/password:
+  put:
+    tags: [users]
+    operationId: changeOwnPassword
+    x-required-role: READONLY
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/users.yaml#/PasswordChangeInput }
+    responses:
+      '204': { description: Password changed }
+      '400':
+        description: Invalid old password or new password
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

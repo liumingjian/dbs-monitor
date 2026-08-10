@@ -1,0 +1,49 @@
+Role:
+  type: string
+  enum: [READONLY, ALERT_ADMIN, PLATFORM_ADMIN]
+User:
+  type: object
+  required: [id, username, role, enabled, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    username: { type: string }
+    role: { $ref: '#/Role' }
+    enabled: { type: boolean }
+    created_at: { type: string, format: date-time }
+UserCreateInput:
+  type: object
+  required: [username, role]
+  properties:
+    username: { type: string, minLength: 1 }
+    role: { $ref: '#/Role' }
+UserCreated:
+  type: object
+  required: [user, initial_password]
+  properties:
+    user: { $ref: '#/User' }
+    initial_password:
+      type: string
+      description: Generated password returned only in this response.
+UserStatusInput:
+  type: object
+  required: [enabled]
+  properties:
+    enabled: { type: boolean }
+UserRoleInput:
+  type: object
+  required: [role]
+  properties:
+    role: { $ref: '#/Role' }
+PasswordIssued:
+  type: object
+  required: [password]
+  properties:
+    password:
+      type: string
+      description: Generated password returned only in this response.
+PasswordChangeInput:
+  type: object
+  required: [old_password, new_password]
+  properties:
+    old_password: { type: string }
+    new_password: { type: string, minLength: 12 }

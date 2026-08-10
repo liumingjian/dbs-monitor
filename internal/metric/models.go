@@ -25,6 +25,8 @@ type AppUser struct {
 	Username     string
 	PasswordHash []byte
 	Role         string
+	Enabled      bool
+	CreatedAt    pgtype.Timestamptz
 }
 
 type CollectionTaskConfig struct {
