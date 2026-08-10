@@ -103,7 +103,10 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		t.Fatalf("insert after partition repair: %v", err)
 	}
 
-	for _, table := range []string{"collection_task_config", "instance_collection_config"} {
+	for _, table := range []string{
+		"collection_task_config", "instance_collection_config",
+		"instance_collection_task_state", "instance_collection_connection_state",
+	} {
 		var exists bool
 		if err := database.QueryRowContext(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
 			t.Fatalf("check collection plan table %q: %v", table, err)
@@ -116,6 +119,12 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		VALUES ('00000000-0000-0000-0000-000000000001', 'pg.stat_database', 4)`)
 	if !errors.As(err, &pgError) || pgError.Code != "23514" {
 		t.Fatalf("4-second collection interval error = %v, want check violation", err)
+	}
+	_, err = database.ExecContext(ctx, `INSERT INTO instance_collection_task_state
+		(instance_id, task_id, consecutive_failures, last_result)
+		VALUES ('00000000-0000-0000-0000-000000000001', 'pg.probe', 0, 'UNKNOWN')`)
+	if !errors.As(err, &pgError) || pgError.Code != "23514" {
+		t.Fatalf("unknown task result error = %v, want check violation", err)
 	}
 }
 

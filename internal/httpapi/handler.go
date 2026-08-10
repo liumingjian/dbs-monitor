@@ -146,6 +146,94 @@ func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteIn
 	return api.DeleteInstance204Response{}, nil
 }
 
+func (handler *Handler) ListCollectionTaskStates(ctx context.Context, request api.ListCollectionTaskStatesRequestObject) (api.ListCollectionTaskStatesResponseObject, error) {
+	states, err := handler.collectionTaskStates(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	return api.ListCollectionTaskStates200JSONResponse(states), nil
+}
+
+func (handler *Handler) UpdateCollectionTaskInterval(ctx context.Context, request api.UpdateCollectionTaskIntervalRequestObject) (api.UpdateCollectionTaskIntervalResponseObject, error) {
+	if request.Body == nil {
+		return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, "collection task interval body is required")), nil
+	}
+	taskID := metric.TaskID(request.TaskId)
+	interval := time.Duration(request.Body.IntervalSeconds) * time.Second
+	if err := metric.ValidateTaskInterval(taskID, interval); err != nil {
+		return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
+	}
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	if err := metric.New(handler.platform).SetTaskInterval(ctx, metric.SetTaskIntervalParams{
+		InstanceID: instanceID, TaskID: request.TaskId, IntervalSeconds: int32(request.Body.IntervalSeconds),
+	}); err != nil {
+		return nil, err
+	}
+	states, err := handler.collectionTaskStates(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	for _, state := range states {
+		if string(state.TaskId) == request.TaskId {
+			return api.UpdateCollectionTaskInterval200JSONResponse(state), nil
+		}
+	}
+	return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, "unknown collection task")), nil
+}
+
+func (handler *Handler) collectionTaskStates(ctx context.Context, instanceID pgtype.UUID) ([]api.CollectionTaskState, error) {
+	persistedRows, err := New(handler.platform).ListPersistedCollectionTaskStates(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	persisted := make(map[metric.TaskID]ListPersistedCollectionTaskStatesRow, len(persistedRows))
+	for _, row := range persistedRows {
+		persisted[metric.TaskID(row.TaskID)] = row
+	}
+	configuredRows, err := metric.New(handler.platform).ListTaskIntervals(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	configured := make(map[metric.TaskID]int, len(configuredRows))
+	for _, row := range configuredRows {
+		configured[metric.TaskID(row.TaskID)] = int(row.IntervalSeconds)
+	}
+
+	states := make([]api.CollectionTaskState, 0, len(metric.Tasks))
+	for _, task := range metric.Tasks {
+		intervalSeconds := int(task.Interval / time.Second)
+		if value, exists := configured[task.ID]; exists {
+			intervalSeconds = value
+		}
+		state := api.CollectionTaskState{
+			TaskId: api.CollectionTaskStateTaskId(task.ID), Kind: api.CollectionTaskStateKind(task.Kind),
+			IntervalSeconds: intervalSeconds,
+		}
+		if row, exists := persisted[task.ID]; exists {
+			state.ConsecutiveFailures = int(row.ConsecutiveFailures)
+			state.LastDueAt = timePointer(row.LastDueAt)
+			state.LastStartedAt = timePointer(row.LastStartedAt)
+			state.LastFinishedAt = timePointer(row.LastFinishedAt)
+			state.LastSuccessAt = timePointer(row.LastSuccessAt)
+			state.NextEligibleAt = timePointer(row.NextEligibleAt)
+			if row.LastResult.Valid {
+				value := api.CollectionTaskResult(row.LastResult.String)
+				state.LastResult = &value
+			}
+			if row.LastErrorCode.Valid {
+				value := row.LastErrorCode.String
+				state.LastErrorCode = &value
+			}
+			if row.LastErrorMessage.Valid {
+				value := row.LastErrorMessage.String
+				state.LastErrorMessage = &value
+			}
+		}
+		states = append(states, state)
+	}
+	return states, nil
+}
+
 func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetricSeriesRequestObject) (api.GetMetricSeriesResponseObject, error) {
 	requested := api.Auto
 	if request.Params.Step != nil {
@@ -172,8 +260,10 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		}{}, Unavailability: nullable.NewNullNullable[api.Unavailability]()}
 
 		if strings.HasPrefix(string(metricID), "pg.") {
-			state, err := instance.New(handler.platform).GetCollectState(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
-			if err == nil && state.LastErrorCode.Valid && state.LastErrorCode.String == string(api.DBUNREACHABLE) {
+			var probeResult pgtype.Text
+			err := handler.platform.QueryRow(ctx, `SELECT last_result FROM instance_collection_task_state
+				WHERE instance_id = $1 AND task_id = 'pg.probe'`, pgtype.UUID{Bytes: request.Id, Valid: true}).Scan(&probeResult)
+			if err == nil && probeResult.Valid && (probeResult.String == "FAILED" || probeResult.String == "TIMED_OUT") {
 				entry.Unavailability = nullable.NewNullableWithValue(api.DBUNREACHABLE)
 				result.Metrics = append(result.Metrics, entry)
 				continue
@@ -348,6 +438,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 var RequiredRoles = map[string]string{
 	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
+	"ListCollectionTaskStates": "READONLY", "UpdateCollectionTaskInterval": "PLATFORM_ADMIN",
 	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
 }
 
@@ -387,6 +478,14 @@ func alertStatus(ctx context.Context, platform *db.Pool, id pgtype.UUID) (api.Al
 
 func metricUnit(metricID string) string {
 	return metric.UnitFor(metric.MetricID(metricID))
+}
+
+func timePointer(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	result := value.Time.UTC()
+	return &result
 }
 
 func newToken() (string, []byte, error) {

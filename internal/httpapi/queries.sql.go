@@ -112,3 +112,62 @@ func (q *Queries) GetUserForLogin(ctx context.Context, username string) (GetUser
 	err := row.Scan(&i.ID, &i.PasswordHash, &i.Role)
 	return i, err
 }
+
+const listPersistedCollectionTaskStates = `-- name: ListPersistedCollectionTaskStates :many
+SELECT task.task_id, task.last_due_at, task.last_started_at, task.last_finished_at, task.last_success_at,
+       task.last_result, task.consecutive_failures,
+       CASE
+           WHEN task.next_eligible_at IS NULL THEN connection.next_eligible_at
+           WHEN connection.next_eligible_at IS NULL THEN task.next_eligible_at
+           ELSE GREATEST(task.next_eligible_at, connection.next_eligible_at)
+       END::timestamptz AS next_eligible_at,
+       task.last_error_code, task.last_error_message
+FROM instance_collection_task_state task
+LEFT JOIN instance_collection_connection_state connection ON connection.instance_id = task.instance_id
+WHERE task.instance_id = $1
+ORDER BY task.task_id
+`
+
+type ListPersistedCollectionTaskStatesRow struct {
+	TaskID              string
+	LastDueAt           pgtype.Timestamptz
+	LastStartedAt       pgtype.Timestamptz
+	LastFinishedAt      pgtype.Timestamptz
+	LastSuccessAt       pgtype.Timestamptz
+	LastResult          pgtype.Text
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
+}
+
+func (q *Queries) ListPersistedCollectionTaskStates(ctx context.Context, instanceID pgtype.UUID) ([]ListPersistedCollectionTaskStatesRow, error) {
+	rows, err := q.db.Query(ctx, listPersistedCollectionTaskStates, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPersistedCollectionTaskStatesRow
+	for rows.Next() {
+		var i ListPersistedCollectionTaskStatesRow
+		if err := rows.Scan(
+			&i.TaskID,
+			&i.LastDueAt,
+			&i.LastStartedAt,
+			&i.LastFinishedAt,
+			&i.LastSuccessAt,
+			&i.LastResult,
+			&i.ConsecutiveFailures,
+			&i.NextEligibleAt,
+			&i.LastErrorCode,
+			&i.LastErrorMessage,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

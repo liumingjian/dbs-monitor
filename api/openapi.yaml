@@ -9,6 +9,7 @@ tags:
   - name: metrics
   - name: auth
   - name: agent
+  - name: collection
 paths:
   /api/v1/login:
     $ref: paths/auth.yaml#/~1api~1v1~1login
@@ -18,6 +19,10 @@ paths:
     $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}
   /api/v1/instances/{id}/metrics/series:
     $ref: paths/metrics.yaml#/~1api~1v1~1instances~1{id}~1metrics~1series
+  /api/v1/instances/{id}/collection/tasks:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks
+  /api/v1/instances/{id}/collection/tasks/{task_id}:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks~1{task_id}
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
 components:
@@ -38,6 +43,10 @@ components:
       $ref: components/schemas/instances.yaml#/Instance
     InstanceCreated:
       $ref: components/schemas/instances.yaml#/InstanceCreated
+    CollectionTaskState:
+      $ref: components/schemas/collection.yaml#/CollectionTaskState
+    CollectionTaskIntervalInput:
+      $ref: components/schemas/collection.yaml#/CollectionTaskIntervalInput
     MetricSeriesResponse:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
     AgentReport:

@@ -50,6 +50,34 @@ const (
 	UNKNOWN       CapabilityStatus = "UNKNOWN"
 )
 
+// Defines values for CollectionTaskResult.
+const (
+	BACKOFF             CollectionTaskResult = "BACKOFF"
+	FAILED              CollectionTaskResult = "FAILED"
+	SKIPPEDBACKPRESSURE CollectionTaskResult = "SKIPPED_BACKPRESSURE"
+	SUCCESS             CollectionTaskResult = "SUCCESS"
+	TIMEDOUT            CollectionTaskResult = "TIMED_OUT"
+)
+
+// Defines values for CollectionTaskStateKind.
+const (
+	AgentDerived CollectionTaskStateKind = "agent-derived"
+	Probe        CollectionTaskStateKind = "probe"
+	Sql          CollectionTaskStateKind = "sql"
+)
+
+// Defines values for CollectionTaskStateTaskId.
+const (
+	PgPreparedXacts   CollectionTaskStateTaskId = "pg.prepared_xacts"
+	PgProbe           CollectionTaskStateTaskId = "pg.probe"
+	PgReplication     CollectionTaskStateTaskId = "pg.replication"
+	PgReplicationSlot CollectionTaskStateTaskId = "pg.replication_slot"
+	PgRole            CollectionTaskStateTaskId = "pg.role"
+	PgStatActivity    CollectionTaskStateTaskId = "pg.stat_activity"
+	PgStatDatabase    CollectionTaskStateTaskId = "pg.stat_database"
+	PgStatStatements  CollectionTaskStateTaskId = "pg.stat_statements"
+)
+
 // Defines values for ErrorErrorCode.
 const (
 	CONFLICT         ErrorErrorCode = "CONFLICT"
@@ -140,6 +168,36 @@ type AlertStatus string
 
 // CapabilityStatus defines model for CapabilityStatus.
 type CapabilityStatus string
+
+// CollectionTaskIntervalInput defines model for CollectionTaskIntervalInput.
+type CollectionTaskIntervalInput struct {
+	IntervalSeconds int `json:"interval_seconds"`
+}
+
+// CollectionTaskResult defines model for CollectionTaskResult.
+type CollectionTaskResult string
+
+// CollectionTaskState defines model for CollectionTaskState.
+type CollectionTaskState struct {
+	ConsecutiveFailures int                       `json:"consecutive_failures"`
+	IntervalSeconds     int                       `json:"interval_seconds"`
+	Kind                CollectionTaskStateKind   `json:"kind"`
+	LastDueAt           *time.Time                `json:"last_due_at,omitempty"`
+	LastErrorCode       *string                   `json:"last_error_code,omitempty"`
+	LastErrorMessage    *string                   `json:"last_error_message,omitempty"`
+	LastFinishedAt      *time.Time                `json:"last_finished_at,omitempty"`
+	LastResult          *CollectionTaskResult     `json:"last_result,omitempty"`
+	LastStartedAt       *time.Time                `json:"last_started_at,omitempty"`
+	LastSuccessAt       *time.Time                `json:"last_success_at,omitempty"`
+	NextEligibleAt      *time.Time                `json:"next_eligible_at,omitempty"`
+	TaskId              CollectionTaskStateTaskId `json:"task_id"`
+}
+
+// CollectionTaskStateKind defines model for CollectionTaskState.Kind.
+type CollectionTaskStateKind string
+
+// CollectionTaskStateTaskId defines model for CollectionTaskState.TaskId.
+type CollectionTaskStateTaskId string
 
 // Error defines model for Error.
 type Error struct {
@@ -232,6 +290,9 @@ type CreateInstanceJSONRequestBody = InstanceInput
 // UpdateInstanceJSONRequestBody defines body for UpdateInstance for application/json ContentType.
 type UpdateInstanceJSONRequestBody = InstanceInput
 
+// UpdateCollectionTaskIntervalJSONRequestBody defines body for UpdateCollectionTaskInterval for application/json ContentType.
+type UpdateCollectionTaskIntervalJSONRequestBody = CollectionTaskIntervalInput
+
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody CreateSessionJSONBody
 
@@ -255,6 +316,12 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/collection/tasks)
+	ListCollectionTaskStates(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/instances/{id}/collection/tasks/{task_id})
+	UpdateCollectionTaskInterval(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, taskId string)
 
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params GetMetricSeriesParams)
@@ -386,6 +453,65 @@ func (siw *ServerInterfaceWrapper) UpdateInstance(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateInstance(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCollectionTaskStates operation middleware
+func (siw *ServerInterfaceWrapper) ListCollectionTaskStates(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCollectionTaskStates(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCollectionTaskInterval operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCollectionTaskInterval(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "task_id" -------------
+	var taskId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "task_id", r.PathValue("task_id"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "task_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCollectionTaskInterval(w, r, id, taskId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -616,6 +742,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}", wrapper.GetInstance)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}", wrapper.UpdateInstance)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks", wrapper.ListCollectionTaskStates)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks/{task_id}", wrapper.UpdateCollectionTaskInterval)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 
@@ -740,6 +868,51 @@ func (response UpdateInstance200JSONResponse) VisitUpdateInstanceResponse(w http
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListCollectionTaskStatesRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListCollectionTaskStatesResponseObject interface {
+	VisitListCollectionTaskStatesResponse(w http.ResponseWriter) error
+}
+
+type ListCollectionTaskStates200JSONResponse []CollectionTaskState
+
+func (response ListCollectionTaskStates200JSONResponse) VisitListCollectionTaskStatesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateCollectionTaskIntervalRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	TaskId string             `json:"task_id"`
+	Body   *UpdateCollectionTaskIntervalJSONRequestBody
+}
+
+type UpdateCollectionTaskIntervalResponseObject interface {
+	VisitUpdateCollectionTaskIntervalResponse(w http.ResponseWriter) error
+}
+
+type UpdateCollectionTaskInterval200JSONResponse CollectionTaskState
+
+func (response UpdateCollectionTaskInterval200JSONResponse) VisitUpdateCollectionTaskIntervalResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateCollectionTaskInterval400JSONResponse Error
+
+func (response UpdateCollectionTaskInterval400JSONResponse) VisitUpdateCollectionTaskIntervalResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetMetricSeriesRequestObject struct {
 	Id     openapi_types.UUID `json:"id"`
 	Params GetMetricSeriesParams
@@ -818,6 +991,12 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(ctx context.Context, request UpdateInstanceRequestObject) (UpdateInstanceResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/collection/tasks)
+	ListCollectionTaskStates(ctx context.Context, request ListCollectionTaskStatesRequestObject) (ListCollectionTaskStatesResponseObject, error)
+
+	// (PUT /api/v1/instances/{id}/collection/tasks/{task_id})
+	UpdateCollectionTaskInterval(ctx context.Context, request UpdateCollectionTaskIntervalRequestObject) (UpdateCollectionTaskIntervalResponseObject, error)
 
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(ctx context.Context, request GetMetricSeriesRequestObject) (GetMetricSeriesResponseObject, error)
@@ -1019,6 +1198,66 @@ func (sh *strictHandler) UpdateInstance(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateInstanceResponseObject); ok {
 		if err := validResponse.VisitUpdateInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCollectionTaskStates operation middleware
+func (sh *strictHandler) ListCollectionTaskStates(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListCollectionTaskStatesRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCollectionTaskStates(ctx, request.(ListCollectionTaskStatesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCollectionTaskStates")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCollectionTaskStatesResponseObject); ok {
+		if err := validResponse.VisitListCollectionTaskStatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCollectionTaskInterval operation middleware
+func (sh *strictHandler) UpdateCollectionTaskInterval(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, taskId string) {
+	var request UpdateCollectionTaskIntervalRequestObject
+
+	request.Id = id
+	request.TaskId = taskId
+
+	var body UpdateCollectionTaskIntervalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCollectionTaskInterval(ctx, request.(UpdateCollectionTaskIntervalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCollectionTaskInterval")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCollectionTaskIntervalResponseObject); ok {
+		if err := validResponse.VisitUpdateCollectionTaskIntervalResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

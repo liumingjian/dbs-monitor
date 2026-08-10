@@ -2,7 +2,6 @@ package collect
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,9 +10,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/google/uuid"
 	pgxconn "github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
@@ -23,18 +23,66 @@ import (
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
+const (
+	defaultProbeConcurrency = 32
+	defaultQueryConcurrency = 32
+)
+
 type Collector interface {
 	RunOnce(context.Context) error
+}
+
+type Config struct {
+	ProbeConcurrency int
+	QueryConcurrency int
+}
+
+func DefaultConfig() Config {
+	return Config{ProbeConcurrency: defaultProbeConcurrency, QueryConcurrency: defaultQueryConcurrency}
+}
+
+func (config Config) Validate() error {
+	if config.ProbeConcurrency < 1 || config.ProbeConcurrency > 50 {
+		return fmt.Errorf("probe concurrency must be between 1 and 50")
+	}
+	if config.QueryConcurrency < 1 || config.QueryConcurrency > 50 {
+		return fmt.Errorf("query concurrency must be between 1 and 50")
+	}
+	return nil
+}
+
+type cachedConnection struct {
+	connectionString string
+	conn             *monitorpg.TargetConn
 }
 
 type Service struct {
 	platform *db.Pool
 	dialer   monitorpg.Dialer
 	clock    clock.Clock
+	config   Config
+
+	connectionMu sync.Mutex
+	connections  map[string]cachedConnection
+	rebuilds     int64
 }
 
 func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock) *Service {
-	return &Service{platform: platform, dialer: dialer, clock: currentClock}
+	service, err := NewWithConfig(platform, dialer, currentClock, DefaultConfig())
+	if err != nil {
+		panic(err)
+	}
+	return service
+}
+
+func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, config Config) (*Service, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+	return &Service{
+		platform: platform, dialer: dialer, clock: currentClock, config: config,
+		connections: map[string]cachedConnection{},
+	}, nil
 }
 
 func (service *Service) RunOnce(ctx context.Context) error {
@@ -42,112 +90,255 @@ func (service *Service) RunOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list collection targets: %w", err)
 	}
+	now := service.clock.Now().UTC()
 	for _, target := range targets {
-		if err := service.collectTarget(ctx, target); err != nil {
+		if err := service.ensureTaskStates(ctx, target.ID); err != nil {
 			return err
+		}
+		intervals, err := service.taskIntervals(ctx, target.ID)
+		if err != nil {
+			return err
+		}
+		for _, task := range scheduledTasks() {
+			run := newScheduledRun(target, task, intervals[task.ID], now)
+			eligible, err := service.nextEligible(ctx, run)
+			if err != nil {
+				return err
+			}
+			if !eligible.IsZero() && now.Before(eligible) {
+				if err := service.recordUnmet(ctx, run, resultBackoff, eligible); err != nil {
+					return err
+				}
+				continue
+			}
+			outcome := service.executeTask(ctx, run)
+			if outcome.err != nil {
+				return outcome.err
+			}
 		}
 	}
 	return nil
 }
 
-func (service *Service) collectTarget(ctx context.Context, target instance.ListCollectionTargetsRow) error {
-	now := service.clock.Now().UTC()
+func (service *Service) executeTask(ctx context.Context, run scheduledRun) executionOutcome {
+	run.startedAt = service.clock.Now().UTC()
+	startedWall := time.Now()
+	outcome := executionOutcome{run: run, result: resultFailed}
+	if err := service.recordStarted(ctx, run, run.startedAt); err != nil {
+		outcome.err = err
+		return outcome
+	}
+
+	if run.task.Kind == metric.TaskKindProbe {
+		taskCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		conn, err := service.dialer.Dial(taskCtx, targetConnectionString(run.target))
+		if err == nil {
+			var one int
+			err = conn.QueryRow(taskCtx, run.task.SQL).Scan(&one)
+			closeConnection(conn)
+		}
+		if err != nil {
+			outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, err, true)
+			outcome.duration = time.Since(startedWall)
+			return outcome
+		}
+		latency := float64(time.Since(startedWall).Microseconds()) / 1000
+		outcome.err = service.recordSuccess(ctx, run, []collectedSample{
+			{metricID: metric.MetricAvailabilityReachable, value: metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
+			{metricID: metric.MetricProbeLatencyMS, value: latency},
+		})
+		outcome.result = resultSuccess
+		outcome.duration = time.Since(startedWall)
+		return outcome
+	}
+
+	timeout := taskTimeout(run.interval)
+	taskCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	conn, err := service.normalConnection(taskCtx, run.target)
+	dialFailure := err != nil
+	if err == nil {
+		var configured string
+		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', $1, false)",
+			strconv.FormatInt(timeout.Milliseconds(), 10)+"ms").Scan(&configured)
+	}
+	values := make([]float64, 8)
+	if err == nil {
+		err = conn.QueryRow(taskCtx, run.task.SQL).Scan(
+			&values[0], &values[1], &values[2], &values[3],
+			&values[4], &values[5], &values[6], &values[7],
+		)
+	}
+	if err != nil {
+		connectionFailure := dialFailure || isConnectionFailure(err)
+		if connectionFailure || errors.Is(taskCtx.Err(), context.DeadlineExceeded) {
+			service.invalidateConnection(run.target.ID)
+		}
+		outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, err, connectionFailure)
+		outcome.duration = time.Since(startedWall)
+		return outcome
+	}
+	metricIDs := []metric.MetricID{
+		metric.MetricConnectionTotal,
+		metric.MetricConnectionActive,
+		metric.MetricConnectionIdleInTransaction,
+		metric.MetricLongTransactionCount,
+		metric.MetricMaxTransactionDurationSec,
+		metric.MetricLockWaitingCount,
+		metric.MetricBlockedSessionCount,
+		metric.MetricLongRunningQueryCount,
+	}
+	samples := make([]collectedSample, len(metricIDs))
+	for index := range metricIDs {
+		samples[index] = collectedSample{metricID: metricIDs[index], value: values[index]}
+	}
+	outcome.err = service.recordSuccess(ctx, run, samples)
+	outcome.result = resultSuccess
+	outcome.duration = time.Since(startedWall)
+	return outcome
+}
+
+func (service *Service) finishFailure(ctx context.Context, run scheduledRun, taskCtx context.Context, cause error, connectionFailure bool) (taskResult, error) {
+	result := resultFailed
+	code := "QUERY_FAILED"
+	if connectionFailure {
+		code = "CONNECTION_FAILED"
+	}
+	if errors.Is(taskCtx.Err(), context.DeadlineExceeded) {
+		result = resultTimedOut
+		code = "TIMEOUT"
+	}
+	return result, service.recordFailure(ctx, run, result, code, cause, connectionFailure)
+}
+
+func (service *Service) normalConnection(ctx context.Context, target instance.ListCollectionTargetsRow) (*monitorpg.TargetConn, error) {
+	key := uuid.UUID(target.ID.Bytes).String()
 	connectionString := targetConnectionString(target)
+	service.connectionMu.Lock()
+	cached, exists := service.connections[key]
+	if exists && cached.connectionString == connectionString && !cached.conn.IsClosed() {
+		service.connectionMu.Unlock()
+		return cached.conn, nil
+	}
+	if exists {
+		delete(service.connections, key)
+		service.rebuilds++
+	}
+	service.connectionMu.Unlock()
+	if exists {
+		closeConnection(cached.conn)
+	}
 	conn, err := service.dialer.Dial(ctx, connectionString)
 	if err != nil {
-		writeFailure := func() error {
-			return service.platform.InTx(ctx, func(tx pgx.Tx) error {
-				queries := metric.New(tx)
-				seriesID, writeErr := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
-					InstanceID: target.ID,
-					MetricID:   string(metric.MetricAvailabilityReachable),
-					Labels:     json.RawMessage(`{}`),
-					LabelsKey:  "{}",
-					LastSeen:   pgtype.Timestamptz{Time: now, Valid: true},
-				})
-				if writeErr != nil {
-					return writeErr
-				}
-				if _, writeErr = tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, now, metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["unreachable"]); writeErr != nil {
-					return writeErr
-				}
-				return instance.New(tx).SetCollectFailure(ctx, instance.SetCollectFailureParams{
-					InstanceID:       target.ID,
-					LastErrorCode:    pgtype.Text{String: "DB_UNREACHABLE", Valid: true},
-					LastErrorMessage: pgtype.Text{String: err.Error(), Valid: true},
-				})
-			})
-		}
-		if writeErr := writeFailure(); writeErr != nil {
-			if !metric.IsMissingPartition(writeErr) {
-				return fmt.Errorf("write collection failure: %w", writeErr)
-			}
-			if writeErr := metric.EnsurePartitions(ctx, service.platform, now); writeErr != nil {
-				return writeErr
-			}
-			if writeErr := writeFailure(); writeErr != nil {
-				return fmt.Errorf("retry collection failure: %w", writeErr)
-			}
-		}
-		return nil
+		return nil, err
 	}
-	defer conn.Close(ctx)
+	service.connectionMu.Lock()
+	service.connections[key] = cachedConnection{connectionString: connectionString, conn: conn}
+	service.connectionMu.Unlock()
+	return conn, nil
+}
 
-	var connectionTotal float64
-	if err := conn.QueryRow(ctx, "SELECT count(*)::double precision FROM pg_stat_activity").Scan(&connectionTotal); err != nil {
-		if !isConnectionFailure(err) {
-			return fmt.Errorf("collect pg.connection.total: %w", err)
+func (service *Service) invalidateConnection(targetID pgtype.UUID) {
+	key := uuid.UUID(targetID.Bytes).String()
+	service.connectionMu.Lock()
+	cached, exists := service.connections[key]
+	if exists {
+		delete(service.connections, key)
+		service.rebuilds++
+	}
+	service.connectionMu.Unlock()
+	if exists {
+		closeConnection(cached.conn)
+	}
+}
+
+func (service *Service) poolSummary(active int) (idle int, rebuilds int64) {
+	service.connectionMu.Lock()
+	defer service.connectionMu.Unlock()
+	idle = len(service.connections) - active
+	if idle < 0 {
+		idle = 0
+	}
+	rebuilds = service.rebuilds
+	service.rebuilds = 0
+	return idle, rebuilds
+}
+
+func (service *Service) closeConnections() {
+	service.connectionMu.Lock()
+	connections := make([]cachedConnection, 0, len(service.connections))
+	for key, cached := range service.connections {
+		connections = append(connections, cached)
+		delete(service.connections, key)
+	}
+	service.connectionMu.Unlock()
+	for _, cached := range connections {
+		closeConnection(cached.conn)
+	}
+}
+
+func closeConnection(conn *monitorpg.TargetConn) {
+	if conn == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	_ = conn.Close(ctx)
+}
+
+func (service *Service) taskIntervals(ctx context.Context, targetID pgtype.UUID) (map[metric.TaskID]time.Duration, error) {
+	rows, err := metric.New(service.platform).ListTaskIntervals(ctx, targetID)
+	if err != nil {
+		return nil, fmt.Errorf("list collection task intervals: %w", err)
+	}
+	intervals := make(map[metric.TaskID]time.Duration, len(rows))
+	for _, row := range rows {
+		intervals[metric.TaskID(row.TaskID)] = time.Duration(row.IntervalSeconds) * time.Second
+	}
+	return intervals, nil
+}
+
+func scheduledTasks() []metric.Task {
+	wanted := map[metric.TaskID]bool{metric.TaskProbe: true, metric.TaskStatActivity: true}
+	tasks := make([]metric.Task, 0, len(wanted))
+	for _, task := range metric.Tasks {
+		if wanted[task.ID] {
+			tasks = append(tasks, task)
 		}
-		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
-			return instance.New(tx).SetCollectFailure(ctx, instance.SetCollectFailureParams{
-				InstanceID:       target.ID,
-				LastErrorCode:    pgtype.Text{String: "DB_UNREACHABLE", Valid: true},
-				LastErrorMessage: pgtype.Text{String: err.Error(), Valid: true},
-			})
-		})
 	}
+	return tasks
+}
 
-	write := func() error {
-		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
-			queries := metric.New(tx)
-			for _, sample := range []struct {
-				metricID string
-				value    float64
-			}{
-				{string(metric.MetricAvailabilityReachable), metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
-				{string(metric.MetricConnectionTotal), connectionTotal},
-			} {
-				seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
-					InstanceID: target.ID,
-					MetricID:   sample.metricID,
-					Labels:     json.RawMessage(`{}`),
-					LabelsKey:  "{}",
-					LastSeen:   pgtype.Timestamptz{Time: now, Valid: true},
-				})
-				if err != nil {
-					return err
-				}
-				if _, err := tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, now, sample.value); err != nil {
-					return err
-				}
-			}
-			return instance.New(tx).SetCollectSuccess(ctx, instance.SetCollectSuccessParams{
-				InstanceID:    target.ID,
-				LastSuccessAt: pgtype.Timestamptz{Time: now, Valid: true},
-			})
-		})
+func taskTimeout(interval time.Duration) time.Duration {
+	timeout := interval * 4 / 5
+	if timeout > 10*time.Second {
+		return 10 * time.Second
 	}
+	return timeout
+}
 
+func newScheduledRun(target instance.ListCollectionTargetsRow, task metric.Task, configured time.Duration, dueAt time.Time) scheduledRun {
+	interval := task.Interval
+	if configured > 0 {
+		interval = configured
+	}
+	instanceID := uuid.UUID(target.ID.Bytes).String()
+	return scheduledRun{
+		key: taskKey{instanceID: instanceID, taskID: task.ID}, target: target, task: task,
+		interval: interval, dueAt: dueAt.UTC(),
+	}
+}
+
+func (service *Service) withPartitionRepair(ctx context.Context, observedAt time.Time, write func() error) error {
 	if err := write(); err != nil {
 		if !metric.IsMissingPartition(err) {
-			return fmt.Errorf("write collected samples: %w", err)
-		}
-		if err := metric.EnsurePartitions(ctx, service.platform, now); err != nil {
 			return err
 		}
-		if err := write(); err != nil {
-			return fmt.Errorf("retry collected samples: %w", err)
+		if err := metric.EnsurePartitions(ctx, service.platform, observedAt); err != nil {
+			return err
 		}
+		return write()
 	}
 	return nil
 }
@@ -169,22 +360,36 @@ func targetConnectionString(target instance.ListCollectionTargetsRow) string {
 		Path:   "/" + target.DatabaseName,
 	}
 	query := connection.Query()
+	query.Set("application_name", "dbs-monitor")
 	query.Set("sslmode", "disable")
 	connection.RawQuery = query.Encode()
 	return connection.String()
 }
 
 func (service *Service) Run(ctx context.Context, interval time.Duration) {
+	defer service.closeConnections()
+	scheduler := newCentralScheduler(service)
+	if err := scheduler.refresh(ctx, service.clock.Now().UTC()); err != nil {
+		log.Printf("collection scheduler refresh failed: %v", err)
+	}
 	ticks, stop := service.clock.Ticker(interval)
 	defer stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case outcome := <-scheduler.completed:
+			scheduler.complete(outcome)
+			scheduler.dispatch(ctx)
 		case <-ticks:
-			if err := service.RunOnce(ctx); err != nil {
-				log.Printf("collection cycle failed: %v", err)
+			now := service.clock.Now().UTC()
+			if err := scheduler.refresh(ctx, now); err != nil {
+				log.Printf("collection scheduler refresh failed: %v", err)
+				continue
 			}
+			scheduler.accrue(ctx, now)
+			scheduler.dispatch(ctx)
+			scheduler.logSummary(now)
 		}
 	}
 }

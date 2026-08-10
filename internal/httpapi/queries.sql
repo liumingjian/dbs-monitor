@@ -24,3 +24,17 @@ SELECT agent_token_hash FROM instance WHERE id = $1;
 
 -- name: GetInstanceAlertStatus :one
 SELECT status FROM alert_instance WHERE instance_id = $1;
+
+-- name: ListPersistedCollectionTaskStates :many
+SELECT task.task_id, task.last_due_at, task.last_started_at, task.last_finished_at, task.last_success_at,
+       task.last_result, task.consecutive_failures,
+       CASE
+           WHEN task.next_eligible_at IS NULL THEN connection.next_eligible_at
+           WHEN connection.next_eligible_at IS NULL THEN task.next_eligible_at
+           ELSE GREATEST(task.next_eligible_at, connection.next_eligible_at)
+       END::timestamptz AS next_eligible_at,
+       task.last_error_code, task.last_error_message
+FROM instance_collection_task_state task
+LEFT JOIN instance_collection_connection_state connection ON connection.instance_id = task.instance_id
+WHERE task.instance_id = $1
+ORDER BY task.task_id;

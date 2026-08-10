@@ -147,6 +147,16 @@ func TestTasksUseClosedCapabilitiesAndValidIntervals(t *testing.T) {
 
 func TestMetricListsMatchGeneratedContracts(t *testing.T) {
 	doc := loadSpec(t)
+	collectionSchema := doc.Components.Schemas["CollectionTaskState"]
+	if collectionSchema == nil || collectionSchema.Value == nil {
+		t.Fatal("CollectionTaskState schema is missing")
+	}
+	taskIDProperty := collectionSchema.Value.Properties["task_id"]
+	if taskIDProperty == nil || taskIDProperty.Value == nil {
+		t.Fatal("CollectionTaskState.task_id schema is missing")
+	}
+	assertSetEqual(t, "collection task enum", taskIDs(), enumStrings(taskIDProperty.Value.Enum))
+
 	operation := doc.Paths.Find("/api/v1/instances/{id}/metrics/series").GetOperation("GET")
 	if operation == nil {
 		t.Fatal("metric series GET operation is missing")
@@ -253,6 +263,14 @@ func agentMetricIDs() []string {
 		if item.Producer == metric.ProducerAgent {
 			ids = append(ids, string(item.ID))
 		}
+	}
+	return ids
+}
+
+func taskIDs() []string {
+	ids := make([]string, 0, len(metric.Tasks))
+	for _, task := range metric.Tasks {
+		ids = append(ids, string(task.ID))
 	}
 	return ids
 }

@@ -1,0 +1,37 @@
+CollectionTaskResult:
+  type: string
+  enum: [SUCCESS, FAILED, TIMED_OUT, SKIPPED_BACKPRESSURE, BACKOFF]
+CollectionTaskState:
+  type: object
+  required: [task_id, kind, interval_seconds, consecutive_failures]
+  properties:
+    task_id:
+      type: string
+      enum:
+        - pg.probe
+        - pg.stat_database
+        - pg.stat_activity
+        - pg.replication
+        - pg.replication_slot
+        - pg.prepared_xacts
+        - pg.role
+        - pg.stat_statements
+    kind:
+      type: string
+      enum: [probe, sql, agent-derived]
+    interval_seconds: { type: integer, minimum: 5 }
+    last_due_at: { type: string, format: date-time }
+    last_started_at: { type: string, format: date-time }
+    last_finished_at: { type: string, format: date-time }
+    last_success_at: { type: string, format: date-time }
+    last_result:
+      $ref: '#/CollectionTaskResult'
+    consecutive_failures: { type: integer, minimum: 0 }
+    next_eligible_at: { type: string, format: date-time }
+    last_error_code: { type: string }
+    last_error_message: { type: string }
+CollectionTaskIntervalInput:
+  type: object
+  required: [interval_seconds]
+  properties:
+    interval_seconds: { type: integer, minimum: 5 }
