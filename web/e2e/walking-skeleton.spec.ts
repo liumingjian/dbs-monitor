@@ -12,7 +12,7 @@ test('walking skeleton reaches a chart and keeps URL and query time ranges in sy
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
   await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '查看监控' }).click()
 
-  const chart = page.getByRole('figure', { name: 'PostgreSQL 总连接数趋势' })
+  const chart = page.getByRole('figure', { name: '总连接数趋势' })
   await expect(chart).toBeVisible()
   await chart.getByText('查看数据表').click()
   await expect(chart.locator('tbody tr').first()).toBeVisible()
