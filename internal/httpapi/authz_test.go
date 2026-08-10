@@ -72,14 +72,25 @@ func TestResponseSchemasDoNotExposeSecrets(t *testing.T) {
 				}
 				for mediaType, media := range responseRef.Value.Content {
 					if media.Schema != nil {
-						allowOneTimeSecret := method == "POST" && status == "201" && path == "/api/v1/instances"
-						allowOneTimeSecret = allowOneTimeSecret || method == "POST" && status == "201" && path == "/api/v1/users"
-						allowOneTimeSecret = allowOneTimeSecret || method == "POST" && status == "200" && strings.HasSuffix(path, "/password")
+						allowOneTimeSecret := responseMayExposeOneTimeSecret(method, path, status)
 						assertNoSecretProperties(t, fmt.Sprintf("%s %s response %s %s", method, path, status, mediaType), media.Schema, map[*openapi3.Schema]bool{}, allowOneTimeSecret)
 					}
 				}
 			}
 		}
+	}
+}
+
+func responseMayExposeOneTimeSecret(method, path, status string) bool {
+	switch {
+	case method == "POST" && status == "201" && path == "/api/v1/instances":
+		return true
+	case method == "POST" && status == "201" && path == "/api/v1/users":
+		return true
+	case method == "POST" && status == "200" && strings.HasSuffix(path, "/password"):
+		return true
+	default:
+		return false
 	}
 }
 

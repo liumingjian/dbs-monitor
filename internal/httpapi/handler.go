@@ -30,10 +30,6 @@ const sessionCookie = "dbs_monitor_session"
 type authenticatedAgentKey struct{}
 type authenticatedUserKey struct{}
 
-type authenticatedUser struct {
-	id uuid.UUID
-}
-
 type Handler struct {
 	platform *db.Pool
 	clock    clock.Clock
@@ -346,7 +342,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		return next(context.WithValue(ctx, authenticatedUserKey{}, authenticatedUser{id: user.ID.Bytes}), writer, request, value)
+		return next(context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes)), writer, request, value)
 	}
 }
 
