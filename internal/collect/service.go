@@ -109,7 +109,7 @@ func (service *Service) RunOnce(ctx context.Context) error {
 	}
 	now := service.clock.Now().UTC()
 	for _, target := range targets {
-		if err := service.refreshCapabilities(ctx, target, now); err != nil {
+		if err := service.refreshCapabilitySnapshot(ctx, target, now); err != nil {
 			return err
 		}
 		if err := service.ensureTaskStates(ctx, target.ID); err != nil {
@@ -141,8 +141,8 @@ func (service *Service) RunOnce(ctx context.Context) error {
 }
 
 func (service *Service) executeTask(ctx context.Context, run scheduledRun) executionOutcome {
-	if run.task.ID == capabilityTask.ID {
-		return service.executeCapability(ctx, run)
+	if isCapabilitySnapshotTask(run.task) {
+		return service.executeCapabilitySnapshot(ctx, run)
 	}
 	run.startedAt = service.clock.Now().UTC()
 	startedWall := time.Now()
@@ -228,7 +228,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	return outcome
 }
 
-func (service *Service) executeCapability(ctx context.Context, run scheduledRun) executionOutcome {
+func (service *Service) executeCapabilitySnapshot(ctx context.Context, run scheduledRun) executionOutcome {
 	startedWall := time.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
 	taskCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -257,7 +257,7 @@ func (service *Service) executeCapability(ctx context.Context, run scheduledRun)
 	return outcome
 }
 
-func (service *Service) refreshCapabilities(ctx context.Context, target instance.ListCollectionTargetsRow, now time.Time) error {
+func (service *Service) refreshCapabilitySnapshot(ctx context.Context, target instance.ListCollectionTargetsRow, now time.Time) error {
 	_, observedAt, exists, err := service.capabilitySnapshot(ctx, target.ID, now)
 	if err != nil {
 		return err
@@ -265,11 +265,11 @@ func (service *Service) refreshCapabilities(ctx context.Context, target instance
 	if exists && now.Sub(observedAt) <= metric.CapabilitySnapshotTTL {
 		return nil
 	}
-	outcome := service.executeCapability(ctx, newScheduledRun(target, capabilityTask, 0, now))
+	outcome := service.executeCapabilitySnapshot(ctx, newScheduledRun(target, capabilitySnapshotTask, 0, now))
 	return outcome.err
 }
 
-func (service *Service) taskCapabilityBlockReason(ctx context.Context, run scheduledRun) (string, bool, error) {
+func (service *Service) taskCapabilityBlockReason(ctx context.Context, run scheduledRun) (metric.CapabilityBlockReason, bool, error) {
 	states, _, _, err := service.capabilitySnapshot(ctx, run.target.ID, service.clock.Now().UTC())
 	if err != nil {
 		return "", false, err

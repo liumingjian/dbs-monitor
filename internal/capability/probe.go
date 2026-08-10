@@ -28,15 +28,15 @@ func Probe(ctx context.Context, platform *db.Pool, conn *monitorpg.TargetConn, i
 			break
 		}
 	}
-	states := statusesForProbeResults(results)
+	states, complete := snapshotForProbeResults(results)
 	if err := storeSnapshot(ctx, platform, instanceID, observedAt, states); err != nil {
 		return false, err
 	}
-	return completeProbeResults(results), nil
+	return complete, nil
 }
 
 func StoreUnknown(ctx context.Context, platform *db.Pool, instanceID pgtype.UUID, observedAt time.Time) error {
-	return storeSnapshot(ctx, platform, instanceID, observedAt, unknownStates())
+	return storeSnapshot(ctx, platform, instanceID, observedAt, metric.UnknownCapabilityStates())
 }
 
 func storeSnapshot(ctx context.Context, platform *db.Pool, instanceID pgtype.UUID, observedAt time.Time, states map[metric.CapabilityID]metric.CapabilityStatus) error {
@@ -54,9 +54,9 @@ func storeSnapshot(ctx context.Context, platform *db.Pool, instanceID pgtype.UUI
 	return nil
 }
 
-func statusesForProbeResults(results []probeResult) map[metric.CapabilityID]metric.CapabilityStatus {
+func snapshotForProbeResults(results []probeResult) (map[metric.CapabilityID]metric.CapabilityStatus, bool) {
 	if !completeProbeResults(results) {
-		return unknownStates()
+		return metric.UnknownCapabilityStates(), false
 	}
 	states := make(map[metric.CapabilityID]metric.CapabilityStatus, len(results))
 	for _, result := range results {
@@ -69,7 +69,7 @@ func statusesForProbeResults(results []probeResult) map[metric.CapabilityID]metr
 			states[result.capability.ID] = metric.CapabilityNotApplicable
 		}
 	}
-	return states
+	return states, true
 }
 
 func completeProbeResults(results []probeResult) bool {
@@ -84,12 +84,4 @@ func completeProbeResults(results []probeResult) bool {
 		seen[result.capability.ID] = struct{}{}
 	}
 	return len(seen) == len(metric.Capabilities)
-}
-
-func unknownStates() map[metric.CapabilityID]metric.CapabilityStatus {
-	states := make(map[metric.CapabilityID]metric.CapabilityStatus, len(metric.Capabilities))
-	for _, declaration := range metric.Capabilities {
-		states[declaration.ID] = metric.CapabilityUnknown
-	}
-	return states
 }

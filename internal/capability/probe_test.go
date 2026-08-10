@@ -7,14 +7,16 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
 
-func TestStatusesForProbeResults(t *testing.T) {
+func TestSnapshotForProbeResults(t *testing.T) {
 	tests := []struct {
-		name    string
-		results []probeResult
-		want    map[metric.CapabilityID]metric.CapabilityStatus
+		name         string
+		results      []probeResult
+		want         map[metric.CapabilityID]metric.CapabilityStatus
+		wantComplete bool
 	}{
 		{
-			name: "successful probes distinguish fixable and structural absence",
+			name:         "successful probes distinguish fixable and structural absence",
+			wantComplete: true,
 			results: []probeResult{
 				{capability: metric.Capabilities[0], present: true},
 				{capability: metric.Capabilities[1], present: false},
@@ -34,12 +36,15 @@ func TestStatusesForProbeResults(t *testing.T) {
 				{capability: metric.Capabilities[0], present: true},
 				{capability: metric.Capabilities[1], err: errors.New("permission denied")},
 			},
-			want: unknownStates(),
+			want: metric.UnknownCapabilityStates(),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := statusesForProbeResults(tt.results)
+			got, complete := snapshotForProbeResults(tt.results)
+			if complete != tt.wantComplete {
+				t.Errorf("complete = %t, want %t", complete, tt.wantComplete)
+			}
 			for _, declaration := range metric.Capabilities {
 				if got[declaration.ID] != tt.want[declaration.ID] {
 					t.Errorf("status for %s = %s, want %s", declaration.ID, got[declaration.ID], tt.want[declaration.ID])

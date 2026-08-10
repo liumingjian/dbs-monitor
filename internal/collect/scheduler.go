@@ -18,13 +18,17 @@ type workClass uint8
 const (
 	workProbe workClass = iota
 	workCollectionQuery
-	workCapability
+	workCapabilitySnapshot
 )
 
-var capabilityTask = metric.Task{
+var capabilitySnapshotTask = metric.Task{
 	ID:       metric.TaskID("capability.snapshot"),
 	Kind:     metric.TaskKindSQL,
 	Interval: metric.CapabilitySnapshotTTL,
+}
+
+func isCapabilitySnapshotTask(task metric.Task) bool {
+	return task.ID == capabilitySnapshotTask.ID
 }
 
 type work struct {
@@ -76,8 +80,8 @@ func (pending *pendingRuns) ordered() []scheduledRun {
 		runs = append(runs, run)
 	}
 	sort.Slice(runs, func(left, right int) bool {
-		leftCapability := runs[left].task.ID == capabilityTask.ID
-		rightCapability := runs[right].task.ID == capabilityTask.ID
+		leftCapability := isCapabilitySnapshotTask(runs[left].task)
+		rightCapability := isCapabilitySnapshotTask(runs[right].task)
 		if leftCapability != rightCapability {
 			return leftCapability
 		}
@@ -89,9 +93,9 @@ func (pending *pendingRuns) ordered() []scheduledRun {
 	return runs
 }
 
-func (pending *pendingRuns) hasCapability() bool {
+func (pending *pendingRuns) hasCapabilitySnapshot() bool {
 	for _, run := range pending.items {
-		if run.task.ID == capabilityTask.ID {
+		if isCapabilitySnapshotTask(run.task) {
 			return true
 		}
 	}
@@ -99,14 +103,14 @@ func (pending *pendingRuns) hasCapability() bool {
 }
 
 type dispatcher struct {
-	probeLimit              int
-	queryLimit              int
-	activeProbes            int
-	activeQueries           int
-	activeCollectionQueries int
-	capabilityWaiting       bool
-	instanceProbe           map[string]bool
-	instanceQuery           map[string]bool
+	probeLimit                int
+	queryLimit                int
+	activeProbes              int
+	activeQueries             int
+	activeCollectionQueries   int
+	capabilitySnapshotWaiting bool
+	instanceProbe             map[string]bool
+	instanceQuery             map[string]bool
 }
 
 func newDispatcher(probeLimit, queryLimit int) *dispatcher {
@@ -130,7 +134,7 @@ func (dispatcher *dispatcher) admit(item work) bool {
 	if dispatcher.activeQueries >= dispatcher.queryLimit || dispatcher.instanceQuery[item.instanceID] {
 		return false
 	}
-	if item.class == workCollectionQuery && dispatcher.capabilityWaiting {
+	if item.class == workCollectionQuery && dispatcher.capabilitySnapshotWaiting {
 		reserved := min(4, dispatcher.queryLimit)
 		if dispatcher.activeCollectionQueries >= dispatcher.queryLimit-reserved {
 			return false
@@ -263,11 +267,11 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 			entry.template = template
 			scheduler.schedule[template.key] = entry
 		}
-		template := newScheduledRun(target, capabilityTask, 0, time.Time{})
+		template := newScheduledRun(target, capabilitySnapshotTask, 0, time.Time{})
 		active[template.key] = struct{}{}
 		entry, exists := scheduler.schedule[template.key]
 		if !exists {
-			entry.nextDue = nextDueAfter(now, initialPhase(template.key.instanceID, capabilityTask.ID, capabilityTask.Interval), capabilityTask.Interval)
+			entry.nextDue = nextDueAfter(now, initialPhase(template.key.instanceID, capabilitySnapshotTask.ID, capabilitySnapshotTask.Interval), capabilitySnapshotTask.Interval)
 		}
 		entry.template = template
 		scheduler.schedule[template.key] = entry
@@ -294,7 +298,7 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 			run := entry.template
 			run.dueAt = entry.nextDue
 			if replaced, exists := scheduler.pending.put(run); exists {
-				if replaced.task.ID == capabilityTask.ID {
+				if isCapabilitySnapshotTask(replaced.task) {
 					if err := capability.StoreUnknown(ctx, scheduler.service.platform, replaced.target.ID, scheduler.service.clock.Now().UTC()); err != nil {
 						log.Printf("record capability backpressure failed: instance_id=%s error=%v", replaced.key.instanceID, err)
 					} else {
@@ -313,7 +317,7 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 }
 
 func (scheduler *centralScheduler) dispatch(ctx context.Context) {
-	scheduler.dispatcher.capabilityWaiting = scheduler.pending.hasCapability()
+	scheduler.dispatcher.capabilitySnapshotWaiting = scheduler.pending.hasCapabilitySnapshot()
 	for _, run := range scheduler.pending.ordered() {
 		eligible, err := scheduler.service.nextEligible(ctx, run)
 		if err != nil {
@@ -343,7 +347,7 @@ func (scheduler *centralScheduler) dispatch(ctx context.Context) {
 			scheduler.counts.dispatchDelayMax = delay
 		}
 		_, _ = scheduler.pending.take(run.key)
-		scheduler.dispatcher.capabilityWaiting = scheduler.pending.hasCapability()
+		scheduler.dispatcher.capabilitySnapshotWaiting = scheduler.pending.hasCapabilitySnapshot()
 		go func(run scheduledRun) {
 			outcome := scheduler.service.executeTask(ctx, run)
 			select {
@@ -409,8 +413,8 @@ func newSchedulerCounts() schedulerCounts {
 }
 
 func classFor(task metric.Task) workClass {
-	if task.ID == capabilityTask.ID {
-		return workCapability
+	if isCapabilitySnapshotTask(task) {
+		return workCapabilitySnapshot
 	}
 	if task.Kind == metric.TaskKindProbe {
 		return workProbe

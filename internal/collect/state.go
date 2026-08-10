@@ -86,9 +86,10 @@ func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, resul
 	})
 }
 
-func (service *Service) recordCapabilityBlocked(ctx context.Context, run scheduledRun, reason string) error {
+func (service *Service) recordCapabilityBlocked(ctx context.Context, run scheduledRun, reason metric.CapabilityBlockReason) error {
 	finished := service.clock.Now().UTC()
-	message := collectionErrorMessage(reason)
+	code := string(reason)
+	message := collectionErrorMessage(code)
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 		if err := lockInstance(ctx, tx, run.target.ID); err != nil {
 			return err
@@ -105,11 +106,11 @@ func (service *Service) recordCapabilityBlocked(ctx context.Context, run schedul
 			next_eligible_at = NULL,
 			last_error_code = EXCLUDED.last_error_code,
 			last_error_message = EXCLUDED.last_error_message`,
-			run.target.ID, run.task.ID, run.dueAt, finished, reason, message)
+			run.target.ID, run.task.ID, run.dueAt, finished, code, message)
 		if err != nil {
 			return err
 		}
-		return setSourceFailure(ctx, tx, run.target.ID, reason, message)
+		return setSourceFailure(ctx, tx, run.target.ID, code, message)
 	})
 }
 
@@ -236,7 +237,7 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, sam
 }
 
 func (service *Service) nextEligible(ctx context.Context, run scheduledRun) (time.Time, error) {
-	if run.task.Kind == metric.TaskKindProbe || run.task.ID == capabilityTask.ID {
+	if run.task.Kind == metric.TaskKindProbe || isCapabilitySnapshotTask(run.task) {
 		return time.Time{}, nil
 	}
 	var taskNext, connectionNext pgtype.Timestamptz
@@ -319,13 +320,13 @@ func collectionErrorMessage(code string) string {
 		return "collection query failed"
 	case errorCodeTimeout:
 		return "collection deadline exceeded"
-	case "PERMISSION_DENIED":
+	case string(metric.CapabilityBlockPermissionDenied):
 		return "required database role is missing"
-	case "EXTENSION_MISSING":
+	case string(metric.CapabilityBlockExtensionMissing):
 		return "required database extension is missing"
-	case "FEATURE_DISABLED":
+	case string(metric.CapabilityBlockFeatureDisabled):
 		return "required database feature is not enabled"
-	case "NOT_APPLICABLE_ROLE":
+	case string(metric.CapabilityBlockNotApplicableRole):
 		return "collection task does not apply to this database role"
 	case string(resultSkippedBackpressure):
 		return "collection skipped because scheduler capacity was unavailable"

@@ -16,9 +16,19 @@ const (
 	CapabilitySnapshotTTL = 5 * time.Minute
 )
 
+type CapabilityBlockReason string
+
+const (
+	CapabilityBlockCollectionFailed  CapabilityBlockReason = "COLLECTION_FAILED"
+	CapabilityBlockPermissionDenied  CapabilityBlockReason = "PERMISSION_DENIED"
+	CapabilityBlockExtensionMissing  CapabilityBlockReason = "EXTENSION_MISSING"
+	CapabilityBlockFeatureDisabled   CapabilityBlockReason = "FEATURE_DISABLED"
+	CapabilityBlockNotApplicableRole CapabilityBlockReason = "NOT_APPLICABLE_ROLE"
+)
+
 func ProjectCapabilitySnapshot(states map[CapabilityID]CapabilityStatus, observedAt, now time.Time) map[CapabilityID]CapabilityStatus {
 	if observedAt.IsZero() || now.Sub(observedAt) > CapabilitySnapshotTTL || !completeCapabilitySnapshot(states) {
-		return allCapabilityStates(CapabilityUnknown)
+		return UnknownCapabilityStates()
 	}
 	result := make(map[CapabilityID]CapabilityStatus, len(Capabilities))
 	for _, capability := range Capabilities {
@@ -35,6 +45,14 @@ func DecodeCapabilitySnapshot(encoded []byte) (map[CapabilityID]CapabilityStatus
 	return states, nil
 }
 
+func UnknownCapabilityStates() map[CapabilityID]CapabilityStatus {
+	states := make(map[CapabilityID]CapabilityStatus, len(Capabilities))
+	for _, capability := range Capabilities {
+		states[capability.ID] = CapabilityUnknown
+	}
+	return states
+}
+
 func CapabilityAffectedMetricCount(capabilityID CapabilityID) int {
 	count := 0
 	for _, task := range Tasks {
@@ -46,7 +64,7 @@ func CapabilityAffectedMetricCount(capabilityID CapabilityID) int {
 	return count
 }
 
-func MetricCapabilityBlockReason(metricID MetricID, states map[CapabilityID]CapabilityStatus) (string, bool) {
+func MetricCapabilityBlockReason(metricID MetricID, states map[CapabilityID]CapabilityStatus) (CapabilityBlockReason, bool) {
 	for _, task := range Tasks {
 		for _, yield := range task.Yields {
 			if yield.Metric == metricID {
@@ -57,29 +75,27 @@ func MetricCapabilityBlockReason(metricID MetricID, states map[CapabilityID]Capa
 	return "", false
 }
 
-func TaskCapabilityBlockReason(task Task, states map[CapabilityID]CapabilityStatus) (string, bool) {
+func TaskCapabilityBlockReason(task Task, states map[CapabilityID]CapabilityStatus) (CapabilityBlockReason, bool) {
 	for _, required := range task.Requires {
-		status := states[required]
-		if status == CapabilityPresent {
+		switch states[required] {
+		case CapabilityPresent:
 			continue
-		}
-		if status == CapabilityMissing {
+		case CapabilityMissing:
 			switch required {
 			case CapabilityRolePGMonitor:
-				return "PERMISSION_DENIED", true
+				return CapabilityBlockPermissionDenied, true
 			case CapabilityExtensionPGStatStatements:
-				return "EXTENSION_MISSING", true
+				return CapabilityBlockExtensionMissing, true
 			}
-		}
-		if status == CapabilityNotApplicable {
+		case CapabilityNotApplicable:
 			switch required {
 			case CapabilityTopologyHasReplication:
-				return "NOT_APPLICABLE_ROLE", true
+				return CapabilityBlockNotApplicableRole, true
 			case CapabilityTopologyHasSlot:
-				return "FEATURE_DISABLED", true
+				return CapabilityBlockFeatureDisabled, true
 			}
 		}
-		return "COLLECTION_FAILED", true
+		return CapabilityBlockCollectionFailed, true
 	}
 	return "", false
 }
@@ -96,14 +112,6 @@ func completeCapabilitySnapshot(states map[CapabilityID]CapabilityStatus) bool {
 		}
 	}
 	return true
-}
-
-func allCapabilityStates(status CapabilityStatus) map[CapabilityID]CapabilityStatus {
-	result := make(map[CapabilityID]CapabilityStatus, len(Capabilities))
-	for _, capability := range Capabilities {
-		result[capability.ID] = status
-	}
-	return result
 }
 
 func taskRequires(task Task, capabilityID CapabilityID) bool {

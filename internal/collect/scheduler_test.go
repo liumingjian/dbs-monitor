@@ -74,16 +74,16 @@ func TestDispatcherEnforcesDualSlotsGlobalLimitsAndCapabilityReserve(t *testing.
 		t.Fatal("second collection query was not admitted")
 	}
 
-	dispatcher.capabilityWaiting = true
+	dispatcher.capabilitySnapshotWaiting = true
 	if dispatcher.admit(work{instanceID: "three", class: workCollectionQuery}) {
 		t.Fatal("collection query consumed a capability-reserved slot")
 	}
 	for _, instanceID := range []string{"three", "four"} {
-		if !dispatcher.admit(work{instanceID: instanceID, class: workCapability}) {
+		if !dispatcher.admit(work{instanceID: instanceID, class: workCapabilitySnapshot}) {
 			t.Fatalf("capability task for %s did not receive its reserved slot", instanceID)
 		}
 	}
-	if dispatcher.admit(work{instanceID: "five", class: workCapability}) {
+	if dispatcher.admit(work{instanceID: "five", class: workCapabilitySnapshot}) {
 		t.Fatal("query-channel global limit was exceeded")
 	}
 }
@@ -133,13 +133,13 @@ func TestPendingRunsPrioritizeCapabilitySnapshot(t *testing.T) {
 	due := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	query := metric.Task{ID: metric.TaskStatActivity, Kind: metric.TaskKindSQL}
 	pending.put(scheduledRun{key: taskKey{instanceID: "one", taskID: query.ID}, task: query, dueAt: due.Add(-time.Second)})
-	pending.put(scheduledRun{key: taskKey{instanceID: "one", taskID: capabilityTask.ID}, task: capabilityTask, dueAt: due})
+	pending.put(scheduledRun{key: taskKey{instanceID: "one", taskID: capabilitySnapshotTask.ID}, task: capabilitySnapshotTask, dueAt: due})
 
 	ordered := pending.ordered()
-	if len(ordered) != 2 || ordered[0].task.ID != capabilityTask.ID {
+	if len(ordered) != 2 || ordered[0].task.ID != capabilitySnapshotTask.ID {
 		t.Fatalf("pending order = %+v, want capability snapshot first", ordered)
 	}
-	if got := classFor(capabilityTask); got != workCapability {
-		t.Fatalf("capability work class = %d, want %d", got, workCapability)
+	if got := classFor(capabilitySnapshotTask); got != workCapabilitySnapshot {
+		t.Fatalf("capability work class = %d, want %d", got, workCapabilitySnapshot)
 	}
 }
