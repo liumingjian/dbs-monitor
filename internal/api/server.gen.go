@@ -45,12 +45,12 @@ const (
 
 // Defines values for AlertOperator.
 const (
-	Empty            AlertOperator = "!="
 	Equal            AlertOperator = "="
 	GreaterThan      AlertOperator = ">"
 	GreaterThanEqual AlertOperator = ">="
 	LessThan         AlertOperator = "<"
 	LessThanEqual    AlertOperator = "<="
+	NotEqual         AlertOperator = "!="
 )
 
 // Defines values for AlertSeverity.

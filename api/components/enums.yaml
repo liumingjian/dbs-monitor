@@ -26,6 +26,13 @@ AlertAggregation:
 AlertOperator:
   type: string
   enum: ['>', '>=', '<', '<=', '=', '!=']
+  x-enum-varnames:
+    - GreaterThan
+    - GreaterThanEqual
+    - LessThan
+    - LessThanEqual
+    - Equal
+    - NotEqual
 AlertSeverity:
   type: string
   enum: [critical, warning, info]

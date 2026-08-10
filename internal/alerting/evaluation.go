@@ -8,42 +8,42 @@ type Point struct {
 }
 
 func AggregateWindow(points []Point, now time.Time, window time.Duration, aggregation string) (float64, bool) {
-	lower := now.Add(-window)
+	windowStart := now.Add(-window)
 	var value float64
-	var latest time.Time
-	count := 0
+	var latestTimestamp time.Time
+	sampleCount := 0
 	for _, point := range points {
-		if !point.Timestamp.After(lower) || point.Timestamp.After(now) {
+		if !point.Timestamp.After(windowStart) || point.Timestamp.After(now) {
 			continue
 		}
-		count++
+		sampleCount++
 		switch aggregation {
 		case "latest":
-			if latest.IsZero() || point.Timestamp.After(latest) {
-				latest = point.Timestamp
+			if latestTimestamp.IsZero() || point.Timestamp.After(latestTimestamp) {
+				latestTimestamp = point.Timestamp
 				value = point.Value
 			}
 		case "avg", "sum":
 			value += point.Value
 		case "max":
-			if count == 1 || point.Value > value {
+			if sampleCount == 1 || point.Value > value {
 				value = point.Value
 			}
 		case "min":
-			if count == 1 || point.Value < value {
+			if sampleCount == 1 || point.Value < value {
 				value = point.Value
 			}
 		case "count":
-			value = float64(count)
+			value = float64(sampleCount)
 		default:
 			return 0, false
 		}
 	}
-	if count == 0 {
+	if sampleCount == 0 {
 		return 0, false
 	}
 	if aggregation == "avg" {
-		value /= float64(count)
+		value /= float64(sampleCount)
 	}
 	return value, true
 }
@@ -67,7 +67,13 @@ func Compare(value float64, operator string, threshold float64) bool {
 	}
 }
 
-func Evaluate(value float64, operator string, threshold float64, recoveryOperator string, recoveryThreshold float64) Evaluation {
+func Evaluate(
+	value float64,
+	operator string,
+	threshold float64,
+	recoveryOperator string,
+	recoveryThreshold float64,
+) Evaluation {
 	if Compare(value, operator, threshold) {
 		return Breaching
 	}
@@ -80,34 +86,34 @@ func Evaluate(value float64, operator string, threshold float64, recoveryOperato
 type EventKind string
 
 const (
-	PENDING_STARTED EventKind = "PENDING_STARTED"
-	FIRED           EventKind = "FIRED"
-	UPDATED         EventKind = "UPDATED"
-	RECOVERED_EVENT EventKind = "RECOVERED"
-	NO_DATA_ENTERED EventKind = "NO_DATA_ENTERED"
-	NO_DATA_EXITED  EventKind = "NO_DATA_EXITED"
+	EventPendingStarted EventKind = "PENDING_STARTED"
+	EventFired          EventKind = "FIRED"
+	EventUpdated        EventKind = "UPDATED"
+	EventRecovered      EventKind = "RECOVERED"
+	EventNoDataEntered  EventKind = "NO_DATA_ENTERED"
+	EventNoDataExited   EventKind = "NO_DATA_EXITED"
 )
 
 func StateEvents(before, after State) []EventKind {
 	if before == NO_DATA && after != NO_DATA {
-		events := []EventKind{NO_DATA_EXITED}
+		events := []EventKind{EventNoDataExited}
 		if after == RECOVERED {
-			events = append(events, RECOVERED_EVENT)
+			events = append(events, EventRecovered)
 		}
 		return events
 	}
 	events := make([]EventKind, 0, 1)
 	switch {
 	case before != PENDING && after == PENDING:
-		events = append(events, PENDING_STARTED)
+		events = append(events, EventPendingStarted)
 	case before != FIRING && after == FIRING:
-		events = append(events, FIRED)
+		events = append(events, EventFired)
 	case before == FIRING && after == FIRING:
-		events = append(events, UPDATED)
+		events = append(events, EventUpdated)
 	case before != RECOVERED && after == RECOVERED:
-		events = append(events, RECOVERED_EVENT)
+		events = append(events, EventRecovered)
 	case before != NO_DATA && after == NO_DATA:
-		events = append(events, NO_DATA_ENTERED)
+		events = append(events, EventNoDataEntered)
 	}
 	return events
 }

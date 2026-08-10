@@ -56,7 +56,8 @@ func (service *Service) evaluateInstance(ctx context.Context, targets []alerting
 
 func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Queries, ruleID, instanceID pgtype.UUID, now time.Time) error {
 	target, err := queries.GetEvaluationTarget(ctx, alerting.GetEvaluationTargetParams{
-		RuleID: ruleID, InstanceID: instanceID,
+		RuleID:     ruleID,
+		InstanceID: instanceID,
 	})
 	if err != nil {
 		return fmt.Errorf("read evaluation target: %w", err)
@@ -72,7 +73,7 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 		}
 		current.StateBeforeNoData = alerting.State(target.StateBeforeNoData.String)
 	}
-	before := current.State
+	previousState := current.State
 
 	evaluation := alerting.Missing
 	unavailability := pgtype.Text{String: "NO_SAMPLES_YET", Valid: true}
@@ -81,22 +82,32 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 		unavailability = target.LastErrorCode
 	} else {
 		window := time.Duration(target.WindowSeconds) * time.Second
-		points, err := queries.SamplesInRuleWindow(ctx, alerting.SamplesInRuleWindowParams{
-			InstanceID: target.InstanceID, MetricID: target.MetricID,
-			Ts:   pgtype.Timestamptz{Time: now.Add(-window), Valid: true},
-			Ts_2: pgtype.Timestamptz{Time: now, Valid: true},
+		samples, err := queries.SamplesInRuleWindow(ctx, alerting.SamplesInRuleWindowParams{
+			InstanceID:  target.InstanceID,
+			MetricID:    target.MetricID,
+			WindowStart: pgtype.Timestamptz{Time: now.Add(-window), Valid: true},
+			WindowEnd:   pgtype.Timestamptz{Time: now, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("read rule samples: %w", err)
 		}
-		windowPoints := make([]alerting.Point, 0, len(points))
-		for _, point := range points {
-			windowPoints = append(windowPoints, alerting.Point{Timestamp: point.Ts.Time, Value: point.Value})
+		points := make([]alerting.Point, 0, len(samples))
+		for _, sample := range samples {
+			points = append(points, alerting.Point{
+				Timestamp: sample.Ts.Time,
+				Value:     sample.Value,
+			})
 		}
-		if value, ok := alerting.AggregateWindow(windowPoints, now, window, target.Aggregation); ok {
+		if value, ok := alerting.AggregateWindow(points, now, window, target.Aggregation); ok {
 			currentValue = pgtype.Float8{Float64: value, Valid: true}
 			unavailability = pgtype.Text{}
-			evaluation = alerting.Evaluate(value, target.Operator, target.Threshold, target.RecoveryOperator, target.RecoveryThreshold)
+			evaluation = alerting.Evaluate(
+				value,
+				target.Operator,
+				target.Threshold,
+				target.RecoveryOperator,
+				target.RecoveryThreshold,
+			)
 		}
 	}
 	if evaluation == alerting.Missing && target.NoDataPolicy == "ignore" {
@@ -112,25 +123,39 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 		unavailability = pgtype.Text{}
 	}
 	alertInstanceID, err := queries.SaveAlertSnapshot(ctx, alerting.SaveAlertSnapshotParams{
-		RuleID: target.RuleID, InstanceID: target.InstanceID, MetricID: target.MetricID,
-		Status: string(next.State), RuleVersion: target.Version, Severity: target.Severity,
-		CurrentValue: currentValue, RuleSnapshot: target.RuleSnapshot,
-		BreachCount: int32(next.BreachCount), RecoveryCount: int32(next.RecoveryCount), NoDataCount: int32(next.NoDataCount),
-		StateBeforeNoData: stateBeforeNoData, Unavailability: unavailability,
-		UpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		RuleID:            target.RuleID,
+		InstanceID:        target.InstanceID,
+		MetricID:          target.MetricID,
+		Status:            string(next.State),
+		RuleVersion:       target.Version,
+		Severity:          target.Severity,
+		CurrentValue:      currentValue,
+		RuleSnapshot:      target.RuleSnapshot,
+		BreachCount:       int32(next.BreachCount),
+		RecoveryCount:     int32(next.RecoveryCount),
+		NoDataCount:       int32(next.NoDataCount),
+		StateBeforeNoData: stateBeforeNoData,
+		Unavailability:    unavailability,
+		UpdatedAt:         pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("save alert state: %w", err)
 	}
-	for _, kind := range alerting.StateEvents(before, next.State) {
-		if kind == alerting.UPDATED && !currentValue.Valid {
+	for _, kind := range alerting.StateEvents(previousState, next.State) {
+		if kind == alerting.EventUpdated && !currentValue.Valid {
 			continue
 		}
 		if err := queries.CreateAlertEvent(ctx, alerting.CreateAlertEventParams{
-			AlertInstanceID: alertInstanceID, RuleID: target.RuleID, RuleVersion: target.Version,
-			Kind: string(kind), FromState: string(before), ToState: string(next.State),
-			CurrentValue: currentValue, Unavailability: unavailability, RuleSnapshot: target.RuleSnapshot,
-			EvaluatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			AlertInstanceID: alertInstanceID,
+			RuleID:          target.RuleID,
+			RuleVersion:     target.Version,
+			Kind:            string(kind),
+			FromState:       string(previousState),
+			ToState:         string(next.State),
+			CurrentValue:    currentValue,
+			Unavailability:  unavailability,
+			RuleSnapshot:    target.RuleSnapshot,
+			EvaluatedAt:     pgtype.Timestamptz{Time: now, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("save alert event: %w", err)
 		}

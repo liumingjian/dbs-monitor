@@ -63,10 +63,10 @@ WHERE rule.id = sqlc.arg(rule_id)
 SELECT sample.ts, sample.value
 FROM metric_series series
 JOIN metric_sample sample ON sample.series_id = series.series_id
-WHERE series.instance_id = $1
-  AND series.metric_id = $2
-  AND sample.ts > $3
-  AND sample.ts <= $4
+WHERE series.instance_id = sqlc.arg(instance_id)
+  AND series.metric_id = sqlc.arg(metric_id)
+  AND sample.ts > sqlc.arg(window_start)
+  AND sample.ts <= sqlc.arg(window_end)
 ORDER BY sample.ts DESC;
 
 -- name: SaveAlertSnapshot :one

@@ -36,7 +36,7 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		})},
 		{"AlertOperator", mapKeys(map[api.AlertOperator]string{
 			api.GreaterThan: "", api.GreaterThanEqual: "", api.LessThan: "", api.LessThanEqual: "",
-			api.Equal: "", api.Empty: "",
+			api.Equal: "", api.NotEqual: "",
 		})},
 		{"AlertSeverity", mapKeys(map[api.AlertSeverity]string{
 			api.Critical: "", api.Warning: "", api.Info: "",

@@ -15,13 +15,13 @@ import (
 )
 
 func (handler *Handler) ListAlertRules(ctx context.Context, _ api.ListAlertRulesRequestObject) (api.ListAlertRulesResponseObject, error) {
-	rows, err := alerting.New(handler.platform).ListAlertRules(ctx)
+	rules, err := alerting.New(handler.platform).ListAlertRules(ctx)
 	if err != nil {
 		return nil, err
 	}
-	response := make(api.ListAlertRules200JSONResponse, 0, len(rows))
-	for _, row := range rows {
-		response = append(response, toAPIAlertRule(row))
+	response := make(api.ListAlertRules200JSONResponse, 0, len(rules))
+	for _, rule := range rules {
+		response = append(response, toAPIAlertRule(rule))
 	}
 	return response, nil
 }
@@ -30,40 +30,52 @@ func (handler *Handler) CreateAlertRule(ctx context.Context, request api.CreateA
 	if request.Body == nil {
 		return invalidAlertRule([]fieldError{{field: "body", message: "is required"}}), nil
 	}
-	if fieldErrors := validateAlertRule(*request.Body); len(fieldErrors) != 0 {
+	input := *request.Body
+	if fieldErrors := validateAlertRule(input); len(fieldErrors) > 0 {
 		return invalidAlertRule(fieldErrors), nil
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
-	id := pgtype.UUID{Bytes: uuid.New(), Valid: true}
-	var created alerting.AlertRule
+	ruleID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	var createdRule alerting.AlertRule
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := alerting.New(tx)
-		var err error
-		created, err = queries.CreateAlertRule(ctx, alerting.CreateAlertRuleParams{
-			ID: id, Name: strings.TrimSpace(request.Body.Name), MetricID: request.Body.MetricId,
-			Aggregation: string(request.Body.Aggregation), Operator: string(request.Body.Operator),
-			Threshold: float64(request.Body.Threshold), RecoveryOperator: string(request.Body.RecoveryOperator),
-			RecoveryThreshold: float64(request.Body.RecoveryThreshold), WindowSeconds: int32(request.Body.WindowSeconds),
-			ConsecutiveCount: int32(request.Body.ConsecutiveCount), RecoveryConsecutiveCount: int32(request.Body.RecoveryConsecutiveCount),
-			Severity: string(request.Body.Severity), NoDataPolicy: string(request.Body.NoDataPolicy),
-			Enabled: request.Body.Enabled, CreatedAt: now,
+		rule, err := queries.CreateAlertRule(ctx, alerting.CreateAlertRuleParams{
+			ID:                       ruleID,
+			Name:                     strings.TrimSpace(input.Name),
+			MetricID:                 input.MetricId,
+			Aggregation:              string(input.Aggregation),
+			Operator:                 string(input.Operator),
+			Threshold:                input.Threshold,
+			RecoveryOperator:         string(input.RecoveryOperator),
+			RecoveryThreshold:        input.RecoveryThreshold,
+			WindowSeconds:            int32(input.WindowSeconds),
+			ConsecutiveCount:         int32(input.ConsecutiveCount),
+			RecoveryConsecutiveCount: int32(input.RecoveryConsecutiveCount),
+			Severity:                 string(input.Severity),
+			NoDataPolicy:             string(input.NoDataPolicy),
+			Enabled:                  input.Enabled,
+			CreatedAt:                now,
 		})
 		if err != nil {
 			return err
 		}
-		snapshot, err := json.Marshal(toAPIAlertRule(created))
+		createdRule = rule
+		snapshot, err := json.Marshal(toAPIAlertRule(rule))
 		if err != nil {
 			return err
 		}
 		return queries.CreateAlertRuleVersion(ctx, alerting.CreateAlertRuleVersionParams{
-			RuleID: created.ID, Version: created.Version, Snapshot: snapshot, CreatedAt: now,
+			RuleID:    rule.ID,
+			Version:   rule.Version,
+			Snapshot:  snapshot,
+			CreatedAt: now,
 		})
 	})
 	if err != nil {
 		return nil, err
 	}
-	return api.CreateAlertRule201JSONResponse(toAPIAlertRule(created)), nil
+	return api.CreateAlertRule201JSONResponse(toAPIAlertRule(createdRule)), nil
 }
 
 type fieldError struct {
@@ -72,48 +84,48 @@ type fieldError struct {
 }
 
 func validateAlertRule(rule api.AlertRuleInput) []fieldError {
-	errors := make([]fieldError, 0)
+	fieldErrors := make([]fieldError, 0)
 	if strings.TrimSpace(rule.Name) == "" {
-		errors = append(errors, fieldError{field: "name", message: "must not be blank"})
+		fieldErrors = append(fieldErrors, fieldError{field: "name", message: "must not be blank"})
 	}
 	definition, exists := metricDefinition(metric.MetricID(rule.MetricId))
 	if !exists || definition.Alertability == metric.AlertabilityNo {
-		errors = append(errors, fieldError{field: "metric_id", message: "must identify an alertable metric"})
+		fieldErrors = append(fieldErrors, fieldError{field: "metric_id", message: "must identify an alertable metric"})
 	}
 	if !validAggregation(rule.Aggregation) {
-		errors = append(errors, fieldError{field: "aggregation", message: "is not supported"})
+		fieldErrors = append(fieldErrors, fieldError{field: "aggregation", message: "is not supported"})
 	}
 	if !validOperator(rule.Operator) {
-		errors = append(errors, fieldError{field: "operator", message: "is not supported"})
+		fieldErrors = append(fieldErrors, fieldError{field: "operator", message: "is not supported"})
 	}
 	if !validOperator(rule.RecoveryOperator) {
-		errors = append(errors, fieldError{field: "recovery_operator", message: "is not supported"})
+		fieldErrors = append(fieldErrors, fieldError{field: "recovery_operator", message: "is not supported"})
 	}
 	if rule.WindowSeconds < 1 {
-		errors = append(errors, fieldError{field: "window_seconds", message: "must be positive"})
+		fieldErrors = append(fieldErrors, fieldError{field: "window_seconds", message: "must be positive"})
 	}
 	if rule.ConsecutiveCount < 1 {
-		errors = append(errors, fieldError{field: "consecutive_count", message: "must be positive"})
+		fieldErrors = append(fieldErrors, fieldError{field: "consecutive_count", message: "must be positive"})
 	}
 	if rule.RecoveryConsecutiveCount < 1 {
-		errors = append(errors, fieldError{field: "recovery_consecutive_count", message: "must be positive"})
+		fieldErrors = append(fieldErrors, fieldError{field: "recovery_consecutive_count", message: "must be positive"})
 	}
 	if rule.Severity != api.Critical && rule.Severity != api.Warning && rule.Severity != api.Info {
-		errors = append(errors, fieldError{field: "severity", message: "is not supported"})
+		fieldErrors = append(fieldErrors, fieldError{field: "severity", message: "is not supported"})
 	}
 	if rule.NoDataPolicy != api.Ignore && rule.NoDataPolicy != api.MarkNoData {
-		errors = append(errors, fieldError{field: "no_data_policy", message: "is not supported"})
+		fieldErrors = append(fieldErrors, fieldError{field: "no_data_policy", message: "is not supported"})
 	}
 	if exists && definition.Type != metric.MetricTypeState && validOperator(rule.Operator) && validOperator(rule.RecoveryOperator) {
-		if !validHysteresis(rule.Operator, float64(rule.Threshold), rule.RecoveryOperator, float64(rule.RecoveryThreshold)) {
-			errors = append(errors, fieldError{field: "recovery_threshold", message: "must define a separate recovery range"})
+		if !validHysteresis(rule.Operator, rule.Threshold, rule.RecoveryOperator, rule.RecoveryThreshold) {
+			fieldErrors = append(fieldErrors, fieldError{field: "recovery_threshold", message: "must define a separate recovery range"})
 		}
 	}
 	if exists && definition.Type == metric.MetricTypeState &&
 		rule.Operator == rule.RecoveryOperator && rule.Threshold == rule.RecoveryThreshold {
-		errors = append(errors, fieldError{field: "recovery_threshold", message: "must define the opposite recovery state"})
+		fieldErrors = append(fieldErrors, fieldError{field: "recovery_threshold", message: "must define the opposite recovery state"})
 	}
-	return errors
+	return fieldErrors
 }
 
 func metricDefinition(id metric.MetricID) (metric.Metric, bool) {
@@ -136,7 +148,7 @@ func validAggregation(value api.AlertAggregation) bool {
 
 func validOperator(value api.AlertOperator) bool {
 	switch value {
-	case api.GreaterThan, api.GreaterThanEqual, api.LessThan, api.LessThanEqual, api.Equal, api.Empty:
+	case api.GreaterThan, api.GreaterThanEqual, api.LessThan, api.LessThanEqual, api.Equal, api.NotEqual:
 		return true
 	default:
 		return false
@@ -149,7 +161,7 @@ func validHysteresis(operator api.AlertOperator, threshold float64, recoveryOper
 		return (recoveryOperator == api.LessThan || recoveryOperator == api.LessThanEqual) && recoveryThreshold < threshold
 	case api.LessThan, api.LessThanEqual:
 		return (recoveryOperator == api.GreaterThan || recoveryOperator == api.GreaterThanEqual) && recoveryThreshold > threshold
-	case api.Equal, api.Empty:
+	case api.Equal, api.NotEqual:
 		return operator != recoveryOperator || threshold != recoveryThreshold
 	default:
 		return false
@@ -174,12 +186,22 @@ func invalidAlertRule(fieldErrors []fieldError) api.CreateAlertRule400JSONRespon
 
 func toAPIAlertRule(rule alerting.AlertRule) api.AlertRule {
 	return api.AlertRule{
-		Id: rule.ID.Bytes, Name: rule.Name, MetricId: rule.MetricID,
-		Aggregation: api.AlertAggregation(rule.Aggregation), Operator: api.AlertOperator(rule.Operator),
-		Threshold: rule.Threshold, RecoveryOperator: api.AlertOperator(rule.RecoveryOperator),
-		RecoveryThreshold: rule.RecoveryThreshold, WindowSeconds: int(rule.WindowSeconds),
-		ConsecutiveCount: int(rule.ConsecutiveCount), RecoveryConsecutiveCount: int(rule.RecoveryConsecutiveCount),
-		Severity: api.AlertSeverity(rule.Severity), NoDataPolicy: api.NoDataPolicy(rule.NoDataPolicy),
-		Enabled: rule.Enabled, Version: int(rule.Version), CreatedAt: rule.CreatedAt.Time, UpdatedAt: rule.UpdatedAt.Time,
+		Id:                       rule.ID.Bytes,
+		Name:                     rule.Name,
+		MetricId:                 rule.MetricID,
+		Aggregation:              api.AlertAggregation(rule.Aggregation),
+		Operator:                 api.AlertOperator(rule.Operator),
+		Threshold:                rule.Threshold,
+		RecoveryOperator:         api.AlertOperator(rule.RecoveryOperator),
+		RecoveryThreshold:        rule.RecoveryThreshold,
+		WindowSeconds:            int(rule.WindowSeconds),
+		ConsecutiveCount:         int(rule.ConsecutiveCount),
+		RecoveryConsecutiveCount: int(rule.RecoveryConsecutiveCount),
+		Severity:                 api.AlertSeverity(rule.Severity),
+		NoDataPolicy:             api.NoDataPolicy(rule.NoDataPolicy),
+		Enabled:                  rule.Enabled,
+		Version:                  int(rule.Version),
+		CreatedAt:                rule.CreatedAt.Time,
+		UpdatedAt:                rule.UpdatedAt.Time,
 	}
 }

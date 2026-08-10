@@ -52,13 +52,13 @@ func TestStateEvents(t *testing.T) {
 		before, after State
 		want          []EventKind
 	}{
-		{name: "pending", before: OK, after: PENDING, want: []EventKind{PENDING_STARTED}},
-		{name: "fired", before: PENDING, after: FIRING, want: []EventKind{FIRED}},
-		{name: "updated", before: FIRING, after: FIRING, want: []EventKind{UPDATED}},
-		{name: "recovered", before: FIRING, after: RECOVERED, want: []EventKind{RECOVERED_EVENT}},
-		{name: "no data entered", before: FIRING, after: NO_DATA, want: []EventKind{NO_DATA_ENTERED}},
-		{name: "no data exited", before: NO_DATA, after: FIRING, want: []EventKind{NO_DATA_EXITED}},
-		{name: "no data recovered", before: NO_DATA, after: RECOVERED, want: []EventKind{NO_DATA_EXITED, RECOVERED_EVENT}},
+		{name: "pending", before: OK, after: PENDING, want: []EventKind{EventPendingStarted}},
+		{name: "fired", before: PENDING, after: FIRING, want: []EventKind{EventFired}},
+		{name: "updated", before: FIRING, after: FIRING, want: []EventKind{EventUpdated}},
+		{name: "recovered", before: FIRING, after: RECOVERED, want: []EventKind{EventRecovered}},
+		{name: "no data entered", before: FIRING, after: NO_DATA, want: []EventKind{EventNoDataEntered}},
+		{name: "no data exited", before: NO_DATA, after: FIRING, want: []EventKind{EventNoDataExited}},
+		{name: "no data recovered", before: NO_DATA, after: RECOVERED, want: []EventKind{EventNoDataExited, EventRecovered}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

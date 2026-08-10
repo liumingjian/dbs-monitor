@@ -349,10 +349,10 @@ ORDER BY sample.ts DESC
 `
 
 type SamplesInRuleWindowParams struct {
-	InstanceID pgtype.UUID
-	MetricID   string
-	Ts         pgtype.Timestamptz
-	Ts_2       pgtype.Timestamptz
+	InstanceID  pgtype.UUID
+	MetricID    string
+	WindowStart pgtype.Timestamptz
+	WindowEnd   pgtype.Timestamptz
 }
 
 type SamplesInRuleWindowRow struct {
@@ -364,8 +364,8 @@ func (q *Queries) SamplesInRuleWindow(ctx context.Context, arg SamplesInRuleWind
 	rows, err := q.db.Query(ctx, samplesInRuleWindow,
 		arg.InstanceID,
 		arg.MetricID,
-		arg.Ts,
-		arg.Ts_2,
+		arg.WindowStart,
+		arg.WindowEnd,
 	)
 	if err != nil {
 		return nil, err
