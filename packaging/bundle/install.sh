@@ -88,6 +88,7 @@ DATABASE_URL=postgres:///dbs_monitor?host=$install_root/run&sslmode=disable
 LISTEN_ADDR=:8443
 PUBLIC_HOST=$public_host
 CERT_DIR=$install_root/certs
+CREDENTIALS_DIR=$install_root/etc/credentials
 EOF
 chmod 0600 "$install_root/etc/dbs-monitor.env"
 chown dbsmon:dbsmon "$install_root/etc/dbs-monitor.env" "$data_dir/postgresql.conf" "$data_dir/pg_hba.conf"

@@ -4,6 +4,8 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 database="dbs_monitor_e2e_$$"
 cert_dir=$(mktemp -d)
+credential_dir=$(mktemp -d)
+cookie_file=$(mktemp)
 server_log=$(mktemp)
 server_pid=
 
@@ -13,7 +15,7 @@ cleanup() {
     wait "$server_pid" 2>/dev/null || true
   fi
   PGPASSWORD="${PGPASSWORD:-dbs_monitor}" psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$database\" WITH (FORCE)" >/dev/null 2>&1 || true
-  rm -rf "$cert_dir" "$server_log"
+  rm -rf "$cert_dir" "$credential_dir" "$cookie_file" "$server_log"
 }
 trap cleanup EXIT INT TERM
 
@@ -25,6 +27,7 @@ INITIAL_ADMIN_PASSWORD=t11-playwright-password \
 LISTEN_ADDR=127.0.0.1:18443 \
 PUBLIC_HOST=127.0.0.1 \
 CERT_DIR="$cert_dir" \
+CREDENTIALS_DIR="$credential_dir" \
 "$root/dbs-monitor-server" >"$server_log" 2>&1 &
 server_pid=$!
 
@@ -46,10 +49,15 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-instance_id=11111111-1111-4111-8111-111111111111
+curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" -c "$cookie_file" \
+  -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/login \
+  --data '{"username":"admin","password":"t11-playwright-password"}' >/dev/null
+instance_id=$(node -e 'process.stdout.write(JSON.stringify({name:"T11 smoke instance",host:process.env.PGHOST || "localhost",port:Number(process.env.PGPORT || 55432),database:process.env.PGDATABASE || "dbs_monitor",username:process.env.PGUSER || "dbs_monitor",password:process.env.PGPASSWORD}))' \
+  | curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" -b "$cookie_file" \
+  -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/instances \
+  --data-binary @- \
+  | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).instance.id))")
 psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d "$database" -v ON_ERROR_STOP=1 <<SQL >/dev/null
-INSERT INTO instance (id, name, host, port, database_name, username, password)
-VALUES ('$instance_id', 'T11 smoke instance', '${PGHOST:-localhost}', ${PGPORT:-55432}, '${PGDATABASE:-dbs_monitor}', '${PGUSER:-dbs_monitor}', '$PGPASSWORD');
 INSERT INTO metric_series (instance_id, metric_id, labels, labels_key, first_seen, last_seen)
 VALUES ('$instance_id', 'pg.connection.total', '{}', '{}', '$now', '$now');
 INSERT INTO metric_sample (series_id, ts, value)

@@ -8,11 +8,10 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	pgxconn "github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -31,10 +30,11 @@ type Service struct {
 	platform *db.Pool
 	dialer   monitorpg.Dialer
 	clock    clock.Clock
+	keyring  *instance.CredentialKeyring
 }
 
-func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock) *Service {
-	return &Service{platform: platform, dialer: dialer, clock: currentClock}
+func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Service {
+	return &Service{platform: platform, dialer: dialer, clock: currentClock, keyring: keyring}
 }
 
 func (service *Service) RunOnce(ctx context.Context) error {
@@ -52,8 +52,15 @@ func (service *Service) RunOnce(ctx context.Context) error {
 
 func (service *Service) collectTarget(ctx context.Context, target instance.ListCollectionTargetsRow) error {
 	now := service.clock.Now().UTC()
-	connectionString := targetConnectionString(target)
-	conn, err := service.dialer.Dial(ctx, connectionString)
+	password, err := service.keyring.DecryptPassword(uuidFromPGType(target.ID), target.PasswordCiphertext, target.PasswordKeyVersion)
+	if err != nil {
+		return fmt.Errorf("read instance credential: %w", err)
+	}
+	config, err := targetConnectionConfig(target, password)
+	if err != nil {
+		return fmt.Errorf("build target connection config: %w", err)
+	}
+	conn, err := service.dialer.Dial(ctx, config)
 	if err != nil {
 		writeFailure := func() error {
 			return service.platform.InTx(ctx, func(tx pgx.Tx) error {
@@ -161,17 +168,21 @@ func isConnectionFailure(err error) bool {
 	return errors.As(err, &networkError) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
-func targetConnectionString(target instance.ListCollectionTargetsRow) string {
-	connection := &url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(target.Username, target.Password),
-		Host:   net.JoinHostPort(target.Host, strconv.Itoa(int(target.Port))),
-		Path:   "/" + target.DatabaseName,
+func targetConnectionConfig(target instance.ListCollectionTargetsRow, password string) (*pgx.ConnConfig, error) {
+	config, err := pgx.ParseConfig("postgres://localhost/?sslmode=disable")
+	if err != nil {
+		return nil, err
 	}
-	query := connection.Query()
-	query.Set("sslmode", "disable")
-	connection.RawQuery = query.Encode()
-	return connection.String()
+	config.Host = target.Host
+	config.Port = uint16(target.Port)
+	config.Database = target.DatabaseName
+	config.User = target.Username
+	config.Password = password
+	return config, nil
+}
+
+func uuidFromPGType(value pgtype.UUID) uuid.UUID {
+	return uuid.UUID(value.Bytes)
 }
 
 func (service *Service) Run(ctx context.Context, interval time.Duration) {

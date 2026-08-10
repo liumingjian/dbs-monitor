@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -37,8 +38,9 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
 	migrationDB := openSQL(t, databaseName)
-	if _, err := migrations.Up(ctx, migrationDB); err != nil {
+	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	migrationDB.Close()
@@ -49,19 +51,27 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		t.Fatalf("open credential keyring: %v", err)
+	}
 
 	instanceID := uuid.New()
 	pgID := pgtype.UUID{Bytes: instanceID, Valid: true}
+	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, env("PGPASSWORD", "dbs_monitor"))
+	if err != nil {
+		t.Fatalf("encrypt instance password: %v", err)
+	}
 	_, err = instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgID, Name: "target", Host: env("PGHOST", "localhost"),
 		Port: int32(envInt("PGPORT", 55432)), DatabaseName: env("PGDATABASE", "dbs_monitor"),
-		Username: env("PGUSER", "dbs_monitor"), Password: env("PGPASSWORD", "dbs_monitor"),
+		Username: env("PGUSER", "dbs_monitor"), PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	})
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
 
-	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{})
+	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{}, keyring)
 	eval := evaluator.New(platform, clock.Real{})
 
 	extra := make([]*pgx.Conn, 25)

@@ -1,7 +1,7 @@
 -- name: CreateInstance :one
 WITH created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password, agent_token_hash)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_token_hash)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING id, name, host, port, database_name, username, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
@@ -18,13 +18,20 @@ FROM instance
 ORDER BY name, id;
 
 -- name: GetInstance :one
-SELECT id, name, host, port, database_name, username, password, agent_token_hash, created_at
+SELECT id, name, host, port, database_name, username, agent_token_hash, created_at
 FROM instance
 WHERE id = $1;
 
 -- name: UpdateInstance :one
 UPDATE instance
-SET name = $2, host = $3, port = $4, database_name = $5, username = $6, password = $7
+SET name = $2,
+    host = $3,
+    port = $4,
+    database_name = $5,
+    username = $6,
+    password_ciphertext = $7,
+    password_key_version = $8,
+    credential_version = credential_version + 1
 WHERE id = $1
 RETURNING id, name, host, port, database_name, username, created_at;
 
@@ -32,7 +39,7 @@ RETURNING id, name, host, port, database_name, username, created_at;
 DELETE FROM instance WHERE id = $1;
 
 -- name: ListCollectionTargets :many
-SELECT id, host, port, database_name, username, password
+SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version
 FROM instance
 ORDER BY id;
 

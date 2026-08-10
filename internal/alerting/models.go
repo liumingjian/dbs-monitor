@@ -35,15 +35,17 @@ type CollectionTaskConfig struct {
 }
 
 type Instance struct {
-	ID             pgtype.UUID
-	Name           string
-	Host           string
-	Port           int32
-	DatabaseName   string
-	Username       string
-	Password       string
-	AgentTokenHash []byte
-	CreatedAt      pgtype.Timestamptz
+	ID                 pgtype.UUID
+	Name               string
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	AgentTokenHash     []byte
+	CreatedAt          pgtype.Timestamptz
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+	CredentialVersion  int64
 }
 
 type InstanceCollectState struct {

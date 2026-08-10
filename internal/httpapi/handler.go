@@ -32,10 +32,11 @@ type authenticatedAgentKey struct{}
 type Handler struct {
 	platform *db.Pool
 	clock    clock.Clock
+	keyring  *instance.CredentialKeyring
 }
 
-func NewHandler(platform *db.Pool, currentClock clock.Clock) *Handler {
-	return &Handler{platform: platform, clock: currentClock}
+func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {
+	return &Handler{platform: platform, clock: currentClock, keyring: keyring}
 }
 
 func (handler *Handler) Routes() http.Handler {
@@ -90,6 +91,10 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		return nil, errors.New("instance body is required")
 	}
 	id := uuid.New()
+	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(id, request.Body.Password)
+	if err != nil {
+		return nil, err
+	}
 	token, tokenHash, err := newToken()
 	if err != nil {
 		return nil, err
@@ -97,7 +102,8 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	row, err := instance.New(handler.platform).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: id, Valid: true}, Name: request.Body.Name,
 		Host: request.Body.Host, Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
-		Username: request.Body.Username, Password: request.Body.Password, AgentTokenHash: tokenHash,
+		Username: request.Body.Username, PasswordCiphertext: ciphertext,
+		PasswordKeyVersion: keyVersion, AgentTokenHash: tokenHash,
 	})
 	if err != nil {
 		return nil, err
@@ -124,10 +130,15 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
+	id := request.Id
+	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(id, request.Body.Password)
+	if err != nil {
+		return nil, err
+	}
 	row, err := instance.New(handler.platform).UpdateInstance(ctx, instance.UpdateInstanceParams{
 		ID: pgtype.UUID{Bytes: request.Id, Valid: true}, Name: request.Body.Name,
 		Host: request.Body.Host, Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
-		Username: request.Body.Username, Password: request.Body.Password,
+		Username: request.Body.Username, PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	})
 	if err != nil {
 		return nil, err
