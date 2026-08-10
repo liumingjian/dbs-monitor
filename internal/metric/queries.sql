@@ -31,3 +31,28 @@ FROM metric_sample
 WHERE series_id = $1 AND ts > $2
 ORDER BY ts DESC
 LIMIT $3;
+
+-- name: GetCollectionPlan :one
+SELECT agent_metrics_enabled
+FROM instance_collection_config
+WHERE instance_id = $1;
+
+-- name: SetAgentMetricsEnabled :exec
+INSERT INTO instance_collection_config (instance_id, agent_metrics_enabled, updated_at)
+VALUES ($1, $2, now())
+ON CONFLICT (instance_id)
+DO UPDATE SET agent_metrics_enabled = EXCLUDED.agent_metrics_enabled,
+              updated_at = EXCLUDED.updated_at;
+
+-- name: ListTaskIntervals :many
+SELECT task_id, interval_seconds
+FROM collection_task_config
+WHERE instance_id = $1
+ORDER BY task_id;
+
+-- name: SetTaskInterval :exec
+INSERT INTO collection_task_config (instance_id, task_id, interval_seconds, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (instance_id, task_id)
+DO UPDATE SET interval_seconds = EXCLUDED.interval_seconds,
+              updated_at = EXCLUDED.updated_at;

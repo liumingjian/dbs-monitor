@@ -386,10 +386,7 @@ func alertStatus(ctx context.Context, platform *db.Pool, id pgtype.UUID) (api.Al
 }
 
 func metricUnit(metricID string) string {
-	if metricID == "host.cpu.usage_percent" {
-		return "percent"
-	}
-	return "count"
+	return metric.UnitFor(metric.MetricID(metricID))
 }
 
 func newToken() (string, []byte, error) {

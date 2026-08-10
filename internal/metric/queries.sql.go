@@ -57,6 +57,19 @@ func (q *Queries) BucketedPointsInRange(ctx context.Context, arg BucketedPointsI
 	return items, nil
 }
 
+const getCollectionPlan = `-- name: GetCollectionPlan :one
+SELECT agent_metrics_enabled
+FROM instance_collection_config
+WHERE instance_id = $1
+`
+
+func (q *Queries) GetCollectionPlan(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getCollectionPlan, instanceID)
+	var agent_metrics_enabled bool
+	err := row.Scan(&agent_metrics_enabled)
+	return agent_metrics_enabled, err
+}
+
 const latestPoints = `-- name: LatestPoints :many
 SELECT ts, value
 FROM metric_sample
@@ -86,6 +99,38 @@ func (q *Queries) LatestPoints(ctx context.Context, arg LatestPointsParams) ([]L
 	for rows.Next() {
 		var i LatestPointsRow
 		if err := rows.Scan(&i.Ts, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskIntervals = `-- name: ListTaskIntervals :many
+SELECT task_id, interval_seconds
+FROM collection_task_config
+WHERE instance_id = $1
+ORDER BY task_id
+`
+
+type ListTaskIntervalsRow struct {
+	TaskID          string
+	IntervalSeconds int32
+}
+
+func (q *Queries) ListTaskIntervals(ctx context.Context, instanceID pgtype.UUID) ([]ListTaskIntervalsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskIntervals, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTaskIntervalsRow
+	for rows.Next() {
+		var i ListTaskIntervalsRow
+		if err := rows.Scan(&i.TaskID, &i.IntervalSeconds); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -169,6 +214,43 @@ func (q *Queries) SeriesForMetric(ctx context.Context, arg SeriesForMetricParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAgentMetricsEnabled = `-- name: SetAgentMetricsEnabled :exec
+INSERT INTO instance_collection_config (instance_id, agent_metrics_enabled, updated_at)
+VALUES ($1, $2, now())
+ON CONFLICT (instance_id)
+DO UPDATE SET agent_metrics_enabled = EXCLUDED.agent_metrics_enabled,
+              updated_at = EXCLUDED.updated_at
+`
+
+type SetAgentMetricsEnabledParams struct {
+	InstanceID          pgtype.UUID
+	AgentMetricsEnabled bool
+}
+
+func (q *Queries) SetAgentMetricsEnabled(ctx context.Context, arg SetAgentMetricsEnabledParams) error {
+	_, err := q.db.Exec(ctx, setAgentMetricsEnabled, arg.InstanceID, arg.AgentMetricsEnabled)
+	return err
+}
+
+const setTaskInterval = `-- name: SetTaskInterval :exec
+INSERT INTO collection_task_config (instance_id, task_id, interval_seconds, updated_at)
+VALUES ($1, $2, $3, now())
+ON CONFLICT (instance_id, task_id)
+DO UPDATE SET interval_seconds = EXCLUDED.interval_seconds,
+              updated_at = EXCLUDED.updated_at
+`
+
+type SetTaskIntervalParams struct {
+	InstanceID      pgtype.UUID
+	TaskID          string
+	IntervalSeconds int32
+}
+
+func (q *Queries) SetTaskInterval(ctx context.Context, arg SetTaskIntervalParams) error {
+	_, err := q.db.Exec(ctx, setTaskInterval, arg.InstanceID, arg.TaskID, arg.IntervalSeconds)
+	return err
 }
 
 const upsertSeries = `-- name: UpsertSeries :one

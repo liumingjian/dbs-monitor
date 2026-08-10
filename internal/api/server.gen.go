@@ -24,7 +24,13 @@ const (
 
 // Defines values for AgentReportMetricsMetric.
 const (
-	AgentReportMetricsMetricHostCpuUsagePercent AgentReportMetricsMetric = "host.cpu.usage_percent"
+	AgentReportMetricsMetricHostCpuUsagePercent           AgentReportMetricsMetric = "host.cpu.usage_percent"
+	AgentReportMetricsMetricHostDiskFreeBytes             AgentReportMetricsMetric = "host.disk.free_bytes"
+	AgentReportMetricsMetricHostDiskIops                  AgentReportMetricsMetric = "host.disk.iops"
+	AgentReportMetricsMetricHostDiskThroughputBytesPerSec AgentReportMetricsMetric = "host.disk.throughput_bytes_per_sec"
+	AgentReportMetricsMetricHostDiskUsagePercent          AgentReportMetricsMetric = "host.disk.usage_percent"
+	AgentReportMetricsMetricHostMemoryUsagePercent        AgentReportMetricsMetric = "host.memory.usage_percent"
+	AgentReportMetricsMetricHostNetworkBytesPerSec        AgentReportMetricsMetric = "host.network.bytes_per_sec"
 )
 
 // Defines values for AlertStatus.
@@ -73,9 +79,38 @@ const (
 
 // Defines values for GetMetricSeriesParamsMetric.
 const (
-	GetMetricSeriesParamsMetricHostCpuUsagePercent     GetMetricSeriesParamsMetric = "host.cpu.usage_percent"
-	GetMetricSeriesParamsMetricPgAvailabilityReachable GetMetricSeriesParamsMetric = "pg.availability.reachable"
-	GetMetricSeriesParamsMetricPgConnectionTotal       GetMetricSeriesParamsMetric = "pg.connection.total"
+	GetMetricSeriesParamsMetricAgentStatus                       GetMetricSeriesParamsMetric = "agent.status"
+	GetMetricSeriesParamsMetricCollectorLastSuccessTime          GetMetricSeriesParamsMetric = "collector.last_success_time"
+	GetMetricSeriesParamsMetricHostCpuUsagePercent               GetMetricSeriesParamsMetric = "host.cpu.usage_percent"
+	GetMetricSeriesParamsMetricHostDiskFreeBytes                 GetMetricSeriesParamsMetric = "host.disk.free_bytes"
+	GetMetricSeriesParamsMetricHostDiskIops                      GetMetricSeriesParamsMetric = "host.disk.iops"
+	GetMetricSeriesParamsMetricHostDiskThroughputBytesPerSec     GetMetricSeriesParamsMetric = "host.disk.throughput_bytes_per_sec"
+	GetMetricSeriesParamsMetricHostDiskUsagePercent              GetMetricSeriesParamsMetric = "host.disk.usage_percent"
+	GetMetricSeriesParamsMetricHostMemoryUsagePercent            GetMetricSeriesParamsMetric = "host.memory.usage_percent"
+	GetMetricSeriesParamsMetricHostNetworkBytesPerSec            GetMetricSeriesParamsMetric = "host.network.bytes_per_sec"
+	GetMetricSeriesParamsMetricPgAvailabilityReachable           GetMetricSeriesParamsMetric = "pg.availability.reachable"
+	GetMetricSeriesParamsMetricPgConnectionActive                GetMetricSeriesParamsMetric = "pg.connection.active"
+	GetMetricSeriesParamsMetricPgConnectionIdleInTransaction     GetMetricSeriesParamsMetric = "pg.connection.idle_in_transaction"
+	GetMetricSeriesParamsMetricPgConnectionTotal                 GetMetricSeriesParamsMetric = "pg.connection.total"
+	GetMetricSeriesParamsMetricPgLockWaitingCount                GetMetricSeriesParamsMetric = "pg.lock.waiting_count"
+	GetMetricSeriesParamsMetricPgPreparedXactsCount              GetMetricSeriesParamsMetric = "pg.prepared_xacts.count"
+	GetMetricSeriesParamsMetricPgProbeLatencyMs                  GetMetricSeriesParamsMetric = "pg.probe.latency_ms"
+	GetMetricSeriesParamsMetricPgQueryLongRunningCount           GetMetricSeriesParamsMetric = "pg.query.long_running_count"
+	GetMetricSeriesParamsMetricPgReplicationConnectionState      GetMetricSeriesParamsMetric = "pg.replication.connection_state"
+	GetMetricSeriesParamsMetricPgReplicationReplayLagMs          GetMetricSeriesParamsMetric = "pg.replication.replay_lag_ms"
+	GetMetricSeriesParamsMetricPgReplicationRole                 GetMetricSeriesParamsMetric = "pg.replication.role"
+	GetMetricSeriesParamsMetricPgReplicationSlotRetainedWalBytes GetMetricSeriesParamsMetric = "pg.replication_slot.retained_wal_bytes"
+	GetMetricSeriesParamsMetricPgReplicationWalLagBytes          GetMetricSeriesParamsMetric = "pg.replication.wal_lag_bytes"
+	GetMetricSeriesParamsMetricPgSessionBlockedCount             GetMetricSeriesParamsMetric = "pg.session.blocked_count"
+	GetMetricSeriesParamsMetricPgTempBytesPerSec                 GetMetricSeriesParamsMetric = "pg.temp.bytes_per_sec"
+	GetMetricSeriesParamsMetricPgTempFilesPerSec                 GetMetricSeriesParamsMetric = "pg.temp.files_per_sec"
+	GetMetricSeriesParamsMetricPgTps                             GetMetricSeriesParamsMetric = "pg.tps"
+	GetMetricSeriesParamsMetricPgTransactionLongCount            GetMetricSeriesParamsMetric = "pg.transaction.long_count"
+	GetMetricSeriesParamsMetricPgTransactionMaxDurationSec       GetMetricSeriesParamsMetric = "pg.transaction.max_duration_sec"
+	GetMetricSeriesParamsMetricPgTuplesReadPerSec                GetMetricSeriesParamsMetric = "pg.tuples.read_per_sec"
+	GetMetricSeriesParamsMetricPgTuplesWritePerSec               GetMetricSeriesParamsMetric = "pg.tuples.write_per_sec"
+	GetMetricSeriesParamsMetricPgXactCommitPerSec                GetMetricSeriesParamsMetric = "pg.xact.commit_per_sec"
+	GetMetricSeriesParamsMetricPgXactRollbackPerSec              GetMetricSeriesParamsMetric = "pg.xact.rollback_per_sec"
 )
 
 // Defines values for GetMetricSeriesParamsStep.

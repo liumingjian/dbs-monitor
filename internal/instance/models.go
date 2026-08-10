@@ -27,6 +27,13 @@ type AppUser struct {
 	Role         string
 }
 
+type CollectionTaskConfig struct {
+	InstanceID      pgtype.UUID
+	TaskID          string
+	IntervalSeconds int32
+	UpdatedAt       pgtype.Timestamptz
+}
+
 type Instance struct {
 	ID             pgtype.UUID
 	Name           string
@@ -46,6 +53,12 @@ type InstanceCollectState struct {
 	LastReportAt     pgtype.Timestamptz
 	LastErrorCode    pgtype.Text
 	LastErrorMessage pgtype.Text
+}
+
+type InstanceCollectionConfig struct {
+	InstanceID          pgtype.UUID
+	AgentMetricsEnabled bool
+	UpdatedAt           pgtype.Timestamptz
 }
 
 type MetricSample struct {

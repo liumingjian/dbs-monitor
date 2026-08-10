@@ -102,6 +102,21 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	if _, err := database.ExecContext(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, now(), 1)", seriesID); err != nil {
 		t.Fatalf("insert after partition repair: %v", err)
 	}
+
+	for _, table := range []string{"collection_task_config", "instance_collection_config"} {
+		var exists bool
+		if err := database.QueryRowContext(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
+			t.Fatalf("check collection plan table %q: %v", table, err)
+		}
+		if !exists {
+			t.Fatalf("collection plan table %q is missing", table)
+		}
+	}
+	_, err = database.ExecContext(ctx, `INSERT INTO collection_task_config (instance_id, task_id, interval_seconds)
+		VALUES ('00000000-0000-0000-0000-000000000001', 'pg.stat_database', 4)`)
+	if !errors.As(err, &pgError) || pgError.Code != "23514" {
+		t.Fatalf("4-second collection interval error = %v, want check violation", err)
+	}
 }
 
 func openDatabase(t *testing.T, database string) *sql.DB {
