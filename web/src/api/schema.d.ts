@@ -112,6 +112,8 @@ export interface components {
             port: number;
             database: string;
             username: string;
+            /** @description Version reported by the Agent, when one has reported. */
+            agent_version?: string;
             alert_status: components["schemas"]["AlertStatus"];
         };
         InstanceCreated: {
@@ -140,13 +142,12 @@ export interface components {
         AgentReport: {
             /** Format: uuid */
             instance_id: string;
+            agent_version: string;
             /** Format: date-time */
             timestamp: string;
-            metrics: {
-                /** @enum {string} */
-                metric: "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec";
-                value: number;
-            }[];
+            metrics: components["schemas"]["AgentMetric"][];
+            /** @description Unacknowledged samples from the Agent's five-minute in-memory window. */
+            backfill?: components["schemas"]["AgentSample"][];
         };
         Error: {
             error: {
@@ -158,6 +159,17 @@ export interface components {
                     message: string;
                 }[];
             };
+        };
+        AgentMetric: {
+            /** @enum {string} */
+            metric: "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec";
+            /** Format: double */
+            value: number;
+        };
+        AgentSample: {
+            /** Format: date-time */
+            timestamp: string;
+            metrics: components["schemas"]["AgentMetric"][];
         };
     };
     responses: never;
@@ -371,7 +383,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Invalid timestamp */
+            /** @description Report rejected because of clock skew or Agent version */
             400: {
                 headers: {
                     [name: string]: unknown;

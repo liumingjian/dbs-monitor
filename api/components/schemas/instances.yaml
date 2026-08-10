@@ -27,5 +27,8 @@ Instance:
     port: { type: integer }
     database: { type: string }
     username: { type: string }
+    agent_version:
+      type: string
+      description: Version reported by the Agent, when one has reported.
     alert_status:
       $ref: ../enums.yaml#/AlertStatus

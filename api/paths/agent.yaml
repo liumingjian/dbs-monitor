@@ -18,7 +18,7 @@
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
       '400':
-        description: Invalid timestamp
+        description: Report rejected because of clock skew or Agent version
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }

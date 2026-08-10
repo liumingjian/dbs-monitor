@@ -13,8 +13,9 @@ import (
 
 	"github.com/liumingjian/dbs-monitor/internal/agent"
 	"github.com/liumingjian/dbs-monitor/internal/api"
-	"github.com/shirou/gopsutil/v4/cpu"
 )
+
+var version = "1.0.0"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -31,8 +32,13 @@ func main() {
 	}
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
+	dataPath := os.Getenv("PGDATA")
+	if dataPath == "" {
+		dataPath = "/"
+	}
+	service := agent.NewService(client, cfg, version, dataPath)
 	for {
-		if err := runOnce(ctx, client, cfg, time.Now().UTC()); err != nil {
+		if err := service.RunOnce(ctx, time.Now().UTC()); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
 		select {
@@ -41,29 +47,6 @@ func main() {
 		case <-ticker.C:
 		}
 	}
-}
-
-func runOnce(ctx context.Context, client *api.ClientWithResponses, cfg agent.Config, now time.Time) error {
-	values, err := cpu.PercentWithContext(ctx, 100*time.Millisecond, false)
-	if err != nil {
-		return fmt.Errorf("collect CPU usage: %w", err)
-	}
-	if len(values) != 1 {
-		return fmt.Errorf("collect CPU usage: got %d aggregate values", len(values))
-	}
-	body := api.AgentReport{InstanceId: cfg.Instance, Timestamp: now}
-	body.Metrics = append(body.Metrics, struct {
-		Metric api.AgentReportMetricsMetric `json:"metric"`
-		Value  float32                      `json:"value"`
-	}{Metric: api.AgentReportMetricsMetricHostCpuUsagePercent, Value: float32(values[0])})
-	response, err := client.ReportAgentMetricsWithResponse(ctx, body)
-	if err != nil {
-		return fmt.Errorf("report Agent metrics: %w", err)
-	}
-	if response.StatusCode() != http.StatusNoContent {
-		return fmt.Errorf("report Agent metrics: server returned %s", response.Status())
-	}
-	return nil
 }
 
 func newClient(cfg agent.Config) (*api.ClientWithResponses, error) {

@@ -44,6 +44,7 @@ type Instance struct {
 	Password       string
 	AgentTokenHash []byte
 	CreatedAt      pgtype.Timestamptz
+	AgentVersion   pgtype.Text
 }
 
 type InstanceCollectState struct {

@@ -28,6 +28,8 @@ import (
 	webassets "github.com/liumingjian/dbs-monitor/web"
 )
 
+var version = "1.0.0"
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -95,7 +97,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	apiHandler := httpapi.NewHandler(platform, clock.Real{}).Routes()
+	apiHandler := httpapi.NewHandlerWithVersion(platform, clock.Real{}, version).Routes()
 	fileServer := http.FileServer(http.FS(static))
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if len(request.URL.Path) >= 5 && request.URL.Path[:5] == "/api/" {

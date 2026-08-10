@@ -56,7 +56,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("seed admin: %v", err)
 	}
 
-	server := httptest.NewTLSServer(httpapi.NewHandler(platform, clock.Real{}).Routes())
+	server := httptest.NewTLSServer(httpapi.NewHandlerWithVersion(platform, clock.Real{}, "3.0.0").Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
@@ -166,37 +166,185 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("restore instance port: %v", err)
 	}
 
-	report := func(timestamp time.Time, token string) *http.Response {
+	hostMetrics := []map[string]any{
+		{"metric": "host.cpu.usage_percent", "value": 37.5},
+		{"metric": "host.memory.usage_percent", "value": 61.25},
+		{"metric": "host.disk.usage_percent", "value": 52.0},
+		{"metric": "host.disk.free_bytes", "value": 1_000_000.0},
+		{"metric": "host.disk.iops", "value": 15.0},
+		{"metric": "host.disk.throughput_bytes_per_sec", "value": 2_000.0},
+		{"metric": "host.network.bytes_per_sec", "value": 3_000.0},
+	}
+	metricsWithIOPS := func(value float64) []map[string]any {
+		metrics := make([]map[string]any, 0, len(hostMetrics))
+		for _, item := range hostMetrics {
+			copy := map[string]any{"metric": item["metric"], "value": item["value"]}
+			if copy["metric"] == "host.disk.iops" {
+				copy["value"] = value
+			}
+			metrics = append(metrics, copy)
+		}
+		return metrics
+	}
+	report := func(timestamp time.Time, version, token string, backfill []map[string]any) *http.Response {
 		return requestJSON(t, client, http.MethodPost, server.URL+"/api/agent/v1/report", map[string]any{
-			"instance_id": createBody.Instance.ID,
-			"timestamp":   timestamp.UTC().Format(time.RFC3339Nano),
-			"metrics":     []map[string]any{{"metric": "host.cpu.usage_percent", "value": 37.5}},
+			"instance_id":          createBody.Instance.ID,
+			"agent_version":        version,
+			"timestamp":            timestamp.UTC().Format(time.RFC3339Nano),
+			"metrics":              hostMetrics,
+			"backfill":             backfill,
+			"unknown_future_field": true,
 		}, token)
 	}
-	wrong := report(time.Now(), "wrong-token")
+	wrong := report(time.Now(), "2.4.0", "wrong-token", nil)
 	if wrong.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("wrong token status = %d, want 401", wrong.StatusCode)
 	}
 	wrong.Body.Close()
-	old := report(time.Now().Add(-31*time.Second), createBody.AgentToken)
-	if old.StatusCode != http.StatusBadRequest {
-		t.Fatalf("old timestamp status = %d, want 400", old.StatusCode)
+	skewed := report(time.Now().Add(-31*time.Second), "2.4.0", createBody.AgentToken, nil)
+	if skewed.StatusCode != http.StatusBadRequest {
+		t.Fatalf("skewed timestamp status = %d, want 400", skewed.StatusCode)
 	}
-	old.Body.Close()
-	accepted := report(time.Now(), createBody.AgentToken)
+	skewed.Body.Close()
+	assertAgentState(t, ctx, pool, createBody.Instance.ID, "2.4.0", "CLOCK_SKEW", "时钟偏移")
+
+	tooOld := report(time.Now(), "1.99.0", createBody.AgentToken, nil)
+	if tooOld.StatusCode != http.StatusBadRequest {
+		t.Fatalf("old Agent version status = %d, want 400", tooOld.StatusCode)
+	}
+	var oldVersionError struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(tooOld.Body).Decode(&oldVersionError); err != nil {
+		t.Fatalf("decode old version response: %v", err)
+	}
+	tooOld.Body.Close()
+	if oldVersionError.Error.Message != "版本过旧，需升级" {
+		t.Fatalf("old version message = %q", oldVersionError.Error.Message)
+	}
+	assertAgentState(t, ctx, pool, createBody.Instance.ID, "1.99.0", "AGENT_VERSION_TOO_OLD", "版本过旧，需升级")
+
+	alertUpdatedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
+		(instance_id, metric_id, status, updated_at) VALUES ($1, 'pg.connection.total', 'OK', $2)`, createBody.Instance.ID, alertUpdatedAt); err != nil {
+		t.Fatalf("seed alert state: %v", err)
+	}
+	now := time.Now().UTC()
+	backfill := []map[string]any{
+		{"timestamp": now.Add(-90 * time.Second).Format(time.RFC3339Nano), "metrics": metricsWithIOPS(9)},
+		{"timestamp": now.Add(-4 * time.Minute).Format(time.RFC3339Nano), "metrics": metricsWithIOPS(20)},
+		{"timestamp": now.Add(-5*time.Minute - time.Second).Format(time.RFC3339Nano), "metrics": hostMetrics},
+	}
+	accepted := report(now, "2.4.0", createBody.AgentToken, backfill)
 	if accepted.StatusCode != http.StatusNoContent {
 		t.Fatalf("valid report status = %d, want 204", accepted.StatusCode)
 	}
 	accepted.Body.Close()
 
-	var hostPoints int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
-		JOIN metric_series series ON series.series_id = sample.series_id
-		WHERE series.metric_id = 'host.cpu.usage_percent'`).Scan(&hostPoints); err != nil {
-		t.Fatalf("count host metric points: %v", err)
+	for _, metricID := range []string{
+		"host.cpu.usage_percent", "host.memory.usage_percent", "host.disk.usage_percent",
+		"host.disk.free_bytes", "host.disk.iops", "host.disk.throughput_bytes_per_sec",
+		"host.network.bytes_per_sec",
+	} {
+		var count int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+			JOIN metric_series series ON series.series_id = sample.series_id
+			WHERE series.instance_id = $1 AND series.metric_id = $2`, createBody.Instance.ID, metricID).Scan(&count); err != nil {
+			t.Fatalf("count %s points: %v", metricID, err)
+		}
+		if count != 3 {
+			t.Fatalf("%s points = %d, want current plus two in-window backfill points", metricID, count)
+		}
 	}
-	if hostPoints != 1 {
-		t.Fatalf("host.cpu.usage_percent points = %d, want 1", hostPoints)
+	var iops []float64
+	if err := pool.QueryRow(ctx, `SELECT array_agg(sample.value ORDER BY sample.ts)
+		FROM metric_sample sample JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1 AND series.metric_id = 'host.disk.iops'`, createBody.Instance.ID).Scan(&iops); err != nil {
+		t.Fatalf("read backfilled IOPS values: %v", err)
+	}
+	if len(iops) != 3 || iops[0] != 20 || iops[1] != 9 || iops[2] != 15 {
+		t.Fatalf("backfilled IOPS values = %v, want [20 9 15] without reset reclassification", iops)
+	}
+	hostSeriesURL, err := url.Parse(fmt.Sprintf("%s/api/v1/instances/%s/metrics/series", server.URL, createBody.Instance.ID))
+	if err != nil {
+		t.Fatalf("parse host series URL: %v", err)
+	}
+	query := hostSeriesURL.Query()
+	for _, metricID := range []string{
+		"host.cpu.usage_percent", "host.memory.usage_percent", "host.disk.usage_percent",
+		"host.disk.free_bytes", "host.disk.iops", "host.disk.throughput_bytes_per_sec",
+		"host.network.bytes_per_sec",
+	} {
+		query.Add("metric", metricID)
+	}
+	query.Set("from", now.Add(-5*time.Minute).Format(time.RFC3339Nano))
+	query.Set("to", now.Add(time.Minute).Format(time.RFC3339Nano))
+	query.Set("step", "raw")
+	hostSeriesURL.RawQuery = query.Encode()
+	hostSeries := getResponse(t, client, hostSeriesURL.String())
+	defer hostSeries.Body.Close()
+	var hostSeriesBody struct {
+		Metrics []struct {
+			Metric string `json:"metric"`
+			Series []struct {
+				Points [][]*float64 `json:"points"`
+			} `json:"series"`
+		} `json:"metrics"`
+	}
+	if err := json.NewDecoder(hostSeries.Body).Decode(&hostSeriesBody); err != nil {
+		t.Fatalf("decode host metric series: %v", err)
+	}
+	if len(hostSeriesBody.Metrics) != 7 {
+		t.Fatalf("host metric series count = %d, want 7", len(hostSeriesBody.Metrics))
+	}
+	for _, item := range hostSeriesBody.Metrics {
+		if len(item.Series) != 1 || len(item.Series[0].Points) != 3 {
+			t.Fatalf("%s API points = %+v, want three raw points", item.Metric, item.Series)
+		}
+		if item.Metric == "host.cpu.usage_percent" {
+			points := item.Series[0].Points
+			if points[0][0] == nil || points[1][0] == nil || points[2][0] == nil ||
+				*points[1][0]-*points[0][0] != 150 || *points[2][0]-*points[1][0] != 90 {
+				t.Fatalf("CPU point timestamps = %+v, want Agent sample intervals 150s and 90s", points)
+			}
+		}
+	}
+	assertAgentState(t, ctx, pool, createBody.Instance.ID, "2.4.0", "", "")
+
+	var unchanged time.Time
+	if err := pool.QueryRow(ctx, "SELECT updated_at FROM alert_instance WHERE instance_id = $1", createBody.Instance.ID).Scan(&unchanged); err != nil {
+		t.Fatalf("read alert state after backfill: %v", err)
+	}
+	if !unchanged.Equal(alertUpdatedAt) {
+		t.Fatalf("backfill changed alert evaluation state at %s, want %s", unchanged, alertUpdatedAt)
+	}
+
+	instanceResponse := getResponse(t, client, server.URL+"/api/v1/instances/"+createBody.Instance.ID)
+	defer instanceResponse.Body.Close()
+	var instanceBody struct {
+		AgentVersion *string `json:"agent_version"`
+	}
+	if err := json.NewDecoder(instanceResponse.Body).Decode(&instanceBody); err != nil {
+		t.Fatalf("decode instance Agent version: %v", err)
+	}
+	if instanceBody.AgentVersion == nil || *instanceBody.AgentVersion != "2.4.0" {
+		t.Fatalf("instance agent_version = %v, want 2.4.0", instanceBody.AgentVersion)
+	}
+}
+
+func assertAgentState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID, version, code, message string) {
+	t.Helper()
+	var gotVersion string
+	var gotCode, gotMessage sql.NullString
+	if err := pool.QueryRow(ctx, `SELECT instance.agent_version, state.last_error_code, state.last_error_message
+		FROM instance JOIN instance_collect_state state ON state.instance_id = instance.id AND state.source = 'AGENT'
+		WHERE instance.id = $1`, instanceID).Scan(&gotVersion, &gotCode, &gotMessage); err != nil {
+		t.Fatalf("read Agent state: %v", err)
+	}
+	if gotVersion != version || gotCode.String != code || gotMessage.String != message {
+		t.Fatalf("Agent state = (%q, %q, %q), want (%q, %q, %q)", gotVersion, gotCode.String, gotMessage.String, version, code, message)
 	}
 }
 
