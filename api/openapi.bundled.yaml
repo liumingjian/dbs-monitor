@@ -7,6 +7,7 @@ servers:
 tags:
   - name: instances
   - name: metrics
+  - name: alert-rules
   - name: auth
   - name: agent
 paths:
@@ -213,6 +214,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/alert-rules:
+    get:
+      tags:
+        - alert-rules
+      operationId: listAlertRules
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Alert rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertRule'
+    post:
+      tags:
+        - alert-rules
+      operationId: createAlertRule
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/agent/v1/report:
     post:
       tags:
@@ -279,6 +319,145 @@ components:
         - MISSING
         - NOT_APPLICABLE
         - UNKNOWN
+    AlertAggregation:
+      type: string
+      enum:
+        - latest
+        - avg
+        - max
+        - min
+        - sum
+        - count
+    AlertOperator:
+      type: string
+      enum:
+        - '>'
+        - '>='
+        - <
+        - <=
+        - '='
+        - '!='
+    AlertSeverity:
+      type: string
+      enum:
+        - critical
+        - warning
+        - info
+    NoDataPolicy:
+      type: string
+      enum:
+        - ignore
+        - mark_no_data
+    AlertRuleInput:
+      type: object
+      required:
+        - name
+        - metric_id
+        - aggregation
+        - operator
+        - threshold
+        - recovery_operator
+        - recovery_threshold
+        - window_seconds
+        - consecutive_count
+        - recovery_consecutive_count
+        - severity
+        - no_data_policy
+        - enabled
+      properties:
+        name:
+          type: string
+          minLength: 1
+        metric_id:
+          type: string
+          minLength: 1
+        aggregation:
+          $ref: '#/components/schemas/AlertAggregation'
+        operator:
+          $ref: '#/components/schemas/AlertOperator'
+        threshold:
+          type: number
+          format: double
+        recovery_operator:
+          $ref: '#/components/schemas/AlertOperator'
+        recovery_threshold:
+          type: number
+          format: double
+        window_seconds:
+          type: integer
+          minimum: 1
+        consecutive_count:
+          type: integer
+          minimum: 1
+        recovery_consecutive_count:
+          type: integer
+          minimum: 1
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        no_data_policy:
+          $ref: '#/components/schemas/NoDataPolicy'
+        enabled:
+          type: boolean
+    AlertRule:
+      type: object
+      required:
+        - id
+        - name
+        - metric_id
+        - aggregation
+        - operator
+        - threshold
+        - recovery_operator
+        - recovery_threshold
+        - window_seconds
+        - consecutive_count
+        - recovery_consecutive_count
+        - severity
+        - no_data_policy
+        - enabled
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        metric_id:
+          type: string
+        aggregation:
+          $ref: '#/components/schemas/AlertAggregation'
+        operator:
+          $ref: '#/components/schemas/AlertOperator'
+        threshold:
+          type: number
+          format: double
+        recovery_operator:
+          $ref: '#/components/schemas/AlertOperator'
+        recovery_threshold:
+          type: number
+          format: double
+        window_seconds:
+          type: integer
+        consecutive_count:
+          type: integer
+        recovery_consecutive_count:
+          type: integer
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        no_data_policy:
+          $ref: '#/components/schemas/NoDataPolicy'
+        enabled:
+          type: boolean
+        version:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     InstanceInput:
       type: object
       required:

@@ -70,6 +70,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alert-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAlertRules"];
+        put?: never;
+        post: operations["createAlertRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/report": {
         parameters: {
             query?: never;
@@ -96,6 +112,55 @@ export interface components {
         AlertStatus: "OK" | "PENDING" | "FIRING" | "NO_DATA" | "RECOVERED";
         /** @enum {string} */
         CapabilityStatus: "PRESENT" | "MISSING" | "NOT_APPLICABLE" | "UNKNOWN";
+        /** @enum {string} */
+        AlertAggregation: "latest" | "avg" | "max" | "min" | "sum" | "count";
+        /** @enum {string} */
+        AlertOperator: ">" | ">=" | "<" | "<=" | "=" | "!=";
+        /** @enum {string} */
+        AlertSeverity: "critical" | "warning" | "info";
+        /** @enum {string} */
+        NoDataPolicy: "ignore" | "mark_no_data";
+        AlertRuleInput: {
+            name: string;
+            metric_id: string;
+            aggregation: components["schemas"]["AlertAggregation"];
+            operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            threshold: number;
+            recovery_operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            recovery_threshold: number;
+            window_seconds: number;
+            consecutive_count: number;
+            recovery_consecutive_count: number;
+            severity: components["schemas"]["AlertSeverity"];
+            no_data_policy: components["schemas"]["NoDataPolicy"];
+            enabled: boolean;
+        };
+        AlertRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            metric_id: string;
+            aggregation: components["schemas"]["AlertAggregation"];
+            operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            threshold: number;
+            recovery_operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            recovery_threshold: number;
+            window_seconds: number;
+            consecutive_count: number;
+            recovery_consecutive_count: number;
+            severity: components["schemas"]["AlertSeverity"];
+            no_data_policy: components["schemas"]["NoDataPolicy"];
+            enabled: boolean;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         InstanceInput: {
             name: string;
             host: string;
@@ -341,6 +406,59 @@ export interface operations {
                 };
             };
             /** @description Invalid time range or step */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alert rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"][];
+                };
+            };
+        };
+    };
+    createAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid alert rule */
             400: {
                 headers: {
                     [name: string]: unknown;

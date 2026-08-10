@@ -8,16 +8,64 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlertEvent struct {
+	ID              int64
+	AlertInstanceID pgtype.UUID
+	RuleID          pgtype.UUID
+	RuleVersion     int32
+	Kind            string
+	FromState       string
+	ToState         string
+	CurrentValue    pgtype.Float8
+	Unavailability  pgtype.Text
+	RuleSnapshot    []byte
+	EvaluatedAt     pgtype.Timestamptz
+}
+
 type AlertInstance struct {
-	InstanceID        pgtype.UUID
-	MetricID          string
-	Status            string
-	BreachCount       int32
-	RecoveryCount     int32
-	NoDataCount       int32
-	StateBeforeNoData pgtype.Text
-	Unavailability    pgtype.Text
-	UpdatedAt         pgtype.Timestamptz
+	InstanceID         pgtype.UUID
+	MetricID           string
+	Status             string
+	BreachCount        int32
+	RecoveryCount      int32
+	NoDataCount        int32
+	StateBeforeNoData  pgtype.Text
+	Unavailability     pgtype.Text
+	UpdatedAt          pgtype.Timestamptz
+	ID                 pgtype.UUID
+	RuleID             pgtype.UUID
+	RuleVersion        int32
+	Severity           string
+	CurrentValue       pgtype.Float8
+	RuleSnapshot       []byte
+	MetricDimensionKey string
+}
+
+type AlertRule struct {
+	ID                       pgtype.UUID
+	Name                     string
+	MetricID                 string
+	Aggregation              string
+	Operator                 string
+	Threshold                float64
+	RecoveryOperator         string
+	RecoveryThreshold        float64
+	WindowSeconds            int32
+	ConsecutiveCount         int32
+	RecoveryConsecutiveCount int32
+	Severity                 string
+	NoDataPolicy             string
+	Enabled                  bool
+	Version                  int32
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
+type AlertRuleVersion struct {
+	RuleID    pgtype.UUID
+	Version   int32
+	Snapshot  []byte
+	CreatedAt pgtype.Timestamptz
 }
 
 type AppUser struct {

@@ -1,0 +1,33 @@
+/api/v1/alert-rules:
+  get:
+    tags: [alert-rules]
+    operationId: listAlertRules
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Alert rules
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/alert-rules.yaml#/AlertRule }
+  post:
+    tags: [alert-rules]
+    operationId: createAlertRule
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRuleInput }
+    responses:
+      '201':
+        description: Created
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRule }
+      '400':
+        description: Invalid alert rule
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

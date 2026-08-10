@@ -15,6 +15,7 @@ type Evaluation uint8
 const (
 	Breaching Evaluation = iota
 	Recovering
+	Stable
 	Missing
 )
 
@@ -37,7 +38,7 @@ func Step(current Snapshot, evaluation Evaluation, triggerCount, recoveryCount i
 			current.State = NO_DATA
 		}
 		return current
-	case Breaching, Recovering:
+	case Breaching, Recovering, Stable:
 		current.NoDataCount = 0
 		if current.State == NO_DATA {
 			before := current.StateBeforeNoData
@@ -48,6 +49,11 @@ func Step(current Snapshot, evaluation Evaluation, triggerCount, recoveryCount i
 			}
 			current.State = before
 		}
+	}
+	if evaluation == Stable {
+		current.BreachCount = 0
+		current.RecoveryCount = 0
+		return current
 	}
 
 	if evaluation == Breaching {

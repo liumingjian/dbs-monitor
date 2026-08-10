@@ -33,6 +33,33 @@ const (
 	AgentReportMetricsMetricHostNetworkBytesPerSec        AgentReportMetricsMetric = "host.network.bytes_per_sec"
 )
 
+// Defines values for AlertAggregation.
+const (
+	Avg    AlertAggregation = "avg"
+	Count  AlertAggregation = "count"
+	Latest AlertAggregation = "latest"
+	Max    AlertAggregation = "max"
+	Min    AlertAggregation = "min"
+	Sum    AlertAggregation = "sum"
+)
+
+// Defines values for AlertOperator.
+const (
+	Empty            AlertOperator = "!="
+	Equal            AlertOperator = "="
+	GreaterThan      AlertOperator = ">"
+	GreaterThanEqual AlertOperator = ">="
+	LessThan         AlertOperator = "<"
+	LessThanEqual    AlertOperator = "<="
+)
+
+// Defines values for AlertSeverity.
+const (
+	Critical AlertSeverity = "critical"
+	Info     AlertSeverity = "info"
+	Warning  AlertSeverity = "warning"
+)
+
 // Defines values for AlertStatus.
 const (
 	FIRING    AlertStatus = "FIRING"
@@ -58,6 +85,12 @@ const (
 	NOTFOUND         ErrorErrorCode = "NOT_FOUND"
 	UNAUTHENTICATED  ErrorErrorCode = "UNAUTHENTICATED"
 	VALIDATIONFAILED ErrorErrorCode = "VALIDATION_FAILED"
+)
+
+// Defines values for NoDataPolicy.
+const (
+	Ignore     NoDataPolicy = "ignore"
+	MarkNoData NoDataPolicy = "mark_no_data"
 )
 
 // Defines values for Unavailability.
@@ -135,6 +168,53 @@ type AgentReport struct {
 // AgentReportMetricsMetric defines model for AgentReport.Metrics.Metric.
 type AgentReportMetricsMetric string
 
+// AlertAggregation defines model for AlertAggregation.
+type AlertAggregation string
+
+// AlertOperator defines model for AlertOperator.
+type AlertOperator string
+
+// AlertRule defines model for AlertRule.
+type AlertRule struct {
+	Aggregation              AlertAggregation   `json:"aggregation"`
+	ConsecutiveCount         int                `json:"consecutive_count"`
+	CreatedAt                time.Time          `json:"created_at"`
+	Enabled                  bool               `json:"enabled"`
+	Id                       openapi_types.UUID `json:"id"`
+	MetricId                 string             `json:"metric_id"`
+	Name                     string             `json:"name"`
+	NoDataPolicy             NoDataPolicy       `json:"no_data_policy"`
+	Operator                 AlertOperator      `json:"operator"`
+	RecoveryConsecutiveCount int                `json:"recovery_consecutive_count"`
+	RecoveryOperator         AlertOperator      `json:"recovery_operator"`
+	RecoveryThreshold        float64            `json:"recovery_threshold"`
+	Severity                 AlertSeverity      `json:"severity"`
+	Threshold                float64            `json:"threshold"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+	Version                  int                `json:"version"`
+	WindowSeconds            int                `json:"window_seconds"`
+}
+
+// AlertRuleInput defines model for AlertRuleInput.
+type AlertRuleInput struct {
+	Aggregation              AlertAggregation `json:"aggregation"`
+	ConsecutiveCount         int              `json:"consecutive_count"`
+	Enabled                  bool             `json:"enabled"`
+	MetricId                 string           `json:"metric_id"`
+	Name                     string           `json:"name"`
+	NoDataPolicy             NoDataPolicy     `json:"no_data_policy"`
+	Operator                 AlertOperator    `json:"operator"`
+	RecoveryConsecutiveCount int              `json:"recovery_consecutive_count"`
+	RecoveryOperator         AlertOperator    `json:"recovery_operator"`
+	RecoveryThreshold        float64          `json:"recovery_threshold"`
+	Severity                 AlertSeverity    `json:"severity"`
+	Threshold                float64          `json:"threshold"`
+	WindowSeconds            int              `json:"window_seconds"`
+}
+
+// AlertSeverity defines model for AlertSeverity.
+type AlertSeverity string
+
 // AlertStatus defines model for AlertStatus.
 type AlertStatus string
 
@@ -200,6 +280,9 @@ type MetricSeriesResponse struct {
 	To   time.Time `json:"to"`
 }
 
+// NoDataPolicy defines model for NoDataPolicy.
+type NoDataPolicy string
+
 // Unavailability defines model for Unavailability.
 type Unavailability string
 
@@ -226,6 +309,9 @@ type CreateSessionJSONBody struct {
 // ReportAgentMetricsJSONRequestBody defines body for ReportAgentMetrics for application/json ContentType.
 type ReportAgentMetricsJSONRequestBody = AgentReport
 
+// CreateAlertRuleJSONRequestBody defines body for CreateAlertRule for application/json ContentType.
+type CreateAlertRuleJSONRequestBody = AlertRuleInput
+
 // CreateInstanceJSONRequestBody defines body for CreateInstance for application/json ContentType.
 type CreateInstanceJSONRequestBody = InstanceInput
 
@@ -240,6 +326,12 @@ type ServerInterface interface {
 
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/alert-rules)
+	ListAlertRules(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/alert-rules)
+	CreateAlertRule(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/instances)
 	ListInstances(w http.ResponseWriter, r *http.Request)
@@ -283,6 +375,34 @@ func (siw *ServerInterfaceWrapper) ReportAgentMetrics(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReportAgentMetrics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertRules operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertRules(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertRules(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) CreateAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAlertRule(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -611,6 +731,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/api/agent/v1/report", wrapper.ReportAgentMetrics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules", wrapper.ListAlertRules)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances", wrapper.ListInstances)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances", wrapper.CreateInstance)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
@@ -652,6 +774,48 @@ type ReportAgentMetrics401JSONResponse Error
 func (response ReportAgentMetrics401JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertRulesRequestObject struct {
+}
+
+type ListAlertRulesResponseObject interface {
+	VisitListAlertRulesResponse(w http.ResponseWriter) error
+}
+
+type ListAlertRules200JSONResponse []AlertRule
+
+func (response ListAlertRules200JSONResponse) VisitListAlertRulesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleRequestObject struct {
+	Body *CreateAlertRuleJSONRequestBody
+}
+
+type CreateAlertRuleResponseObject interface {
+	VisitCreateAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type CreateAlertRule201JSONResponse AlertRule
+
+func (response CreateAlertRule201JSONResponse) VisitCreateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRule400JSONResponse Error
+
+func (response CreateAlertRule400JSONResponse) VisitCreateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -804,6 +968,12 @@ type StrictServerInterface interface {
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(ctx context.Context, request ReportAgentMetricsRequestObject) (ReportAgentMetricsResponseObject, error)
 
+	// (GET /api/v1/alert-rules)
+	ListAlertRules(ctx context.Context, request ListAlertRulesRequestObject) (ListAlertRulesResponseObject, error)
+
+	// (POST /api/v1/alert-rules)
+	CreateAlertRule(ctx context.Context, request CreateAlertRuleRequestObject) (CreateAlertRuleResponseObject, error)
+
 	// (GET /api/v1/instances)
 	ListInstances(ctx context.Context, request ListInstancesRequestObject) (ListInstancesResponseObject, error)
 
@@ -879,6 +1049,61 @@ func (sh *strictHandler) ReportAgentMetrics(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReportAgentMetricsResponseObject); ok {
 		if err := validResponse.VisitReportAgentMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertRules operation middleware
+func (sh *strictHandler) ListAlertRules(w http.ResponseWriter, r *http.Request) {
+	var request ListAlertRulesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertRules(ctx, request.(ListAlertRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertRulesResponseObject); ok {
+		if err := validResponse.VisitListAlertRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAlertRule operation middleware
+func (sh *strictHandler) CreateAlertRule(w http.ResponseWriter, r *http.Request) {
+	var request CreateAlertRuleRequestObject
+
+	var body CreateAlertRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAlertRule(ctx, request.(CreateAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAlertRuleResponseObject); ok {
+		if err := validResponse.VisitCreateAlertRuleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

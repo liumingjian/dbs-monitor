@@ -103,7 +103,10 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		t.Fatalf("insert after partition repair: %v", err)
 	}
 
-	for _, table := range []string{"collection_task_config", "instance_collection_config"} {
+	for _, table := range []string{
+		"collection_task_config", "instance_collection_config",
+		"alert_rule", "alert_rule_version", "alert_event",
+	} {
 		var exists bool
 		if err := database.QueryRowContext(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
 			t.Fatalf("check collection plan table %q: %v", table, err)
@@ -111,6 +114,18 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		if !exists {
 			t.Fatalf("collection plan table %q is missing", table)
 		}
+	}
+	var seedMetric string
+	var seedVersion int
+	var seedSnapshot []byte
+	if err := database.QueryRowContext(ctx, `SELECT rule.metric_id, version.version, version.snapshot
+		FROM alert_rule rule
+		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = rule.version
+		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`).Scan(&seedMetric, &seedVersion, &seedSnapshot); err != nil {
+		t.Fatalf("read seeded tracer rule: %v", err)
+	}
+	if seedMetric != "pg.connection.total" || seedVersion != 1 || len(seedSnapshot) == 0 {
+		t.Fatalf("seeded tracer rule = metric %q version %d snapshot %q", seedMetric, seedVersion, seedSnapshot)
 	}
 	_, err = database.ExecContext(ctx, `INSERT INTO collection_task_config (instance_id, task_id, interval_seconds)
 		VALUES ('00000000-0000-0000-0000-000000000001', 'pg.stat_database', 4)`)

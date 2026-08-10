@@ -347,6 +347,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 
 var RequiredRoles = map[string]string{
 	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
+	"ListAlertRules": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
 }

@@ -20,3 +20,15 @@ AlertStatus:
 CapabilityStatus:
   type: string
   enum: [PRESENT, MISSING, NOT_APPLICABLE, UNKNOWN]
+AlertAggregation:
+  type: string
+  enum: [latest, avg, max, min, sum, count]
+AlertOperator:
+  type: string
+  enum: ['>', '>=', '<', '<=', '=', '!=']
+AlertSeverity:
+  type: string
+  enum: [critical, warning, info]
+NoDataPolicy:
+  type: string
+  enum: [ignore, mark_no_data]
