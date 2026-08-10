@@ -13,8 +13,8 @@ import (
 
 const createInstance = `-- name: CreateInstance :one
 WITH created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password, agent_token_hash)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_token_hash)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING id, name, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
@@ -27,14 +27,15 @@ JOIN configured ON configured.instance_id = created.id
 `
 
 type CreateInstanceParams struct {
-	ID             pgtype.UUID
-	Name           string
-	Host           string
-	Port           int32
-	DatabaseName   string
-	Username       string
-	Password       string
-	AgentTokenHash []byte
+	ID                 pgtype.UUID
+	Name               string
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+	AgentTokenHash     []byte
 }
 
 type CreateInstanceRow struct {
@@ -56,7 +57,8 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		arg.Port,
 		arg.DatabaseName,
 		arg.Username,
-		arg.Password,
+		arg.PasswordCiphertext,
+		arg.PasswordKeyVersion,
 		arg.AgentTokenHash,
 	)
 	var i CreateInstanceRow
@@ -101,7 +103,7 @@ func (q *Queries) GetCollectState(ctx context.Context, instanceID pgtype.UUID) (
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT id, name, host, port, database_name, username, password, agent_token_hash, agent_version, created_at
+SELECT id, name, host, port, database_name, username, agent_token_hash, agent_version, created_at
 FROM instance
 WHERE id = $1
 `
@@ -113,7 +115,6 @@ type GetInstanceRow struct {
 	Port           int32
 	DatabaseName   string
 	Username       string
-	Password       string
 	AgentTokenHash []byte
 	AgentVersion   pgtype.Text
 	CreatedAt      pgtype.Timestamptz
@@ -129,7 +130,6 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 		&i.Port,
 		&i.DatabaseName,
 		&i.Username,
-		&i.Password,
 		&i.AgentTokenHash,
 		&i.AgentVersion,
 		&i.CreatedAt,
@@ -138,18 +138,20 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 }
 
 const listCollectionTargets = `-- name: ListCollectionTargets :many
-SELECT id, host, port, database_name, username, password
+SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version
 FROM instance
 ORDER BY id
 `
 
 type ListCollectionTargetsRow struct {
-	ID           pgtype.UUID
-	Host         string
-	Port         int32
-	DatabaseName string
-	Username     string
-	Password     string
+	ID                 pgtype.UUID
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+	CredentialVersion  int64
 }
 
 func (q *Queries) ListCollectionTargets(ctx context.Context) ([]ListCollectionTargetsRow, error) {
@@ -167,7 +169,9 @@ func (q *Queries) ListCollectionTargets(ctx context.Context) ([]ListCollectionTa
 			&i.Port,
 			&i.DatabaseName,
 			&i.Username,
-			&i.Password,
+			&i.PasswordCiphertext,
+			&i.PasswordKeyVersion,
+			&i.CredentialVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -265,19 +269,27 @@ func (q *Queries) SetCollectSuccess(ctx context.Context, arg SetCollectSuccessPa
 
 const updateInstance = `-- name: UpdateInstance :one
 UPDATE instance
-SET name = $2, host = $3, port = $4, database_name = $5, username = $6, password = $7
+SET name = $2,
+    host = $3,
+    port = $4,
+    database_name = $5,
+    username = $6,
+    password_ciphertext = $7,
+    password_key_version = $8,
+    credential_version = credential_version + 1
 WHERE id = $1
 RETURNING id, name, host, port, database_name, username, agent_version, created_at
 `
 
 type UpdateInstanceParams struct {
-	ID           pgtype.UUID
-	Name         string
-	Host         string
-	Port         int32
-	DatabaseName string
-	Username     string
-	Password     string
+	ID                 pgtype.UUID
+	Name               string
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
 }
 
 type UpdateInstanceRow struct {
@@ -299,7 +311,8 @@ func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) 
 		arg.Port,
 		arg.DatabaseName,
 		arg.Username,
-		arg.Password,
+		arg.PasswordCiphertext,
+		arg.PasswordKeyVersion,
 	)
 	var i UpdateInstanceRow
 	err := row.Scan(

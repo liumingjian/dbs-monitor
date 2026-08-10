@@ -11,13 +11,13 @@ type TargetConn struct {
 }
 
 type Dialer interface {
-	Dial(context.Context, string) (*TargetConn, error)
+	Dial(context.Context, *pgx.ConnConfig) (*TargetConn, error)
 }
 
 type DirectDialer struct{}
 
-func (DirectDialer) Dial(ctx context.Context, connectionString string) (*TargetConn, error) {
-	conn, err := pgx.Connect(ctx, connectionString)
+func (DirectDialer) Dial(ctx context.Context, config *pgx.ConnConfig) (*TargetConn, error) {
+	conn, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}

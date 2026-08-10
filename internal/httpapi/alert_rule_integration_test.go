@@ -8,6 +8,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -38,8 +39,9 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
 	migrationDB := openSQL(t, databaseName)
-	if _, err := migrations.Up(ctx, migrationDB); err != nil {
+	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	migrationDB.Close()
@@ -50,13 +52,17 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		t.Fatalf("open credential keyring: %v", err)
+	}
 	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 	currentClock := fixedClock{now: now}
 
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}
-	server := httptest.NewTLSServer(httpapi.NewHandler(platform, currentClock).Routes())
+	server := httptest.NewTLSServer(httpapi.NewHandler(platform, currentClock, keyring).Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
@@ -71,9 +77,13 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 
 	instanceID := uuid.New()
 	pgInstanceID := pgtype.UUID{Bytes: instanceID, Valid: true}
+	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "unused")
+	if err != nil {
+		t.Fatalf("encrypt instance credential: %v", err)
+	}
 	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgInstanceID, Name: "target", Host: "localhost", Port: 5432,
-		DatabaseName: "postgres", Username: "postgres", Password: "unused",
+		DatabaseName: "postgres", Username: "postgres", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create instance: %v", err)
 	}

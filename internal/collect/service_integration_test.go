@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -40,8 +40,9 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
 	migrationDB := openSQL(t, databaseName)
-	if _, err := migrations.Up(ctx, migrationDB); err != nil {
+	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate test database: %v", err)
 	}
 	migrationDB.Close()
@@ -52,20 +53,28 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		t.Fatalf("open credential keyring: %v", err)
+	}
 
 	instanceID := uuid.New()
 	pgID := pgtype.UUID{Bytes: instanceID, Valid: true}
+	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, env("PGPASSWORD", "dbs_monitor"))
+	if err != nil {
+		t.Fatalf("encrypt instance password: %v", err)
+	}
 	_, err = instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgID, Name: "target", Host: env("PGHOST", "localhost"),
 		Port: int32(envInt("PGPORT", 55432)), DatabaseName: env("PGDATABASE", "dbs_monitor"),
-		Username: env("PGUSER", "dbs_monitor"), Password: env("PGPASSWORD", "dbs_monitor"),
+		Username: env("PGUSER", "dbs_monitor"), PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	})
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
 
 	dialer := &countingDialer{}
-	collector := New(platform, dialer, clock.Real{})
+	collector := New(platform, dialer, clock.Real{}, keyring)
 	eval := evaluator.New(platform, clock.Real{})
 
 	extra := make([]*pgx.Conn, 25)
@@ -92,8 +101,8 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		}
 	}
 	assertStatus(t, ctx, pool, pgID, alerting.FIRING)
-	if dialer.calls != 3 {
-		t.Fatalf("dial count after two runs = %d, want 3 (two fresh probes and one cached query connection)", dialer.calls)
+	if dialer.calls != 4 {
+		t.Fatalf("dial count after three runs = %d, want 4 (three fresh probes and one cached query connection)", dialer.calls)
 	}
 	var healthyWatermark time.Time
 	if err := pool.QueryRow(ctx, `SELECT last_success_at FROM instance_collect_state
@@ -256,8 +265,9 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 		t.Fatalf("create isolation test database: %v", err)
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
 	migrationDB := openSQL(t, databaseName)
-	if _, err := migrations.Up(ctx, migrationDB); err != nil {
+	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate isolation test database: %v", err)
 	}
 	migrationDB.Close()
@@ -267,20 +277,28 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		t.Fatalf("open isolation credential keyring: %v", err)
+	}
 	observedAt := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	if err := metric.EnsurePartitions(ctx, platform, observedAt); err != nil {
 		t.Fatalf("ensure isolation test partitions: %v", err)
 	}
 	for _, host := range []string{"slow.invalid", "fast.invalid"} {
 		id := uuid.New()
+		ciphertext, keyVersion, err := keyring.EncryptPassword(id, "secret")
+		if err != nil {
+			t.Fatalf("encrypt %s credential: %v", host, err)
+		}
 		if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 			ID: pgtype.UUID{Bytes: id, Valid: true}, Name: host, Host: host, Port: 5432,
-			DatabaseName: "postgres", Username: "monitor", Password: "secret",
+			DatabaseName: "postgres", Username: "monitor", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 		}); err != nil {
 			t.Fatalf("create %s instance: %v", host, err)
 		}
 	}
-	service, err := NewWithConfig(platform, delayedFailureDialer{}, fixedClock{now: observedAt}, Config{ProbeConcurrency: 2, QueryConcurrency: 1})
+	service, err := NewWithConfig(platform, delayedFailureDialer{}, fixedClock{now: observedAt}, keyring, Config{ProbeConcurrency: 2, QueryConcurrency: 1})
 	if err != nil {
 		t.Fatalf("create isolation collector: %v", err)
 	}
@@ -433,16 +451,15 @@ type countingDialer struct {
 	calls int
 }
 
-func (dialer *countingDialer) Dial(ctx context.Context, connectionString string) (*monitorpg.TargetConn, error) {
+func (dialer *countingDialer) Dial(ctx context.Context, config *pgx.ConnConfig) (*monitorpg.TargetConn, error) {
 	dialer.calls++
-	return (monitorpg.DirectDialer{}).Dial(ctx, connectionString)
+	return (monitorpg.DirectDialer{}).Dial(ctx, config)
 }
 
 type delayedFailureDialer struct{}
 
-func (delayedFailureDialer) Dial(ctx context.Context, connectionString string) (*monitorpg.TargetConn, error) {
-	target, _ := url.Parse(connectionString)
-	if target.Hostname() == "slow.invalid" {
+func (delayedFailureDialer) Dial(ctx context.Context, config *pgx.ConnConfig) (*monitorpg.TargetConn, error) {
+	if config.Host == "slow.invalid" {
 		select {
 		case <-time.After(200 * time.Millisecond):
 		case <-ctx.Done():

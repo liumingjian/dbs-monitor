@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
+	"github.com/liumingjian/dbs-monitor/internal/instance"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
@@ -42,8 +45,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
 	migrationDB := openSQL(t, databaseName)
-	if _, err := migrations.Up(ctx, migrationDB); err != nil {
+	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	migrationDB.Close()
@@ -54,11 +58,15 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		t.Fatalf("open credential keyring: %v", err)
+	}
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}
 
-	server := httptest.NewTLSServer(httpapi.NewHandlerWithVersion(platform, clock.Real{}, "3.0.0").Routes())
+	server := httptest.NewTLSServer(httpapi.NewHandlerWithVersion(platform, clock.Real{}, keyring, "3.0.0").Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
@@ -81,11 +89,13 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	login.Body.Close()
 
-	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances", map[string]any{
+	targetPassword := env("PGPASSWORD", "dbs_monitor")
+	instanceInput := map[string]any{
 		"name": "target", "host": env("PGHOST", "localhost"), "port": envInt("PGPORT", 55432),
 		"database": env("PGDATABASE", "dbs_monitor"), "username": env("PGUSER", "dbs_monitor"),
-		"password": env("PGPASSWORD", "dbs_monitor"),
-	}, "")
+		"password": targetPassword,
+	}
+	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances", instanceInput, "")
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create instance status = %d, want 201", created.StatusCode)
 	}
@@ -108,6 +118,35 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	if !agentMetricsEnabled {
 		t.Fatal("new instance should enable agent metrics by default")
+	}
+	var originalCiphertext []byte
+	var keyVersion int32
+	var credentialVersion int64
+	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, password_key_version, credential_version
+		FROM instance WHERE id = $1`, createBody.Instance.ID).Scan(&originalCiphertext, &keyVersion, &credentialVersion); err != nil {
+		t.Fatalf("read stored credential: %v", err)
+	}
+	if bytes.Contains(originalCiphertext, []byte(targetPassword)) {
+		t.Fatal("stored credential contains plaintext password")
+	}
+	if keyVersion != 1 || credentialVersion != 1 {
+		t.Fatalf("initial key/credential versions = %d/%d, want 1/1", keyVersion, credentialVersion)
+	}
+	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, instanceInput, "")
+	if updated.StatusCode != http.StatusOK {
+		t.Fatalf("update instance status = %d, want 200", updated.StatusCode)
+	}
+	updated.Body.Close()
+	var updatedCiphertext []byte
+	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, createBody.Instance.ID).
+		Scan(&updatedCiphertext, &credentialVersion); err != nil {
+		t.Fatalf("read updated credential: %v", err)
+	}
+	if bytes.Equal(originalCiphertext, updatedCiphertext) {
+		t.Fatal("credential update reused the previous ciphertext")
+	}
+	if credentialVersion != 2 {
+		t.Fatalf("updated credential version = %d, want 2", credentialVersion)
 	}
 
 	tasksURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/tasks", server.URL, createBody.Instance.ID)
@@ -181,7 +220,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertUnavailability(t, client, seriesURL, "NO_SAMPLES_YET")
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1), "NO_SAMPLES_YET")
 
-	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{})
+	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{}, keyring)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect samples: %v", err)
 	}
@@ -230,6 +269,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertUnavailability(t, client, seriesURL, "DB_UNREACHABLE")
 	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", createBody.Instance.ID, envInt("PGPORT", 55432)); err != nil {
 		t.Fatalf("restore instance port: %v", err)
+	}
+	if err := collector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect restored instance: %v", err)
 	}
 
 	hostMetrics := []map[string]any{
@@ -294,7 +336,11 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 
 	alertUpdatedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
-		(instance_id, metric_id, status, updated_at) VALUES ($1, 'pg.connection.total', 'OK', $2)`, createBody.Instance.ID, alertUpdatedAt); err != nil {
+		(instance_id, metric_id, status, updated_at, rule_id, rule_version, severity, rule_snapshot)
+		SELECT $1, rule.metric_id, 'OK', $2, rule.id, rule.version, rule.severity, version.snapshot
+		FROM alert_rule rule
+		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = rule.version
+		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`, createBody.Instance.ID, alertUpdatedAt); err != nil {
 		t.Fatalf("seed alert state: %v", err)
 	}
 	now := time.Now().UTC()
@@ -397,6 +443,23 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	if instanceBody.AgentVersion == nil || *instanceBody.AgentVersion != "2.4.0" {
 		t.Fatalf("instance agent_version = %v, want 2.4.0", instanceBody.AgentVersion)
+	}
+
+	if _, err := pool.Exec(ctx, "UPDATE instance SET password_key_version = 999 WHERE id = $1", createBody.Instance.ID); err != nil {
+		t.Fatalf("set unknown credential key version: %v", err)
+	}
+	err = collector.RunOnce(ctx)
+	var credentialFault *instance.CredentialFault
+	if !errors.As(err, &credentialFault) || credentialFault.Code != instance.CredentialFaultUnknownKeyVersion {
+		t.Fatalf("collection error = %v, want unknown credential key fault", err)
+	}
+	var lastErrorCode string
+	if err := pool.QueryRow(ctx, `SELECT COALESCE(last_error_code, '') FROM instance_collect_state
+		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, createBody.Instance.ID).Scan(&lastErrorCode); err != nil {
+		t.Fatalf("read collection state after credential fault: %v", err)
+	}
+	if lastErrorCode != "" {
+		t.Fatalf("credential fault was downgraded to target failure %q", lastErrorCode)
 	}
 }
 

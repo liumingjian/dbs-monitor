@@ -7,13 +7,13 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	pgxconn "github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
@@ -63,8 +63,8 @@ func (config Config) Validate() error {
 }
 
 type cachedConnection struct {
-	connectionString string
-	conn             *monitorpg.TargetConn
+	credentialVersion instance.CredentialVersion
+	conn              *monitorpg.TargetConn
 }
 
 type Service struct {
@@ -72,21 +72,22 @@ type Service struct {
 	dialer   monitorpg.Dialer
 	clock    clock.Clock
 	config   Config
+	keyring  *instance.CredentialKeyring
 
 	queryConnectionMu       sync.Mutex
 	queryConnections        map[string]cachedConnection
 	queryConnectionRebuilds int64
 }
 
-func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock) *Service {
-	service, err := NewWithConfig(platform, dialer, currentClock, DefaultConfig())
+func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Service {
+	service, err := NewWithConfig(platform, dialer, currentClock, keyring, DefaultConfig())
 	if err != nil {
 		panic(err)
 	}
 	return service
 }
 
-func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, config Config) (*Service, error) {
+func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, keyring *instance.CredentialKeyring, config Config) (*Service, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -95,6 +96,7 @@ func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock cloc
 		dialer:           dialer,
 		clock:            currentClock,
 		config:           config,
+		keyring:          keyring,
 		queryConnections: map[string]cachedConnection{},
 	}, nil
 }
@@ -146,7 +148,12 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	if run.task.Kind == metric.TaskKindProbe {
 		taskCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		conn, err := service.dialer.Dial(taskCtx, targetConnectionString(run.target))
+		config, err := service.connectionConfig(run.target)
+		if err != nil {
+			outcome.err = fmt.Errorf("read instance credential: %w", err)
+			return outcome
+		}
+		conn, err := service.dialer.Dial(taskCtx, config)
 		if err == nil {
 			var one int
 			err = conn.QueryRow(taskCtx, run.task.SQL).Scan(&one)
@@ -218,10 +225,10 @@ func (service *Service) finishFailure(ctx context.Context, run scheduledRun, tas
 
 func (service *Service) queryConnection(ctx context.Context, target instance.ListCollectionTargetsRow) (*monitorpg.TargetConn, error) {
 	key := uuid.UUID(target.ID.Bytes).String()
-	connectionString := targetConnectionString(target)
+	credentialVersion := instance.CredentialVersion(target.CredentialVersion)
 	service.queryConnectionMu.Lock()
 	cached, exists := service.queryConnections[key]
-	if exists && cached.connectionString == connectionString && !cached.conn.IsClosed() {
+	if exists && cached.credentialVersion == credentialVersion && !cached.conn.IsClosed() {
 		service.queryConnectionMu.Unlock()
 		return cached.conn, nil
 	}
@@ -233,12 +240,16 @@ func (service *Service) queryConnection(ctx context.Context, target instance.Lis
 	if exists {
 		closeConnection(cached.conn)
 	}
-	conn, err := service.dialer.Dial(ctx, connectionString)
+	config, err := service.connectionConfig(target)
+	if err != nil {
+		return nil, fmt.Errorf("read instance credential: %w", err)
+	}
+	conn, err := service.dialer.Dial(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 	service.queryConnectionMu.Lock()
-	service.queryConnections[key] = cachedConnection{connectionString: connectionString, conn: conn}
+	service.queryConnections[key] = cachedConnection{credentialVersion: credentialVersion, conn: conn}
 	service.queryConnectionMu.Unlock()
 	return conn, nil
 }
@@ -359,18 +370,26 @@ func isConnectionFailure(err error) bool {
 	return errors.As(err, &networkError) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
 }
 
-func targetConnectionString(target instance.ListCollectionTargetsRow) string {
-	connection := &url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(target.Username, target.Password),
-		Host:   net.JoinHostPort(target.Host, strconv.Itoa(int(target.Port))),
-		Path:   "/" + target.DatabaseName,
+func (service *Service) connectionConfig(target instance.ListCollectionTargetsRow) (*pgx.ConnConfig, error) {
+	password, err := service.keyring.DecryptPassword(uuid.UUID(target.ID.Bytes), target.PasswordCiphertext, target.PasswordKeyVersion)
+	if err != nil {
+		return nil, err
 	}
-	query := connection.Query()
-	query.Set("application_name", "dbs-monitor")
-	query.Set("sslmode", "disable")
-	connection.RawQuery = query.Encode()
-	return connection.String()
+	return targetConnectionConfig(target, password)
+}
+
+func targetConnectionConfig(target instance.ListCollectionTargetsRow, password string) (*pgx.ConnConfig, error) {
+	config, err := pgx.ParseConfig("postgres://localhost/?sslmode=disable")
+	if err != nil {
+		return nil, err
+	}
+	config.Host = target.Host
+	config.Port = uint16(target.Port)
+	config.Database = target.DatabaseName
+	config.User = target.Username
+	config.Password = password
+	config.RuntimeParams["application_name"] = "dbs-monitor"
+	return config, nil
 }
 
 func (service *Service) Run(ctx context.Context, interval time.Duration) {

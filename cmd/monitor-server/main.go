@@ -23,6 +23,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
+	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/migrations"
@@ -42,6 +43,7 @@ func main() {
 
 func run(ctx context.Context) error {
 	connectionString := env("DATABASE_URL", "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable")
+	credentialDirectory := env("CREDENTIALS_DIR", "/opt/dbs-monitor/etc/credentials")
 	pool, err := pgxpool.New(ctx, connectionString)
 	if err != nil {
 		return fmt.Errorf("open platform database: %w", err)
@@ -53,11 +55,15 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := migrations.Up(ctx, migrationDB); err != nil {
+	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		migrationDB.Close()
 		return err
 	}
 	migrationDB.Close()
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		return err
+	}
 	if err := metric.EnsurePartitions(ctx, platform, time.Now()); err != nil {
 		return err
 	}
@@ -83,7 +89,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	collector, err := collect.NewWithConfig(platform, monitorpg.DirectDialer{}, clock.Real{}, collectionConfig)
+	collector, err := collect.NewWithConfig(platform, monitorpg.DirectDialer{}, clock.Real{}, keyring, collectionConfig)
 	if err != nil {
 		return fmt.Errorf("collection scheduler config: %w", err)
 	}
@@ -105,7 +111,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	apiHandler := httpapi.NewHandlerWithVersion(platform, clock.Real{}, version).Routes()
+	apiHandler := httpapi.NewHandlerWithVersion(platform, clock.Real{}, keyring, version).Routes()
 	fileServer := http.FileServer(http.FS(static))
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if len(request.URL.Path) >= 5 && request.URL.Path[:5] == "/api/" {
