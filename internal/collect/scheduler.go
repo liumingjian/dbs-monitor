@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
@@ -19,6 +20,12 @@ const (
 	workCollectionQuery
 	workCapability
 )
+
+var capabilityTask = metric.Task{
+	ID:       metric.TaskID("capability.snapshot"),
+	Kind:     metric.TaskKindSQL,
+	Interval: metric.CapabilitySnapshotTTL,
+}
 
 type work struct {
 	instanceID string
@@ -69,12 +76,26 @@ func (pending *pendingRuns) ordered() []scheduledRun {
 		runs = append(runs, run)
 	}
 	sort.Slice(runs, func(left, right int) bool {
+		leftCapability := runs[left].task.ID == capabilityTask.ID
+		rightCapability := runs[right].task.ID == capabilityTask.ID
+		if leftCapability != rightCapability {
+			return leftCapability
+		}
 		if !runs[left].dueAt.Equal(runs[right].dueAt) {
 			return runs[left].dueAt.Before(runs[right].dueAt)
 		}
 		return taskKeyLess(runs[left].key, runs[right].key)
 	})
 	return runs
+}
+
+func (pending *pendingRuns) hasCapability() bool {
+	for _, run := range pending.items {
+		if run.task.ID == capabilityTask.ID {
+			return true
+		}
+	}
+	return false
 }
 
 type dispatcher struct {
@@ -223,7 +244,7 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 		return fmt.Errorf("list collection targets: %w", err)
 	}
 	tasks := scheduledTasks()
-	active := make(map[taskKey]struct{}, len(targets)*len(tasks))
+	active := make(map[taskKey]struct{}, len(targets)*(len(tasks)+1))
 	for _, target := range targets {
 		if err := scheduler.service.ensureTaskStates(ctx, target.ID); err != nil {
 			return err
@@ -242,6 +263,14 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 			entry.template = template
 			scheduler.schedule[template.key] = entry
 		}
+		template := newScheduledRun(target, capabilityTask, 0, time.Time{})
+		active[template.key] = struct{}{}
+		entry, exists := scheduler.schedule[template.key]
+		if !exists {
+			entry.nextDue = nextDueAfter(now, initialPhase(template.key.instanceID, capabilityTask.ID, capabilityTask.Interval), capabilityTask.Interval)
+		}
+		entry.template = template
+		scheduler.schedule[template.key] = entry
 	}
 	for key := range scheduler.schedule {
 		if _, exists := active[key]; !exists {
@@ -265,7 +294,13 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 			run := entry.template
 			run.dueAt = entry.nextDue
 			if replaced, exists := scheduler.pending.put(run); exists {
-				if err := scheduler.service.recordUnmet(ctx, replaced, resultSkippedBackpressure, time.Time{}); err != nil {
+				if replaced.task.ID == capabilityTask.ID {
+					if err := capability.StoreUnknown(ctx, scheduler.service.platform, replaced.target.ID, scheduler.service.clock.Now().UTC()); err != nil {
+						log.Printf("record capability backpressure failed: instance_id=%s error=%v", replaced.key.instanceID, err)
+					} else {
+						scheduler.counts.skipped++
+					}
+				} else if err := scheduler.service.recordUnmet(ctx, replaced, resultSkippedBackpressure, time.Time{}); err != nil {
 					log.Printf("record collection backpressure skip failed: instance_id=%s task_id=%s error=%v", replaced.key.instanceID, replaced.key.taskID, err)
 				} else {
 					scheduler.counts.skipped++
@@ -278,6 +313,7 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 }
 
 func (scheduler *centralScheduler) dispatch(ctx context.Context) {
+	scheduler.dispatcher.capabilityWaiting = scheduler.pending.hasCapability()
 	for _, run := range scheduler.pending.ordered() {
 		eligible, err := scheduler.service.nextEligible(ctx, run)
 		if err != nil {
@@ -307,6 +343,7 @@ func (scheduler *centralScheduler) dispatch(ctx context.Context) {
 			scheduler.counts.dispatchDelayMax = delay
 		}
 		_, _ = scheduler.pending.take(run.key)
+		scheduler.dispatcher.capabilityWaiting = scheduler.pending.hasCapability()
 		go func(run scheduledRun) {
 			outcome := scheduler.service.executeTask(ctx, run)
 			select {
@@ -372,6 +409,9 @@ func newSchedulerCounts() schedulerCounts {
 }
 
 func classFor(task metric.Task) workClass {
+	if task.ID == capabilityTask.ID {
+		return workCapability
+	}
 	if task.Kind == metric.TaskKindProbe {
 		return workProbe
 	}

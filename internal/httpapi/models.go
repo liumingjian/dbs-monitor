@@ -99,6 +99,12 @@ type Instance struct {
 	CredentialVersion  int64
 }
 
+type InstanceCapabilitySnapshot struct {
+	InstanceID pgtype.UUID
+	ObservedAt pgtype.Timestamptz
+	States     []byte
+}
+
 type InstanceCollectState struct {
 	InstanceID       pgtype.UUID
 	Source           string

@@ -122,6 +122,9 @@ type ClientInterface interface {
 
 	UpdateInstance(ctx context.Context, id openapi_types.UUID, body UpdateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListCapabilitySnapshot request
+	ListCapabilitySnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListCollectionTaskStates request
 	ListCollectionTaskStates(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -302,6 +305,18 @@ func (c *Client) UpdateInstanceWithBody(ctx context.Context, id openapi_types.UU
 
 func (c *Client) UpdateInstance(ctx context.Context, id openapi_types.UUID, body UpdateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateInstanceRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCapabilitySnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCapabilitySnapshotRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -801,6 +816,40 @@ func NewUpdateInstanceRequestWithBody(server string, id openapi_types.UUID, cont
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListCapabilitySnapshotRequest generates requests for ListCapabilitySnapshot
+func NewListCapabilitySnapshotRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/collection/capabilities", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -1362,6 +1411,9 @@ type ClientWithResponsesInterface interface {
 
 	UpdateInstanceWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateInstanceResponse, error)
 
+	// ListCapabilitySnapshotWithResponse request
+	ListCapabilitySnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCapabilitySnapshotResponse, error)
+
 	// ListCollectionTaskStatesWithResponse request
 	ListCollectionTaskStatesWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCollectionTaskStatesResponse, error)
 
@@ -1579,6 +1631,28 @@ func (r UpdateInstanceResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateInstanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCapabilitySnapshotResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]CapabilitySnapshotEntry
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCapabilitySnapshotResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCapabilitySnapshotResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1941,6 +2015,15 @@ func (c *ClientWithResponses) UpdateInstanceWithResponse(ctx context.Context, id
 	return ParseUpdateInstanceResponse(rsp)
 }
 
+// ListCapabilitySnapshotWithResponse request returning *ListCapabilitySnapshotResponse
+func (c *ClientWithResponses) ListCapabilitySnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCapabilitySnapshotResponse, error) {
+	rsp, err := c.ListCapabilitySnapshot(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCapabilitySnapshotResponse(rsp)
+}
+
 // ListCollectionTaskStatesWithResponse request returning *ListCollectionTaskStatesResponse
 func (c *ClientWithResponses) ListCollectionTaskStatesWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCollectionTaskStatesResponse, error) {
 	rsp, err := c.ListCollectionTaskStates(ctx, id, reqEditors...)
@@ -2290,6 +2373,32 @@ func ParseUpdateInstanceResponse(rsp *http.Response) (*UpdateInstanceResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Instance
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCapabilitySnapshotResponse parses an HTTP response from a ListCapabilitySnapshotWithResponse call
+func ParseListCapabilitySnapshotResponse(rsp *http.Response) (*ListCapabilitySnapshotResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCapabilitySnapshotResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []CapabilitySnapshotEntry
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

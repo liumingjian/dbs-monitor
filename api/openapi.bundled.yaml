@@ -238,6 +238,28 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CollectionTaskState'
+  /api/v1/instances/{id}/collection/capabilities:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - collection
+      operationId: listCapabilitySnapshot
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current projected capability snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CapabilitySnapshotEntry'
   /api/v1/instances/{id}/collection/tasks/{task_id}:
     parameters:
       - name: id
@@ -851,6 +873,38 @@ components:
         interval_seconds:
           type: integer
           minimum: 5
+    CapabilitySnapshotEntry:
+      type: object
+      required:
+        - capability_id
+        - class
+        - status
+        - affected_metric_count
+      properties:
+        capability_id:
+          type: string
+          enum:
+            - role.pg_monitor
+            - ext.pg_stat_statements
+            - topo.has_replication
+            - topo.has_slot
+        class:
+          type: string
+          enum:
+            - fixable
+            - structural
+        status:
+          $ref: '#/components/schemas/CapabilityStatus'
+        observed_at:
+          type: string
+          format: date-time
+        fix_hint:
+          type: string
+        na_reason:
+          type: string
+        affected_metric_count:
+          type: integer
+          minimum: 0
     MetricSeriesResponse:
       type: object
       required:

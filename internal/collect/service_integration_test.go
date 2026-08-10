@@ -341,6 +341,163 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 	}
 }
 
+func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	databaseName := fmt.Sprintf("dbs_monitor_capability_%d", os.Getpid())
+	roleName := fmt.Sprintf("dbs_capability_%d", os.Getpid())
+	admin := openSQL(t, env("PGDATABASE", "dbs_monitor"))
+	defer admin.Close()
+	databaseIdentifier := pgx.Identifier{databaseName}.Sanitize()
+	roleIdentifier := pgx.Identifier{roleName}.Sanitize()
+	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+databaseIdentifier+" WITH (FORCE)")
+	admin.ExecContext(ctx, "DROP ROLE IF EXISTS "+roleIdentifier)
+	if _, err := admin.ExecContext(ctx, "CREATE ROLE "+roleIdentifier+" LOGIN PASSWORD 'capability-secret'"); err != nil {
+		t.Fatalf("create capability test role: %v", err)
+	}
+	if _, err := admin.ExecContext(ctx, "GRANT pg_monitor TO "+roleIdentifier); err != nil {
+		t.Fatalf("grant pg_monitor: %v", err)
+	}
+	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+databaseIdentifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
+		t.Fatalf("create capability platform database: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanup, err := sql.Open("pgx", connectionString(env("PGDATABASE", "dbs_monitor")))
+		if err != nil {
+			return
+		}
+		defer cleanup.Close()
+		cleanup.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+databaseIdentifier+" WITH (FORCE)")
+		cleanup.ExecContext(context.Background(), "DROP ROLE IF EXISTS "+roleIdentifier)
+	})
+
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	migrationDB := openSQL(t, databaseName)
+	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
+		t.Fatalf("migrate capability platform database: %v", err)
+	}
+	migrationDB.Close()
+	pool, err := pgxpool.New(ctx, connectionString(databaseName))
+	if err != nil {
+		t.Fatalf("open capability platform pool: %v", err)
+	}
+	defer pool.Close()
+	platform := &db.Pool{Pool: pool}
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		t.Fatalf("open capability credential keyring: %v", err)
+	}
+	instanceID := uuid.New()
+	pgID := pgtype.UUID{Bytes: instanceID, Valid: true}
+	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "capability-secret")
+	if err != nil {
+		t.Fatalf("encrypt capability credential: %v", err)
+	}
+	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
+		ID: pgID, Name: "capability-target", Host: env("PGHOST", "localhost"),
+		Port: int32(envInt("PGPORT", 55432)), DatabaseName: env("PGDATABASE", "dbs_monitor"),
+		Username: roleName, PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+	}); err != nil {
+		t.Fatalf("create capability target: %v", err)
+	}
+	base := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	if err := metric.EnsurePartitions(ctx, platform, base); err != nil {
+		t.Fatalf("ensure capability test partitions: %v", err)
+	}
+
+	presentCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base}, keyring)
+	if err := presentCollector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect with pg_monitor: %v", err)
+	}
+	presentCollector.closeQueryConnections()
+	present := storedCapabilityStates(t, ctx, pool, pgID)
+	if present[metric.CapabilityRolePGMonitor] != metric.CapabilityPresent {
+		t.Fatalf("pg_monitor status = %s, want PRESENT", present[metric.CapabilityRolePGMonitor])
+	}
+	var samplesBefore int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1 AND series.metric_id = 'pg.connection.total'`, pgID).Scan(&samplesBefore); err != nil {
+		t.Fatalf("count samples before revoke: %v", err)
+	}
+	if samplesBefore == 0 {
+		t.Fatal("pg.stat_activity did not execute while pg_monitor was present")
+	}
+	var startedBefore time.Time
+	if err := pool.QueryRow(ctx, `SELECT last_started_at FROM instance_collection_task_state
+		WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, pgID).Scan(&startedBefore); err != nil {
+		t.Fatalf("read task start before revoke: %v", err)
+	}
+
+	if _, err := admin.ExecContext(ctx, "REVOKE pg_monitor FROM "+roleIdentifier); err != nil {
+		t.Fatalf("revoke pg_monitor: %v", err)
+	}
+	missingCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base.Add(6 * time.Minute)}, keyring)
+	if err := missingCollector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect after pg_monitor revoke: %v", err)
+	}
+	missingCollector.closeQueryConnections()
+	missing := storedCapabilityStates(t, ctx, pool, pgID)
+	if missing[metric.CapabilityRolePGMonitor] != metric.CapabilityMissing {
+		t.Fatalf("pg_monitor status after revoke = %s, want MISSING", missing[metric.CapabilityRolePGMonitor])
+	}
+	var samplesAfter int
+	var startedAfter time.Time
+	var errorCode string
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1 AND series.metric_id = 'pg.connection.total'`, pgID).Scan(&samplesAfter); err != nil {
+		t.Fatalf("count samples after revoke: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT last_started_at, last_error_code FROM instance_collection_task_state
+		WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, pgID).Scan(&startedAfter, &errorCode); err != nil {
+		t.Fatalf("read gated task state: %v", err)
+	}
+	if samplesAfter != samplesBefore || !startedAfter.Equal(startedBefore) || errorCode != "PERMISSION_DENIED" {
+		t.Fatalf("gated task samples/start/error = %d/%s/%s, want %d/%s/PERMISSION_DENIED",
+			samplesAfter, startedAfter, errorCode, samplesBefore, startedBefore)
+	}
+
+	probeIndex := -1
+	for index := range metric.Capabilities {
+		if metric.Capabilities[index].ID == metric.CapabilityExtensionPGStatStatements {
+			probeIndex = index
+			break
+		}
+	}
+	if probeIndex < 0 {
+		t.Fatal("pg_stat_statements capability declaration is missing")
+	}
+	originalProbe := metric.Capabilities[probeIndex].Probe
+	metric.Capabilities[probeIndex].Probe = "SELECT missing_column FROM pg_extension LIMIT 1"
+	defer func() { metric.Capabilities[probeIndex].Probe = originalProbe }()
+	unknownCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base.Add(12 * time.Minute)}, keyring)
+	if err := unknownCollector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect with failed capability probe: %v", err)
+	}
+	unknownCollector.closeQueryConnections()
+	unknown := storedCapabilityStates(t, ctx, pool, pgID)
+	for _, declaration := range metric.Capabilities {
+		if unknown[declaration.ID] != metric.CapabilityUnknown {
+			t.Errorf("status after partial probe failure for %s = %s, want UNKNOWN", declaration.ID, unknown[declaration.ID])
+		}
+	}
+}
+
+func storedCapabilityStates(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID pgtype.UUID) map[metric.CapabilityID]metric.CapabilityStatus {
+	t.Helper()
+	var encoded []byte
+	if err := pool.QueryRow(ctx, "SELECT states FROM instance_capability_snapshot WHERE instance_id = $1", instanceID).Scan(&encoded); err != nil {
+		t.Fatalf("read stored capability snapshot: %v", err)
+	}
+	states, err := metric.DecodeCapabilitySnapshot(encoded)
+	if err != nil {
+		t.Fatalf("decode stored capability snapshot: %v", err)
+	}
+	return states
+}
+
 func assertLifecycleEvents(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID pgtype.UUID) {
 	t.Helper()
 	rows, err := pool.Query(ctx, `SELECT DISTINCT event.kind, event.rule_version, event.rule_snapshot

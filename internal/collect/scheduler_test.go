@@ -127,3 +127,19 @@ func TestQueryTaskTimeoutUsesEightyPercentWithTenSecondCap(t *testing.T) {
 		}
 	}
 }
+
+func TestPendingRunsPrioritizeCapabilitySnapshot(t *testing.T) {
+	pending := newPendingRuns()
+	due := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
+	query := metric.Task{ID: metric.TaskStatActivity, Kind: metric.TaskKindSQL}
+	pending.put(scheduledRun{key: taskKey{instanceID: "one", taskID: query.ID}, task: query, dueAt: due.Add(-time.Second)})
+	pending.put(scheduledRun{key: taskKey{instanceID: "one", taskID: capabilityTask.ID}, task: capabilityTask, dueAt: due})
+
+	ordered := pending.ordered()
+	if len(ordered) != 2 || ordered[0].task.ID != capabilityTask.ID {
+		t.Fatalf("pending order = %+v, want capability snapshot first", ordered)
+	}
+	if got := classFor(capabilityTask); got != workCapability {
+		t.Fatalf("capability work class = %d, want %d", got, workCapability)
+	}
+}

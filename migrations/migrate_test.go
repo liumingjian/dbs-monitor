@@ -123,6 +123,7 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	for _, table := range []string{
 		"collection_task_config", "instance_collection_config",
 		"instance_collection_task_state", "instance_collection_connection_state",
+		"instance_capability_snapshot",
 		"alert_rule", "alert_rule_version", "alert_event",
 	} {
 		var exists bool

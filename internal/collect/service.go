@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	pgxconn "github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
@@ -108,6 +109,9 @@ func (service *Service) RunOnce(ctx context.Context) error {
 	}
 	now := service.clock.Now().UTC()
 	for _, target := range targets {
+		if err := service.refreshCapabilities(ctx, target, now); err != nil {
+			return err
+		}
 		if err := service.ensureTaskStates(ctx, target.ID); err != nil {
 			return err
 		}
@@ -137,9 +141,23 @@ func (service *Service) RunOnce(ctx context.Context) error {
 }
 
 func (service *Service) executeTask(ctx context.Context, run scheduledRun) executionOutcome {
+	if run.task.ID == capabilityTask.ID {
+		return service.executeCapability(ctx, run)
+	}
 	run.startedAt = service.clock.Now().UTC()
 	startedWall := time.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
+	if run.task.Kind != metric.TaskKindProbe {
+		reason, blocked, err := service.taskCapabilityBlockReason(ctx, run)
+		if err != nil {
+			outcome.err = err
+			return outcome
+		}
+		if blocked {
+			outcome.err = service.recordCapabilityBlocked(ctx, run, reason)
+			return outcome
+		}
+	}
 	if err := service.recordStarted(ctx, run); err != nil {
 		outcome.err = err
 		return outcome
@@ -208,6 +226,73 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	outcome.result = resultSuccess
 	outcome.duration = time.Since(startedWall)
 	return outcome
+}
+
+func (service *Service) executeCapability(ctx context.Context, run scheduledRun) executionOutcome {
+	startedWall := time.Now()
+	outcome := executionOutcome{run: run, result: resultFailed}
+	taskCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, err := service.queryConnection(taskCtx, run.target)
+	if err == nil {
+		var configured string
+		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', '10s', false)").Scan(&configured)
+	}
+	observedAt := service.clock.Now().UTC()
+	if err != nil {
+		if isConnectionFailure(err) || errors.Is(taskCtx.Err(), context.DeadlineExceeded) {
+			service.invalidateQueryConnection(run.target.ID)
+		}
+		outcome.err = capability.StoreUnknown(ctx, service.platform, run.target.ID, observedAt)
+		outcome.duration = time.Since(startedWall)
+		return outcome
+	}
+	complete, err := capability.Probe(taskCtx, service.platform, conn, run.target.ID, observedAt)
+	if err != nil {
+		outcome.err = err
+	} else if complete {
+		outcome.result = resultSuccess
+	}
+	outcome.duration = time.Since(startedWall)
+	return outcome
+}
+
+func (service *Service) refreshCapabilities(ctx context.Context, target instance.ListCollectionTargetsRow, now time.Time) error {
+	_, observedAt, exists, err := service.capabilitySnapshot(ctx, target.ID, now)
+	if err != nil {
+		return err
+	}
+	if exists && now.Sub(observedAt) <= metric.CapabilitySnapshotTTL {
+		return nil
+	}
+	outcome := service.executeCapability(ctx, newScheduledRun(target, capabilityTask, 0, now))
+	return outcome.err
+}
+
+func (service *Service) taskCapabilityBlockReason(ctx context.Context, run scheduledRun) (string, bool, error) {
+	states, _, _, err := service.capabilitySnapshot(ctx, run.target.ID, service.clock.Now().UTC())
+	if err != nil {
+		return "", false, err
+	}
+	reason, blocked := metric.TaskCapabilityBlockReason(run.task, states)
+	return reason, blocked, nil
+}
+
+func (service *Service) capabilitySnapshot(ctx context.Context, instanceID pgtype.UUID, now time.Time) (map[metric.CapabilityID]metric.CapabilityStatus, time.Time, bool, error) {
+	var encoded []byte
+	var observedAt time.Time
+	err := service.platform.QueryRow(ctx, `SELECT states, observed_at FROM instance_capability_snapshot WHERE instance_id = $1`, instanceID).Scan(&encoded, &observedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return metric.ProjectCapabilitySnapshot(nil, time.Time{}, now), time.Time{}, false, nil
+	}
+	if err != nil {
+		return nil, time.Time{}, false, err
+	}
+	states, err := metric.DecodeCapabilitySnapshot(encoded)
+	if err != nil {
+		return nil, time.Time{}, false, fmt.Errorf("decode capability snapshot: %w", err)
+	}
+	return metric.ProjectCapabilitySnapshot(states, observedAt, now), observedAt.UTC(), true, nil
 }
 
 func (service *Service) finishFailure(ctx context.Context, run scheduledRun, taskCtx context.Context, connectionFailure bool) (taskResult, error) {

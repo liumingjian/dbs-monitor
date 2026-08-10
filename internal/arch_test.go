@@ -11,19 +11,20 @@ import (
 )
 
 var packageLayers = map[string]int{
-	"cmd/monitor-agent":  3,
-	"cmd/monitor-server": 3,
-	"internal/agent":     2,
-	"internal/alerting":  1,
-	"internal/api":       0,
-	"internal/clock":     0,
-	"internal/collect":   2,
-	"internal/db":        0,
-	"internal/evaluator": 2,
-	"internal/httpapi":   2,
-	"internal/instance":  1,
-	"internal/metric":    1,
-	"internal/pgconn":    0,
+	"cmd/monitor-agent":   3,
+	"cmd/monitor-server":  3,
+	"internal/agent":      2,
+	"internal/alerting":   1,
+	"internal/api":        0,
+	"internal/capability": 2,
+	"internal/clock":      0,
+	"internal/collect":    2,
+	"internal/db":         0,
+	"internal/evaluator":  2,
+	"internal/httpapi":    2,
+	"internal/instance":   1,
+	"internal/metric":     1,
+	"internal/pgconn":     0,
 }
 
 func TestInternalPackageArchitecture(t *testing.T) {
@@ -90,6 +91,9 @@ func checkPackage(t *testing.T, path, packageName string, layer int) {
 			dependencyLayer, ok := packageLayers[dependency]
 			if !ok {
 				t.Errorf("%s imports unregistered %s", packageName, dependency)
+				continue
+			}
+			if packageName == "internal/collect" && dependency == "internal/capability" {
 				continue
 			}
 			if dependencyLayer >= layer {

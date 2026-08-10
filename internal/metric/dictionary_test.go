@@ -147,6 +147,16 @@ func TestTasksUseClosedCapabilitiesAndValidIntervals(t *testing.T) {
 
 func TestMetricListsMatchGeneratedContracts(t *testing.T) {
 	doc := loadSpec(t)
+	capabilitySchema := doc.Components.Schemas["CapabilitySnapshotEntry"]
+	if capabilitySchema == nil || capabilitySchema.Value == nil {
+		t.Fatal("CapabilitySnapshotEntry schema is missing")
+	}
+	capabilityIDProperty := capabilitySchema.Value.Properties["capability_id"]
+	if capabilityIDProperty == nil || capabilityIDProperty.Value == nil {
+		t.Fatal("CapabilitySnapshotEntry.capability_id schema is missing")
+	}
+	assertSetEqual(t, "capability enum", capabilityIDs(), enumStrings(capabilityIDProperty.Value.Enum))
+
 	collectionSchema := doc.Components.Schemas["CollectionTaskState"]
 	if collectionSchema == nil || collectionSchema.Value == nil {
 		t.Fatal("CollectionTaskState schema is missing")
@@ -271,6 +281,14 @@ func taskIDs() []string {
 	ids := make([]string, 0, len(metric.Tasks))
 	for _, task := range metric.Tasks {
 		ids = append(ids, string(task.ID))
+	}
+	return ids
+}
+
+func capabilityIDs() []string {
+	ids := make([]string, 0, len(metric.Capabilities))
+	for _, capability := range metric.Capabilities {
+		ids = append(ids, string(capability.ID))
 	}
 	return ids
 }

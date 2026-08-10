@@ -16,6 +16,24 @@
             schema:
               type: array
               items: { $ref: ../components/schemas/collection.yaml#/CollectionTaskState }
+/api/v1/instances/{id}/collection/capabilities:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: listCapabilitySnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Current projected capability snapshot
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/collection.yaml#/CapabilitySnapshotEntry }
 /api/v1/instances/{id}/collection/tasks/{task_id}:
   parameters:
     - name: id

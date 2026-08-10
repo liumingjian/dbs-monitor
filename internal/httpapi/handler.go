@@ -179,6 +179,54 @@ func (handler *Handler) ListCollectionTaskStates(ctx context.Context, request ap
 	return api.ListCollectionTaskStates200JSONResponse(states), nil
 }
 
+func (handler *Handler) ListCapabilitySnapshot(ctx context.Context, request api.ListCapabilitySnapshotRequestObject) (api.ListCapabilitySnapshotResponseObject, error) {
+	states, observedAt, err := handler.currentCapabilitySnapshot(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	response := make(api.ListCapabilitySnapshot200JSONResponse, 0, len(metric.Capabilities))
+	for _, declaration := range metric.Capabilities {
+		entry := api.CapabilitySnapshotEntry{
+			AffectedMetricCount: metric.CapabilityAffectedMetricCount(declaration.ID),
+			CapabilityId:        api.CapabilitySnapshotEntryCapabilityId(declaration.ID),
+			Class:               api.CapabilitySnapshotEntryClass(declaration.Class),
+			Status:              api.CapabilityStatus(states[declaration.ID]),
+		}
+		if observedAt != nil {
+			value := *observedAt
+			entry.ObservedAt = &value
+		}
+		if declaration.FixHint != "" {
+			value := declaration.FixHint
+			entry.FixHint = &value
+		}
+		if declaration.NAReason != "" {
+			value := declaration.NAReason
+			entry.NaReason = &value
+		}
+		response = append(response, entry)
+	}
+	return response, nil
+}
+
+func (handler *Handler) currentCapabilitySnapshot(ctx context.Context, instanceID pgtype.UUID) (map[metric.CapabilityID]metric.CapabilityStatus, *time.Time, error) {
+	var encoded []byte
+	var observedAt time.Time
+	err := handler.platform.QueryRow(ctx, `SELECT states, observed_at FROM instance_capability_snapshot WHERE instance_id = $1`, instanceID).Scan(&encoded, &observedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return metric.ProjectCapabilitySnapshot(nil, time.Time{}, handler.clock.Now().UTC()), nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	states, err := metric.DecodeCapabilitySnapshot(encoded)
+	if err != nil {
+		return nil, nil, err
+	}
+	observedAt = observedAt.UTC()
+	return metric.ProjectCapabilitySnapshot(states, observedAt, handler.clock.Now().UTC()), &observedAt, nil
+}
+
 func (handler *Handler) UpdateCollectionTaskInterval(ctx context.Context, request api.UpdateCollectionTaskIntervalRequestObject) (api.UpdateCollectionTaskIntervalResponseObject, error) {
 	if request.Body == nil {
 		return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, "collection task interval body is required")), nil
@@ -271,6 +319,8 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 	}
 	result := api.MetricSeriesResponse{From: request.Params.From, To: request.Params.To, Step: step.name}
 	queries := metric.New(handler.platform)
+	var capabilityStates map[metric.CapabilityID]metric.CapabilityStatus
+	capabilityStatesLoaded := false
 	for _, metricID := range request.Params.Metric {
 		entry := struct {
 			Metric string `json:"metric"`
@@ -299,6 +349,18 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			}
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return nil, err
+			}
+			if !capabilityStatesLoaded {
+				capabilityStates, _, err = handler.currentCapabilitySnapshot(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+				if err != nil {
+					return nil, err
+				}
+				capabilityStatesLoaded = true
+			}
+			if reason, blocked := metric.MetricCapabilityBlockReason(metric.MetricID(metricID), capabilityStates); blocked {
+				entry.Unavailability = nullable.NewNullableWithValue(api.Unavailability(reason))
+				result.Metrics = append(result.Metrics, entry)
+				continue
 			}
 		}
 
@@ -536,7 +598,7 @@ var RequiredRoles = map[string]string{
 	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
 	"ListAlertRules": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
-	"ListCollectionTaskStates": "READONLY", "UpdateCollectionTaskInterval": "PLATFORM_ADMIN",
+	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "UpdateCollectionTaskInterval": "PLATFORM_ADMIN",
 	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
 	"GetCurrentUser": "READONLY", "ChangeOwnPassword": "READONLY", "ListUsers": "READONLY",
 	"CreateUser": "PLATFORM_ADMIN", "ResetUserPassword": "PLATFORM_ADMIN",

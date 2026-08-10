@@ -165,6 +165,15 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if len(taskStates) != 8 {
 		t.Fatalf("collection task state count = %d, want 8", len(taskStates))
 	}
+	capabilitiesURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/capabilities", server.URL, createBody.Instance.ID)
+	capabilities := readCapabilities(t, client, capabilitiesURL)
+	if len(capabilities) != 4 {
+		t.Fatalf("capability count = %d, want 4", len(capabilities))
+	}
+	roleCapability := capabilityByID(t, capabilities, "role.pg_monitor")
+	if roleCapability.Status != "UNKNOWN" || roleCapability.ObservedAt != nil || roleCapability.AffectedMetricCount != 19 || roleCapability.FixHint == nil {
+		t.Fatalf("initial pg_monitor capability = %+v", roleCapability)
+	}
 
 	readOnlyToken := "read-only-token"
 	readOnlyHash := sha256.Sum256([]byte(readOnlyToken))
@@ -217,12 +226,16 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		server.URL, createBody.Instance.ID,
 		url.QueryEscape(time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)),
 		url.QueryEscape(time.Now().Add(time.Minute).UTC().Format(time.RFC3339)))
-	assertUnavailability(t, client, seriesURL, "NO_SAMPLES_YET")
-	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1), "NO_SAMPLES_YET")
+	assertUnavailability(t, client, seriesURL, "COLLECTION_FAILED")
+	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1), "COLLECTION_FAILED")
 
 	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{}, keyring)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect samples: %v", err)
+	}
+	roleCapability = capabilityByID(t, readCapabilities(t, client, capabilitiesURL), "role.pg_monitor")
+	if roleCapability.Status != "PRESENT" || roleCapability.ObservedAt == nil {
+		t.Fatalf("probed pg_monitor capability = %+v", roleCapability)
 	}
 	series, err := client.Get(seriesURL)
 	if err != nil {
@@ -250,6 +263,17 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("metric API returned no points: %+v", returnedSeries)
 	}
 	assertStep(t, client, strings.Replace(seriesURL, "step=raw", "step=auto", 1), "15s")
+	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
+		SET states = jsonb_set(states, '{role.pg_monitor}', '"MISSING"')
+		WHERE instance_id = $1`, createBody.Instance.ID); err != nil {
+		t.Fatalf("set missing pg_monitor capability: %v", err)
+	}
+	assertUnavailability(t, client, seriesURL, "PERMISSION_DENIED")
+	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
+		SET states = jsonb_set(states, '{role.pg_monitor}', '"PRESENT"')
+		WHERE instance_id = $1`, createBody.Instance.ID); err != nil {
+		t.Fatalf("restore pg_monitor capability: %v", err)
+	}
 	tooWideRaw := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.total&from=%s&to=%s&step=raw",
 		server.URL, createBody.Instance.ID,
 		url.QueryEscape(time.Now().Add(-7*time.Hour).UTC().Format(time.RFC3339)),
@@ -519,6 +543,41 @@ func assertUnavailability(t *testing.T, client *http.Client, address, want strin
 	if len(body.Metrics) != 1 || body.Metrics[0].Unavailability == nil || *body.Metrics[0].Unavailability != want {
 		t.Fatalf("unavailability = %+v, want %s", body.Metrics, want)
 	}
+}
+
+type capabilityResponse struct {
+	CapabilityID        string     `json:"capability_id"`
+	Status              string     `json:"status"`
+	ObservedAt          *time.Time `json:"observed_at"`
+	FixHint             *string    `json:"fix_hint"`
+	NAReason            *string    `json:"na_reason"`
+	AffectedMetricCount int        `json:"affected_metric_count"`
+}
+
+func readCapabilities(t *testing.T, client *http.Client, address string) []capabilityResponse {
+	t.Helper()
+	response := getResponse(t, client, address)
+	if response.StatusCode != http.StatusOK {
+		response.Body.Close()
+		t.Fatalf("capability snapshot status = %d, want 200", response.StatusCode)
+	}
+	defer response.Body.Close()
+	var capabilities []capabilityResponse
+	if err := json.NewDecoder(response.Body).Decode(&capabilities); err != nil {
+		t.Fatalf("decode capability snapshot: %v", err)
+	}
+	return capabilities
+}
+
+func capabilityByID(t *testing.T, capabilities []capabilityResponse, id string) capabilityResponse {
+	t.Helper()
+	for _, capability := range capabilities {
+		if capability.CapabilityID == id {
+			return capability
+		}
+	}
+	t.Fatalf("capability %q is missing from %+v", id, capabilities)
+	return capabilityResponse{}
 }
 
 func requestJSON(t *testing.T, client *http.Client, method, address string, body any, bearer string) *http.Response {

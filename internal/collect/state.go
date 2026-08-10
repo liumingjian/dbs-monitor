@@ -86,6 +86,33 @@ func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, resul
 	})
 }
 
+func (service *Service) recordCapabilityBlocked(ctx context.Context, run scheduledRun, reason string) error {
+	finished := service.clock.Now().UTC()
+	message := collectionErrorMessage(reason)
+	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
+		if err := lockInstance(ctx, tx, run.target.ID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO instance_collection_task_state
+			(instance_id, task_id, last_due_at, last_finished_at, last_result, consecutive_failures,
+			 next_eligible_at, last_error_code, last_error_message)
+			VALUES ($1, $2, $3, $4, 'FAILED', 0, NULL, $5, $6)
+			ON CONFLICT (instance_id, task_id) DO UPDATE SET
+			last_due_at = EXCLUDED.last_due_at,
+			last_finished_at = EXCLUDED.last_finished_at,
+			last_result = EXCLUDED.last_result,
+			consecutive_failures = 0,
+			next_eligible_at = NULL,
+			last_error_code = EXCLUDED.last_error_code,
+			last_error_message = EXCLUDED.last_error_message`,
+			run.target.ID, run.task.ID, run.dueAt, finished, reason, message)
+		if err != nil {
+			return err
+		}
+		return setSourceFailure(ctx, tx, run.target.ID, reason, message)
+	})
+}
+
 func (service *Service) recordFailure(ctx context.Context, run scheduledRun, result taskResult, code string, connectionFailure bool) error {
 	finished := service.clock.Now().UTC()
 	message := collectionErrorMessage(code)
@@ -209,7 +236,7 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, sam
 }
 
 func (service *Service) nextEligible(ctx context.Context, run scheduledRun) (time.Time, error) {
-	if run.task.Kind == metric.TaskKindProbe {
+	if run.task.Kind == metric.TaskKindProbe || run.task.ID == capabilityTask.ID {
 		return time.Time{}, nil
 	}
 	var taskNext, connectionNext pgtype.Timestamptz
@@ -292,6 +319,14 @@ func collectionErrorMessage(code string) string {
 		return "collection query failed"
 	case errorCodeTimeout:
 		return "collection deadline exceeded"
+	case "PERMISSION_DENIED":
+		return "required database role is missing"
+	case "EXTENSION_MISSING":
+		return "required database extension is missing"
+	case "FEATURE_DISABLED":
+		return "required database feature is not enabled"
+	case "NOT_APPLICABLE_ROLE":
+		return "collection task does not apply to this database role"
 	case string(resultSkippedBackpressure):
 		return "collection skipped because scheduler capacity was unavailable"
 	case string(resultBackoff):

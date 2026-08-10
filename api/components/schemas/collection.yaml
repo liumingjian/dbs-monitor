@@ -35,3 +35,23 @@ CollectionTaskIntervalInput:
   required: [interval_seconds]
   properties:
     interval_seconds: { type: integer, minimum: 5 }
+CapabilitySnapshotEntry:
+  type: object
+  required: [capability_id, class, status, affected_metric_count]
+  properties:
+    capability_id:
+      type: string
+      enum:
+        - role.pg_monitor
+        - ext.pg_stat_statements
+        - topo.has_replication
+        - topo.has_slot
+    class:
+      type: string
+      enum: [fixable, structural]
+    status:
+      $ref: ../enums.yaml#/CapabilityStatus
+    observed_at: { type: string, format: date-time }
+    fix_hint: { type: string }
+    na_reason: { type: string }
+    affected_metric_count: { type: integer, minimum: 0 }

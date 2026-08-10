@@ -69,6 +69,20 @@ const (
 	RECOVERED AlertStatus = "RECOVERED"
 )
 
+// Defines values for CapabilitySnapshotEntryCapabilityId.
+const (
+	ExtPgStatStatements CapabilitySnapshotEntryCapabilityId = "ext.pg_stat_statements"
+	RolePgMonitor       CapabilitySnapshotEntryCapabilityId = "role.pg_monitor"
+	TopoHasReplication  CapabilitySnapshotEntryCapabilityId = "topo.has_replication"
+	TopoHasSlot         CapabilitySnapshotEntryCapabilityId = "topo.has_slot"
+)
+
+// Defines values for CapabilitySnapshotEntryClass.
+const (
+	Fixable    CapabilitySnapshotEntryClass = "fixable"
+	Structural CapabilitySnapshotEntryClass = "structural"
+)
+
 // Defines values for CapabilityStatus.
 const (
 	MISSING       CapabilityStatus = "MISSING"
@@ -265,6 +279,23 @@ type AlertSeverity string
 
 // AlertStatus defines model for AlertStatus.
 type AlertStatus string
+
+// CapabilitySnapshotEntry defines model for CapabilitySnapshotEntry.
+type CapabilitySnapshotEntry struct {
+	AffectedMetricCount int                                 `json:"affected_metric_count"`
+	CapabilityId        CapabilitySnapshotEntryCapabilityId `json:"capability_id"`
+	Class               CapabilitySnapshotEntryClass        `json:"class"`
+	FixHint             *string                             `json:"fix_hint,omitempty"`
+	NaReason            *string                             `json:"na_reason,omitempty"`
+	ObservedAt          *time.Time                          `json:"observed_at,omitempty"`
+	Status              CapabilityStatus                    `json:"status"`
+}
+
+// CapabilitySnapshotEntryCapabilityId defines model for CapabilitySnapshotEntry.CapabilityId.
+type CapabilitySnapshotEntryCapabilityId string
+
+// CapabilitySnapshotEntryClass defines model for CapabilitySnapshotEntry.Class.
+type CapabilitySnapshotEntryClass string
 
 // CapabilityStatus defines model for CapabilityStatus.
 type CapabilityStatus string
@@ -490,6 +521,9 @@ type ServerInterface interface {
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (GET /api/v1/instances/{id}/collection/capabilities)
+	ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /api/v1/instances/{id}/collection/tasks)
 	ListCollectionTaskStates(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
@@ -675,6 +709,31 @@ func (siw *ServerInterfaceWrapper) UpdateInstance(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateInstance(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCapabilitySnapshot operation middleware
+func (siw *ServerInterfaceWrapper) ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCapabilitySnapshot(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1097,6 +1156,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}", wrapper.GetInstance)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}", wrapper.UpdateInstance)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/capabilities", wrapper.ListCapabilitySnapshot)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks", wrapper.ListCollectionTaskStates)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks/{task_id}", wrapper.UpdateCollectionTaskInterval)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
@@ -1266,6 +1326,23 @@ type UpdateInstanceResponseObject interface {
 type UpdateInstance200JSONResponse Instance
 
 func (response UpdateInstance200JSONResponse) VisitUpdateInstanceResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCapabilitySnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListCapabilitySnapshotResponseObject interface {
+	VisitListCapabilitySnapshotResponse(w http.ResponseWriter) error
+}
+
+type ListCapabilitySnapshot200JSONResponse []CapabilitySnapshotEntry
+
+func (response ListCapabilitySnapshot200JSONResponse) VisitListCapabilitySnapshotResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
@@ -1601,6 +1678,9 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(ctx context.Context, request UpdateInstanceRequestObject) (UpdateInstanceResponseObject, error)
 
+	// (GET /api/v1/instances/{id}/collection/capabilities)
+	ListCapabilitySnapshot(ctx context.Context, request ListCapabilitySnapshotRequestObject) (ListCapabilitySnapshotResponseObject, error)
+
 	// (GET /api/v1/instances/{id}/collection/tasks)
 	ListCollectionTaskStates(ctx context.Context, request ListCollectionTaskStatesRequestObject) (ListCollectionTaskStatesResponseObject, error)
 
@@ -1883,6 +1963,32 @@ func (sh *strictHandler) UpdateInstance(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateInstanceResponseObject); ok {
 		if err := validResponse.VisitUpdateInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCapabilitySnapshot operation middleware
+func (sh *strictHandler) ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListCapabilitySnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCapabilitySnapshot(ctx, request.(ListCapabilitySnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCapabilitySnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCapabilitySnapshotResponseObject); ok {
+		if err := validResponse.VisitListCapabilitySnapshotResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

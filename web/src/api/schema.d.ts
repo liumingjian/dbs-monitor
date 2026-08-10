@@ -88,6 +88,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/collection/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listCapabilitySnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/collection/tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -348,6 +366,18 @@ export interface components {
         };
         CollectionTaskIntervalInput: {
             interval_seconds: number;
+        };
+        CapabilitySnapshotEntry: {
+            /** @enum {string} */
+            capability_id: "role.pg_monitor" | "ext.pg_stat_statements" | "topo.has_replication" | "topo.has_slot";
+            /** @enum {string} */
+            class: "fixable" | "structural";
+            status: components["schemas"]["CapabilityStatus"];
+            /** Format: date-time */
+            observed_at?: string;
+            fix_hint?: string;
+            na_reason?: string;
+            affected_metric_count: number;
         };
         MetricSeriesResponse: {
             /** Format: date-time */
@@ -645,6 +675,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CollectionTaskState"][];
+                };
+            };
+        };
+    };
+    listCapabilitySnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current projected capability snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilitySnapshotEntry"][];
                 };
             };
         };
