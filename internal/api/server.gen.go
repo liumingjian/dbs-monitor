@@ -22,15 +22,15 @@ const (
 	AgentTokenScopes = "agentToken.Scopes"
 )
 
-// Defines values for AgentReportMetricsMetric.
+// Defines values for AgentMetricMetric.
 const (
-	AgentReportMetricsMetricHostCpuUsagePercent           AgentReportMetricsMetric = "host.cpu.usage_percent"
-	AgentReportMetricsMetricHostDiskFreeBytes             AgentReportMetricsMetric = "host.disk.free_bytes"
-	AgentReportMetricsMetricHostDiskIops                  AgentReportMetricsMetric = "host.disk.iops"
-	AgentReportMetricsMetricHostDiskThroughputBytesPerSec AgentReportMetricsMetric = "host.disk.throughput_bytes_per_sec"
-	AgentReportMetricsMetricHostDiskUsagePercent          AgentReportMetricsMetric = "host.disk.usage_percent"
-	AgentReportMetricsMetricHostMemoryUsagePercent        AgentReportMetricsMetric = "host.memory.usage_percent"
-	AgentReportMetricsMetricHostNetworkBytesPerSec        AgentReportMetricsMetric = "host.network.bytes_per_sec"
+	AgentMetricMetricHostCpuUsagePercent           AgentMetricMetric = "host.cpu.usage_percent"
+	AgentMetricMetricHostDiskFreeBytes             AgentMetricMetric = "host.disk.free_bytes"
+	AgentMetricMetricHostDiskIops                  AgentMetricMetric = "host.disk.iops"
+	AgentMetricMetricHostDiskThroughputBytesPerSec AgentMetricMetric = "host.disk.throughput_bytes_per_sec"
+	AgentMetricMetricHostDiskUsagePercent          AgentMetricMetric = "host.disk.usage_percent"
+	AgentMetricMetricHostMemoryUsagePercent        AgentMetricMetric = "host.memory.usage_percent"
+	AgentMetricMetricHostNetworkBytesPerSec        AgentMetricMetric = "host.network.bytes_per_sec"
 )
 
 // Defines values for AlertStatus.
@@ -150,18 +150,31 @@ const (
 	Raw  GetMetricSeriesParamsStep = "raw"
 )
 
-// AgentReport defines model for AgentReport.
-type AgentReport struct {
-	InstanceId openapi_types.UUID `json:"instance_id"`
-	Metrics    []struct {
-		Metric AgentReportMetricsMetric `json:"metric"`
-		Value  float32                  `json:"value"`
-	} `json:"metrics"`
-	Timestamp time.Time `json:"timestamp"`
+// AgentMetric defines model for AgentMetric.
+type AgentMetric struct {
+	Metric AgentMetricMetric `json:"metric"`
+	Value  float64           `json:"value"`
 }
 
-// AgentReportMetricsMetric defines model for AgentReport.Metrics.Metric.
-type AgentReportMetricsMetric string
+// AgentMetricMetric defines model for AgentMetric.Metric.
+type AgentMetricMetric string
+
+// AgentReport defines model for AgentReport.
+type AgentReport struct {
+	AgentVersion string `json:"agent_version"`
+
+	// Backfill Unacknowledged samples from the Agent's five-minute in-memory window.
+	Backfill   *[]AgentSample     `json:"backfill,omitempty"`
+	InstanceId openapi_types.UUID `json:"instance_id"`
+	Metrics    []AgentMetric      `json:"metrics"`
+	Timestamp  time.Time          `json:"timestamp"`
+}
+
+// AgentSample defines model for AgentSample.
+type AgentSample struct {
+	Metrics   []AgentMetric `json:"metrics"`
+	Timestamp time.Time     `json:"timestamp"`
+}
 
 // AlertStatus defines model for AlertStatus.
 type AlertStatus string
@@ -216,13 +229,15 @@ type ErrorErrorCode string
 
 // Instance defines model for Instance.
 type Instance struct {
-	AlertStatus AlertStatus        `json:"alert_status"`
-	Database    string             `json:"database"`
-	Host        string             `json:"host"`
-	Id          openapi_types.UUID `json:"id"`
-	Name        string             `json:"name"`
-	Port        int                `json:"port"`
-	Username    string             `json:"username"`
+	// AgentVersion Version reported by the Agent, when one has reported.
+	AgentVersion *string            `json:"agent_version,omitempty"`
+	AlertStatus  AlertStatus        `json:"alert_status"`
+	Database     string             `json:"database"`
+	Host         string             `json:"host"`
+	Id           openapi_types.UUID `json:"id"`
+	Name         string             `json:"name"`
+	Port         int                `json:"port"`
+	Username     string             `json:"username"`
 }
 
 // InstanceCreated defines model for InstanceCreated.

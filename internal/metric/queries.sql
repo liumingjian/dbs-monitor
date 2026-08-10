@@ -2,7 +2,7 @@
 INSERT INTO metric_series (instance_id, metric_id, labels, labels_key, last_seen)
 VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (instance_id, metric_id, labels_key)
-DO UPDATE SET last_seen = EXCLUDED.last_seen
+DO UPDATE SET last_seen = GREATEST(metric_series.last_seen, EXCLUDED.last_seen)
 RETURNING series_id;
 
 -- name: SeriesForMetric :many

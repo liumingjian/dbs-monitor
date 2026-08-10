@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,17 +26,30 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
 
-const sessionCookie = "dbs_monitor_session"
+const (
+	sessionCookie            = "dbs_monitor_session"
+	agentBackfillWindow      = 5 * time.Minute
+	agentClockSkew           = 30 * time.Second
+	agentClockSkewErrorCode  = "CLOCK_SKEW"
+	agentClockSkewMessage    = "时钟偏移"
+	agentVersionErrorCode    = "AGENT_VERSION_TOO_OLD"
+	agentVersionErrorMessage = "版本过旧，需升级"
+)
 
 type authenticatedAgentKey struct{}
 
 type Handler struct {
-	platform *db.Pool
-	clock    clock.Clock
+	platform      *db.Pool
+	clock         clock.Clock
+	serverVersion string
 }
 
 func NewHandler(platform *db.Pool, currentClock clock.Clock) *Handler {
-	return &Handler{platform: platform, clock: currentClock}
+	return NewHandlerWithVersion(platform, currentClock, "1.0.0")
+}
+
+func NewHandlerWithVersion(platform *db.Pool, currentClock clock.Clock, serverVersion string) *Handler {
+	return &Handler{platform: platform, clock: currentClock, serverVersion: serverVersion}
 }
 
 func (handler *Handler) Routes() http.Handler {
@@ -80,7 +94,7 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 		if err != nil {
 			return nil, err
 		}
-		response = append(response, toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, status))
+		response = append(response, toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status))
 	}
 	return response, nil
 }
@@ -104,7 +118,7 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	}
 	return api.CreateInstance201JSONResponse{
 		AgentToken: token,
-		Instance:   toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, api.OK),
+		Instance:   toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK),
 	}, nil
 }
 
@@ -117,7 +131,7 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	if err != nil {
 		return nil, err
 	}
-	return api.GetInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, status)), nil
+	return api.GetInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status)), nil
 }
 
 func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateInstanceRequestObject) (api.UpdateInstanceResponseObject, error) {
@@ -136,7 +150,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 	if err != nil {
 		return nil, err
 	}
-	return api.UpdateInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, status)), nil
+	return api.UpdateInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status)), nil
 }
 
 func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteInstanceRequestObject) (api.DeleteInstanceResponseObject, error) {
@@ -354,45 +368,113 @@ func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.Repo
 	if !ok || authenticated != request.Body.InstanceId {
 		return unauthorizedAgent(), nil
 	}
+	if !agentVersionSupported(request.Body.AgentVersion, handler.serverVersion) {
+		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentVersionErrorCode, agentVersionErrorMessage)
+	}
 	now := handler.clock.Now().UTC()
-	if delta := request.Body.Timestamp.Sub(now); delta > 30*time.Second || delta < -30*time.Second {
-		return badAgentRequest("timestamp must be within 30 seconds of server time"), nil
+	if agentReportHasClockSkew(*request.Body, now) {
+		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentClockSkewErrorCode, agentClockSkewMessage)
 	}
 
-	write := func() error {
-		return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
-			queries := metric.New(tx)
-			for _, sample := range request.Body.Metrics {
-				seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
-					InstanceID: pgtype.UUID{Bytes: authenticated, Valid: true}, MetricID: string(sample.Metric),
-					Labels: json.RawMessage(`{}`), LabelsKey: "{}",
-					LastSeen: pgtype.Timestamptz{Time: request.Body.Timestamp, Valid: true},
-				})
-				if err != nil {
-					return err
-				}
-				if _, err := tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, request.Body.Timestamp, sample.Value); err != nil {
-					return err
-				}
-			}
-			_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_report_at)
-				VALUES ($1, 'AGENT', $2) ON CONFLICT (instance_id, source)
-				DO UPDATE SET last_report_at = EXCLUDED.last_report_at, last_error_code = NULL, last_error_message = NULL`, authenticated, request.Body.Timestamp)
-			return err
-		})
-	}
-	if err := write(); err != nil {
+	if err := handler.storeAgentReport(ctx, authenticated, *request.Body, now); err != nil {
 		if !metric.IsMissingPartition(err) {
 			return nil, err
 		}
-		if err := metric.EnsurePartitions(ctx, handler.platform, now); err != nil {
+		if err := metric.EnsurePartitions(ctx, handler.platform, now.Add(-agentBackfillWindow)); err != nil {
 			return nil, err
 		}
-		if err := write(); err != nil {
+		if err := handler.storeAgentReport(ctx, authenticated, *request.Body, now); err != nil {
 			return nil, err
 		}
 	}
 	return api.ReportAgentMetrics204Response{}, nil
+}
+
+func agentReportHasClockSkew(report api.AgentReport, now time.Time) bool {
+	earliestCurrentSample := now.Add(-agentClockSkew)
+	latestSample := now.Add(agentClockSkew)
+	if report.Timestamp.Before(earliestCurrentSample) || report.Timestamp.After(latestSample) {
+		return true
+	}
+	if report.Backfill == nil {
+		return false
+	}
+	for _, sample := range *report.Backfill {
+		if sample.Timestamp.After(latestSample) {
+			return true
+		}
+	}
+	return false
+}
+
+func (handler *Handler) storeAgentReport(ctx context.Context, instanceID uuid.UUID, report api.AgentReport, receivedAt time.Time) error {
+	samples := []api.AgentSample{{Timestamp: report.Timestamp, Metrics: report.Metrics}}
+	if report.Backfill != nil {
+		samples = append(samples, (*report.Backfill)...)
+	}
+	oldestSample := receivedAt.Add(-agentBackfillWindow)
+	databaseInstanceID := pgtype.UUID{Bytes: instanceID, Valid: true}
+
+	return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := metric.New(tx)
+		for _, batch := range samples {
+			if batch.Timestamp.Before(oldestSample) {
+				continue
+			}
+			for _, reportedMetric := range batch.Metrics {
+				seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
+					InstanceID: databaseInstanceID, MetricID: string(reportedMetric.Metric),
+					Labels: json.RawMessage(`{}`), LabelsKey: "{}",
+					LastSeen: pgtype.Timestamptz{Time: batch.Timestamp, Valid: true},
+				})
+				if err != nil {
+					return err
+				}
+				if _, err := tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, batch.Timestamp, reportedMetric.Value); err != nil {
+					return err
+				}
+			}
+		}
+		if _, err := tx.Exec(ctx, "UPDATE instance SET agent_version = $2 WHERE id = $1", instanceID, report.AgentVersion); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_report_at)
+			VALUES ($1, 'AGENT', $2) ON CONFLICT (instance_id, source)
+			DO UPDATE SET last_report_at = EXCLUDED.last_report_at, last_error_code = NULL, last_error_message = NULL`, instanceID, receivedAt)
+		return err
+	})
+}
+
+func (handler *Handler) rejectAgentReport(ctx context.Context, instanceID uuid.UUID, version, code, message string) (api.ReportAgentMetricsResponseObject, error) {
+	if err := handler.recordAgentError(ctx, instanceID, version, code, message); err != nil {
+		return nil, err
+	}
+	return badAgentRequest(message), nil
+}
+
+func (handler *Handler) recordAgentError(ctx context.Context, instanceID uuid.UUID, version, code, message string) error {
+	return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "UPDATE instance SET agent_version = $2 WHERE id = $1", instanceID, version); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_error_code, last_error_message)
+			VALUES ($1, 'AGENT', $2, $3) ON CONFLICT (instance_id, source)
+			DO UPDATE SET last_error_code = EXCLUDED.last_error_code, last_error_message = EXCLUDED.last_error_message`, instanceID, code, message)
+		return err
+	})
+}
+
+func agentVersionSupported(agentVersion, serverVersion string) bool {
+	agentMajor, agentOK := majorVersion(agentVersion)
+	serverMajor, serverOK := majorVersion(serverVersion)
+	return agentOK && serverOK && agentMajor >= serverMajor-1
+}
+
+func majorVersion(version string) (int, bool) {
+	version = strings.TrimPrefix(version, "v")
+	majorText, _, _ := strings.Cut(version, ".")
+	major, err := strconv.Atoi(majorText)
+	return major, err == nil && major >= 0
 }
 
 func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
@@ -465,8 +547,12 @@ func SeedAdmin(ctx context.Context, platform *db.Pool, username, password string
 	})
 }
 
-func toAPIInstance(id pgtype.UUID, name, host string, port int32, database, username string, status api.AlertStatus) api.Instance {
-	return api.Instance{Id: id.Bytes, Name: name, Host: host, Port: int(port), Database: database, Username: username, AlertStatus: status}
+func toAPIInstance(id pgtype.UUID, name, host string, port int32, database, username string, agentVersion pgtype.Text, status api.AlertStatus) api.Instance {
+	result := api.Instance{Id: id.Bytes, Name: name, Host: host, Port: int(port), Database: database, Username: username, AlertStatus: status}
+	if agentVersion.Valid {
+		result.AgentVersion = &agentVersion.String
+	}
+	return result
 }
 
 func alertStatus(ctx context.Context, platform *db.Pool, id pgtype.UUID) (api.AlertStatus, error) {

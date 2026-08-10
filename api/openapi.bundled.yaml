@@ -300,7 +300,7 @@ paths:
         '204':
           description: Accepted
         '400':
-          description: Invalid timestamp
+          description: Report rejected because of clock skew or Agent version
           content:
             application/json:
               schema:
@@ -401,6 +401,9 @@ components:
           type: string
         username:
           type: string
+        agent_version:
+          type: string
+          description: Version reported by the Agent, when one has reported.
         alert_status:
           $ref: '#/components/schemas/AlertStatus'
     InstanceCreated:
@@ -534,35 +537,28 @@ components:
       type: object
       required:
         - instance_id
+        - agent_version
         - timestamp
         - metrics
       properties:
         instance_id:
           type: string
           format: uuid
+        agent_version:
+          type: string
+          minLength: 1
         timestamp:
           type: string
           format: date-time
         metrics:
           type: array
           items:
-            type: object
-            required:
-              - metric
-              - value
-            properties:
-              metric:
-                type: string
-                enum:
-                  - host.cpu.usage_percent
-                  - host.memory.usage_percent
-                  - host.disk.usage_percent
-                  - host.disk.free_bytes
-                  - host.disk.iops
-                  - host.disk.throughput_bytes_per_sec
-                  - host.network.bytes_per_sec
-              value:
-                type: number
+            $ref: '#/components/schemas/AgentMetric'
+        backfill:
+          type: array
+          description: Unacknowledged samples from the Agent's five-minute in-memory window.
+          items:
+            $ref: '#/components/schemas/AgentSample'
     Error:
       type: object
       required:
@@ -605,3 +601,35 @@ components:
         - TIMED_OUT
         - SKIPPED_BACKPRESSURE
         - BACKOFF
+    AgentMetric:
+      type: object
+      required:
+        - metric
+        - value
+      properties:
+        metric:
+          type: string
+          enum:
+            - host.cpu.usage_percent
+            - host.memory.usage_percent
+            - host.disk.usage_percent
+            - host.disk.free_bytes
+            - host.disk.iops
+            - host.disk.throughput_bytes_per_sec
+            - host.network.bytes_per_sec
+        value:
+          type: number
+          format: double
+    AgentSample:
+      type: object
+      required:
+        - timestamp
+        - metrics
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMetric'
