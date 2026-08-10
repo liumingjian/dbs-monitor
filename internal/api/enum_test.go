@@ -31,6 +31,19 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		{"CapabilityStatus", mapKeys(map[api.CapabilityStatus]string{
 			api.PRESENT: "", api.MISSING: "", api.NOTAPPLICABLE: "", api.UNKNOWN: "",
 		})},
+		{"AlertAggregation", mapKeys(map[api.AlertAggregation]string{
+			api.Latest: "", api.Avg: "", api.Max: "", api.Min: "", api.Sum: "", api.Count: "",
+		})},
+		{"AlertOperator", mapKeys(map[api.AlertOperator]string{
+			api.GreaterThan: "", api.GreaterThanEqual: "", api.LessThan: "", api.LessThanEqual: "",
+			api.Equal: "", api.NotEqual: "",
+		})},
+		{"AlertSeverity", mapKeys(map[api.AlertSeverity]string{
+			api.Critical: "", api.Warning: "", api.Info: "",
+		})},
+		{"NoDataPolicy", mapKeys(map[api.NoDataPolicy]string{
+			api.Ignore: "", api.MarkNoData: "",
+		})},
 	}
 
 	for _, tt := range tests {

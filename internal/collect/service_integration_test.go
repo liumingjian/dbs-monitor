@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -82,7 +83,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		}
 	}()
 
-	for range 2 {
+	for range 3 {
 		if err := collector.RunOnce(ctx); err != nil {
 			t.Fatalf("collect breaching sample: %v", err)
 		}
@@ -229,6 +230,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if recoveredWatermark.Before(healthyWatermark) {
 		t.Fatalf("recovered integrity watermark = %s, before healthy watermark %s", recoveredWatermark, healthyWatermark)
 	}
+	assertLifecycleEvents(t, ctx, pool, pgID)
 
 	var points int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
@@ -318,6 +320,57 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("slow probe did not complete")
+	}
+}
+
+func assertLifecycleEvents(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID pgtype.UUID) {
+	t.Helper()
+	rows, err := pool.Query(ctx, `SELECT DISTINCT event.kind, event.rule_version, event.rule_snapshot
+		FROM alert_event event
+		JOIN alert_instance instance ON instance.id = event.alert_instance_id
+		WHERE instance.instance_id = $1`, instanceID)
+	if err != nil {
+		t.Fatalf("read alert events: %v", err)
+	}
+	defer rows.Close()
+	want := map[string]bool{
+		"PENDING_STARTED": false, "FIRED": false, "UPDATED": false,
+		"RECOVERED": false, "NO_DATA_ENTERED": false, "NO_DATA_EXITED": false,
+	}
+	for rows.Next() {
+		var kind string
+		var version int
+		var snapshot []byte
+		if err := rows.Scan(&kind, &version, &snapshot); err != nil {
+			t.Fatalf("scan alert event: %v", err)
+		}
+		if version != 1 || !json.Valid(snapshot) {
+			t.Errorf("event %s version=%d snapshot=%s, want version 1 and JSON", kind, version, snapshot)
+		}
+		var ruleSnapshot struct {
+			MetricID          string  `json:"metric_id"`
+			Threshold         float64 `json:"threshold"`
+			RecoveryThreshold float64 `json:"recovery_threshold"`
+			Severity          string  `json:"severity"`
+			Version           int     `json:"version"`
+		}
+		if err := json.Unmarshal(snapshot, &ruleSnapshot); err != nil {
+			t.Errorf("decode event %s rule snapshot: %v", kind, err)
+		} else if ruleSnapshot.MetricID != "pg.connection.total" || ruleSnapshot.Threshold != 20 ||
+			ruleSnapshot.RecoveryThreshold != 15 || ruleSnapshot.Severity != "critical" || ruleSnapshot.Version != 1 {
+			t.Errorf("event %s rule snapshot = %+v", kind, ruleSnapshot)
+		}
+		if _, exists := want[kind]; exists {
+			want[kind] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate alert events: %v", err)
+	}
+	for kind, found := range want {
+		if !found {
+			t.Errorf("alert event %s was not recorded", kind)
+		}
 	}
 }
 

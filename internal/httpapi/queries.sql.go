@@ -67,7 +67,17 @@ func (q *Queries) GetAgentTokenHash(ctx context.Context, id pgtype.UUID) ([]byte
 }
 
 const getInstanceAlertStatus = `-- name: GetInstanceAlertStatus :one
-SELECT status FROM alert_instance WHERE instance_id = $1
+SELECT status
+FROM alert_instance
+WHERE instance_id = $1
+ORDER BY CASE status
+    WHEN 'FIRING' THEN 5
+    WHEN 'NO_DATA' THEN 4
+    WHEN 'PENDING' THEN 3
+    WHEN 'RECOVERED' THEN 2
+    ELSE 1
+END DESC
+LIMIT 1
 `
 
 func (q *Queries) GetInstanceAlertStatus(ctx context.Context, instanceID pgtype.UUID) (string, error) {

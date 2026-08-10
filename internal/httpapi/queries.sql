@@ -23,7 +23,17 @@ WHERE session.token_hash = $1 AND session.expires_at > $2;
 SELECT agent_token_hash FROM instance WHERE id = $1;
 
 -- name: GetInstanceAlertStatus :one
-SELECT status FROM alert_instance WHERE instance_id = $1;
+SELECT status
+FROM alert_instance
+WHERE instance_id = $1
+ORDER BY CASE status
+    WHEN 'FIRING' THEN 5
+    WHEN 'NO_DATA' THEN 4
+    WHEN 'PENDING' THEN 3
+    WHEN 'RECOVERED' THEN 2
+    ELSE 1
+END DESC
+LIMIT 1;
 
 -- name: ListPersistedCollectionTaskStates :many
 SELECT task.task_id, task.last_due_at, task.last_started_at, task.last_finished_at, task.last_success_at,

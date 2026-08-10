@@ -1,0 +1,68 @@
+AlertRuleInput:
+  type: object
+  required:
+    - name
+    - metric_id
+    - aggregation
+    - operator
+    - threshold
+    - recovery_operator
+    - recovery_threshold
+    - window_seconds
+    - consecutive_count
+    - recovery_consecutive_count
+    - severity
+    - no_data_policy
+    - enabled
+  properties:
+    name: { type: string, minLength: 1 }
+    metric_id: { type: string, minLength: 1 }
+    aggregation: { $ref: ../enums.yaml#/AlertAggregation }
+    operator: { $ref: ../enums.yaml#/AlertOperator }
+    threshold: { type: number, format: double }
+    recovery_operator: { $ref: ../enums.yaml#/AlertOperator }
+    recovery_threshold: { type: number, format: double }
+    window_seconds: { type: integer, minimum: 1 }
+    consecutive_count: { type: integer, minimum: 1 }
+    recovery_consecutive_count: { type: integer, minimum: 1 }
+    severity: { $ref: ../enums.yaml#/AlertSeverity }
+    no_data_policy: { $ref: ../enums.yaml#/NoDataPolicy }
+    enabled: { type: boolean }
+AlertRule:
+  type: object
+  required:
+    - id
+    - name
+    - metric_id
+    - aggregation
+    - operator
+    - threshold
+    - recovery_operator
+    - recovery_threshold
+    - window_seconds
+    - consecutive_count
+    - recovery_consecutive_count
+    - severity
+    - no_data_policy
+    - enabled
+    - version
+    - created_at
+    - updated_at
+  properties:
+    id: { type: string, format: uuid }
+    name: { type: string }
+    metric_id: { type: string }
+    aggregation: { $ref: ../enums.yaml#/AlertAggregation }
+    operator: { $ref: ../enums.yaml#/AlertOperator }
+    threshold: { type: number, format: double }
+    recovery_operator: { $ref: ../enums.yaml#/AlertOperator }
+    recovery_threshold: { type: number, format: double }
+    window_seconds: { type: integer }
+    consecutive_count: { type: integer }
+    recovery_consecutive_count: { type: integer }
+    severity: { $ref: ../enums.yaml#/AlertSeverity }
+    no_data_policy: { $ref: ../enums.yaml#/NoDataPolicy }
+    enabled: { type: boolean }
+    version: { type: integer }
+    created_at: { type: string, format: date-time }
+    updated_at: { type: string, format: date-time }
