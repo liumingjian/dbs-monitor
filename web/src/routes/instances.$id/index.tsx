@@ -1,3 +1,4 @@
+import { SettingOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Card, Select, Space, Typography } from 'antd'
 import { useRef } from 'react'
@@ -37,7 +38,10 @@ function InstancePage() {
 
   return <Space direction="vertical" size="large" style={{ width: '100%' }}>
     <Link to="/instances">← 返回实例列表</Link>
-    <Typography.Title level={2}>{instance.data?.name ?? '实例详情'}</Typography.Title>
+    <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+      <Typography.Title level={2} style={{ margin: 0 }}>{instance.data?.name ?? '实例详情'}</Typography.Title>
+      <Link to="/instances/$id/settings" params={{ id }}><Button icon={<SettingOutlined />}>接入设置</Button></Link>
+    </Space>
     <Space wrap>
       <Select<MetricID>
         aria-label="指标"

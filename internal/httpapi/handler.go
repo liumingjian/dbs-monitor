@@ -24,6 +24,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
 const (
@@ -43,6 +44,7 @@ type Handler struct {
 	platform      *db.Pool
 	clock         clock.Clock
 	keyring       *instance.CredentialKeyring
+	dialer        monitorpg.Dialer
 	serverVersion string
 }
 
@@ -51,7 +53,11 @@ func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.C
 }
 
 func NewHandlerWithVersion(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string) *Handler {
-	return &Handler{platform: platform, clock: currentClock, keyring: keyring, serverVersion: serverVersion}
+	return NewHandlerWithDialer(platform, currentClock, keyring, monitorpg.DirectDialer{}, serverVersion)
+}
+
+func NewHandlerWithDialer(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string) *Handler {
+	return &Handler{platform: platform, clock: currentClock, keyring: keyring, dialer: dialer, serverVersion: serverVersion}
 }
 
 func (handler *Handler) Routes() http.Handler {
@@ -105,12 +111,18 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
-	id := uuid.New()
-	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(id, request.Body.Password)
-	if err != nil {
+	if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
+		host: request.Body.Host, port: request.Body.Port, database: request.Body.Database,
+		username: request.Body.Username, password: request.Body.Password,
+	}); err != nil {
+		var validationError *targetValidationError
+		if errors.As(err, &validationError) {
+			return api.CreateInstance400JSONResponse(errorBody(validationError.code, validationError.message)), nil
+		}
 		return nil, err
 	}
-	token, tokenHash, err := newToken()
+	id := uuid.New()
+	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(id, request.Body.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -118,14 +130,13 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		ID: pgtype.UUID{Bytes: id, Valid: true}, Name: request.Body.Name,
 		Host: request.Body.Host, Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
 		Username: request.Body.Username, PasswordCiphertext: ciphertext,
-		PasswordKeyVersion: keyVersion, AgentTokenHash: tokenHash,
+		PasswordKeyVersion: keyVersion,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return api.CreateInstance201JSONResponse{
-		AgentToken: token,
-		Instance:   toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK),
+		Instance: toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK),
 	}, nil
 }
 
@@ -145,16 +156,38 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
-	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(request.Id, request.Body.Password)
-	if err != nil {
-		return nil, err
-	}
-	row, err := instance.New(handler.platform).UpdateInstance(ctx, instance.UpdateInstanceParams{
-		ID: pgtype.UUID{Bytes: request.Id, Valid: true}, Name: request.Body.Name,
-		Host: request.Body.Host, Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
-		Username: request.Body.Username, PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	var row instance.UpdateInstanceMetadataRow
+	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := instance.New(tx)
+		current, err := queries.GetInstanceForUpdate(ctx, instanceID)
+		if err != nil {
+			return err
+		}
+		connectionChanged := current.Host != request.Body.Host || current.Port != int32(request.Body.Port) || current.DatabaseName != request.Body.Database
+		if connectionChanged {
+			password, err := handler.keyring.DecryptPassword(request.Id, current.PasswordCiphertext, current.PasswordKeyVersion)
+			if err != nil {
+				return err
+			}
+			if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
+				host: request.Body.Host, port: request.Body.Port, database: request.Body.Database,
+				username: current.Username, password: password,
+			}); err != nil {
+				return err
+			}
+		}
+		row, err = queries.UpdateInstanceMetadata(ctx, instance.UpdateInstanceMetadataParams{
+			ID: instanceID, Name: request.Body.Name, Host: request.Body.Host,
+			Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
+		})
+		return err
 	})
 	if err != nil {
+		var validationError *targetValidationError
+		if errors.As(err, &validationError) {
+			return api.UpdateInstance400JSONResponse(errorBody(validationError.code, validationError.message)), nil
+		}
 		return nil, err
 	}
 	status, err := alertStatus(ctx, handler.platform, row.ID)
@@ -162,6 +195,44 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		return nil, err
 	}
 	return api.UpdateInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status)), nil
+}
+
+func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request api.UpdateInstanceCredentialRequestObject) (api.UpdateInstanceCredentialResponseObject, error) {
+	if request.Body == nil {
+		return nil, errors.New("instance credential body is required")
+	}
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	var username string
+	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := instance.New(tx)
+		current, err := queries.GetInstanceForUpdate(ctx, instanceID)
+		if err != nil {
+			return err
+		}
+		if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
+			host: current.Host, port: int(current.Port), database: current.DatabaseName,
+			username: request.Body.Username, password: request.Body.Password,
+		}); err != nil {
+			return err
+		}
+		ciphertext, keyVersion, err := handler.keyring.EncryptPassword(request.Id, request.Body.Password)
+		if err != nil {
+			return err
+		}
+		username, err = queries.UpdateInstanceCredential(ctx, instance.UpdateInstanceCredentialParams{
+			ID: instanceID, Username: request.Body.Username,
+			PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+		})
+		return err
+	})
+	if err != nil {
+		var validationError *targetValidationError
+		if errors.As(err, &validationError) {
+			return api.UpdateInstanceCredential400JSONResponse(errorBody(validationError.code, validationError.message)), nil
+		}
+		return nil, err
+	}
+	return api.UpdateInstanceCredential200JSONResponse{Username: username}, nil
 }
 
 func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteInstanceRequestObject) (api.DeleteInstanceResponseObject, error) {
@@ -537,7 +608,7 @@ var RequiredRoles = map[string]string{
 	"ListAlertRules": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"ListCollectionTaskStates": "READONLY", "UpdateCollectionTaskInterval": "PLATFORM_ADMIN",
-	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
+	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "ALERT_ADMIN", "UpdateInstanceCredential": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
 	"GetCurrentUser": "READONLY", "ChangeOwnPassword": "READONLY", "ListUsers": "READONLY",
 	"CreateUser": "PLATFORM_ADMIN", "ResetUserPassword": "PLATFORM_ADMIN",
 	"UpdateUserRole": "PLATFORM_ADMIN", "UpdateUserStatus": "PLATFORM_ADMIN",

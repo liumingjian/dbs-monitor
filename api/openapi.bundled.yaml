@@ -72,7 +72,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InstanceInput'
+              $ref: '#/components/schemas/InstanceCreateInput'
       responses:
         '201':
           description: Created
@@ -80,6 +80,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InstanceCreated'
+        '400':
+          description: Connection test or version gate failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/instances/{id}:
     parameters:
       - name: id
@@ -104,13 +110,13 @@ paths:
       tags:
         - instances
       operationId: updateInstance
-      x-required-role: PLATFORM_ADMIN
+      x-required-role: ALERT_ADMIN
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InstanceInput'
+              $ref: '#/components/schemas/InstanceMetadataInput'
       responses:
         '200':
           description: Updated
@@ -118,6 +124,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Instance'
+        '400':
+          description: Connection test failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - instances
@@ -126,6 +138,38 @@ paths:
       responses:
         '204':
           description: Deleted
+  /api/v1/instances/{id}/credentials:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - instances
+      operationId: updateInstanceCredential
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstanceCredentialInput'
+      responses:
+        '200':
+          description: Credential updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceCredentialUpdated'
+        '400':
+          description: Connection test failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/instances/{id}/metrics/series:
     get:
       tags:
@@ -722,7 +766,7 @@ components:
         updated_at:
           type: string
           format: date-time
-    InstanceInput:
+    InstanceCreateInput:
       type: object
       required:
         - name
@@ -751,6 +795,46 @@ components:
         password:
           type: string
           minLength: 1
+    InstanceMetadataInput:
+      type: object
+      required:
+        - name
+        - host
+        - port
+        - database
+      properties:
+        name:
+          type: string
+          minLength: 1
+        host:
+          type: string
+          minLength: 1
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        database:
+          type: string
+          minLength: 1
+    InstanceCredentialInput:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+    InstanceCredentialUpdated:
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          type: string
     Instance:
       type: object
       required:
@@ -784,13 +868,9 @@ components:
       type: object
       required:
         - instance
-        - agent_token
       properties:
         instance:
           $ref: '#/components/schemas/Instance'
-        agent_token:
-          type: string
-          description: Returned once when the instance is created.
     CollectionTaskState:
       type: object
       required:
@@ -1035,6 +1115,19 @@ components:
                 - NOT_FOUND
                 - CONFLICT
                 - INTERNAL
+                - NETWORK_UNREACHABLE
+                - AUTH_FAILED
+                - VERSION_UNSUPPORTED
+              x-enum-varnames:
+                - VALIDATIONFAILED
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOTFOUND
+                - CONFLICT
+                - INTERNAL
+                - NETWORKUNREACHABLE
+                - AUTHFAILED
+                - ONBOARDINGVERSIONUNSUPPORTED
             message:
               type: string
             field_errors:

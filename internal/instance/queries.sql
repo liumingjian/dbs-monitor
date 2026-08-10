@@ -1,7 +1,7 @@
 -- name: CreateInstance :one
 WITH created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_token_hash)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING id, name, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
@@ -22,18 +22,33 @@ SELECT id, name, host, port, database_name, username, agent_token_hash, agent_ve
 FROM instance
 WHERE id = $1;
 
--- name: UpdateInstance :one
+-- name: GetInstanceForUpdate :one
+SELECT id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_version, created_at
+FROM instance
+WHERE id = $1
+FOR UPDATE;
+
+-- name: UpdateInstanceMetadata :one
 UPDATE instance
 SET name = $2,
     host = $3,
     port = $4,
     database_name = $5,
-    username = $6,
-    password_ciphertext = $7,
-    password_key_version = $8,
-    credential_version = credential_version + 1
+    credential_version = credential_version + CASE
+        WHEN host <> $3 OR port <> $4 OR database_name <> $5 THEN 1
+        ELSE 0
+    END
 WHERE id = $1
 RETURNING id, name, host, port, database_name, username, agent_version, created_at;
+
+-- name: UpdateInstanceCredential :one
+UPDATE instance
+SET username = $2,
+    password_ciphertext = $3,
+    password_key_version = $4,
+    credential_version = credential_version + 1
+WHERE id = $1
+RETURNING username;
 
 -- name: DeleteInstance :exec
 DELETE FROM instance WHERE id = $1;

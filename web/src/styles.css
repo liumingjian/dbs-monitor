@@ -7,8 +7,10 @@ figcaption { color: #52514e; font-size: 13px; }
 .header-link { color: rgba(255, 255, 255, 0.82); }
 .header-link:hover { color: #fff; }
 .header-user { color: rgba(255, 255, 255, 0.9); }
+.settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; max-width: 760px; }
 @media (max-width: 640px) {
   .app-header { padding-inline: 16px; }
   .app-header h3 { display: none; }
   .app-header .ant-space { gap: 10px !important; }
+  .settings-form-grid { grid-template-columns: minmax(0, 1fr); }
 }

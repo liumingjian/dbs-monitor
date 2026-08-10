@@ -19,6 +19,8 @@ paths:
     $ref: paths/instances.yaml#/~1api~1v1~1instances
   /api/v1/instances/{id}:
     $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}
+  /api/v1/instances/{id}/credentials:
+    $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}~1credentials
   /api/v1/instances/{id}/metrics/series:
     $ref: paths/metrics.yaml#/~1api~1v1~1instances~1{id}~1metrics~1series
   /api/v1/instances/{id}/collection/tasks:
@@ -65,8 +67,14 @@ components:
       $ref: components/schemas/alert-rules.yaml#/AlertRuleInput
     AlertRule:
       $ref: components/schemas/alert-rules.yaml#/AlertRule
-    InstanceInput:
-      $ref: components/schemas/instances.yaml#/InstanceInput
+    InstanceCreateInput:
+      $ref: components/schemas/instances.yaml#/InstanceCreateInput
+    InstanceMetadataInput:
+      $ref: components/schemas/instances.yaml#/InstanceMetadataInput
+    InstanceCredentialInput:
+      $ref: components/schemas/instances.yaml#/InstanceCredentialInput
+    InstanceCredentialUpdated:
+      $ref: components/schemas/instances.yaml#/InstanceCredentialUpdated
     Instance:
       $ref: components/schemas/instances.yaml#/Instance
     InstanceCreated:

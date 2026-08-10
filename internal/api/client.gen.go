@@ -130,6 +130,11 @@ type ClientInterface interface {
 
 	UpdateCollectionTaskInterval(ctx context.Context, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// UpdateInstanceCredentialWithBody request with any body
+	UpdateInstanceCredentialWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateInstanceCredential(ctx context.Context, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMetricSeries request
 	GetMetricSeries(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -338,6 +343,30 @@ func (c *Client) UpdateCollectionTaskIntervalWithBody(ctx context.Context, id op
 
 func (c *Client) UpdateCollectionTaskInterval(ctx context.Context, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateCollectionTaskIntervalRequest(c.Server, id, taskId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateInstanceCredentialWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateInstanceCredentialRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateInstanceCredential(ctx context.Context, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateInstanceCredentialRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -893,6 +922,53 @@ func NewUpdateCollectionTaskIntervalRequestWithBody(server string, id openapi_ty
 	return req, nil
 }
 
+// NewUpdateInstanceCredentialRequest calls the generic UpdateInstanceCredential builder with application/json body
+func NewUpdateInstanceCredentialRequest(server string, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateInstanceCredentialRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateInstanceCredentialRequestWithBody generates requests for UpdateInstanceCredential with any type of body
+func NewUpdateInstanceCredentialRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/credentials", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetMetricSeriesRequest generates requests for GetMetricSeries
 func NewGetMetricSeriesRequest(server string, id openapi_types.UUID, params *GetMetricSeriesParams) (*http.Request, error) {
 	var err error
@@ -1370,6 +1446,11 @@ type ClientWithResponsesInterface interface {
 
 	UpdateCollectionTaskIntervalWithResponse(ctx context.Context, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateCollectionTaskIntervalResponse, error)
 
+	// UpdateInstanceCredentialWithBodyWithResponse request with any body
+	UpdateInstanceCredentialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateInstanceCredentialResponse, error)
+
+	UpdateInstanceCredentialWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateInstanceCredentialResponse, error)
+
 	// GetMetricSeriesWithResponse request
 	GetMetricSeriesWithResponse(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetMetricSeriesResponse, error)
 
@@ -1502,6 +1583,7 @@ type CreateInstanceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *InstanceCreated
+	JSON400      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -1567,6 +1649,7 @@ type UpdateInstanceResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *Instance
+	JSON400      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -1624,6 +1707,29 @@ func (r UpdateCollectionTaskIntervalResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateCollectionTaskIntervalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateInstanceCredentialResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InstanceCredentialUpdated
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateInstanceCredentialResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateInstanceCredentialResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1967,6 +2073,23 @@ func (c *ClientWithResponses) UpdateCollectionTaskIntervalWithResponse(ctx conte
 	return ParseUpdateCollectionTaskIntervalResponse(rsp)
 }
 
+// UpdateInstanceCredentialWithBodyWithResponse request with arbitrary body returning *UpdateInstanceCredentialResponse
+func (c *ClientWithResponses) UpdateInstanceCredentialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateInstanceCredentialResponse, error) {
+	rsp, err := c.UpdateInstanceCredentialWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateInstanceCredentialResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateInstanceCredentialWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateInstanceCredentialResponse, error) {
+	rsp, err := c.UpdateInstanceCredential(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateInstanceCredentialResponse(rsp)
+}
+
 // GetMetricSeriesWithResponse request returning *GetMetricSeriesResponse
 func (c *ClientWithResponses) GetMetricSeriesWithResponse(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetMetricSeriesResponse, error) {
 	rsp, err := c.GetMetricSeries(ctx, id, params, reqEditors...)
@@ -2227,6 +2350,13 @@ func ParseCreateInstanceResponse(rsp *http.Response) (*CreateInstanceResponse, e
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -2295,6 +2425,13 @@ func ParseUpdateInstanceResponse(rsp *http.Response) (*UpdateInstanceResponse, e
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -2342,6 +2479,39 @@ func ParseUpdateCollectionTaskIntervalResponse(rsp *http.Response) (*UpdateColle
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest CollectionTaskState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateInstanceCredentialResponse parses an HTTP response from a UpdateInstanceCredentialWithResponse call
+func ParseUpdateInstanceCredentialResponse(rsp *http.Response) (*UpdateInstanceCredentialResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateInstanceCredentialResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest InstanceCredentialUpdated
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

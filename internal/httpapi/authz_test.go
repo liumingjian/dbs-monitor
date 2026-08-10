@@ -83,8 +83,6 @@ func TestResponseSchemasDoNotExposeSecrets(t *testing.T) {
 
 func responseMayExposeOneTimeSecret(method, path, status string) bool {
 	switch {
-	case method == "POST" && status == "201" && path == "/api/v1/instances":
-		return true
 	case method == "POST" && status == "201" && path == "/api/v1/users":
 		return true
 	case method == "POST" && status == "200" && strings.HasSuffix(path, "/password"):
