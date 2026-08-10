@@ -100,12 +100,20 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if createBody.AgentToken == "" || createBody.Instance.ID == "" {
 		t.Fatalf("create response missing token or instance: %+v", createBody)
 	}
+	var agentMetricsEnabled bool
+	if err := pool.QueryRow(ctx, "SELECT agent_metrics_enabled FROM instance_collection_config WHERE instance_id = $1", createBody.Instance.ID).Scan(&agentMetricsEnabled); err != nil {
+		t.Fatalf("read default agent collection setting: %v", err)
+	}
+	if !agentMetricsEnabled {
+		t.Fatal("new instance should enable agent metrics by default")
+	}
 
 	seriesURL := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.total&from=%s&to=%s&step=raw",
 		server.URL, createBody.Instance.ID,
 		url.QueryEscape(time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)),
 		url.QueryEscape(time.Now().Add(time.Minute).UTC().Format(time.RFC3339)))
 	assertUnavailability(t, client, seriesURL, "NO_SAMPLES_YET")
+	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1), "NO_SAMPLES_YET")
 
 	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{})
 	if err := collector.RunOnce(ctx); err != nil {

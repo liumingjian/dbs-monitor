@@ -60,7 +60,7 @@ func (service *Service) collectTarget(ctx context.Context, target instance.ListC
 				queries := metric.New(tx)
 				seriesID, writeErr := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
 					InstanceID: target.ID,
-					MetricID:   "pg.availability.reachable",
+					MetricID:   string(metric.MetricAvailabilityReachable),
 					Labels:     json.RawMessage(`{}`),
 					LabelsKey:  "{}",
 					LastSeen:   pgtype.Timestamptz{Time: now, Valid: true},
@@ -68,7 +68,7 @@ func (service *Service) collectTarget(ctx context.Context, target instance.ListC
 				if writeErr != nil {
 					return writeErr
 				}
-				if _, writeErr = tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, now, metric.NonNumericMetricEncodings["pg.availability.reachable"]["unreachable"]); writeErr != nil {
+				if _, writeErr = tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, now, metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["unreachable"]); writeErr != nil {
 					return writeErr
 				}
 				return instance.New(tx).SetCollectFailure(ctx, instance.SetCollectFailureParams{
@@ -114,8 +114,8 @@ func (service *Service) collectTarget(ctx context.Context, target instance.ListC
 				metricID string
 				value    float64
 			}{
-				{"pg.availability.reachable", metric.NonNumericMetricEncodings["pg.availability.reachable"]["reachable"]},
-				{"pg.connection.total", connectionTotal},
+				{string(metric.MetricAvailabilityReachable), metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
+				{string(metric.MetricConnectionTotal), connectionTotal},
 			} {
 				seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
 					InstanceID: target.ID,

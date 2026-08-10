@@ -24,4 +24,24 @@ describe('time range search', () => {
       error: '时间范围必须是绝对 RFC3339 时间',
     })
   })
+
+  it('keeps a dictionary metric in the URL state', () => {
+    expect(parseTimeRange({
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+      metric: 'pg.tps',
+    })).toEqual({
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+      metric: 'pg.tps',
+    })
+  })
+
+  it('rejects a metric outside the generated dictionary enum', () => {
+    expect(parseTimeRange({
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+      metric: 'not-a-metric',
+    })).toEqual({ error: '指标必须来自指标字典' })
+  })
 })

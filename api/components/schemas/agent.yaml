@@ -12,5 +12,12 @@ AgentReport:
         properties:
           metric:
             type: string
-            enum: [host.cpu.usage_percent]
+            enum:
+              - host.cpu.usage_percent
+              - host.memory.usage_percent
+              - host.disk.usage_percent
+              - host.disk.free_bytes
+              - host.disk.iops
+              - host.disk.throughput_bytes_per_sec
+              - host.network.bytes_per_sec
           value: { type: number }
