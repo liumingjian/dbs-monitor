@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 )
@@ -14,15 +16,34 @@ type credentialRotationResult struct {
 	CredentialsRotated int64
 }
 
+func runMasterKeyRotationCommand(ctx context.Context) error {
+	connectionString := env("DATABASE_URL", defaultDatabaseURL)
+	credentialDirectory := env("CREDENTIALS_DIR", defaultCredentialDirectory)
+	pool, err := pgxpool.New(ctx, connectionString)
+	if err != nil {
+		return fmt.Errorf("open platform database: %w", err)
+	}
+	defer pool.Close()
+
+	result, err := rotateCredentialKeyring(ctx, &db.Pool{Pool: pool}, credentialDirectory)
+	if err != nil {
+		return err
+	}
+	log.Printf("rotated %d instance credentials to master key v%d", result.CredentialsRotated, result.KeyVersion)
+	return nil
+}
+
 func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory string) (credentialRotationResult, error) {
-	keyring, reencrypt, err := instance.PrepareCredentialKeyRotation(ctx, instance.New(platform), directory)
+	keyring, needsReencryption, err := instance.PrepareCredentialKeyRotation(ctx, instance.New(platform), directory)
 	if err != nil {
 		return credentialRotationResult{}, err
 	}
-	result := credentialRotationResult{}
-	if reencrypt {
+
+	var credentialsRotated int64
+	if needsReencryption {
 		if err := platform.InTx(ctx, func(tx pgx.Tx) error {
-			result.CredentialsRotated, err = keyring.ReencryptCredentials(ctx, instance.New(tx))
+			var err error
+			credentialsRotated, err = keyring.ReencryptCredentials(ctx, instance.New(tx))
 			return err
 		}); err != nil {
 			return credentialRotationResult{}, fmt.Errorf("rotate instance credentials: %w", err)
@@ -31,6 +52,8 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 	if err := keyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err != nil {
 		return credentialRotationResult{}, err
 	}
-	result.KeyVersion = keyring.CurrentVersion()
-	return result, nil
+	return credentialRotationResult{
+		KeyVersion:         keyring.CurrentVersion(),
+		CredentialsRotated: credentialsRotated,
+	}, nil
 }

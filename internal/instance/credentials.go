@@ -24,7 +24,8 @@ const (
 	credentialNonceSize                   = 12
 	credentialEnvelopeHeaderSize          = 1 + credentialNonceSize
 	credentialCurrentVersionFilename      = "current"
-	credentialKeyFilenamePattern          = "master-key-v*"
+	credentialKeyFilenamePrefix           = "master-key-v"
+	credentialKeyFilenamePattern          = credentialKeyFilenamePrefix + "*"
 )
 
 type CredentialFaultCode string
@@ -177,7 +178,7 @@ func PrepareCredentialKeyRotation(ctx context.Context, queries *Queries, directo
 	if err != nil {
 		return nil, false, err
 	}
-	notCurrent, err := queries.CountCredentialsNotUsingKeyVersion(ctx, keyring.currentVersion)
+	credentialsNotUsingCurrentKey, err := queries.CountCredentialsNotUsingKeyVersion(ctx, keyring.currentVersion)
 	if err != nil {
 		return nil, false, fmt.Errorf("inspect instance credential key versions: %w", err)
 	}
@@ -186,19 +187,19 @@ func PrepareCredentialKeyRotation(ctx context.Context, queries *Queries, directo
 	if nextVersion <= keyring.currentVersion {
 		return nil, false, fmt.Errorf("instance credential key version exhausted")
 	}
+	// Resume an attempt that staged the next key but did not update current.
 	if containsCredentialKeyVersion(versions, nextVersion) {
 		if _, err := readCredentialKey(directory, nextVersion, CredentialFaultCurrentKey); err != nil {
 			return nil, false, err
 		}
-		if err := writeCurrentCredentialKeyVersion(directory, nextVersion); err != nil {
-			return nil, false, err
-		}
-		keyring, err = OpenCredentialKeyring(directory, true)
+		keyring, err := activateCredentialKey(directory, nextVersion)
 		return keyring, true, err
 	}
-	if notCurrent > 0 {
+	// Resume the row rewrite after current was updated by an earlier attempt.
+	if credentialsNotUsingCurrentKey > 0 {
 		return keyring, true, nil
 	}
+	// Old keys with no database references only need cleanup.
 	for _, version := range versions {
 		if version < keyring.currentVersion {
 			return keyring, false, nil
@@ -211,11 +212,15 @@ func PrepareCredentialKeyRotation(ctx context.Context, queries *Queries, directo
 	if err := generateCredentialKey(directory, nextVersion); err != nil {
 		return nil, false, err
 	}
-	if err := writeCurrentCredentialKeyVersion(directory, nextVersion); err != nil {
-		return nil, false, err
-	}
-	keyring, err = OpenCredentialKeyring(directory, true)
+	keyring, err = activateCredentialKey(directory, nextVersion)
 	return keyring, true, err
+}
+
+func activateCredentialKey(directory string, version int32) (*CredentialKeyring, error) {
+	if err := writeCurrentCredentialKeyVersion(directory, version); err != nil {
+		return nil, err
+	}
+	return OpenCredentialKeyring(directory, true)
 }
 
 func (keyring *CredentialKeyring) ReencryptCredentials(ctx context.Context, queries *Queries) (int64, error) {
@@ -359,7 +364,7 @@ func credentialKeyVersions(directory string) ([]int32, error) {
 	}
 	versions := make([]int32, 0, len(matches))
 	for _, match := range matches {
-		value := strings.TrimPrefix(filepath.Base(match), "master-key-v")
+		value := strings.TrimPrefix(filepath.Base(match), credentialKeyFilenamePrefix)
 		parsed, err := strconv.ParseInt(value, 10, 32)
 		if err != nil || parsed <= 0 {
 			return nil, &CredentialFault{Code: CredentialFaultCurrentKey}
@@ -458,7 +463,7 @@ func readCredentialKey(directory string, version int32, missingCode CredentialFa
 }
 
 func credentialKeyFilename(version int32) string {
-	return fmt.Sprintf("master-key-v%d", version)
+	return fmt.Sprintf("%s%d", credentialKeyFilenamePrefix, version)
 }
 
 func credentialGCM(key []byte) (cipher.AEAD, error) {

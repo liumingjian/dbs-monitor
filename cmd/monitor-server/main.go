@@ -30,6 +30,12 @@ import (
 	webassets "github.com/liumingjian/dbs-monitor/web"
 )
 
+const (
+	defaultDatabaseURL         = "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable"
+	defaultCredentialDirectory = "/opt/dbs-monitor/etc/credentials"
+	rotateMasterKeyCommand     = "rotate-master-key"
+)
+
 var version = "1.0.0"
 
 func main() {
@@ -42,30 +48,19 @@ func main() {
 }
 
 func runCommand(ctx context.Context, arguments []string) error {
-	if len(arguments) == 0 {
+	switch {
+	case len(arguments) == 0:
 		return run(ctx)
+	case len(arguments) == 1 && arguments[0] == rotateMasterKeyCommand:
+		return runMasterKeyRotationCommand(ctx)
+	default:
+		return fmt.Errorf("usage: dbs-monitor-server [%s]", rotateMasterKeyCommand)
 	}
-	if len(arguments) != 1 || arguments[0] != "rotate-master-key" {
-		return fmt.Errorf("usage: dbs-monitor-server [rotate-master-key]")
-	}
-	connectionString := env("DATABASE_URL", "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable")
-	credentialDirectory := env("CREDENTIALS_DIR", "/opt/dbs-monitor/etc/credentials")
-	pool, err := pgxpool.New(ctx, connectionString)
-	if err != nil {
-		return fmt.Errorf("open platform database: %w", err)
-	}
-	defer pool.Close()
-	result, err := rotateCredentialKeyring(ctx, &db.Pool{Pool: pool}, credentialDirectory)
-	if err != nil {
-		return err
-	}
-	log.Printf("rotated %d instance credentials to master key v%d", result.CredentialsRotated, result.KeyVersion)
-	return nil
 }
 
 func run(ctx context.Context) error {
-	connectionString := env("DATABASE_URL", "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable")
-	credentialDirectory := env("CREDENTIALS_DIR", "/opt/dbs-monitor/etc/credentials")
+	connectionString := env("DATABASE_URL", defaultDatabaseURL)
+	credentialDirectory := env("CREDENTIALS_DIR", defaultCredentialDirectory)
 	pool, err := pgxpool.New(ctx, connectionString)
 	if err != nil {
 		return fmt.Errorf("open platform database: %w", err)
