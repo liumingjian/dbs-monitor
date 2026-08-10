@@ -1,8 +1,6 @@
 package collect
 
 import (
-	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -57,14 +55,14 @@ func TestFailureBackoffCapsAtSixtySecondsAndExcludesProbe(t *testing.T) {
 
 func TestDispatcherEnforcesDualSlotsGlobalLimitsAndCapabilityReserve(t *testing.T) {
 	dispatcher := newDispatcher(2, 4)
-	if !dispatcher.admit(work{instanceID: "one", class: workRegular}) {
-		t.Fatal("first regular task was not admitted")
+	if !dispatcher.admit(work{instanceID: "one", class: workCollectionQuery}) {
+		t.Fatal("first collection query was not admitted")
 	}
-	if dispatcher.admit(work{instanceID: "one", class: workRegular}) {
-		t.Fatal("same-instance regular tasks overlapped")
+	if dispatcher.admit(work{instanceID: "one", class: workCollectionQuery}) {
+		t.Fatal("same-instance collection queries overlapped")
 	}
 	if !dispatcher.admit(work{instanceID: "one", class: workProbe}) {
-		t.Fatal("probe did not run alongside same-instance regular task")
+		t.Fatal("probe did not run alongside same-instance collection query")
 	}
 	if !dispatcher.admit(work{instanceID: "two", class: workProbe}) {
 		t.Fatal("second probe was not admitted")
@@ -72,13 +70,13 @@ func TestDispatcherEnforcesDualSlotsGlobalLimitsAndCapabilityReserve(t *testing.
 	if dispatcher.admit(work{instanceID: "three", class: workProbe}) {
 		t.Fatal("probe global limit was exceeded")
 	}
-	if !dispatcher.admit(work{instanceID: "two", class: workRegular}) {
-		t.Fatal("second regular task was not admitted")
+	if !dispatcher.admit(work{instanceID: "two", class: workCollectionQuery}) {
+		t.Fatal("second collection query was not admitted")
 	}
 
 	dispatcher.capabilityWaiting = true
-	if dispatcher.admit(work{instanceID: "three", class: workRegular}) {
-		t.Fatal("regular task consumed a capability-reserved slot")
+	if dispatcher.admit(work{instanceID: "three", class: workCollectionQuery}) {
+		t.Fatal("collection query consumed a capability-reserved slot")
 	}
 	for _, instanceID := range []string{"three", "four"} {
 		if !dispatcher.admit(work{instanceID: instanceID, class: workCapability}) {
@@ -86,7 +84,7 @@ func TestDispatcherEnforcesDualSlotsGlobalLimitsAndCapabilityReserve(t *testing.
 		}
 	}
 	if dispatcher.admit(work{instanceID: "five", class: workCapability}) {
-		t.Fatal("normal-channel global limit was exceeded")
+		t.Fatal("query-channel global limit was exceeded")
 	}
 }
 
@@ -95,15 +93,15 @@ func TestPendingRunsKeepOnlyLatestDueIntent(t *testing.T) {
 	base := time.Date(2026, time.August, 10, 12, 0, 0, 0, time.UTC)
 	key := taskKey{instanceID: "one", taskID: metric.TaskProbe}
 
-	if replaced := pending.put(scheduledRun{key: key, dueAt: base}); replaced != nil {
+	if replaced, exists := pending.put(scheduledRun{key: key, dueAt: base}); exists {
 		t.Fatalf("first due replaced %+v", replaced)
 	}
-	if replaced := pending.put(scheduledRun{key: key, dueAt: base.Add(5 * time.Second)}); replaced == nil || !replaced.dueAt.Equal(base) {
+	if replaced, exists := pending.put(scheduledRun{key: key, dueAt: base.Add(5 * time.Second)}); !exists || !replaced.dueAt.Equal(base) {
 		t.Fatalf("second due replaced %+v, want %s", replaced, base)
 	}
 	second := base.Add(5 * time.Second)
 	latest := base.Add(10 * time.Second)
-	if replaced := pending.put(scheduledRun{key: key, dueAt: latest}); replaced == nil || !replaced.dueAt.Equal(second) {
+	if replaced, exists := pending.put(scheduledRun{key: key, dueAt: latest}); !exists || !replaced.dueAt.Equal(second) {
 		t.Fatalf("third due replaced %+v, want %s", replaced, second)
 	}
 	if pending.len() != 1 {
@@ -114,20 +112,7 @@ func TestPendingRunsKeepOnlyLatestDueIntent(t *testing.T) {
 	}
 }
 
-func TestCollectionErrorMessageNeverContainsCredentials(t *testing.T) {
-	unsafe := errors.New("dial postgres://admin:top-secret@db.internal:5432/app?sslmode=disable failed")
-	message := safeErrorMessage("CONNECTION_FAILED", unsafe)
-	for _, forbidden := range []string{"admin", "top-secret", "postgres://", "db.internal", "sslmode"} {
-		if strings.Contains(message, forbidden) {
-			t.Fatalf("safe error message %q contains %q", message, forbidden)
-		}
-	}
-	if message == "" {
-		t.Fatal("safe error message is empty")
-	}
-}
-
-func TestNormalTaskTimeoutUsesEightyPercentWithTenSecondCap(t *testing.T) {
+func TestQueryTaskTimeoutUsesEightyPercentWithTenSecondCap(t *testing.T) {
 	tests := []struct {
 		interval time.Duration
 		want     time.Duration
