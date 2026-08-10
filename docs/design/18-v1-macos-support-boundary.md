@@ -2,7 +2,7 @@
 
 > 出处：[v1 macOS 支持边界：arm64、macOS 版本与最低承诺 #99](https://github.com/liumingjian/dbs-monitor/issues/99)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
 > 定位：冻结 v1 首发的操作系统、运行架构与“支持 macOS”的最低验收语义。PostgreSQL 交付形态、构建发布路线及既有 Linux 发布票的处置分别由地图 #98 的其他子票决定，本文不展开。
-> 状态：2026-08-10 冻结。本文是对 [`09`](09-packaging-and-deployment.md) 与 [`15`](15-ci-and-release-pipeline.md) 中 Linux 双架构发布边界的后续决策；v1 首发范围冲突时以本文为准。
+> 状态：2026-08-10 冻结。本文是对 [打包、部署与运行形态](09-packaging-and-deployment.md) 与 [CI 与发布流水线](15-ci-and-release-pipeline.md) 中 Linux 双架构发布边界的后续决策；v1 首发范围冲突时以本文为准。
 
 ---
 
@@ -37,7 +37,7 @@
 ## 3. D3 · 明确不承诺的 macOS 形态
 
 - **Intel macOS / `darwin/amd64`：不承诺。** 不构建、不发布，也不纳入缺陷修复或回归矩阵。
-- **Universal binary：不承诺。** v1 只产出 arm64 目标，不把两种 Mach-O 架构合并为单一资产。
+- **universal binary：不承诺。** v1 只产出 arm64 目标，不把两种 Mach-O 架构合并为单一资产。
 - **Rosetta 2：不承诺。** 即使某个组件偶然可经转译运行，也不构成受支持路径或验收证据。
 - **低于 macOS 14.0：不承诺。** 能启动属于偶然兼容，不据此扩大支持边界。
 
@@ -46,9 +46,9 @@
 ## 4. D4 · Linux / amd64 从 v1 验收中排除
 
 - v1 发布清单、发布门、安装文档与支持矩阵只允许 §1 的 `darwin/arm64` 元组；不得把 Linux 或任何 amd64 资产列为 v1 必交物。
-- 既有 Linux amd64/arm64 打包脚本、workflow、验证记录和 walking-skeleton 产物是历史工程资产，不因本文删除，也不再构成 v1 完成条件或发布阻塞项。
+- 既有 `linux/amd64`、`linux/arm64` 打包脚本、workflow、验证记录和 walking-skeleton 产物是历史工程资产，不因本文删除，也不再构成 v1 完成条件或发布阻塞项。
 - 为静态兼容性保留的 Linux 交叉编译可以继续作为非发布检查，但通过或失败均不得被表述为 v1 Linux 支持证据；是否保留这些检查由后续实施票处理。
-- “Linux/amd64 不支持”只描述 dbs-monitor 交付物的宿主目标，不禁止 v1 通过 PostgreSQL 协议监控运行在 Linux/amd64 上的远端数据库。需要宿主 Agent 的能力则只在 §1 支持元组内承诺。
+- “Linux 与所有 amd64 目标均不进入 v1 发布验收”只描述 dbs-monitor 交付物的宿主目标，不禁止 v1 通过 PostgreSQL 协议监控运行在 `linux/amd64` 上的远端数据库。需要宿主 Agent 的能力则只在 §1 支持元组内承诺。
 
 这一区分避免两种误读：不把旧 Linux 证据冒充当前发布承诺，也不把交付宿主边界错误扩大成被监控 PostgreSQL 的宿主限制。
 
@@ -68,6 +68,6 @@
 
 | 下游 | 必须承接的边界 |
 |---|---|
-| PostgreSQL 交付形态决策 | 所选形态必须能在 macOS 14.0+ arm64 干净机完成安装和原生交付运行验收 |
+| PostgreSQL 交付形态决策 | 所选形态必须能在 macOS 14.0 及以上版本的 Apple silicon 干净机上完成安装和原生交付运行验收 |
 | macOS 构建、验证与发布路线 | 只把 `darwin/arm64` 作为 v1 发布目标，并为 §2 四类场景建立可追溯证据 |
 | 既有 Linux 发布票处置 | 从 v1 必交物和阻塞条件中移除 Linux 与 amd64，不把历史证据删除或改写 |
