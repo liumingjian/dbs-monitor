@@ -62,15 +62,15 @@ PostgreSQL 保持 17 大版本。17.x 小版本随 dbs-monitor 整包升级；17
 
 ## 4. D4 · 安装与首次初始化闭环
 
-正式安装入口必须幂等地区分“全新安装”和“已安装版本”，并按以下顺序完成：
+正式安装入口必须幂等地区分“全新安装”和“已安装版本”：已安装版本不得重复执行首次初始化；全新安装按以下顺序完成：
 
-1. 硬检查 macOS 版本、原生 arm64、管理员权限、目标数据盘空间和资产完整性；失败时不创建半套服务。
-2. 创建 `_dbsmonitor` 与 §3 的目录和权限，将版本化只读 payload 落盘。
-3. 接收数据目录和平台对外访问地址；后者用于 TLS 证书 SAN，不允许猜测。
+1. 接收数据目录和平台对外访问地址；后者用于 TLS 证书 SAN，不允许猜测。
+2. 硬检查 macOS 版本、原生 arm64、管理员权限、目标数据盘空间和资产完整性；失败时不创建半套服务。
+3. 创建 `_dbsmonitor` 与 §3 的目录和权限，将版本化只读 payload 落盘。
 4. 仅在空数据目录执行一次 `initdb`（`UTF8`、`C` locale），写入 socket-only 与 peer 配置；发现未知或不匹配的现有目录必须停止，不得覆盖。
 5. 生成并持久保存自签 CA、CA 私钥和服务端证书/私钥；安装 server 与 PostgreSQL plist。
 6. 启动 PostgreSQL 并验证 ready，再启动 server；server 自动执行向上 schema 迁移，并仅在不存在管理员时生成一次初始管理员密码。
-7. 使用生成的 CA 验证 HTTPS 健康、数据库没有 TCP listener、两个 job 由 `launchd` 托管，然后打印访问地址、一次性管理员密码和诊断入口。
+7. 使用生成的 CA 验证 HTTPS 健康、数据库没有 TCP listener、两个 job 由 `launchd` 托管，然后打印访问地址、本次生成的一次性管理员密码和诊断入口。
 
 整个过程不得从网络下载 Homebrew、PostgreSQL、动态库、Go、Node.js 或前端资源。允许且必须使用 macOS 14 自带的基础系统能力；浏览器、运行期访问远端被监控 PostgreSQL 的网络，以及用户主动把资产传到目标机，不属于“安装时依赖”。
 
@@ -92,7 +92,7 @@ v1 的升级备份仍采用“控制面可恢复、时序样本可丢弃”的�
 2. 停 server，保持 PostgreSQL 运行并创建带版本元数据的升级前备份。
 3. 若 PostgreSQL 17.x 小版本发生变化，停止 PostgreSQL；原子切换 `current` 后重新启动 PostgreSQL。仅应用升级则不必停止数据库。
 4. 启动 server 执行向上迁移，再验证数据库、HTTPS、版本和两个 LaunchDaemon。
-5. 验收失败则停止新进程，切回旧 payload，并从升级前控制面备份恢复；不执行 down migration。
+5. 验收失败则停止新 server；若切换过 PostgreSQL 二进制，也停止 PostgreSQL。切回旧 payload，确保旧版 PostgreSQL 运行，从升级前备份集恢复后再启动旧 server；不执行 down migration。
 
 旧 payload 与升级前备份至少保留到本次升级验收完成。PostgreSQL 17.x 的数据格式在小版本间兼容，但切换二进制时仍必须停库；PostgreSQL 大版本升级明确不属于以上流程。
 
@@ -100,7 +100,7 @@ v1 的升级备份仍采用“控制面可恢复、时序样本可丢弃”的�
 
 ## 7. D7 · 卸载默认可恢复
 
-普通卸载执行 `launchctl bootout` 停止两个 job，移除 plist、日志轮转配置、`current` 链接和版本化 payload，但保留 PostgreSQL 数据、配置/密钥、备份、日志及 `_dbsmonitor` 用户，并打印这些保留路径。这样重装或人工恢复仍有明确入口。
+普通卸载执行 `launchctl bootout` 停止两个 job，移除 plist、随 payload 安装的 server 日志轮转配置、`current` 链接和版本化 payload，但保留 PostgreSQL 数据、配置/密钥、备份、日志及 `_dbsmonitor` 用户，并打印这些保留路径。这样重装或人工恢复仍有明确入口。
 
 永久清除必须是单独的显式 purge 动作：再次列出将删除的绝对路径，要求管理员确认，先停止 job，再删除 §3 的可变状态，最后在确认没有残留文件归属后移除专用用户。升级脚本不得调用卸载或 purge；卸载也不得删除所选数据目录以外的父卷内容。
 
