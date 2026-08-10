@@ -43,6 +43,7 @@
 | [`docs/design/14-platform-observability-and-diagnostics.md`](design/14-platform-observability-and-diagnostics.md) | R2 · 平台自身运行可观测性与诊断出口：journal + 只读诊断 API、四态平台健康快照、非递归告警边界、磁盘分级保护、故障注入验收 | **v1.0** |
 | [`docs/design/15-ci-and-release-pipeline.md`](design/15-ci-and-release-pipeline.md) | R2 · CI 与发布流水线：GitHub Actions 唯一规范执行者、PR 门与 `check-full`、tag + 精确提交校验 + 人工审批发布、四组合构建矩阵、留痕规则 | **v1.0** |
 | [`docs/design/16-r2-decision-index.md`](design/16-r2-decision-index.md) | R2 收口索引：固化地图 #15 的 `Decisions so far`，以 `make check ≤120 秒` 为当前真值 | **v1.0** |
+| [`docs/design/18-v1-macos-support-boundary.md`](design/18-v1-macos-support-boundary.md) | v1 macOS 首发支持边界：macOS 14.0+、arm64 only，以及开发/CI/安装/交付运行的最低验收语义 | **v1.0** |
 | [`docs/validation/t11-windows-amd64-progress.md`](validation/t11-windows-amd64-progress.md) | T11 · Windows amd64 环境验证记录、Docker Desktop 兼容性结论与 Linux amd64 后续验收清单 | 已完成（T11 已验收） |
 
 ### 2.1 四条跨文档不变式
