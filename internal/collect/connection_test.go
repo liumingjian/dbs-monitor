@@ -3,13 +3,12 @@ package collect
 import (
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 )
 
 func TestTargetConnectionConfigSetsPasswordDirectly(t *testing.T) {
 	target := instance.ListCollectionTargetsRow{
-		ID: pgtype.UUID{}, Host: "2001:db8::1", Port: 5432,
+		Host: "2001:db8::1", Port: 5432,
 		DatabaseName: "db name", Username: "user name",
 	}
 	config, err := targetConnectionConfig(target, `space ' quote \\ slash`)

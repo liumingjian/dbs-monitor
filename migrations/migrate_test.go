@@ -143,7 +143,9 @@ func TestPlaintextCredentialMigration(t *testing.T) {
 	admin := openDatabase(t, env("PGDATABASE", "dbs_monitor"))
 	defer admin.Close()
 	identifier := pgx.Identifier{databaseName}.Sanitize()
-	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
+	if _, err := admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)"); err != nil {
+		t.Fatalf("drop stale test database: %v", err)
+	}
 	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
 		t.Fatalf("create test database: %v", err)
 	}

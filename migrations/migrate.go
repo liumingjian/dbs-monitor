@@ -16,6 +16,11 @@ import (
 //go:embed *.sql
 var files embed.FS
 
+const (
+	credentialSchemaVersion         = 3
+	plaintextPasswordRemovalVersion = 4
+)
+
 func Open(connectionString string) (*sql.DB, error) {
 	database, err := sql.Open("pgx", connectionString)
 	if err != nil {
@@ -38,14 +43,14 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (int,
 		return 0, fmt.Errorf("read migration version: %w", err)
 	}
 	applied := 0
-	if current < 3 {
-		results, err := provider.UpTo(ctx, 3)
+	if current < credentialSchemaVersion {
+		results, err := provider.UpTo(ctx, credentialSchemaVersion)
 		if err != nil {
 			return 0, fmt.Errorf("apply credential schema migration: %w", err)
 		}
 		applied += len(results)
 	}
-	if err := migrateInstanceCredentials(ctx, database, credentialDirectory, current < 4); err != nil {
+	if err := migrateInstanceCredentials(ctx, database, credentialDirectory, current < plaintextPasswordRemovalVersion); err != nil {
 		return applied, err
 	}
 	results, err := provider.Up(ctx)
@@ -56,11 +61,11 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (int,
 }
 
 func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentialDirectory string, backfillPlaintext bool) error {
-	var encryptedCredentialsExist bool
-	if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NOT NULL)").Scan(&encryptedCredentialsExist); err != nil {
+	var hasEncryptedCredentials bool
+	if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NOT NULL)").Scan(&hasEncryptedCredentials); err != nil {
 		return fmt.Errorf("inspect encrypted instance credentials: %w", err)
 	}
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, encryptedCredentialsExist)
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, hasEncryptedCredentials)
 	if err != nil {
 		return err
 	}
@@ -77,6 +82,7 @@ func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentia
 	if err != nil {
 		return fmt.Errorf("read plaintext instance credentials: %w", err)
 	}
+	defer rows.Close()
 	type plaintextCredential struct {
 		id       uuid.UUID
 		password string
@@ -85,12 +91,10 @@ func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentia
 	for rows.Next() {
 		var idText, password string
 		if err := rows.Scan(&idText, &password); err != nil {
-			rows.Close()
 			return fmt.Errorf("scan plaintext instance credential: %w", err)
 		}
 		id, err := uuid.Parse(idText)
 		if err != nil {
-			rows.Close()
 			return fmt.Errorf("parse instance identifier during credential migration: %w", err)
 		}
 		credentials = append(credentials, plaintextCredential{id: id, password: password})

@@ -130,8 +130,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
-	id := request.Id
-	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(id, request.Body.Password)
+	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(request.Id, request.Body.Password)
 	if err != nil {
 		return nil, err
 	}

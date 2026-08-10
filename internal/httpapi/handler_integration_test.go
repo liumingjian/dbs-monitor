@@ -87,10 +87,11 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	login.Body.Close()
 
+	targetPassword := env("PGPASSWORD", "dbs_monitor")
 	instanceInput := map[string]any{
 		"name": "target", "host": env("PGHOST", "localhost"), "port": envInt("PGPORT", 55432),
 		"database": env("PGDATABASE", "dbs_monitor"), "username": env("PGUSER", "dbs_monitor"),
-		"password": env("PGPASSWORD", "dbs_monitor"),
+		"password": targetPassword,
 	}
 	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances", instanceInput, "")
 	if created.StatusCode != http.StatusCreated {
@@ -123,7 +124,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		FROM instance WHERE id = $1`, createBody.Instance.ID).Scan(&originalCiphertext, &keyVersion, &credentialVersion); err != nil {
 		t.Fatalf("read stored credential: %v", err)
 	}
-	if bytes.Contains(originalCiphertext, []byte(instanceInput["password"].(string))) {
+	if bytes.Contains(originalCiphertext, []byte(targetPassword)) {
 		t.Fatal("stored credential contains plaintext password")
 	}
 	if keyVersion != 1 || credentialVersion != 1 {

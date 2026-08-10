@@ -52,7 +52,8 @@ func (service *Service) RunOnce(ctx context.Context) error {
 
 func (service *Service) collectTarget(ctx context.Context, target instance.ListCollectionTargetsRow) error {
 	now := service.clock.Now().UTC()
-	password, err := service.keyring.DecryptPassword(uuidFromPGType(target.ID), target.PasswordCiphertext, target.PasswordKeyVersion)
+	instanceID := uuid.UUID(target.ID.Bytes)
+	password, err := service.keyring.DecryptPassword(instanceID, target.PasswordCiphertext, target.PasswordKeyVersion)
 	if err != nil {
 		return fmt.Errorf("read instance credential: %w", err)
 	}
@@ -179,10 +180,6 @@ func targetConnectionConfig(target instance.ListCollectionTargetsRow, password s
 	config.User = target.Username
 	config.Password = password
 	return config, nil
-}
-
-func uuidFromPGType(value pgtype.UUID) uuid.UUID {
-	return uuid.UUID(value.Bytes)
 }
 
 func (service *Service) Run(ctx context.Context, interval time.Duration) {

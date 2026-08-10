@@ -12,6 +12,10 @@ import (
 )
 
 func TestCredentialKeyringRoundTripAndNonceIsolation(t *testing.T) {
+	const (
+		password   = "not-written-to-errors"
+		gcmTagSize = 16
+	)
 	directory := filepath.Join(t.TempDir(), "credentials")
 	keyring, err := OpenCredentialKeyring(directory, false)
 	if err != nil {
@@ -19,24 +23,24 @@ func TestCredentialKeyringRoundTripAndNonceIsolation(t *testing.T) {
 	}
 	instanceID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
-	first, firstVersion, err := keyring.EncryptPassword(instanceID, "not-written-to-errors")
+	first, firstVersion, err := keyring.EncryptPassword(instanceID, password)
 	if err != nil {
 		t.Fatalf("encrypt first password: %v", err)
 	}
-	second, secondVersion, err := keyring.EncryptPassword(instanceID, "not-written-to-errors")
+	second, secondVersion, err := keyring.EncryptPassword(instanceID, password)
 	if err != nil {
 		t.Fatalf("encrypt second password: %v", err)
 	}
 	if firstVersion != secondVersion || firstVersion != 1 {
 		t.Fatalf("key versions = %d, %d, want 1, 1", firstVersion, secondVersion)
 	}
-	if len(first) != 1+12+len("not-written-to-errors")+16 {
+	if len(first) != credentialEnvelopeHeaderSize+len(password)+gcmTagSize {
 		t.Fatalf("envelope length = %d, want format byte + nonce + ciphertext/tag", len(first))
 	}
 	if bytes.Equal(first, second) {
 		t.Fatal("two encryptions reused an envelope")
 	}
-	if len(first) < 13 || len(second) < 13 || bytes.Equal(first[1:13], second[1:13]) {
+	if bytes.Equal(first[1:credentialEnvelopeHeaderSize], second[1:credentialEnvelopeHeaderSize]) {
 		t.Fatal("two encryptions reused a nonce")
 	}
 
@@ -44,7 +48,7 @@ func TestCredentialKeyringRoundTripAndNonceIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decrypt password: %v", err)
 	}
-	if plaintext != "not-written-to-errors" {
+	if plaintext != password {
 		t.Fatal("decrypted password did not round-trip")
 	}
 
@@ -52,22 +56,22 @@ func TestCredentialKeyringRoundTripAndNonceIsolation(t *testing.T) {
 	tampered[len(tampered)-1] ^= 1
 	assertCredentialFault(t, decryptError(keyring, instanceID, tampered, firstVersion), CredentialFaultAuthentication)
 	otherInstance := uuid.MustParse("00000000-0000-0000-0000-000000000002")
-	if err := decryptError(keyring, otherInstance, first, firstVersion); err == nil {
-		t.Fatal("ciphertext copied to another instance decrypted successfully")
-	} else {
-		assertCredentialFault(t, err, CredentialFaultAuthentication)
-		if strings.Contains(err.Error(), "not-written-to-errors") {
-			t.Fatalf("credential fault exposed plaintext: %v", err)
-		}
+	err = decryptError(keyring, otherInstance, first, firstVersion)
+	assertCredentialFault(t, err, CredentialFaultAuthentication)
+	if strings.Contains(err.Error(), password) {
+		t.Fatalf("credential fault exposed plaintext: %v", err)
 	}
 }
 
 func TestCredentialKeyringGeneratesOnlyOnce(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		t.Fatalf("create empty credential directory: %v", err)
+	}
 	if _, err := OpenCredentialKeyring(directory, false); err != nil {
 		t.Fatalf("open new keyring: %v", err)
 	}
-	path := filepath.Join(directory, "master-key-v1")
+	path := filepath.Join(directory, credentialKeyFilename(1))
 	first, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read generated key: %v", err)
@@ -79,7 +83,7 @@ func TestCredentialKeyringGeneratesOnlyOnce(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("key permissions = %04o, want 0600", info.Mode().Perm())
 	}
-	current, err := os.ReadFile(filepath.Join(directory, "current"))
+	current, err := os.ReadFile(filepath.Join(directory, credentialCurrentVersionFilename))
 	if err != nil {
 		t.Fatalf("read current key pointer: %v", err)
 	}
@@ -98,11 +102,19 @@ func TestCredentialKeyringGeneratesOnlyOnce(t *testing.T) {
 	}
 }
 
+func TestCredentialKeyringRejectsOrphanedKey(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "credentials")
+	writeCredentialFile(t, directory, credentialKeyFilename(1), make([]byte, credentialKeySize), 0o600)
+
+	_, err := OpenCredentialKeyring(directory, false)
+	assertCredentialFault(t, err, CredentialFaultCurrentKey)
+}
+
 func TestCredentialKeyringFaults(t *testing.T) {
 	tests := []struct {
-		name string
-		make func(*testing.T, string)
-		want CredentialFaultCode
+		name  string
+		setup func(*testing.T, string)
+		want  CredentialFaultCode
 	}{
 		{
 			name: "missing keyring with encrypted credentials",
@@ -110,32 +122,32 @@ func TestCredentialKeyringFaults(t *testing.T) {
 		},
 		{
 			name: "missing current master key",
-			make: func(t *testing.T, directory string) {
-				writeCredentialFile(t, directory, "current", []byte("1\n"), 0o600)
+			setup: func(t *testing.T, directory string) {
+				writeCredentialFile(t, directory, credentialCurrentVersionFilename, []byte("1\n"), 0o600)
 			},
 			want: CredentialFaultMissingKey,
 		},
 		{
 			name: "dangling current",
-			make: func(t *testing.T, directory string) {
-				writeCredentialFile(t, directory, "current", []byte("2\n"), 0o600)
-				writeCredentialFile(t, directory, "master-key-v1", make([]byte, 32), 0o600)
+			setup: func(t *testing.T, directory string) {
+				writeCredentialFile(t, directory, credentialCurrentVersionFilename, []byte("2\n"), 0o600)
+				writeCredentialFile(t, directory, credentialKeyFilename(1), make([]byte, credentialKeySize), 0o600)
 			},
 			want: CredentialFaultCurrentKey,
 		},
 		{
 			name: "wrong key length",
-			make: func(t *testing.T, directory string) {
-				writeCredentialFile(t, directory, "current", []byte("1\n"), 0o600)
-				writeCredentialFile(t, directory, "master-key-v1", make([]byte, 31), 0o600)
+			setup: func(t *testing.T, directory string) {
+				writeCredentialFile(t, directory, credentialCurrentVersionFilename, []byte("1\n"), 0o600)
+				writeCredentialFile(t, directory, credentialKeyFilename(1), make([]byte, credentialKeySize-1), 0o600)
 			},
 			want: CredentialFaultKeyLength,
 		},
 		{
 			name: "wrong key permissions",
-			make: func(t *testing.T, directory string) {
-				writeCredentialFile(t, directory, "current", []byte("1\n"), 0o600)
-				writeCredentialFile(t, directory, "master-key-v1", make([]byte, 32), 0o640)
+			setup: func(t *testing.T, directory string) {
+				writeCredentialFile(t, directory, credentialCurrentVersionFilename, []byte("1\n"), 0o600)
+				writeCredentialFile(t, directory, credentialKeyFilename(1), make([]byte, credentialKeySize), 0o640)
 			},
 			want: CredentialFaultKeyPermissions,
 		},
@@ -144,8 +156,8 @@ func TestCredentialKeyringFaults(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			directory := filepath.Join(t.TempDir(), "credentials")
-			if test.make != nil {
-				test.make(t, directory)
+			if test.setup != nil {
+				test.setup(t, directory)
 			}
 			_, err := OpenCredentialKeyring(directory, true)
 			assertCredentialFault(t, err, test.want)
@@ -158,7 +170,7 @@ func TestCredentialKeyringRejectsUnknownVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open keyring: %v", err)
 	}
-	err = decryptError(keyring, uuid.New(), make([]byte, 29), 2)
+	err = decryptError(keyring, uuid.New(), nil, 2)
 	assertCredentialFault(t, err, CredentialFaultUnknownKeyVersion)
 }
 
