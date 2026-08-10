@@ -3,3 +3,12 @@ body { background: #f9f9f7; color: #0b0b0b; }
 table { border-collapse: collapse; width: 100%; margin-top: 12px; }
 th, td { border-bottom: 1px solid #e1e0d9; padding: 8px; text-align: left; }
 figcaption { color: #52514e; font-size: 13px; }
+.app-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.header-link { color: rgba(255, 255, 255, 0.82); }
+.header-link:hover { color: #fff; }
+.header-user { color: rgba(255, 255, 255, 0.9); }
+@media (max-width: 640px) {
+  .app-header { padding-inline: 16px; }
+  .app-header h3 { display: none; }
+  .app-header .ant-space { gap: 10px !important; }
+}

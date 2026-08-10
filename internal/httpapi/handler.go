@@ -37,6 +37,7 @@ const (
 )
 
 type authenticatedAgentKey struct{}
+type authenticatedUserKey struct{}
 
 type Handler struct {
 	platform      *db.Pool
@@ -511,7 +512,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			return nil, nil
 		}
 		hash := sha256.Sum256([]byte(cookie.Value))
-		role, err := New(handler.platform).GetSessionRole(ctx, GetSessionRoleParams{
+		user, err := New(handler.platform).GetSessionUser(ctx, GetSessionUserParams{
 			TokenHash: hash[:], ExpiresAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 		})
 		if err != nil {
@@ -523,11 +524,11 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		if roleRank(role) < roleRank(required) {
+		if roleRank(user.Role) < roleRank(required) {
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		return next(ctx, writer, request, value)
+		return next(context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes)), writer, request, value)
 	}
 }
 
@@ -537,6 +538,9 @@ var RequiredRoles = map[string]string{
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"ListCollectionTaskStates": "READONLY", "UpdateCollectionTaskInterval": "PLATFORM_ADMIN",
 	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
+	"GetCurrentUser": "READONLY", "ChangeOwnPassword": "READONLY", "ListUsers": "READONLY",
+	"CreateUser": "PLATFORM_ADMIN", "ResetUserPassword": "PLATFORM_ADMIN",
+	"UpdateUserRole": "PLATFORM_ADMIN", "UpdateUserStatus": "PLATFORM_ADMIN",
 }
 
 func roleRank(role string) int {

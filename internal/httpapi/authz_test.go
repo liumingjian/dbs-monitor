@@ -72,7 +72,8 @@ func TestResponseSchemasDoNotExposeSecrets(t *testing.T) {
 				}
 				for mediaType, media := range responseRef.Value.Content {
 					if media.Schema != nil {
-						assertNoSecretProperties(t, fmt.Sprintf("%s %s response %s %s", method, path, status, mediaType), media.Schema, map[*openapi3.Schema]bool{}, method == "POST" && path == "/api/v1/instances" && status == "201")
+						allowOneTimeSecret := responseMayExposeOneTimeSecret(method, path, status)
+						assertNoSecretProperties(t, fmt.Sprintf("%s %s response %s %s", method, path, status, mediaType), media.Schema, map[*openapi3.Schema]bool{}, allowOneTimeSecret)
 					}
 				}
 			}
@@ -80,7 +81,20 @@ func TestResponseSchemasDoNotExposeSecrets(t *testing.T) {
 	}
 }
 
-func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.SchemaRef, visited map[*openapi3.Schema]bool, allowAgentToken bool) {
+func responseMayExposeOneTimeSecret(method, path, status string) bool {
+	switch {
+	case method == "POST" && status == "201" && path == "/api/v1/instances":
+		return true
+	case method == "POST" && status == "201" && path == "/api/v1/users":
+		return true
+	case method == "POST" && status == "200" && strings.HasSuffix(path, "/password"):
+		return true
+	default:
+		return false
+	}
+}
+
+func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.SchemaRef, visited map[*openapi3.Schema]bool, allowOneTimeSecret bool) {
 	t.Helper()
 	if ref == nil || ref.Value == nil || visited[ref.Value] {
 		return
@@ -88,7 +102,7 @@ func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.Schem
 	visited[ref.Value] = true
 
 	for name, property := range ref.Value.Properties {
-		if allowAgentToken && name == "agent_token" {
+		if allowOneTimeSecret && (name == "agent_token" || name == "initial_password" || name == "password") {
 			continue
 		}
 		lower := strings.ToLower(name)
@@ -101,7 +115,7 @@ func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.Schem
 	}
 	assertNoSecretProperties(t, location+"[]", ref.Value.Items, visited, false)
 	for _, child := range append(append(ref.Value.AllOf, ref.Value.OneOf...), ref.Value.AnyOf...) {
-		assertNoSecretProperties(t, location, child, visited, allowAgentToken)
+		assertNoSecretProperties(t, location, child, visited, allowOneTimeSecret)
 	}
 }
 
