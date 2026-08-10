@@ -44,6 +44,9 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		{"NoDataPolicy", mapKeys(map[api.NoDataPolicy]string{
 			api.Ignore: "", api.MarkNoData: "",
 		})},
+		{"AlertRuleScope", mapKeys(map[api.AlertRuleScope]string{
+			api.ALL: "", api.INSTANCES: "",
+		})},
 	}
 
 	for _, tt := range tests {

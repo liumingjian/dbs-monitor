@@ -323,6 +323,82 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/alert-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - alert-rules
+      operationId: updateAlertRule
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleInput'
+      responses:
+        '200':
+          description: Updated alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-rules/{id}/enabled:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - alert-rules
+      operationId: updateAlertRuleEnabled
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleEnabledInput'
+      responses:
+        '200':
+          description: Updated alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid enablement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/agent/v1/report:
     post:
       tags:
@@ -612,6 +688,11 @@ components:
       enum:
         - ignore
         - mark_no_data
+    AlertRuleScope:
+      type: string
+      enum:
+        - ALL
+        - INSTANCES
     AlertRuleInput:
       type: object
       required:
@@ -624,9 +705,11 @@ components:
         - recovery_threshold
         - window_seconds
         - consecutive_count
-        - recovery_consecutive_count
         - severity
         - no_data_policy
+        - scope
+        - instance_ids
+        - evaluation_interval_seconds
         - enabled
       properties:
         name:
@@ -647,6 +730,7 @@ components:
         recovery_threshold:
           type: number
           format: double
+          x-go-type: '*float64'
         window_seconds:
           type: integer
           minimum: 1
@@ -660,6 +744,17 @@ components:
           $ref: '#/components/schemas/AlertSeverity'
         no_data_policy:
           $ref: '#/components/schemas/NoDataPolicy'
+        scope:
+          $ref: '#/components/schemas/AlertRuleScope'
+        instance_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        evaluation_interval_seconds:
+          type: integer
+          minimum: 5
         enabled:
           type: boolean
     AlertRule:
@@ -678,6 +773,9 @@ components:
         - recovery_consecutive_count
         - severity
         - no_data_policy
+        - scope
+        - instance_ids
+        - evaluation_interval_seconds
         - enabled
         - version
         - created_at
@@ -712,8 +810,23 @@ components:
           $ref: '#/components/schemas/AlertSeverity'
         no_data_policy:
           $ref: '#/components/schemas/NoDataPolicy'
+        scope:
+          $ref: '#/components/schemas/AlertRuleScope'
+        instance_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        evaluation_interval_seconds:
+          type: integer
         enabled:
           type: boolean
+        enabled_updated_by:
+          type: string
+          format: uuid
+        enabled_updated_at:
+          type: string
+          format: date-time
         version:
           type: integer
         created_at:
@@ -722,6 +835,13 @@ components:
         updated_at:
           type: string
           format: date-time
+    AlertRuleEnabledInput:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
     InstanceInput:
       type: object
       required:

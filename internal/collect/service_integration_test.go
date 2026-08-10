@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
-	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
@@ -74,8 +73,9 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 
 	dialer := &countingDialer{}
-	collector := New(platform, dialer, clock.Real{}, keyring)
-	eval := evaluator.New(platform, clock.Real{})
+	currentClock := &fixedClock{now: time.Now().UTC()}
+	collector := New(platform, dialer, currentClock, keyring)
+	eval := evaluator.New(platform, currentClock)
 
 	extra := make([]*pgx.Conn, 25)
 	for index := range extra {
@@ -92,7 +92,10 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		}
 	}()
 
-	for range 3 {
+	for cycle := range 3 {
+		if cycle > 0 {
+			currentClock.Advance(30 * time.Second)
+		}
 		if err := collector.RunOnce(ctx); err != nil {
 			t.Fatalf("collect breaching sample: %v", err)
 		}
@@ -172,6 +175,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if !skippedWatermark.Equal(healthyWatermark) {
 		t.Fatalf("integrity watermark advanced from %s to %s after backpressure skip", healthyWatermark, skippedWatermark)
 	}
+	currentClock.Advance(30 * time.Second)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("recover after backpressure skip: %v", err)
 	}
@@ -185,6 +189,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		t.Fatalf("make target unreachable: %v", err)
 	}
 	for range 2 {
+		currentClock.Advance(30 * time.Second)
 		if err := collector.RunOnce(ctx); err != nil {
 			t.Fatalf("record unreachable target: %v", err)
 		}
@@ -222,7 +227,8 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("restore target port: %v", err)
 	}
-	for range 2 {
+	for range 3 {
+		currentClock.Advance(30 * time.Second)
 		if err := collector.RunOnce(ctx); err != nil {
 			t.Fatalf("collect recovery sample: %v", err)
 		}
@@ -478,3 +484,5 @@ func (clock fixedClock) Now() time.Time { return clock.now }
 func (clock fixedClock) Ticker(time.Duration) (<-chan time.Time, func()) {
 	return make(chan time.Time), func() {}
 }
+
+func (clock *fixedClock) Advance(duration time.Duration) { clock.now = clock.now.Add(duration) }

@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addAlertRuleScopeInstance = `-- name: AddAlertRuleScopeInstance :exec
+INSERT INTO alert_rule_scope_instance (rule_id, instance_id)
+VALUES ($1, $2)
+`
+
+type AddAlertRuleScopeInstanceParams struct {
+	RuleID     pgtype.UUID
+	InstanceID pgtype.UUID
+}
+
+func (q *Queries) AddAlertRuleScopeInstance(ctx context.Context, arg AddAlertRuleScopeInstanceParams) error {
+	_, err := q.db.Exec(ctx, addAlertRuleScopeInstance, arg.RuleID, arg.InstanceID)
+	return err
+}
+
+const alertRuleTargetInstanceExists = `-- name: AlertRuleTargetInstanceExists :one
+SELECT EXISTS (SELECT 1 FROM instance WHERE id = $1)
+`
+
+func (q *Queries) AlertRuleTargetInstanceExists(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, alertRuleTargetInstanceExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const createAlertEvent = `-- name: CreateAlertEvent :exec
 INSERT INTO alert_event (
     alert_instance_id, rule_id, rule_version, kind,
@@ -54,28 +80,31 @@ INSERT INTO alert_rule (
     id, name, metric_id, aggregation, operator, threshold,
     recovery_operator, recovery_threshold, window_seconds,
     consecutive_count, recovery_consecutive_count, severity,
-    no_data_policy, enabled, version, created_at, updated_at
+    no_data_policy, scope, evaluation_interval_seconds,
+    enabled, version, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1, $15, $15)
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17)
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at
 `
 
 type CreateAlertRuleParams struct {
-	ID                       pgtype.UUID
-	Name                     string
-	MetricID                 string
-	Aggregation              string
-	Operator                 string
-	Threshold                float64
-	RecoveryOperator         string
-	RecoveryThreshold        float64
-	WindowSeconds            int32
-	ConsecutiveCount         int32
-	RecoveryConsecutiveCount int32
-	Severity                 string
-	NoDataPolicy             string
-	Enabled                  bool
-	CreatedAt                pgtype.Timestamptz
+	ID                        pgtype.UUID
+	Name                      string
+	MetricID                  string
+	Aggregation               string
+	Operator                  string
+	Threshold                 float64
+	RecoveryOperator          string
+	RecoveryThreshold         float64
+	WindowSeconds             int32
+	ConsecutiveCount          int32
+	RecoveryConsecutiveCount  int32
+	Severity                  string
+	NoDataPolicy              string
+	Scope                     string
+	EvaluationIntervalSeconds int32
+	Enabled                   bool
+	CreatedAt                 pgtype.Timestamptz
 }
 
 func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error) {
@@ -93,6 +122,8 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		arg.RecoveryConsecutiveCount,
 		arg.Severity,
 		arg.NoDataPolicy,
+		arg.Scope,
+		arg.EvaluationIntervalSeconds,
 		arg.Enabled,
 		arg.CreatedAt,
 	)
@@ -115,6 +146,10 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		&i.Version,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Scope,
+		&i.EvaluationIntervalSeconds,
+		&i.EnabledUpdatedBy,
+		&i.EnabledUpdatedAt,
 	)
 	return i, err
 }
@@ -139,6 +174,48 @@ func (q *Queries) CreateAlertRuleVersion(ctx context.Context, arg CreateAlertRul
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const deleteAlertRuleScopeInstances = `-- name: DeleteAlertRuleScopeInstances :exec
+DELETE FROM alert_rule_scope_instance WHERE rule_id = $1
+`
+
+func (q *Queries) DeleteAlertRuleScopeInstances(ctx context.Context, ruleID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAlertRuleScopeInstances, ruleID)
+	return err
+}
+
+const getAlertRule = `-- name: GetAlertRule :one
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at FROM alert_rule WHERE id = $1
+`
+
+func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, error) {
+	row := q.db.QueryRow(ctx, getAlertRule, id)
+	var i AlertRule
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.MetricID,
+		&i.Aggregation,
+		&i.Operator,
+		&i.Threshold,
+		&i.RecoveryOperator,
+		&i.RecoveryThreshold,
+		&i.WindowSeconds,
+		&i.ConsecutiveCount,
+		&i.RecoveryConsecutiveCount,
+		&i.Severity,
+		&i.NoDataPolicy,
+		&i.Enabled,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Scope,
+		&i.EvaluationIntervalSeconds,
+		&i.EnabledUpdatedBy,
+		&i.EnabledUpdatedAt,
+	)
+	return i, err
 }
 
 const getAlertStatus = `-- name: GetAlertStatus :one
@@ -180,29 +257,39 @@ SELECT rule.id AS rule_id,
        instance.id AS instance_id,
        collect_state.last_error_code,
        alert.id AS alert_instance_id,
-       alert.status,
-       alert.rule_version AS evaluated_rule_version,
-       alert.breach_count,
-       alert.recovery_count,
-       alert.no_data_count,
-       alert.state_before_no_data
+       COALESCE(alert.status, 'OK') AS status,
+       COALESCE(alert.rule_version, 0) AS evaluated_rule_version,
+       COALESCE(alert.breach_count, 0) AS breach_count,
+       COALESCE(alert.recovery_count, 0) AS recovery_count,
+       COALESCE(alert.no_data_count, 0) AS no_data_count,
+       alert.state_before_no_data,
+       COALESCE(collection_config.agent_metrics_enabled, true) AS agent_metrics_enabled
 FROM alert_rule rule
 JOIN alert_rule_version version
   ON version.rule_id = rule.id AND version.version = rule.version
 CROSS JOIN instance
+LEFT JOIN instance_collection_config collection_config
+  ON collection_config.instance_id = instance.id
 LEFT JOIN instance_collect_state collect_state
   ON collect_state.instance_id = instance.id AND collect_state.source = 'SERVER_DIRECT'
-LEFT JOIN alert_instance alert
-  ON alert.rule_id = rule.id
- AND alert.instance_id = instance.id
- AND alert.metric_dimension_key = '{}'
-WHERE rule.id = $1
-  AND instance.id = $2
+LEFT JOIN LATERAL (
+    SELECT candidate.instance_id, candidate.metric_id, candidate.status, candidate.breach_count, candidate.recovery_count, candidate.no_data_count, candidate.state_before_no_data, candidate.unavailability, candidate.updated_at, candidate.id, candidate.rule_id, candidate.rule_version, candidate.severity, candidate.current_value, candidate.rule_snapshot, candidate.metric_dimension_key, candidate.first_triggered_at, candidate.first_rule_version, candidate.first_rule_snapshot, candidate.recovered_at
+    FROM alert_instance candidate
+    WHERE candidate.rule_id = rule.id
+      AND candidate.instance_id = instance.id
+      AND candidate.metric_dimension_key = $1
+    ORDER BY (candidate.status <> 'RECOVERED') DESC, candidate.updated_at DESC
+    LIMIT 1
+) alert ON true
+WHERE rule.id = $2
+  AND instance.id = $3
+  AND rule.enabled
 `
 
 type GetEvaluationTargetParams struct {
-	RuleID     pgtype.UUID
-	InstanceID pgtype.UUID
+	MetricDimensionKey string
+	RuleID             pgtype.UUID
+	InstanceID         pgtype.UUID
 }
 
 type GetEvaluationTargetRow struct {
@@ -223,16 +310,17 @@ type GetEvaluationTargetRow struct {
 	InstanceID               pgtype.UUID
 	LastErrorCode            pgtype.Text
 	AlertInstanceID          pgtype.UUID
-	Status                   pgtype.Text
-	EvaluatedRuleVersion     pgtype.Int4
-	BreachCount              pgtype.Int4
-	RecoveryCount            pgtype.Int4
-	NoDataCount              pgtype.Int4
+	Status                   string
+	EvaluatedRuleVersion     int32
+	BreachCount              int32
+	RecoveryCount            int32
+	NoDataCount              int32
 	StateBeforeNoData        pgtype.Text
+	AgentMetricsEnabled      bool
 }
 
 func (q *Queries) GetEvaluationTarget(ctx context.Context, arg GetEvaluationTargetParams) (GetEvaluationTargetRow, error) {
-	row := q.db.QueryRow(ctx, getEvaluationTarget, arg.RuleID, arg.InstanceID)
+	row := q.db.QueryRow(ctx, getEvaluationTarget, arg.MetricDimensionKey, arg.RuleID, arg.InstanceID)
 	var i GetEvaluationTargetRow
 	err := row.Scan(
 		&i.RuleID,
@@ -258,12 +346,40 @@ func (q *Queries) GetEvaluationTarget(ctx context.Context, arg GetEvaluationTarg
 		&i.RecoveryCount,
 		&i.NoDataCount,
 		&i.StateBeforeNoData,
+		&i.AgentMetricsEnabled,
 	)
 	return i, err
 }
 
+const listAlertRuleScopeInstances = `-- name: ListAlertRuleScopeInstances :many
+SELECT instance_id
+FROM alert_rule_scope_instance
+WHERE rule_id = $1
+ORDER BY instance_id
+`
+
+func (q *Queries) ListAlertRuleScopeInstances(ctx context.Context, ruleID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAlertRuleScopeInstances, ruleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var instance_id pgtype.UUID
+		if err := rows.Scan(&instance_id); err != nil {
+			return nil, err
+		}
+		items = append(items, instance_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAlertRules = `-- name: ListAlertRules :many
-SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at FROM alert_rule ORDER BY created_at, id
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at FROM alert_rule ORDER BY created_at, id
 `
 
 func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
@@ -293,6 +409,10 @@ func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Scope,
+			&i.EvaluationIntervalSeconds,
+			&i.EnabledUpdatedBy,
+			&i.EnabledUpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -305,20 +425,47 @@ func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 }
 
 const listEvaluationTargets = `-- name: ListEvaluationTargets :many
-SELECT rule.id AS rule_id, instance.id AS instance_id
+SELECT rule.id AS rule_id,
+       instance.id AS instance_id,
+       COALESCE(dimension.metric_dimension_key, '{}') AS metric_dimension_key
 FROM alert_rule rule
 CROSS JOIN instance
+LEFT JOIN LATERAL (
+    SELECT series.labels_key AS metric_dimension_key
+    FROM metric_series series
+    WHERE series.instance_id = instance.id
+      AND series.metric_id = rule.metric_id
+    UNION
+    SELECT alert.metric_dimension_key
+    FROM alert_instance alert
+    WHERE alert.rule_id = rule.id
+      AND alert.instance_id = instance.id
+      AND alert.status <> 'RECOVERED'
+) dimension ON true
+LEFT JOIN alert_rule_evaluation_state evaluation_state
+  ON evaluation_state.rule_id = rule.id
+ AND evaluation_state.instance_id = instance.id
+ AND evaluation_state.metric_dimension_key = COALESCE(dimension.metric_dimension_key, '{}')
 WHERE rule.enabled
-ORDER BY instance.id, rule.id
+  AND (rule.scope = 'ALL' OR EXISTS (
+      SELECT 1
+      FROM alert_rule_scope_instance scope_instance
+      WHERE scope_instance.rule_id = rule.id
+        AND scope_instance.instance_id = instance.id
+  ))
+  AND (evaluation_state.last_evaluated_at IS NULL
+       OR evaluation_state.last_evaluated_at <= $1::timestamptz - rule.evaluation_interval_seconds * interval '1 second')
+ORDER BY instance.id, rule.id, 3
 `
 
 type ListEvaluationTargetsRow struct {
-	RuleID     pgtype.UUID
-	InstanceID pgtype.UUID
+	RuleID             pgtype.UUID
+	InstanceID         pgtype.UUID
+	MetricDimensionKey string
 }
 
-func (q *Queries) ListEvaluationTargets(ctx context.Context) ([]ListEvaluationTargetsRow, error) {
-	rows, err := q.db.Query(ctx, listEvaluationTargets)
+func (q *Queries) ListEvaluationTargets(ctx context.Context, evaluatedAt pgtype.Timestamptz) ([]ListEvaluationTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listEvaluationTargets, evaluatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +473,7 @@ func (q *Queries) ListEvaluationTargets(ctx context.Context) ([]ListEvaluationTa
 	var items []ListEvaluationTargetsRow
 	for rows.Next() {
 		var i ListEvaluationTargetsRow
-		if err := rows.Scan(&i.RuleID, &i.InstanceID); err != nil {
+		if err := rows.Scan(&i.RuleID, &i.InstanceID, &i.MetricDimensionKey); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -337,22 +484,139 @@ func (q *Queries) ListEvaluationTargets(ctx context.Context) ([]ListEvaluationTa
 	return items, nil
 }
 
+const markAlertRuleEvaluated = `-- name: MarkAlertRuleEvaluated :exec
+INSERT INTO alert_rule_evaluation_state (
+    rule_id, instance_id, metric_dimension_key, last_evaluated_at
+)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (rule_id, instance_id, metric_dimension_key)
+DO UPDATE SET last_evaluated_at = EXCLUDED.last_evaluated_at
+`
+
+type MarkAlertRuleEvaluatedParams struct {
+	RuleID             pgtype.UUID
+	InstanceID         pgtype.UUID
+	MetricDimensionKey string
+	LastEvaluatedAt    pgtype.Timestamptz
+}
+
+func (q *Queries) MarkAlertRuleEvaluated(ctx context.Context, arg MarkAlertRuleEvaluatedParams) error {
+	_, err := q.db.Exec(ctx, markAlertRuleEvaluated,
+		arg.RuleID,
+		arg.InstanceID,
+		arg.MetricDimensionKey,
+		arg.LastEvaluatedAt,
+	)
+	return err
+}
+
+const recoverAlertSnapshot = `-- name: RecoverAlertSnapshot :one
+UPDATE alert_instance
+SET metric_id = $2,
+    status = 'RECOVERED',
+    rule_version = $3,
+    severity = $4,
+    current_value = $5,
+    rule_snapshot = $6,
+    breach_count = $7,
+    recovery_count = $8,
+    no_data_count = $9,
+    state_before_no_data = NULL,
+    unavailability = NULL,
+    updated_at = $10,
+    recovered_at = $10
+WHERE id = $1
+  AND status <> 'RECOVERED'
+RETURNING id
+`
+
+type RecoverAlertSnapshotParams struct {
+	ID            pgtype.UUID
+	MetricID      string
+	RuleVersion   int32
+	Severity      string
+	CurrentValue  pgtype.Float8
+	RuleSnapshot  []byte
+	BreachCount   int32
+	RecoveryCount int32
+	NoDataCount   int32
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) RecoverAlertSnapshot(ctx context.Context, arg RecoverAlertSnapshotParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, recoverAlertSnapshot,
+		arg.ID,
+		arg.MetricID,
+		arg.RuleVersion,
+		arg.Severity,
+		arg.CurrentValue,
+		arg.RuleSnapshot,
+		arg.BreachCount,
+		arg.RecoveryCount,
+		arg.NoDataCount,
+		arg.UpdatedAt,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const resetIgnoredMissingAlert = `-- name: ResetIgnoredMissingAlert :exec
+UPDATE alert_instance
+SET rule_version = $2,
+    severity = $3,
+    rule_snapshot = $4,
+    breach_count = $5,
+    recovery_count = $6,
+    no_data_count = $7,
+    updated_at = $8
+WHERE id = $1
+  AND status <> 'RECOVERED'
+`
+
+type ResetIgnoredMissingAlertParams struct {
+	ID            pgtype.UUID
+	RuleVersion   int32
+	Severity      string
+	RuleSnapshot  []byte
+	BreachCount   int32
+	RecoveryCount int32
+	NoDataCount   int32
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) ResetIgnoredMissingAlert(ctx context.Context, arg ResetIgnoredMissingAlertParams) error {
+	_, err := q.db.Exec(ctx, resetIgnoredMissingAlert,
+		arg.ID,
+		arg.RuleVersion,
+		arg.Severity,
+		arg.RuleSnapshot,
+		arg.BreachCount,
+		arg.RecoveryCount,
+		arg.NoDataCount,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const samplesInRuleWindow = `-- name: SamplesInRuleWindow :many
 SELECT sample.ts, sample.value
 FROM metric_series series
 JOIN metric_sample sample ON sample.series_id = series.series_id
 WHERE series.instance_id = $1
   AND series.metric_id = $2
-  AND sample.ts > $3
-  AND sample.ts <= $4
+  AND series.labels_key = $3
+  AND sample.ts > $4
+  AND sample.ts <= $5
 ORDER BY sample.ts DESC
 `
 
 type SamplesInRuleWindowParams struct {
-	InstanceID  pgtype.UUID
-	MetricID    string
-	WindowStart pgtype.Timestamptz
-	WindowEnd   pgtype.Timestamptz
+	InstanceID         pgtype.UUID
+	MetricID           string
+	MetricDimensionKey string
+	WindowStart        pgtype.Timestamptz
+	WindowEnd          pgtype.Timestamptz
 }
 
 type SamplesInRuleWindowRow struct {
@@ -364,6 +628,7 @@ func (q *Queries) SamplesInRuleWindow(ctx context.Context, arg SamplesInRuleWind
 	rows, err := q.db.Query(ctx, samplesInRuleWindow,
 		arg.InstanceID,
 		arg.MetricID,
+		arg.MetricDimensionKey,
 		arg.WindowStart,
 		arg.WindowEnd,
 	)
@@ -390,10 +655,12 @@ INSERT INTO alert_instance (
     rule_id, instance_id, metric_id, metric_dimension_key,
     status, rule_version, severity, current_value, rule_snapshot,
     breach_count, recovery_count, no_data_count,
-    state_before_no_data, unavailability, updated_at
+    state_before_no_data, unavailability, updated_at,
+    first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at
 )
-VALUES ($1, $2, $3, '{}', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 ON CONFLICT (rule_id, instance_id, metric_dimension_key)
+WHERE status <> 'RECOVERED'
 DO UPDATE SET metric_id = EXCLUDED.metric_id,
               status = EXCLUDED.status,
               rule_version = EXCLUDED.rule_version,
@@ -405,25 +672,34 @@ DO UPDATE SET metric_id = EXCLUDED.metric_id,
               no_data_count = EXCLUDED.no_data_count,
               state_before_no_data = EXCLUDED.state_before_no_data,
               unavailability = EXCLUDED.unavailability,
-              updated_at = EXCLUDED.updated_at
+              updated_at = EXCLUDED.updated_at,
+              first_triggered_at = COALESCE(alert_instance.first_triggered_at, EXCLUDED.first_triggered_at),
+              first_rule_version = COALESCE(alert_instance.first_rule_version, EXCLUDED.first_rule_version),
+              first_rule_snapshot = COALESCE(alert_instance.first_rule_snapshot, EXCLUDED.first_rule_snapshot),
+              recovered_at = EXCLUDED.recovered_at
 RETURNING id
 `
 
 type SaveAlertSnapshotParams struct {
-	RuleID            pgtype.UUID
-	InstanceID        pgtype.UUID
-	MetricID          string
-	Status            string
-	RuleVersion       int32
-	Severity          string
-	CurrentValue      pgtype.Float8
-	RuleSnapshot      []byte
-	BreachCount       int32
-	RecoveryCount     int32
-	NoDataCount       int32
-	StateBeforeNoData pgtype.Text
-	Unavailability    pgtype.Text
-	UpdatedAt         pgtype.Timestamptz
+	RuleID             pgtype.UUID
+	InstanceID         pgtype.UUID
+	MetricID           string
+	MetricDimensionKey string
+	Status             string
+	RuleVersion        int32
+	Severity           string
+	CurrentValue       pgtype.Float8
+	RuleSnapshot       []byte
+	BreachCount        int32
+	RecoveryCount      int32
+	NoDataCount        int32
+	StateBeforeNoData  pgtype.Text
+	Unavailability     pgtype.Text
+	UpdatedAt          pgtype.Timestamptz
+	FirstTriggeredAt   pgtype.Timestamptz
+	FirstRuleVersion   pgtype.Int4
+	FirstRuleSnapshot  []byte
+	RecoveredAt        pgtype.Timestamptz
 }
 
 func (q *Queries) SaveAlertSnapshot(ctx context.Context, arg SaveAlertSnapshotParams) (pgtype.UUID, error) {
@@ -431,6 +707,7 @@ func (q *Queries) SaveAlertSnapshot(ctx context.Context, arg SaveAlertSnapshotPa
 		arg.RuleID,
 		arg.InstanceID,
 		arg.MetricID,
+		arg.MetricDimensionKey,
 		arg.Status,
 		arg.RuleVersion,
 		arg.Severity,
@@ -442,8 +719,149 @@ func (q *Queries) SaveAlertSnapshot(ctx context.Context, arg SaveAlertSnapshotPa
 		arg.StateBeforeNoData,
 		arg.Unavailability,
 		arg.UpdatedAt,
+		arg.FirstTriggeredAt,
+		arg.FirstRuleVersion,
+		arg.FirstRuleSnapshot,
+		arg.RecoveredAt,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const setAlertRuleEnabled = `-- name: SetAlertRuleEnabled :one
+UPDATE alert_rule
+SET enabled = $2,
+    enabled_updated_by = $3,
+    enabled_updated_at = $4
+WHERE id = $1
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at
+`
+
+type SetAlertRuleEnabledParams struct {
+	ID               pgtype.UUID
+	Enabled          bool
+	EnabledUpdatedBy pgtype.UUID
+	EnabledUpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) SetAlertRuleEnabled(ctx context.Context, arg SetAlertRuleEnabledParams) (AlertRule, error) {
+	row := q.db.QueryRow(ctx, setAlertRuleEnabled,
+		arg.ID,
+		arg.Enabled,
+		arg.EnabledUpdatedBy,
+		arg.EnabledUpdatedAt,
+	)
+	var i AlertRule
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.MetricID,
+		&i.Aggregation,
+		&i.Operator,
+		&i.Threshold,
+		&i.RecoveryOperator,
+		&i.RecoveryThreshold,
+		&i.WindowSeconds,
+		&i.ConsecutiveCount,
+		&i.RecoveryConsecutiveCount,
+		&i.Severity,
+		&i.NoDataPolicy,
+		&i.Enabled,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Scope,
+		&i.EvaluationIntervalSeconds,
+		&i.EnabledUpdatedBy,
+		&i.EnabledUpdatedAt,
+	)
+	return i, err
+}
+
+const updateAlertRule = `-- name: UpdateAlertRule :one
+UPDATE alert_rule
+SET name = $2,
+    metric_id = $3,
+    aggregation = $4,
+    operator = $5,
+    threshold = $6,
+    recovery_operator = $7,
+    recovery_threshold = $8,
+    window_seconds = $9,
+    consecutive_count = $10,
+    recovery_consecutive_count = $11,
+    severity = $12,
+    no_data_policy = $13,
+    scope = $14,
+    evaluation_interval_seconds = $15,
+    version = version + 1,
+    updated_at = $16
+WHERE id = $1
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at
+`
+
+type UpdateAlertRuleParams struct {
+	ID                        pgtype.UUID
+	Name                      string
+	MetricID                  string
+	Aggregation               string
+	Operator                  string
+	Threshold                 float64
+	RecoveryOperator          string
+	RecoveryThreshold         float64
+	WindowSeconds             int32
+	ConsecutiveCount          int32
+	RecoveryConsecutiveCount  int32
+	Severity                  string
+	NoDataPolicy              string
+	Scope                     string
+	EvaluationIntervalSeconds int32
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams) (AlertRule, error) {
+	row := q.db.QueryRow(ctx, updateAlertRule,
+		arg.ID,
+		arg.Name,
+		arg.MetricID,
+		arg.Aggregation,
+		arg.Operator,
+		arg.Threshold,
+		arg.RecoveryOperator,
+		arg.RecoveryThreshold,
+		arg.WindowSeconds,
+		arg.ConsecutiveCount,
+		arg.RecoveryConsecutiveCount,
+		arg.Severity,
+		arg.NoDataPolicy,
+		arg.Scope,
+		arg.EvaluationIntervalSeconds,
+		arg.UpdatedAt,
+	)
+	var i AlertRule
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.MetricID,
+		&i.Aggregation,
+		&i.Operator,
+		&i.Threshold,
+		&i.RecoveryOperator,
+		&i.RecoveryThreshold,
+		&i.WindowSeconds,
+		&i.ConsecutiveCount,
+		&i.RecoveryConsecutiveCount,
+		&i.Severity,
+		&i.NoDataPolicy,
+		&i.Enabled,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Scope,
+		&i.EvaluationIntervalSeconds,
+		&i.EnabledUpdatedBy,
+		&i.EnabledUpdatedAt,
+	)
+	return i, err
 }

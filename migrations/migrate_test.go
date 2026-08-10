@@ -123,7 +123,8 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	for _, table := range []string{
 		"collection_task_config", "instance_collection_config",
 		"instance_collection_task_state", "instance_collection_connection_state",
-		"alert_rule", "alert_rule_version", "alert_event",
+		"alert_rule", "alert_rule_version", "alert_rule_scope_instance",
+		"alert_rule_evaluation_state", "alert_event",
 	} {
 		var exists bool
 		if err := database.QueryRowContext(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
@@ -133,17 +134,21 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 			t.Fatalf("collection plan table %q is missing", table)
 		}
 	}
-	var seedMetric string
+	var seedMetric, seedScope string
 	var seedVersion int
+	var seedEvaluationInterval int
 	var seedSnapshot []byte
-	if err := database.QueryRowContext(ctx, `SELECT rule.metric_id, version.version, version.snapshot
+	if err := database.QueryRowContext(ctx, `SELECT rule.metric_id, rule.scope, rule.evaluation_interval_seconds,
+		version.version, version.snapshot
 		FROM alert_rule rule
 		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = rule.version
-		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`).Scan(&seedMetric, &seedVersion, &seedSnapshot); err != nil {
+		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`).Scan(
+		&seedMetric, &seedScope, &seedEvaluationInterval, &seedVersion, &seedSnapshot); err != nil {
 		t.Fatalf("read seeded tracer rule: %v", err)
 	}
-	if seedMetric != "pg.connection.total" || seedVersion != 1 || len(seedSnapshot) == 0 {
-		t.Fatalf("seeded tracer rule = metric %q version %d snapshot %q", seedMetric, seedVersion, seedSnapshot)
+	if seedMetric != "pg.connection.total" || seedScope != "ALL" || seedEvaluationInterval != 5 || seedVersion != 1 || len(seedSnapshot) == 0 {
+		t.Fatalf("seeded tracer rule = metric %q scope %q interval %d version %d snapshot %q",
+			seedMetric, seedScope, seedEvaluationInterval, seedVersion, seedSnapshot)
 	}
 	_, err = database.ExecContext(ctx, `INSERT INTO collection_task_config (instance_id, task_id, interval_seconds)
 		VALUES ('00000000-0000-0000-0000-000000000001', 'pg.stat_database', 4)`)

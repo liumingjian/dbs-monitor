@@ -10,9 +10,11 @@ AlertRuleInput:
     - recovery_threshold
     - window_seconds
     - consecutive_count
-    - recovery_consecutive_count
     - severity
     - no_data_policy
+    - scope
+    - instance_ids
+    - evaluation_interval_seconds
     - enabled
   properties:
     name: { type: string, minLength: 1 }
@@ -21,12 +23,21 @@ AlertRuleInput:
     operator: { $ref: ../enums.yaml#/AlertOperator }
     threshold: { type: number, format: double }
     recovery_operator: { $ref: ../enums.yaml#/AlertOperator }
-    recovery_threshold: { type: number, format: double }
+    recovery_threshold:
+      type: number
+      format: double
+      x-go-type: "*float64"
     window_seconds: { type: integer, minimum: 1 }
     consecutive_count: { type: integer, minimum: 1 }
     recovery_consecutive_count: { type: integer, minimum: 1 }
     severity: { $ref: ../enums.yaml#/AlertSeverity }
     no_data_policy: { $ref: ../enums.yaml#/NoDataPolicy }
+    scope: { $ref: ../enums.yaml#/AlertRuleScope }
+    instance_ids:
+      type: array
+      uniqueItems: true
+      items: { type: string, format: uuid }
+    evaluation_interval_seconds: { type: integer, minimum: 5 }
     enabled: { type: boolean }
 AlertRule:
   type: object
@@ -44,6 +55,9 @@ AlertRule:
     - recovery_consecutive_count
     - severity
     - no_data_policy
+    - scope
+    - instance_ids
+    - evaluation_interval_seconds
     - enabled
     - version
     - created_at
@@ -62,7 +76,19 @@ AlertRule:
     recovery_consecutive_count: { type: integer }
     severity: { $ref: ../enums.yaml#/AlertSeverity }
     no_data_policy: { $ref: ../enums.yaml#/NoDataPolicy }
+    scope: { $ref: ../enums.yaml#/AlertRuleScope }
+    instance_ids:
+      type: array
+      items: { type: string, format: uuid }
+    evaluation_interval_seconds: { type: integer }
     enabled: { type: boolean }
+    enabled_updated_by: { type: string, format: uuid }
+    enabled_updated_at: { type: string, format: date-time }
     version: { type: integer }
     created_at: { type: string, format: date-time }
     updated_at: { type: string, format: date-time }
+AlertRuleEnabledInput:
+  type: object
+  required: [enabled]
+  properties:
+    enabled: { type: boolean }

@@ -1,26 +1,101 @@
 -- name: ListAlertRules :many
 SELECT * FROM alert_rule ORDER BY created_at, id;
 
+-- name: GetAlertRule :one
+SELECT * FROM alert_rule WHERE id = $1;
+
+-- name: ListAlertRuleScopeInstances :many
+SELECT instance_id
+FROM alert_rule_scope_instance
+WHERE rule_id = $1
+ORDER BY instance_id;
+
+-- name: AlertRuleTargetInstanceExists :one
+SELECT EXISTS (SELECT 1 FROM instance WHERE id = $1);
+
 -- name: CreateAlertRule :one
 INSERT INTO alert_rule (
     id, name, metric_id, aggregation, operator, threshold,
     recovery_operator, recovery_threshold, window_seconds,
     consecutive_count, recovery_consecutive_count, severity,
-    no_data_policy, enabled, version, created_at, updated_at
+    no_data_policy, scope, evaluation_interval_seconds,
+    enabled, version, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 1, $15, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17)
 RETURNING *;
+
+-- name: UpdateAlertRule :one
+UPDATE alert_rule
+SET name = $2,
+    metric_id = $3,
+    aggregation = $4,
+    operator = $5,
+    threshold = $6,
+    recovery_operator = $7,
+    recovery_threshold = $8,
+    window_seconds = $9,
+    consecutive_count = $10,
+    recovery_consecutive_count = $11,
+    severity = $12,
+    no_data_policy = $13,
+    scope = $14,
+    evaluation_interval_seconds = $15,
+    version = version + 1,
+    updated_at = $16
+WHERE id = $1
+RETURNING *;
+
+-- name: SetAlertRuleEnabled :one
+UPDATE alert_rule
+SET enabled = $2,
+    enabled_updated_by = $3,
+    enabled_updated_at = $4
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteAlertRuleScopeInstances :exec
+DELETE FROM alert_rule_scope_instance WHERE rule_id = $1;
+
+-- name: AddAlertRuleScopeInstance :exec
+INSERT INTO alert_rule_scope_instance (rule_id, instance_id)
+VALUES ($1, $2);
 
 -- name: CreateAlertRuleVersion :exec
 INSERT INTO alert_rule_version (rule_id, version, snapshot, created_at)
 VALUES ($1, $2, $3, $4);
 
 -- name: ListEvaluationTargets :many
-SELECT rule.id AS rule_id, instance.id AS instance_id
+SELECT rule.id AS rule_id,
+       instance.id AS instance_id,
+       COALESCE(dimension.metric_dimension_key, '{}') AS metric_dimension_key
 FROM alert_rule rule
 CROSS JOIN instance
+LEFT JOIN LATERAL (
+    SELECT series.labels_key AS metric_dimension_key
+    FROM metric_series series
+    WHERE series.instance_id = instance.id
+      AND series.metric_id = rule.metric_id
+    UNION
+    SELECT alert.metric_dimension_key
+    FROM alert_instance alert
+    WHERE alert.rule_id = rule.id
+      AND alert.instance_id = instance.id
+      AND alert.status <> 'RECOVERED'
+) dimension ON true
+LEFT JOIN alert_rule_evaluation_state evaluation_state
+  ON evaluation_state.rule_id = rule.id
+ AND evaluation_state.instance_id = instance.id
+ AND evaluation_state.metric_dimension_key = COALESCE(dimension.metric_dimension_key, '{}')
 WHERE rule.enabled
-ORDER BY instance.id, rule.id;
+  AND (rule.scope = 'ALL' OR EXISTS (
+      SELECT 1
+      FROM alert_rule_scope_instance scope_instance
+      WHERE scope_instance.rule_id = rule.id
+        AND scope_instance.instance_id = instance.id
+  ))
+  AND (evaluation_state.last_evaluated_at IS NULL
+       OR evaluation_state.last_evaluated_at <= sqlc.arg(evaluated_at)::timestamptz - rule.evaluation_interval_seconds * interval '1 second')
+ORDER BY instance.id, rule.id, 3;
 
 -- name: GetEvaluationTarget :one
 SELECT rule.id AS rule_id,
@@ -40,24 +115,33 @@ SELECT rule.id AS rule_id,
        instance.id AS instance_id,
        collect_state.last_error_code,
        alert.id AS alert_instance_id,
-       alert.status,
-       alert.rule_version AS evaluated_rule_version,
-       alert.breach_count,
-       alert.recovery_count,
-       alert.no_data_count,
-       alert.state_before_no_data
+       COALESCE(alert.status, 'OK') AS status,
+       COALESCE(alert.rule_version, 0) AS evaluated_rule_version,
+       COALESCE(alert.breach_count, 0) AS breach_count,
+       COALESCE(alert.recovery_count, 0) AS recovery_count,
+       COALESCE(alert.no_data_count, 0) AS no_data_count,
+       alert.state_before_no_data,
+       COALESCE(collection_config.agent_metrics_enabled, true) AS agent_metrics_enabled
 FROM alert_rule rule
 JOIN alert_rule_version version
   ON version.rule_id = rule.id AND version.version = rule.version
 CROSS JOIN instance
+LEFT JOIN instance_collection_config collection_config
+  ON collection_config.instance_id = instance.id
 LEFT JOIN instance_collect_state collect_state
   ON collect_state.instance_id = instance.id AND collect_state.source = 'SERVER_DIRECT'
-LEFT JOIN alert_instance alert
-  ON alert.rule_id = rule.id
- AND alert.instance_id = instance.id
- AND alert.metric_dimension_key = '{}'
+LEFT JOIN LATERAL (
+    SELECT candidate.*
+    FROM alert_instance candidate
+    WHERE candidate.rule_id = rule.id
+      AND candidate.instance_id = instance.id
+      AND candidate.metric_dimension_key = sqlc.arg(metric_dimension_key)
+    ORDER BY (candidate.status <> 'RECOVERED') DESC, candidate.updated_at DESC
+    LIMIT 1
+) alert ON true
 WHERE rule.id = sqlc.arg(rule_id)
-  AND instance.id = sqlc.arg(instance_id);
+  AND instance.id = sqlc.arg(instance_id)
+  AND rule.enabled;
 
 -- name: SamplesInRuleWindow :many
 SELECT sample.ts, sample.value
@@ -65,6 +149,7 @@ FROM metric_series series
 JOIN metric_sample sample ON sample.series_id = series.series_id
 WHERE series.instance_id = sqlc.arg(instance_id)
   AND series.metric_id = sqlc.arg(metric_id)
+  AND series.labels_key = sqlc.arg(metric_dimension_key)
   AND sample.ts > sqlc.arg(window_start)
   AND sample.ts <= sqlc.arg(window_end)
 ORDER BY sample.ts DESC;
@@ -74,10 +159,12 @@ INSERT INTO alert_instance (
     rule_id, instance_id, metric_id, metric_dimension_key,
     status, rule_version, severity, current_value, rule_snapshot,
     breach_count, recovery_count, no_data_count,
-    state_before_no_data, unavailability, updated_at
+    state_before_no_data, unavailability, updated_at,
+    first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at
 )
-VALUES ($1, $2, $3, '{}', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 ON CONFLICT (rule_id, instance_id, metric_dimension_key)
+WHERE status <> 'RECOVERED'
 DO UPDATE SET metric_id = EXCLUDED.metric_id,
               status = EXCLUDED.status,
               rule_version = EXCLUDED.rule_version,
@@ -89,8 +176,51 @@ DO UPDATE SET metric_id = EXCLUDED.metric_id,
               no_data_count = EXCLUDED.no_data_count,
               state_before_no_data = EXCLUDED.state_before_no_data,
               unavailability = EXCLUDED.unavailability,
-              updated_at = EXCLUDED.updated_at
+              updated_at = EXCLUDED.updated_at,
+              first_triggered_at = COALESCE(alert_instance.first_triggered_at, EXCLUDED.first_triggered_at),
+              first_rule_version = COALESCE(alert_instance.first_rule_version, EXCLUDED.first_rule_version),
+              first_rule_snapshot = COALESCE(alert_instance.first_rule_snapshot, EXCLUDED.first_rule_snapshot),
+              recovered_at = EXCLUDED.recovered_at
 RETURNING id;
+
+-- name: RecoverAlertSnapshot :one
+UPDATE alert_instance
+SET metric_id = $2,
+    status = 'RECOVERED',
+    rule_version = $3,
+    severity = $4,
+    current_value = $5,
+    rule_snapshot = $6,
+    breach_count = $7,
+    recovery_count = $8,
+    no_data_count = $9,
+    state_before_no_data = NULL,
+    unavailability = NULL,
+    updated_at = $10,
+    recovered_at = $10
+WHERE id = $1
+  AND status <> 'RECOVERED'
+RETURNING id;
+
+-- name: ResetIgnoredMissingAlert :exec
+UPDATE alert_instance
+SET rule_version = $2,
+    severity = $3,
+    rule_snapshot = $4,
+    breach_count = $5,
+    recovery_count = $6,
+    no_data_count = $7,
+    updated_at = $8
+WHERE id = $1
+  AND status <> 'RECOVERED';
+
+-- name: MarkAlertRuleEvaluated :exec
+INSERT INTO alert_rule_evaluation_state (
+    rule_id, instance_id, metric_dimension_key, last_evaluated_at
+)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (rule_id, instance_id, metric_dimension_key)
+DO UPDATE SET last_evaluated_at = EXCLUDED.last_evaluated_at;
 
 -- name: CreateAlertEvent :exec
 INSERT INTO alert_event (

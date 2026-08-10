@@ -103,6 +103,16 @@ type ClientInterface interface {
 
 	CreateAlertRule(ctx context.Context, body CreateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// UpdateAlertRuleWithBody request with any body
+	UpdateAlertRuleWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateAlertRule(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAlertRuleEnabledWithBody request with any body
+	UpdateAlertRuleEnabledWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListInstances request
 	ListInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -218,6 +228,54 @@ func (c *Client) CreateAlertRuleWithBody(ctx context.Context, contentType string
 
 func (c *Client) CreateAlertRule(ctx context.Context, body CreateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateAlertRuleRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateAlertRuleWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertRuleRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateAlertRule(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertRuleRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateAlertRuleEnabledWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertRuleEnabledRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertRuleEnabledRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -614,6 +672,100 @@ func NewCreateAlertRuleRequestWithBody(server string, contentType string, body i
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewUpdateAlertRuleRequest calls the generic UpdateAlertRule builder with application/json body
+func NewUpdateAlertRuleRequest(server string, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateAlertRuleRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateAlertRuleRequestWithBody generates requests for UpdateAlertRule with any type of body
+func NewUpdateAlertRuleRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-rules/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewUpdateAlertRuleEnabledRequest calls the generic UpdateAlertRuleEnabled builder with application/json body
+func NewUpdateAlertRuleEnabledRequest(server string, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateAlertRuleEnabledRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateAlertRuleEnabledRequestWithBody generates requests for UpdateAlertRuleEnabled with any type of body
+func NewUpdateAlertRuleEnabledRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-rules/%s/enabled", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -1343,6 +1495,16 @@ type ClientWithResponsesInterface interface {
 
 	CreateAlertRuleWithResponse(ctx context.Context, body CreateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlertRuleResponse, error)
 
+	// UpdateAlertRuleWithBodyWithResponse request with any body
+	UpdateAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error)
+
+	UpdateAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error)
+
+	// UpdateAlertRuleEnabledWithBodyWithResponse request with any body
+	UpdateAlertRuleEnabledWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error)
+
+	UpdateAlertRuleEnabledWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error)
+
 	// ListInstancesWithResponse request
 	ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error)
 
@@ -1470,6 +1632,54 @@ func (r CreateAlertRuleResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r CreateAlertRuleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateAlertRuleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertRule
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateAlertRuleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateAlertRuleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateAlertRuleEnabledResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertRule
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateAlertRuleEnabledResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateAlertRuleEnabledResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1880,6 +2090,40 @@ func (c *ClientWithResponses) CreateAlertRuleWithResponse(ctx context.Context, b
 	return ParseCreateAlertRuleResponse(rsp)
 }
 
+// UpdateAlertRuleWithBodyWithResponse request with arbitrary body returning *UpdateAlertRuleResponse
+func (c *ClientWithResponses) UpdateAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error) {
+	rsp, err := c.UpdateAlertRuleWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertRuleResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error) {
+	rsp, err := c.UpdateAlertRule(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertRuleResponse(rsp)
+}
+
+// UpdateAlertRuleEnabledWithBodyWithResponse request with arbitrary body returning *UpdateAlertRuleEnabledResponse
+func (c *ClientWithResponses) UpdateAlertRuleEnabledWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error) {
+	rsp, err := c.UpdateAlertRuleEnabledWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertRuleEnabledResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateAlertRuleEnabledWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error) {
+	rsp, err := c.UpdateAlertRuleEnabled(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertRuleEnabledResponse(rsp)
+}
+
 // ListInstancesWithResponse request returning *ListInstancesResponse
 func (c *ClientWithResponses) ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error) {
 	rsp, err := c.ListInstances(ctx, reqEditors...)
@@ -2174,6 +2418,86 @@ func ParseCreateAlertRuleResponse(rsp *http.Response) (*CreateAlertRuleResponse,
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateAlertRuleResponse parses an HTTP response from a UpdateAlertRuleWithResponse call
+func ParseUpdateAlertRuleResponse(rsp *http.Response) (*UpdateAlertRuleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateAlertRuleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateAlertRuleEnabledResponse parses an HTTP response from a UpdateAlertRuleEnabledWithResponse call
+func ParseUpdateAlertRuleEnabledResponse(rsp *http.Response) (*UpdateAlertRuleEnabledResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateAlertRuleEnabledResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

@@ -27,6 +27,10 @@ paths:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks~1{task_id}
   /api/v1/alert-rules:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules
+  /api/v1/alert-rules/{id}:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}
+  /api/v1/alert-rules/{id}/enabled:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1enabled
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
   /api/v1/me:
@@ -61,10 +65,14 @@ components:
       $ref: components/enums.yaml#/AlertSeverity
     NoDataPolicy:
       $ref: components/enums.yaml#/NoDataPolicy
+    AlertRuleScope:
+      $ref: components/enums.yaml#/AlertRuleScope
     AlertRuleInput:
       $ref: components/schemas/alert-rules.yaml#/AlertRuleInput
     AlertRule:
       $ref: components/schemas/alert-rules.yaml#/AlertRule
+    AlertRuleEnabledInput:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleEnabledInput
     InstanceInput:
       $ref: components/schemas/instances.yaml#/InstanceInput
     Instance:

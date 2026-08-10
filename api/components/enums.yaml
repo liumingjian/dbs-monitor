@@ -39,3 +39,6 @@ AlertSeverity:
 NoDataPolicy:
   type: string
   enum: [ignore, mark_no_data]
+AlertRuleScope:
+  type: string
+  enum: [ALL, INSTANCES]
