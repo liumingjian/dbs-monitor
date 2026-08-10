@@ -1,0 +1,58 @@
+/api/v1/instances/{id}/collection/tasks:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: listCollectionTaskStates
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Collection task states and configured intervals
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/collection.yaml#/CollectionTaskState }
+/api/v1/instances/{id}/collection/tasks/{task_id}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    - name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+          - pg.probe
+          - pg.stat_database
+          - pg.stat_activity
+          - pg.replication
+          - pg.replication_slot
+          - pg.prepared_xacts
+          - pg.role
+          - pg.stat_statements
+  put:
+    tags: [collection]
+    operationId: updateCollectionTaskInterval
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/collection.yaml#/CollectionTaskIntervalInput }
+    responses:
+      '200':
+        description: Updated collection task state and configured interval
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/CollectionTaskState }
+      '400':
+        description: Invalid task or interval
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

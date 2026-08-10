@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -76,7 +77,14 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{})
+	collectionConfig, err := collectionConfigFromEnvironment()
+	if err != nil {
+		return err
+	}
+	collector, err := collect.NewWithConfig(platform, monitorpg.DirectDialer{}, clock.Real{}, collectionConfig)
+	if err != nil {
+		return fmt.Errorf("collection scheduler config: %w", err)
+	}
 	evaluation := evaluator.New(platform, clock.Real{})
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform)
@@ -157,4 +165,26 @@ func env(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func collectionConfigFromEnvironment() (collect.Config, error) {
+	config := collect.DefaultConfig()
+	for _, setting := range []struct {
+		name   string
+		target *int
+	}{
+		{name: "COLLECT_PROBE_CONCURRENCY", target: &config.ProbeConcurrency},
+		{name: "COLLECT_QUERY_CONCURRENCY", target: &config.QueryConcurrency},
+	} {
+		value := os.Getenv(setting.name)
+		if value == "" {
+			continue
+		}
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return collect.Config{}, fmt.Errorf("%s must be an integer", setting.name)
+		}
+		*setting.target = parsed
+	}
+	return config, nil
 }

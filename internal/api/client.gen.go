@@ -114,6 +114,14 @@ type ClientInterface interface {
 
 	UpdateInstance(ctx context.Context, id openapi_types.UUID, body UpdateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListCollectionTaskStates request
+	ListCollectionTaskStates(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateCollectionTaskIntervalWithBody request with any body
+	UpdateCollectionTaskIntervalWithBody(ctx context.Context, id openapi_types.UUID, taskId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateCollectionTaskInterval(ctx context.Context, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMetricSeries request
 	GetMetricSeries(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -221,6 +229,42 @@ func (c *Client) UpdateInstanceWithBody(ctx context.Context, id openapi_types.UU
 
 func (c *Client) UpdateInstance(ctx context.Context, id openapi_types.UUID, body UpdateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateInstanceRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCollectionTaskStates(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCollectionTaskStatesRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateCollectionTaskIntervalWithBody(ctx context.Context, id openapi_types.UUID, taskId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateCollectionTaskIntervalRequestWithBody(c.Server, id, taskId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateCollectionTaskInterval(ctx context.Context, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateCollectionTaskIntervalRequest(c.Server, id, taskId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -489,6 +533,94 @@ func NewUpdateInstanceRequestWithBody(server string, id openapi_types.UUID, cont
 	return req, nil
 }
 
+// NewListCollectionTaskStatesRequest generates requests for ListCollectionTaskStates
+func NewListCollectionTaskStatesRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/collection/tasks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateCollectionTaskIntervalRequest calls the generic UpdateCollectionTaskInterval builder with application/json body
+func NewUpdateCollectionTaskIntervalRequest(server string, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateCollectionTaskIntervalRequestWithBody(server, id, taskId, "application/json", bodyReader)
+}
+
+// NewUpdateCollectionTaskIntervalRequestWithBody generates requests for UpdateCollectionTaskInterval with any type of body
+func NewUpdateCollectionTaskIntervalRequestWithBody(server string, id openapi_types.UUID, taskId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "task_id", runtime.ParamLocationPath, taskId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/collection/tasks/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetMetricSeriesRequest generates requests for GetMetricSeries
 func NewGetMetricSeriesRequest(server string, id openapi_types.UUID, params *GetMetricSeriesParams) (*http.Request, error) {
 	var err error
@@ -688,6 +820,14 @@ type ClientWithResponsesInterface interface {
 
 	UpdateInstanceWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateInstanceResponse, error)
 
+	// ListCollectionTaskStatesWithResponse request
+	ListCollectionTaskStatesWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCollectionTaskStatesResponse, error)
+
+	// UpdateCollectionTaskIntervalWithBodyWithResponse request with any body
+	UpdateCollectionTaskIntervalWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, taskId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateCollectionTaskIntervalResponse, error)
+
+	UpdateCollectionTaskIntervalWithResponse(ctx context.Context, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateCollectionTaskIntervalResponse, error)
+
 	// GetMetricSeriesWithResponse request
 	GetMetricSeriesWithResponse(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetMetricSeriesResponse, error)
 
@@ -829,6 +969,51 @@ func (r UpdateInstanceResponse) StatusCode() int {
 	return 0
 }
 
+type ListCollectionTaskStatesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]CollectionTaskState
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCollectionTaskStatesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCollectionTaskStatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateCollectionTaskIntervalResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CollectionTaskState
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateCollectionTaskIntervalResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateCollectionTaskIntervalResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetMetricSeriesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -950,6 +1135,32 @@ func (c *ClientWithResponses) UpdateInstanceWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseUpdateInstanceResponse(rsp)
+}
+
+// ListCollectionTaskStatesWithResponse request returning *ListCollectionTaskStatesResponse
+func (c *ClientWithResponses) ListCollectionTaskStatesWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCollectionTaskStatesResponse, error) {
+	rsp, err := c.ListCollectionTaskStates(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCollectionTaskStatesResponse(rsp)
+}
+
+// UpdateCollectionTaskIntervalWithBodyWithResponse request with arbitrary body returning *UpdateCollectionTaskIntervalResponse
+func (c *ClientWithResponses) UpdateCollectionTaskIntervalWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, taskId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateCollectionTaskIntervalResponse, error) {
+	rsp, err := c.UpdateCollectionTaskIntervalWithBody(ctx, id, taskId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateCollectionTaskIntervalResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateCollectionTaskIntervalWithResponse(ctx context.Context, id openapi_types.UUID, taskId string, body UpdateCollectionTaskIntervalJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateCollectionTaskIntervalResponse, error) {
+	rsp, err := c.UpdateCollectionTaskInterval(ctx, id, taskId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateCollectionTaskIntervalResponse(rsp)
 }
 
 // GetMetricSeriesWithResponse request returning *GetMetricSeriesResponse
@@ -1125,6 +1336,65 @@ func ParseUpdateInstanceResponse(rsp *http.Response) (*UpdateInstanceResponse, e
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCollectionTaskStatesResponse parses an HTTP response from a ListCollectionTaskStatesWithResponse call
+func ParseListCollectionTaskStatesResponse(rsp *http.Response) (*ListCollectionTaskStatesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCollectionTaskStatesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []CollectionTaskState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateCollectionTaskIntervalResponse parses an HTTP response from a UpdateCollectionTaskIntervalWithResponse call
+func ParseUpdateCollectionTaskIntervalResponse(rsp *http.Response) (*UpdateCollectionTaskIntervalResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateCollectionTaskIntervalResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CollectionTaskState
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 

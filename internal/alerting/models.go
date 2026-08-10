@@ -61,6 +61,28 @@ type InstanceCollectionConfig struct {
 	UpdatedAt           pgtype.Timestamptz
 }
 
+type InstanceCollectionConnectionState struct {
+	InstanceID          pgtype.UUID
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
+}
+
+type InstanceCollectionTaskState struct {
+	InstanceID          pgtype.UUID
+	TaskID              string
+	LastDueAt           pgtype.Timestamptz
+	LastStartedAt       pgtype.Timestamptz
+	LastFinishedAt      pgtype.Timestamptz
+	LastSuccessAt       pgtype.Timestamptz
+	LastResult          pgtype.Text
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
+}
+
 type MetricSample struct {
 	SeriesID int64
 	Ts       pgtype.Timestamptz

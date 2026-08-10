@@ -70,6 +70,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/collection/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listCollectionTaskStates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/collection/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateCollectionTaskInterval"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/report": {
         parameters: {
             query?: never;
@@ -119,6 +156,30 @@ export interface components {
             /** @description Returned once when the instance is created. */
             agent_token: string;
         };
+        CollectionTaskState: {
+            /** @enum {string} */
+            task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            /** @enum {string} */
+            kind: "probe" | "sql" | "agent-derived";
+            interval_seconds: number;
+            /** Format: date-time */
+            last_due_at?: string;
+            /** Format: date-time */
+            last_started_at?: string;
+            /** Format: date-time */
+            last_finished_at?: string;
+            /** Format: date-time */
+            last_success_at?: string;
+            last_result?: components["schemas"]["CollectionTaskResult"];
+            consecutive_failures: number;
+            /** Format: date-time */
+            next_eligible_at?: string;
+            last_error_code?: string;
+            last_error_message?: string;
+        };
+        CollectionTaskIntervalInput: {
+            interval_seconds: number;
+        };
         MetricSeriesResponse: {
             /** Format: date-time */
             from: string;
@@ -159,6 +220,8 @@ export interface components {
                 }[];
             };
         };
+        /** @enum {string} */
+        CollectionTaskResult: "SUCCESS" | "FAILED" | "TIMED_OUT" | "SKIPPED_BACKPRESSURE" | "BACKOFF";
     };
     responses: never;
     parameters: never;
@@ -341,6 +404,64 @@ export interface operations {
                 };
             };
             /** @description Invalid time range or step */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCollectionTaskStates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collection task states and configured intervals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionTaskState"][];
+                };
+            };
+        };
+    };
+    updateCollectionTaskInterval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionTaskIntervalInput"];
+            };
+        };
+        responses: {
+            /** @description Updated collection task state and configured interval */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionTaskState"];
+                };
+            };
+            /** @description Invalid task or interval */
             400: {
                 headers: {
                     [name: string]: unknown;
