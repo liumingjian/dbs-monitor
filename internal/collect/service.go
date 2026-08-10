@@ -28,6 +28,17 @@ const (
 	defaultQueryConcurrency = 32
 )
 
+var statActivityMetricIDs = [...]metric.MetricID{
+	metric.MetricConnectionTotal,
+	metric.MetricConnectionActive,
+	metric.MetricConnectionIdleInTransaction,
+	metric.MetricLongTransactionCount,
+	metric.MetricMaxTransactionDurationSec,
+	metric.MetricLockWaitingCount,
+	metric.MetricBlockedSessionCount,
+	metric.MetricLongRunningQueryCount,
+}
+
 type Collector interface {
 	RunOnce(context.Context) error
 }
@@ -43,10 +54,10 @@ func DefaultConfig() Config {
 
 func (config Config) Validate() error {
 	if config.ProbeConcurrency < 1 || config.ProbeConcurrency > 50 {
-		return fmt.Errorf("probe concurrency must be between 1 and 50")
+		return errors.New("probe concurrency must be between 1 and 50")
 	}
 	if config.QueryConcurrency < 1 || config.QueryConcurrency > 50 {
-		return fmt.Errorf("query concurrency must be between 1 and 50")
+		return errors.New("query concurrency must be between 1 and 50")
 	}
 	return nil
 }
@@ -62,9 +73,9 @@ type Service struct {
 	clock    clock.Clock
 	config   Config
 
-	connectionMu sync.Mutex
-	connections  map[string]cachedConnection
-	rebuilds     int64
+	queryConnectionMu       sync.Mutex
+	queryConnections        map[string]cachedConnection
+	queryConnectionRebuilds int64
 }
 
 func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock) *Service {
@@ -80,8 +91,11 @@ func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock cloc
 		return nil, err
 	}
 	return &Service{
-		platform: platform, dialer: dialer, clock: currentClock, config: config,
-		connections: map[string]cachedConnection{},
+		platform:         platform,
+		dialer:           dialer,
+		clock:            currentClock,
+		config:           config,
+		queryConnections: map[string]cachedConnection{},
 	}, nil
 }
 
@@ -124,7 +138,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	run.startedAt = service.clock.Now().UTC()
 	startedWall := time.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
-	if err := service.recordStarted(ctx, run, run.startedAt); err != nil {
+	if err := service.recordStarted(ctx, run); err != nil {
 		outcome.err = err
 		return outcome
 	}
@@ -139,7 +153,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 			closeConnection(conn)
 		}
 		if err != nil {
-			outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, err, true)
+			outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, true)
 			outcome.duration = time.Since(startedWall)
 			return outcome
 		}
@@ -156,14 +170,14 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	timeout := taskTimeout(run.interval)
 	taskCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	conn, err := service.normalConnection(taskCtx, run.target)
+	conn, err := service.queryConnection(taskCtx, run.target)
 	dialFailure := err != nil
 	if err == nil {
 		var configured string
 		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', $1, false)",
 			strconv.FormatInt(timeout.Milliseconds(), 10)+"ms").Scan(&configured)
 	}
-	values := make([]float64, 8)
+	values := make([]float64, len(statActivityMetricIDs))
 	if err == nil {
 		err = conn.QueryRow(taskCtx, run.task.SQL).Scan(
 			&values[0], &values[1], &values[2], &values[3],
@@ -173,25 +187,15 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	if err != nil {
 		connectionFailure := dialFailure || isConnectionFailure(err)
 		if connectionFailure || errors.Is(taskCtx.Err(), context.DeadlineExceeded) {
-			service.invalidateConnection(run.target.ID)
+			service.invalidateQueryConnection(run.target.ID)
 		}
-		outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, err, connectionFailure)
+		outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, connectionFailure)
 		outcome.duration = time.Since(startedWall)
 		return outcome
 	}
-	metricIDs := []metric.MetricID{
-		metric.MetricConnectionTotal,
-		metric.MetricConnectionActive,
-		metric.MetricConnectionIdleInTransaction,
-		metric.MetricLongTransactionCount,
-		metric.MetricMaxTransactionDurationSec,
-		metric.MetricLockWaitingCount,
-		metric.MetricBlockedSessionCount,
-		metric.MetricLongRunningQueryCount,
-	}
-	samples := make([]collectedSample, len(metricIDs))
-	for index := range metricIDs {
-		samples[index] = collectedSample{metricID: metricIDs[index], value: values[index]}
+	samples := make([]collectedSample, len(statActivityMetricIDs))
+	for index, metricID := range statActivityMetricIDs {
+		samples[index] = collectedSample{metricID: metricID, value: values[index]}
 	}
 	outcome.err = service.recordSuccess(ctx, run, samples)
 	outcome.result = resultSuccess
@@ -199,33 +203,33 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	return outcome
 }
 
-func (service *Service) finishFailure(ctx context.Context, run scheduledRun, taskCtx context.Context, cause error, connectionFailure bool) (taskResult, error) {
+func (service *Service) finishFailure(ctx context.Context, run scheduledRun, taskCtx context.Context, connectionFailure bool) (taskResult, error) {
 	result := resultFailed
-	code := "QUERY_FAILED"
+	code := errorCodeQueryFailed
 	if connectionFailure {
-		code = "CONNECTION_FAILED"
+		code = errorCodeConnectionFailed
 	}
 	if errors.Is(taskCtx.Err(), context.DeadlineExceeded) {
 		result = resultTimedOut
-		code = "TIMEOUT"
+		code = errorCodeTimeout
 	}
-	return result, service.recordFailure(ctx, run, result, code, cause, connectionFailure)
+	return result, service.recordFailure(ctx, run, result, code, connectionFailure)
 }
 
-func (service *Service) normalConnection(ctx context.Context, target instance.ListCollectionTargetsRow) (*monitorpg.TargetConn, error) {
+func (service *Service) queryConnection(ctx context.Context, target instance.ListCollectionTargetsRow) (*monitorpg.TargetConn, error) {
 	key := uuid.UUID(target.ID.Bytes).String()
 	connectionString := targetConnectionString(target)
-	service.connectionMu.Lock()
-	cached, exists := service.connections[key]
+	service.queryConnectionMu.Lock()
+	cached, exists := service.queryConnections[key]
 	if exists && cached.connectionString == connectionString && !cached.conn.IsClosed() {
-		service.connectionMu.Unlock()
+		service.queryConnectionMu.Unlock()
 		return cached.conn, nil
 	}
 	if exists {
-		delete(service.connections, key)
-		service.rebuilds++
+		delete(service.queryConnections, key)
+		service.queryConnectionRebuilds++
 	}
-	service.connectionMu.Unlock()
+	service.queryConnectionMu.Unlock()
 	if exists {
 		closeConnection(cached.conn)
 	}
@@ -233,46 +237,46 @@ func (service *Service) normalConnection(ctx context.Context, target instance.Li
 	if err != nil {
 		return nil, err
 	}
-	service.connectionMu.Lock()
-	service.connections[key] = cachedConnection{connectionString: connectionString, conn: conn}
-	service.connectionMu.Unlock()
+	service.queryConnectionMu.Lock()
+	service.queryConnections[key] = cachedConnection{connectionString: connectionString, conn: conn}
+	service.queryConnectionMu.Unlock()
 	return conn, nil
 }
 
-func (service *Service) invalidateConnection(targetID pgtype.UUID) {
+func (service *Service) invalidateQueryConnection(targetID pgtype.UUID) {
 	key := uuid.UUID(targetID.Bytes).String()
-	service.connectionMu.Lock()
-	cached, exists := service.connections[key]
+	service.queryConnectionMu.Lock()
+	cached, exists := service.queryConnections[key]
 	if exists {
-		delete(service.connections, key)
-		service.rebuilds++
+		delete(service.queryConnections, key)
+		service.queryConnectionRebuilds++
 	}
-	service.connectionMu.Unlock()
+	service.queryConnectionMu.Unlock()
 	if exists {
 		closeConnection(cached.conn)
 	}
 }
 
-func (service *Service) poolSummary(active int) (idle int, rebuilds int64) {
-	service.connectionMu.Lock()
-	defer service.connectionMu.Unlock()
-	idle = len(service.connections) - active
+func (service *Service) queryConnectionSummary(active int) (idle int, rebuilds int64) {
+	service.queryConnectionMu.Lock()
+	defer service.queryConnectionMu.Unlock()
+	idle = len(service.queryConnections) - active
 	if idle < 0 {
 		idle = 0
 	}
-	rebuilds = service.rebuilds
-	service.rebuilds = 0
+	rebuilds = service.queryConnectionRebuilds
+	service.queryConnectionRebuilds = 0
 	return idle, rebuilds
 }
 
-func (service *Service) closeConnections() {
-	service.connectionMu.Lock()
-	connections := make([]cachedConnection, 0, len(service.connections))
-	for key, cached := range service.connections {
+func (service *Service) closeQueryConnections() {
+	service.queryConnectionMu.Lock()
+	connections := make([]cachedConnection, 0, len(service.queryConnections))
+	for key, cached := range service.queryConnections {
 		connections = append(connections, cached)
-		delete(service.connections, key)
+		delete(service.queryConnections, key)
 	}
-	service.connectionMu.Unlock()
+	service.queryConnectionMu.Unlock()
 	for _, cached := range connections {
 		closeConnection(cached.conn)
 	}
@@ -300,10 +304,10 @@ func (service *Service) taskIntervals(ctx context.Context, targetID pgtype.UUID)
 }
 
 func scheduledTasks() []metric.Task {
-	wanted := map[metric.TaskID]bool{metric.TaskProbe: true, metric.TaskStatActivity: true}
-	tasks := make([]metric.Task, 0, len(wanted))
+	tasks := make([]metric.Task, 0, 2)
 	for _, task := range metric.Tasks {
-		if wanted[task.ID] {
+		switch task.ID {
+		case metric.TaskProbe, metric.TaskStatActivity:
 			tasks = append(tasks, task)
 		}
 	}
@@ -325,8 +329,11 @@ func newScheduledRun(target instance.ListCollectionTargetsRow, task metric.Task,
 	}
 	instanceID := uuid.UUID(target.ID.Bytes).String()
 	return scheduledRun{
-		key: taskKey{instanceID: instanceID, taskID: task.ID}, target: target, task: task,
-		interval: interval, dueAt: dueAt.UTC(),
+		key:      taskKey{instanceID: instanceID, taskID: task.ID},
+		dueAt:    dueAt.UTC(),
+		target:   target,
+		task:     task,
+		interval: interval,
 	}
 }
 
@@ -367,7 +374,7 @@ func targetConnectionString(target instance.ListCollectionTargetsRow) string {
 }
 
 func (service *Service) Run(ctx context.Context, interval time.Duration) {
-	defer service.closeConnections()
+	defer service.closeQueryConnections()
 	scheduler := newCentralScheduler(service)
 	if err := scheduler.refresh(ctx, service.clock.Now().UTC()); err != nil {
 		log.Printf("collection scheduler refresh failed: %v", err)

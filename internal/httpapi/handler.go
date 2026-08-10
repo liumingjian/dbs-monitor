@@ -186,46 +186,47 @@ func (handler *Handler) collectionTaskStates(ctx context.Context, instanceID pgt
 	if err != nil {
 		return nil, err
 	}
-	persisted := make(map[metric.TaskID]ListPersistedCollectionTaskStatesRow, len(persistedRows))
+	persistedStates := make(map[metric.TaskID]ListPersistedCollectionTaskStatesRow, len(persistedRows))
 	for _, row := range persistedRows {
-		persisted[metric.TaskID(row.TaskID)] = row
+		persistedStates[metric.TaskID(row.TaskID)] = row
 	}
 	configuredRows, err := metric.New(handler.platform).ListTaskIntervals(ctx, instanceID)
 	if err != nil {
 		return nil, err
 	}
-	configured := make(map[metric.TaskID]int, len(configuredRows))
+	configuredIntervals := make(map[metric.TaskID]int, len(configuredRows))
 	for _, row := range configuredRows {
-		configured[metric.TaskID(row.TaskID)] = int(row.IntervalSeconds)
+		configuredIntervals[metric.TaskID(row.TaskID)] = int(row.IntervalSeconds)
 	}
 
 	states := make([]api.CollectionTaskState, 0, len(metric.Tasks))
 	for _, task := range metric.Tasks {
 		intervalSeconds := int(task.Interval / time.Second)
-		if value, exists := configured[task.ID]; exists {
-			intervalSeconds = value
+		if configuredInterval, exists := configuredIntervals[task.ID]; exists {
+			intervalSeconds = configuredInterval
 		}
 		state := api.CollectionTaskState{
-			TaskId: api.CollectionTaskStateTaskId(task.ID), Kind: api.CollectionTaskStateKind(task.Kind),
+			TaskId:          api.CollectionTaskStateTaskId(task.ID),
+			Kind:            api.CollectionTaskStateKind(task.Kind),
 			IntervalSeconds: intervalSeconds,
 		}
-		if row, exists := persisted[task.ID]; exists {
-			state.ConsecutiveFailures = int(row.ConsecutiveFailures)
-			state.LastDueAt = timePointer(row.LastDueAt)
-			state.LastStartedAt = timePointer(row.LastStartedAt)
-			state.LastFinishedAt = timePointer(row.LastFinishedAt)
-			state.LastSuccessAt = timePointer(row.LastSuccessAt)
-			state.NextEligibleAt = timePointer(row.NextEligibleAt)
-			if row.LastResult.Valid {
-				value := api.CollectionTaskResult(row.LastResult.String)
+		if persistedState, exists := persistedStates[task.ID]; exists {
+			state.ConsecutiveFailures = int(persistedState.ConsecutiveFailures)
+			state.LastDueAt = timePointer(persistedState.LastDueAt)
+			state.LastStartedAt = timePointer(persistedState.LastStartedAt)
+			state.LastFinishedAt = timePointer(persistedState.LastFinishedAt)
+			state.LastSuccessAt = timePointer(persistedState.LastSuccessAt)
+			state.NextEligibleAt = timePointer(persistedState.NextEligibleAt)
+			if persistedState.LastResult.Valid {
+				value := api.CollectionTaskResult(persistedState.LastResult.String)
 				state.LastResult = &value
 			}
-			if row.LastErrorCode.Valid {
-				value := row.LastErrorCode.String
+			if persistedState.LastErrorCode.Valid {
+				value := persistedState.LastErrorCode.String
 				state.LastErrorCode = &value
 			}
-			if row.LastErrorMessage.Valid {
-				value := row.LastErrorMessage.String
+			if persistedState.LastErrorMessage.Valid {
+				value := persistedState.LastErrorMessage.String
 				state.LastErrorMessage = &value
 			}
 		}
@@ -263,10 +264,13 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			var probeResult pgtype.Text
 			err := handler.platform.QueryRow(ctx, `SELECT last_result FROM instance_collection_task_state
 				WHERE instance_id = $1 AND task_id = 'pg.probe'`, pgtype.UUID{Bytes: request.Id, Valid: true}).Scan(&probeResult)
-			if err == nil && probeResult.Valid && (probeResult.String == "FAILED" || probeResult.String == "TIMED_OUT") {
-				entry.Unavailability = nullable.NewNullableWithValue(api.DBUNREACHABLE)
-				result.Metrics = append(result.Metrics, entry)
-				continue
+			if err == nil && probeResult.Valid {
+				switch api.CollectionTaskResult(probeResult.String) {
+				case api.FAILED, api.TIMEDOUT:
+					entry.Unavailability = nullable.NewNullableWithValue(api.DBUNREACHABLE)
+					result.Metrics = append(result.Metrics, entry)
+					continue
+				}
 			}
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return nil, err

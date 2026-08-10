@@ -16,7 +16,7 @@ type workClass uint8
 
 const (
 	workProbe workClass = iota
-	workRegular
+	workCollectionQuery
 	workCapability
 )
 
@@ -47,14 +47,10 @@ func newPendingRuns() *pendingRuns {
 	return &pendingRuns{items: map[taskKey]scheduledRun{}}
 }
 
-func (pending *pendingRuns) put(run scheduledRun) *scheduledRun {
-	var replaced *scheduledRun
-	if previous, exists := pending.items[run.key]; exists {
-		copy := previous
-		replaced = &copy
-	}
+func (pending *pendingRuns) put(run scheduledRun) (scheduledRun, bool) {
+	previous, replaced := pending.items[run.key]
 	pending.items[run.key] = run
-	return replaced
+	return previous, replaced
 }
 
 func (pending *pendingRuns) take(key taskKey) (scheduledRun, bool) {
@@ -73,29 +69,31 @@ func (pending *pendingRuns) ordered() []scheduledRun {
 		runs = append(runs, run)
 	}
 	sort.Slice(runs, func(left, right int) bool {
-		if runs[left].dueAt.Equal(runs[right].dueAt) {
-			if runs[left].key.instanceID == runs[right].key.instanceID {
-				return runs[left].key.taskID < runs[right].key.taskID
-			}
-			return runs[left].key.instanceID < runs[right].key.instanceID
+		if !runs[left].dueAt.Equal(runs[right].dueAt) {
+			return runs[left].dueAt.Before(runs[right].dueAt)
 		}
-		return runs[left].dueAt.Before(runs[right].dueAt)
+		return taskKeyLess(runs[left].key, runs[right].key)
 	})
 	return runs
 }
 
 type dispatcher struct {
-	probeLimit, normalLimit       int
-	activeProbes, activeNormal    int
-	activeRegular                 int
-	capabilityWaiting             bool
-	instanceProbe, instanceNormal map[string]bool
+	probeLimit              int
+	queryLimit              int
+	activeProbes            int
+	activeQueries           int
+	activeCollectionQueries int
+	capabilityWaiting       bool
+	instanceProbe           map[string]bool
+	instanceQuery           map[string]bool
 }
 
-func newDispatcher(probeLimit, normalLimit int) *dispatcher {
+func newDispatcher(probeLimit, queryLimit int) *dispatcher {
 	return &dispatcher{
-		probeLimit: probeLimit, normalLimit: normalLimit,
-		instanceProbe: map[string]bool{}, instanceNormal: map[string]bool{},
+		probeLimit:    probeLimit,
+		queryLimit:    queryLimit,
+		instanceProbe: map[string]bool{},
+		instanceQuery: map[string]bool{},
 	}
 }
 
@@ -108,20 +106,20 @@ func (dispatcher *dispatcher) admit(item work) bool {
 		dispatcher.instanceProbe[item.instanceID] = true
 		return true
 	}
-	if dispatcher.activeNormal >= dispatcher.normalLimit || dispatcher.instanceNormal[item.instanceID] {
+	if dispatcher.activeQueries >= dispatcher.queryLimit || dispatcher.instanceQuery[item.instanceID] {
 		return false
 	}
-	if item.class == workRegular && dispatcher.capabilityWaiting {
-		reserved := min(4, dispatcher.normalLimit)
-		if dispatcher.activeRegular >= dispatcher.normalLimit-reserved {
+	if item.class == workCollectionQuery && dispatcher.capabilityWaiting {
+		reserved := min(4, dispatcher.queryLimit)
+		if dispatcher.activeCollectionQueries >= dispatcher.queryLimit-reserved {
 			return false
 		}
 	}
-	dispatcher.activeNormal++
-	if item.class == workRegular {
-		dispatcher.activeRegular++
+	dispatcher.activeQueries++
+	if item.class == workCollectionQuery {
+		dispatcher.activeCollectionQueries++
 	}
-	dispatcher.instanceNormal[item.instanceID] = true
+	dispatcher.instanceQuery[item.instanceID] = true
 	return true
 }
 
@@ -133,11 +131,11 @@ func (dispatcher *dispatcher) finish(item work) {
 		}
 		return
 	}
-	if dispatcher.instanceNormal[item.instanceID] {
-		delete(dispatcher.instanceNormal, item.instanceID)
-		dispatcher.activeNormal--
-		if item.class == workRegular {
-			dispatcher.activeRegular--
+	if dispatcher.instanceQuery[item.instanceID] {
+		delete(dispatcher.instanceQuery, item.instanceID)
+		dispatcher.activeQueries--
+		if item.class == workCollectionQuery {
+			dispatcher.activeCollectionQueries--
 		}
 	}
 }
@@ -167,23 +165,6 @@ func failureBackoff(kind metric.TaskKind, interval time.Duration, failures int) 
 	return backoff
 }
 
-func safeErrorMessage(code string, _ error) string {
-	switch code {
-	case "CONNECTION_FAILED":
-		return "target connection failed"
-	case "QUERY_FAILED":
-		return "collection query failed"
-	case "TIMEOUT":
-		return "collection deadline exceeded"
-	case "SKIPPED_BACKPRESSURE":
-		return "collection skipped because scheduler capacity was unavailable"
-	case "BACKOFF":
-		return "collection deferred by failure backoff"
-	default:
-		return "collection failed"
-	}
-}
-
 type executionOutcome struct {
 	run      scheduledRun
 	result   taskResult
@@ -197,15 +178,21 @@ type scheduleEntry struct {
 }
 
 type schedulerCounts struct {
-	success, failed, timedOut, skipped, backoff int64
-	dispatchCount                               int64
-	dispatchTotal, dispatchMax                  time.Duration
-	durations                                   map[metric.TaskID]durationSummary
+	success            int64
+	failed             int64
+	timedOut           int64
+	skipped            int64
+	backoff            int64
+	dispatchDelayCount int64
+	dispatchDelayTotal time.Duration
+	dispatchDelayMax   time.Duration
+	taskDurations      map[metric.TaskID]durationSummary
 }
 
 type durationSummary struct {
-	count      int64
-	total, max time.Duration
+	count int64
+	total time.Duration
+	max   time.Duration
 }
 
 type centralScheduler struct {
@@ -222,10 +209,11 @@ func newCentralScheduler(service *Service) *centralScheduler {
 	return &centralScheduler{
 		service:    service,
 		dispatcher: newDispatcher(service.config.ProbeConcurrency, service.config.QueryConcurrency),
-		pending:    newPendingRuns(), schedule: map[taskKey]scheduleEntry{},
-		completed: make(chan executionOutcome, service.config.ProbeConcurrency+service.config.QueryConcurrency),
-		counts:    newSchedulerCounts(),
-		lastLog:   service.clock.Now().UTC(),
+		pending:    newPendingRuns(),
+		schedule:   map[taskKey]scheduleEntry{},
+		completed:  make(chan executionOutcome, service.config.ProbeConcurrency+service.config.QueryConcurrency),
+		counts:     newSchedulerCounts(),
+		lastLog:    service.clock.Now().UTC(),
 	}
 }
 
@@ -234,7 +222,8 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 	if err != nil {
 		return fmt.Errorf("list collection targets: %w", err)
 	}
-	active := make(map[taskKey]bool, len(targets)*len(scheduledTasks()))
+	tasks := scheduledTasks()
+	active := make(map[taskKey]struct{}, len(targets)*len(tasks))
 	for _, target := range targets {
 		if err := scheduler.service.ensureTaskStates(ctx, target.ID); err != nil {
 			return err
@@ -243,9 +232,9 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 		if err != nil {
 			return err
 		}
-		for _, task := range scheduledTasks() {
+		for _, task := range tasks {
 			template := newScheduledRun(target, task, intervals[task.ID], time.Time{})
-			active[template.key] = true
+			active[template.key] = struct{}{}
 			entry, exists := scheduler.schedule[template.key]
 			if !exists || entry.template.interval != template.interval {
 				entry.nextDue = nextDueAfter(now, initialPhase(template.key.instanceID, task.ID, template.interval), template.interval)
@@ -255,7 +244,7 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 		}
 	}
 	for key := range scheduler.schedule {
-		if !active[key] {
+		if _, exists := active[key]; !exists {
 			delete(scheduler.schedule, key)
 		}
 	}
@@ -268,18 +257,15 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 		keys = append(keys, key)
 	}
 	sort.Slice(keys, func(left, right int) bool {
-		if keys[left].instanceID == keys[right].instanceID {
-			return keys[left].taskID < keys[right].taskID
-		}
-		return keys[left].instanceID < keys[right].instanceID
+		return taskKeyLess(keys[left], keys[right])
 	})
 	for _, key := range keys {
 		entry := scheduler.schedule[key]
 		for !entry.nextDue.After(now) {
 			run := entry.template
 			run.dueAt = entry.nextDue
-			if replaced := scheduler.pending.put(run); replaced != nil {
-				if err := scheduler.service.recordUnmet(ctx, *replaced, resultSkippedBackpressure, time.Time{}); err != nil {
+			if replaced, exists := scheduler.pending.put(run); exists {
+				if err := scheduler.service.recordUnmet(ctx, replaced, resultSkippedBackpressure, time.Time{}); err != nil {
 					log.Printf("record collection backpressure skip failed: instance_id=%s task_id=%s error=%v", replaced.key.instanceID, replaced.key.taskID, err)
 				} else {
 					scheduler.counts.skipped++
@@ -315,10 +301,10 @@ func (scheduler *centralScheduler) dispatch(ctx context.Context) {
 		if delay < 0 {
 			delay = 0
 		}
-		scheduler.counts.dispatchCount++
-		scheduler.counts.dispatchTotal += delay
-		if delay > scheduler.counts.dispatchMax {
-			scheduler.counts.dispatchMax = delay
+		scheduler.counts.dispatchDelayCount++
+		scheduler.counts.dispatchDelayTotal += delay
+		if delay > scheduler.counts.dispatchDelayMax {
+			scheduler.counts.dispatchDelayMax = delay
 		}
 		_, _ = scheduler.pending.take(run.key)
 		go func(run scheduledRun) {
@@ -345,13 +331,13 @@ func (scheduler *centralScheduler) complete(outcome executionOutcome) {
 	default:
 		scheduler.counts.failed++
 	}
-	duration := scheduler.counts.durations[outcome.run.task.ID]
+	duration := scheduler.counts.taskDurations[outcome.run.task.ID]
 	duration.count++
 	duration.total += outcome.duration
 	if outcome.duration > duration.max {
 		duration.max = outcome.duration
 	}
-	scheduler.counts.durations[outcome.run.task.ID] = duration
+	scheduler.counts.taskDurations[outcome.run.task.ID] = duration
 	log.Printf("collection task result: instance_id=%s task_id=%s result=%s duration_ms=%d",
 		outcome.run.key.instanceID, outcome.run.key.taskID, outcome.result, outcome.duration.Milliseconds())
 }
@@ -362,18 +348,18 @@ func (scheduler *centralScheduler) logSummary(now time.Time) {
 	}
 	scheduler.lastLog = now
 	var averageDelay time.Duration
-	if scheduler.counts.dispatchCount > 0 {
-		averageDelay = scheduler.counts.dispatchTotal / time.Duration(scheduler.counts.dispatchCount)
+	if scheduler.counts.dispatchDelayCount > 0 {
+		averageDelay = scheduler.counts.dispatchDelayTotal / time.Duration(scheduler.counts.dispatchDelayCount)
 	}
-	idle, rebuilds := scheduler.service.poolSummary(scheduler.dispatcher.activeNormal)
+	idle, rebuilds := scheduler.service.queryConnectionSummary(scheduler.dispatcher.activeQueries)
 	log.Printf("collection scheduler summary: probe_capacity=%d probe_active=%d query_capacity=%d query_active=%d pending=%d dispatch_delay_avg_ms=%d dispatch_delay_max_ms=%d success=%d failed=%d timeout=%d skipped_backpressure=%d backoff=%d pool_active=%d pool_idle=%d pool_rebuild=%d",
 		scheduler.dispatcher.probeLimit, scheduler.dispatcher.activeProbes,
-		scheduler.dispatcher.normalLimit, scheduler.dispatcher.activeNormal, scheduler.pending.len(),
-		averageDelay.Milliseconds(), scheduler.counts.dispatchMax.Milliseconds(),
+		scheduler.dispatcher.queryLimit, scheduler.dispatcher.activeQueries, scheduler.pending.len(),
+		averageDelay.Milliseconds(), scheduler.counts.dispatchDelayMax.Milliseconds(),
 		scheduler.counts.success, scheduler.counts.failed, scheduler.counts.timedOut,
 		scheduler.counts.skipped, scheduler.counts.backoff,
-		scheduler.dispatcher.activeNormal, idle, rebuilds)
-	for taskID, duration := range scheduler.counts.durations {
+		scheduler.dispatcher.activeQueries, idle, rebuilds)
+	for taskID, duration := range scheduler.counts.taskDurations {
 		average := duration.total / time.Duration(duration.count)
 		log.Printf("collection scheduler task summary: task_id=%s count=%d duration_avg_ms=%d duration_max_ms=%d",
 			taskID, duration.count, average.Milliseconds(), duration.max.Milliseconds())
@@ -382,14 +368,21 @@ func (scheduler *centralScheduler) logSummary(now time.Time) {
 }
 
 func newSchedulerCounts() schedulerCounts {
-	return schedulerCounts{durations: map[metric.TaskID]durationSummary{}}
+	return schedulerCounts{taskDurations: map[metric.TaskID]durationSummary{}}
 }
 
 func classFor(task metric.Task) workClass {
 	if task.Kind == metric.TaskKindProbe {
 		return workProbe
 	}
-	return workRegular
+	return workCollectionQuery
+}
+
+func taskKeyLess(left, right taskKey) bool {
+	if left.instanceID == right.instanceID {
+		return left.taskID < right.taskID
+	}
+	return left.instanceID < right.instanceID
 }
 
 func nextDueAfter(now time.Time, phase, interval time.Duration) time.Time {

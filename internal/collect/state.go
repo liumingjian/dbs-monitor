@@ -23,6 +23,12 @@ const (
 	resultBackoff             taskResult = "BACKOFF"
 )
 
+const (
+	errorCodeConnectionFailed = "CONNECTION_FAILED"
+	errorCodeQueryFailed      = "QUERY_FAILED"
+	errorCodeTimeout          = "TIMEOUT"
+)
+
 type collectedSample struct {
 	metricID metric.MetricID
 	value    float64
@@ -38,13 +44,13 @@ func (service *Service) ensureTaskStates(ctx context.Context, targetID pgtype.UU
 	return nil
 }
 
-func (service *Service) recordStarted(ctx context.Context, run scheduledRun, started time.Time) error {
+func (service *Service) recordStarted(ctx context.Context, run scheduledRun) error {
 	_, err := service.platform.Exec(ctx, `INSERT INTO instance_collection_task_state
 		(instance_id, task_id, last_due_at, last_started_at)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (instance_id, task_id) DO UPDATE
 		SET last_due_at = EXCLUDED.last_due_at, last_started_at = EXCLUDED.last_started_at`,
-		run.target.ID, run.task.ID, run.dueAt, started)
+		run.target.ID, run.task.ID, run.dueAt, run.startedAt)
 	if err != nil {
 		return fmt.Errorf("record collection task start: %w", err)
 	}
@@ -54,7 +60,7 @@ func (service *Service) recordStarted(ctx context.Context, run scheduledRun, sta
 func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, result taskResult, nextEligible time.Time) error {
 	now := service.clock.Now().UTC()
 	code := string(result)
-	message := safeErrorMessage(code, nil)
+	message := collectionErrorMessage(code)
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 		if err := lockInstance(ctx, tx, run.target.ID); err != nil {
 			return err
@@ -72,7 +78,7 @@ func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, resul
 			END,
 			last_error_code = EXCLUDED.last_error_code,
 			last_error_message = EXCLUDED.last_error_message`,
-			run.target.ID, run.task.ID, run.dueAt, now, result, nullableTime(nextEligible), code, message)
+			run.target.ID, run.task.ID, run.dueAt, now, result, nullableTimestamp(nextEligible), code, message)
 		if err != nil {
 			return err
 		}
@@ -80,9 +86,9 @@ func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, resul
 	})
 }
 
-func (service *Service) recordFailure(ctx context.Context, run scheduledRun, result taskResult, code string, cause error, connectionFailure bool) error {
+func (service *Service) recordFailure(ctx context.Context, run scheduledRun, result taskResult, code string, connectionFailure bool) error {
 	finished := service.clock.Now().UTC()
-	message := safeErrorMessage(code, cause)
+	message := collectionErrorMessage(code)
 	write := func() error {
 		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 			if err := lockInstance(ctx, tx, run.target.ID); err != nil {
@@ -116,9 +122,6 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 					return err
 				}
 			}
-			if run.task.Kind == metric.TaskKindProbe {
-				taskNextEligible = time.Time{}
-			}
 			_, err = tx.Exec(ctx, `INSERT INTO instance_collection_task_state
 				(instance_id, task_id, last_due_at, last_started_at, last_finished_at, last_result,
 				 consecutive_failures, next_eligible_at, last_error_code, last_error_message)
@@ -133,7 +136,7 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 				last_error_code = EXCLUDED.last_error_code,
 				last_error_message = EXCLUDED.last_error_message`,
 				run.target.ID, run.task.ID, run.dueAt, run.startedAt, finished, result,
-				failures, nullableTime(taskNextEligible), code, message)
+				failures, nullableTimestamp(taskNextEligible), code, message)
 			if err != nil {
 				return err
 			}
@@ -274,9 +277,26 @@ func connectionFailureCount(ctx context.Context, tx pgx.Tx, instanceID pgtype.UU
 	return count, err
 }
 
-func nullableTime(value time.Time) any {
-	if value.IsZero() {
-		return nil
+func nullableTimestamp(value time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{
+		Time:  value,
+		Valid: !value.IsZero(),
 	}
-	return value
+}
+
+func collectionErrorMessage(code string) string {
+	switch code {
+	case errorCodeConnectionFailed:
+		return "target connection failed"
+	case errorCodeQueryFailed:
+		return "collection query failed"
+	case errorCodeTimeout:
+		return "collection deadline exceeded"
+	case string(resultSkippedBackpressure):
+		return "collection skipped because scheduler capacity was unavailable"
+	case string(resultBackoff):
+		return "collection deferred by failure backoff"
+	default:
+		return "collection failed"
+	}
 }

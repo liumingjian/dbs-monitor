@@ -92,7 +92,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	assertStatus(t, ctx, pool, pgID, alerting.FIRING)
 	if dialer.calls != 3 {
-		t.Fatalf("dial count after two runs = %d, want 3 (two fresh probes and one lazy normal connection)", dialer.calls)
+		t.Fatalf("dial count after two runs = %d, want 3 (two fresh probes and one cached query connection)", dialer.calls)
 	}
 	var healthyWatermark time.Time
 	if err := pool.QueryRow(ctx, `SELECT last_success_at FROM instance_collect_state
@@ -107,12 +107,12 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if successfulTasks != 2 {
 		t.Fatalf("successful task count = %d, want 2", successfulTasks)
 	}
-	collector.connectionMu.Lock()
-	cached := collector.connections[instanceID.String()]
-	collector.connectionMu.Unlock()
+	collector.queryConnectionMu.Lock()
+	cached := collector.queryConnections[instanceID.String()]
+	collector.queryConnectionMu.Unlock()
 	var statementTimeout string
 	if cached.conn == nil {
-		t.Fatal("normal collection connection was not retained")
+		t.Fatal("collection query connection was not retained")
 	}
 	if err := cached.conn.QueryRow(ctx, "SHOW statement_timeout").Scan(&statementTimeout); err != nil {
 		t.Fatalf("read server-side statement timeout: %v", err)
