@@ -27,7 +27,25 @@ systemctl status dbs-monitor-postgres dbs-monitor-server
 ss -ltnp
 ```
 
-Restart `dbs-monitor-server` and confirm its new journal entries do not print another initial password. Agent platform distribution, upgrades, rollback, high availability, credential encryption, and runtime disk-watermark behavior are intentionally outside T11 and deferred to R3. The T11 archive is a walking-skeleton package, not the complete production upgrade package.
+Restart `dbs-monitor-server` and confirm its new journal entries do not print another initial password. Agent platform distribution, upgrades, rollback, high availability, and runtime disk-watermark behavior are intentionally outside T11 and deferred to R3. The T11 archive is a walking-skeleton package, not the complete production upgrade package.
+
+## Master key rotation
+
+Rotate the credential master key only during a maintenance window, with the platform database running and `dbs-monitor-server` stopped:
+
+```sh
+sudo systemctl stop dbs-monitor-server
+sudo -u dbsmon sh -c 'set -a; . /opt/dbs-monitor/etc/dbs-monitor.env; exec /opt/dbs-monitor/bin/dbs-monitor-server rotate-master-key'
+sudo systemctl start dbs-monitor-server
+```
+
+The command switches `current` atomically, re-encrypts every instance password in one database transaction, and deletes an old key only after verifying that no database row references it. If it is interrupted, leave all key files in place and run the same command again.
+
+## Backup separation
+
+A control-plane database backup and `/opt/dbs-monitor/etc/credentials` are two independent artifacts. Never include the credential keyring in the database backup archive. For same-host recovery retain the existing keyring; for a replacement host, transfer the matching keyring separately and restore its `dbsmon` ownership and `0600` file permissions before starting the server. An upgrade must preserve the keyring in place.
+
+Both artifacts are required for recovery. If the keyring is missing, the server fails with a credential-key platform fault instead of generating a replacement or reporting a monitored database outage. A lost master key cannot be recovered; affected PostgreSQL credentials must be entered again.
 
 ## Platform host availability
 

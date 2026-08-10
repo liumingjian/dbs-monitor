@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -74,6 +76,10 @@ type CredentialKeyring struct {
 	directory      string
 	currentVersion int32
 	currentKey     []byte
+}
+
+func (keyring *CredentialKeyring) CurrentVersion() int32 {
+	return keyring.currentVersion
 }
 
 func OpenCredentialKeyring(directory string, hasEncryptedCredentials bool) (*CredentialKeyring, error) {
@@ -160,6 +166,115 @@ func (keyring *CredentialKeyring) DecryptPassword(instanceID uuid.UUID, envelope
 	return string(plaintext), nil
 }
 
+// PrepareCredentialKeyRotation creates or resumes the filesystem side of an offline rotation.
+// The returned boolean is false only when a previous rotation needs key cleanup but no row rewrite.
+func PrepareCredentialKeyRotation(ctx context.Context, queries *Queries, directory string) (*CredentialKeyring, bool, error) {
+	keyring, err := OpenCredentialKeyring(directory, true)
+	if err != nil {
+		return nil, false, err
+	}
+	versions, err := credentialKeyVersions(directory)
+	if err != nil {
+		return nil, false, err
+	}
+	notCurrent, err := queries.CountCredentialsNotUsingKeyVersion(ctx, keyring.currentVersion)
+	if err != nil {
+		return nil, false, fmt.Errorf("inspect instance credential key versions: %w", err)
+	}
+
+	nextVersion := keyring.currentVersion + 1
+	if nextVersion <= keyring.currentVersion {
+		return nil, false, fmt.Errorf("instance credential key version exhausted")
+	}
+	if containsCredentialKeyVersion(versions, nextVersion) {
+		if _, err := readCredentialKey(directory, nextVersion, CredentialFaultCurrentKey); err != nil {
+			return nil, false, err
+		}
+		if err := writeCurrentCredentialKeyVersion(directory, nextVersion); err != nil {
+			return nil, false, err
+		}
+		keyring, err = OpenCredentialKeyring(directory, true)
+		return keyring, true, err
+	}
+	if notCurrent > 0 {
+		return keyring, true, nil
+	}
+	for _, version := range versions {
+		if version < keyring.currentVersion {
+			return keyring, false, nil
+		}
+		if version > nextVersion {
+			return nil, false, &CredentialFault{Code: CredentialFaultCurrentKey}
+		}
+	}
+
+	if err := generateCredentialKey(directory, nextVersion); err != nil {
+		return nil, false, err
+	}
+	if err := writeCurrentCredentialKeyVersion(directory, nextVersion); err != nil {
+		return nil, false, err
+	}
+	keyring, err = OpenCredentialKeyring(directory, true)
+	return keyring, true, err
+}
+
+func (keyring *CredentialKeyring) ReencryptCredentials(ctx context.Context, queries *Queries) (int64, error) {
+	rows, err := queries.ListCredentialsForKeyRotation(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list instance credentials for key rotation: %w", err)
+	}
+	var rotated int64
+	for _, row := range rows {
+		if row.PasswordKeyVersion == keyring.currentVersion {
+			continue
+		}
+		instanceID := uuid.UUID(row.ID.Bytes)
+		password, err := keyring.DecryptPassword(instanceID, row.PasswordCiphertext, row.PasswordKeyVersion)
+		if err != nil {
+			return 0, err
+		}
+		ciphertext, version, err := keyring.EncryptPassword(instanceID, password)
+		if err != nil {
+			return 0, err
+		}
+		if err := queries.UpdateCredentialKeyVersion(ctx, UpdateCredentialKeyVersionParams{
+			ID: row.ID, PasswordCiphertext: ciphertext, PasswordKeyVersion: version,
+		}); err != nil {
+			return 0, fmt.Errorf("update instance credential key version: %w", err)
+		}
+		rotated++
+	}
+	return rotated, nil
+}
+
+func (keyring *CredentialKeyring) RemoveUnreferencedKeys(ctx context.Context, queries *Queries) error {
+	versions, err := credentialKeyVersions(keyring.directory)
+	if err != nil {
+		return err
+	}
+	for _, version := range versions {
+		if version == keyring.currentVersion {
+			continue
+		}
+		references, err := queries.CountCredentialKeyReferences(ctx, version)
+		if err != nil {
+			return fmt.Errorf("verify instance credential key version %d references: %w", version, err)
+		}
+		if references != 0 {
+			return fmt.Errorf("instance credential key version %d still has %d database references", version, references)
+		}
+	}
+	for _, version := range versions {
+		if version == keyring.currentVersion {
+			continue
+		}
+		if err := os.Remove(filepath.Join(keyring.directory, credentialKeyFilename(version))); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove instance credential key version %d: %w", version, err)
+		}
+	}
+	return syncCredentialDirectory(keyring.directory, CredentialFaultMissingKey)
+}
+
 func generateInitialCredentialKeyring(directory string) error {
 	if os.Geteuid() == 0 {
 		return &CredentialFault{Code: CredentialFaultKeyOwner}
@@ -205,6 +320,65 @@ func generateInitialCredentialKeyring(directory string) error {
 	return nil
 }
 
+func generateCredentialKey(directory string, version int32) error {
+	key := make([]byte, credentialKeySize)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return fmt.Errorf("generate instance credential key: %w", err)
+	}
+	file, err := os.CreateTemp(directory, ".master-key-")
+	if err != nil {
+		return &CredentialFault{Code: CredentialFaultMissingKey}
+	}
+	temporary := file.Name()
+	defer os.Remove(temporary)
+	if err := file.Chmod(0o600); err != nil {
+		file.Close()
+		return &CredentialFault{Code: CredentialFaultKeyPermissions}
+	}
+	if _, err := file.Write(key); err != nil {
+		file.Close()
+		return &CredentialFault{Code: CredentialFaultMissingKey}
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return &CredentialFault{Code: CredentialFaultMissingKey}
+	}
+	if err := file.Close(); err != nil {
+		return &CredentialFault{Code: CredentialFaultMissingKey}
+	}
+	if err := os.Link(temporary, filepath.Join(directory, credentialKeyFilename(version))); err != nil {
+		return &CredentialFault{Code: CredentialFaultCurrentKey}
+	}
+	return syncCredentialDirectory(directory, CredentialFaultMissingKey)
+}
+
+func credentialKeyVersions(directory string) ([]int32, error) {
+	matches, err := filepath.Glob(filepath.Join(directory, credentialKeyFilenamePattern))
+	if err != nil {
+		return nil, &CredentialFault{Code: CredentialFaultCurrentKey}
+	}
+	versions := make([]int32, 0, len(matches))
+	for _, match := range matches {
+		value := strings.TrimPrefix(filepath.Base(match), "master-key-v")
+		parsed, err := strconv.ParseInt(value, 10, 32)
+		if err != nil || parsed <= 0 {
+			return nil, &CredentialFault{Code: CredentialFaultCurrentKey}
+		}
+		version := int32(parsed)
+		if _, err := readCredentialKey(directory, version, CredentialFaultCurrentKey); err != nil {
+			return nil, err
+		}
+		versions = append(versions, version)
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+	return versions, nil
+}
+
+func containsCredentialKeyVersion(versions []int32, want int32) bool {
+	index := sort.Search(len(versions), func(index int) bool { return versions[index] >= want })
+	return index < len(versions) && versions[index] == want
+}
+
 func readCurrentCredentialKeyVersion(directory string) (int32, error) {
 	contents, err := os.ReadFile(filepath.Join(directory, credentialCurrentVersionFilename))
 	if err != nil {
@@ -242,13 +416,17 @@ func writeCurrentCredentialKeyVersion(directory string, version int32) error {
 	if err := os.Rename(temporary, filepath.Join(directory, credentialCurrentVersionFilename)); err != nil {
 		return &CredentialFault{Code: CredentialFaultCurrentKey}
 	}
+	return syncCredentialDirectory(directory, CredentialFaultCurrentKey)
+}
+
+func syncCredentialDirectory(directory string, faultCode CredentialFaultCode) error {
 	directoryHandle, err := os.Open(directory)
 	if err != nil {
-		return &CredentialFault{Code: CredentialFaultCurrentKey}
+		return &CredentialFault{Code: faultCode}
 	}
 	defer directoryHandle.Close()
 	if err := directoryHandle.Sync(); err != nil {
-		return &CredentialFault{Code: CredentialFaultCurrentKey}
+		return &CredentialFault{Code: faultCode}
 	}
 	return nil
 }

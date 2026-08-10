@@ -55,3 +55,23 @@ func TestClaudeMarkdownPathsExist(t *testing.T) {
 		}
 	}
 }
+
+func TestInstalledDatabaseAndCredentialKeyringStaySeparate(t *testing.T) {
+	installer, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "packaging", "bundle", "install.sh"))
+	if err != nil {
+		t.Fatalf("read installer: %v", err)
+	}
+	contents := string(installer)
+	for _, required := range []string{
+		`data_dir=$(realpath -m "$data_dir")`,
+		`data_prefix=${data_dir%/}`,
+		`case "$install_root/etc" in`,
+		`case "$data_dir" in`,
+		`PGDATA=$data_dir`,
+		`CREDENTIALS_DIR=$install_root/etc/credentials`,
+	} {
+		if !strings.Contains(contents, required) {
+			t.Errorf("installer no longer enforces separate database and credential-keyring artifacts: missing %q", required)
+		}
+	}
+}

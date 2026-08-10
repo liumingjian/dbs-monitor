@@ -11,6 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countCredentialKeyReferences = `-- name: CountCredentialKeyReferences :one
+SELECT count(*) FROM instance WHERE password_key_version = $1
+`
+
+func (q *Queries) CountCredentialKeyReferences(ctx context.Context, passwordKeyVersion int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countCredentialKeyReferences, passwordKeyVersion)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countCredentialsNotUsingKeyVersion = `-- name: CountCredentialsNotUsingKeyVersion :one
+SELECT count(*) FROM instance WHERE password_key_version <> $1
+`
+
+func (q *Queries) CountCredentialsNotUsingKeyVersion(ctx context.Context, passwordKeyVersion int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countCredentialsNotUsingKeyVersion, passwordKeyVersion)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createInstance = `-- name: CreateInstance :one
 WITH created AS (
     INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_token_hash)
@@ -183,6 +205,39 @@ func (q *Queries) ListCollectionTargets(ctx context.Context) ([]ListCollectionTa
 	return items, nil
 }
 
+const listCredentialsForKeyRotation = `-- name: ListCredentialsForKeyRotation :many
+SELECT id, password_ciphertext, password_key_version
+FROM instance
+ORDER BY id
+FOR UPDATE
+`
+
+type ListCredentialsForKeyRotationRow struct {
+	ID                 pgtype.UUID
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+}
+
+func (q *Queries) ListCredentialsForKeyRotation(ctx context.Context) ([]ListCredentialsForKeyRotationRow, error) {
+	rows, err := q.db.Query(ctx, listCredentialsForKeyRotation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCredentialsForKeyRotationRow
+	for rows.Next() {
+		var i ListCredentialsForKeyRotationRow
+		if err := rows.Scan(&i.ID, &i.PasswordCiphertext, &i.PasswordKeyVersion); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstances = `-- name: ListInstances :many
 SELECT id, name, host, port, database_name, username, agent_version, created_at
 FROM instance
@@ -264,6 +319,24 @@ type SetCollectSuccessParams struct {
 
 func (q *Queries) SetCollectSuccess(ctx context.Context, arg SetCollectSuccessParams) error {
 	_, err := q.db.Exec(ctx, setCollectSuccess, arg.InstanceID, arg.LastSuccessAt)
+	return err
+}
+
+const updateCredentialKeyVersion = `-- name: UpdateCredentialKeyVersion :exec
+UPDATE instance
+SET password_ciphertext = $2,
+    password_key_version = $3
+WHERE id = $1
+`
+
+type UpdateCredentialKeyVersionParams struct {
+	ID                 pgtype.UUID
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+}
+
+func (q *Queries) UpdateCredentialKeyVersion(ctx context.Context, arg UpdateCredentialKeyVersionParams) error {
+	_, err := q.db.Exec(ctx, updateCredentialKeyVersion, arg.ID, arg.PasswordCiphertext, arg.PasswordKeyVersion)
 	return err
 }
 

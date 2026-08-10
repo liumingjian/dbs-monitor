@@ -38,6 +38,14 @@ fi
 printf 'Data directory [/opt/dbs-monitor/data]: '
 read -r data_dir
 data_dir=${data_dir:-/opt/dbs-monitor/data}
+data_dir=$(realpath -m "$data_dir")
+data_prefix=${data_dir%/}
+case "$install_root/etc" in
+  "$data_dir"|"$data_prefix/"*) echo "data directory must not contain $install_root/etc; database backups and the credential keyring must remain separate" >&2; exit 1 ;;
+esac
+case "$data_dir" in
+  "$install_root/etc"|"$install_root/etc/"*) echo "data directory must not be inside $install_root/etc; database backups and the credential keyring must remain separate" >&2; exit 1 ;;
+esac
 printf 'Public platform IP or hostname: '
 read -r public_host
 if [ -z "$public_host" ]; then
