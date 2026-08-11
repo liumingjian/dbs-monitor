@@ -127,12 +127,15 @@ const (
 
 // Defines values for ErrorErrorCode.
 const (
-	CONFLICT         ErrorErrorCode = "CONFLICT"
-	FORBIDDEN        ErrorErrorCode = "FORBIDDEN"
-	INTERNAL         ErrorErrorCode = "INTERNAL"
-	NOTFOUND         ErrorErrorCode = "NOT_FOUND"
-	UNAUTHENTICATED  ErrorErrorCode = "UNAUTHENTICATED"
-	VALIDATIONFAILED ErrorErrorCode = "VALIDATION_FAILED"
+	AUTHFAILED                   ErrorErrorCode = "AUTH_FAILED"
+	CONFLICT                     ErrorErrorCode = "CONFLICT"
+	FORBIDDEN                    ErrorErrorCode = "FORBIDDEN"
+	INTERNAL                     ErrorErrorCode = "INTERNAL"
+	NETWORKUNREACHABLE           ErrorErrorCode = "NETWORK_UNREACHABLE"
+	NOTFOUND                     ErrorErrorCode = "NOT_FOUND"
+	ONBOARDINGVERSIONUNSUPPORTED ErrorErrorCode = "VERSION_UNSUPPORTED"
+	UNAUTHENTICATED              ErrorErrorCode = "UNAUTHENTICATED"
+	VALIDATIONFAILED             ErrorErrorCode = "VALIDATION_FAILED"
 )
 
 // Defines values for NoDataPolicy.
@@ -380,21 +383,38 @@ type Instance struct {
 	Username     string             `json:"username"`
 }
 
-// InstanceCreated defines model for InstanceCreated.
-type InstanceCreated struct {
-	// AgentToken Returned once when the instance is created.
-	AgentToken string   `json:"agent_token"`
-	Instance   Instance `json:"instance"`
-}
-
-// InstanceInput defines model for InstanceInput.
-type InstanceInput struct {
+// InstanceCreateInput defines model for InstanceCreateInput.
+type InstanceCreateInput struct {
 	Database string `json:"database"`
 	Host     string `json:"host"`
 	Name     string `json:"name"`
 	Password string `json:"password"`
 	Port     int    `json:"port"`
 	Username string `json:"username"`
+}
+
+// InstanceCreated defines model for InstanceCreated.
+type InstanceCreated struct {
+	Instance Instance `json:"instance"`
+}
+
+// InstanceCredentialInput defines model for InstanceCredentialInput.
+type InstanceCredentialInput struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// InstanceCredentialUpdated defines model for InstanceCredentialUpdated.
+type InstanceCredentialUpdated struct {
+	Username string `json:"username"`
+}
+
+// InstanceMetadataInput defines model for InstanceMetadataInput.
+type InstanceMetadataInput struct {
+	Database string `json:"database"`
+	Host     string `json:"host"`
+	Name     string `json:"name"`
+	Port     int    `json:"port"`
 }
 
 // MetricSeriesResponse defines model for MetricSeriesResponse.
@@ -499,13 +519,16 @@ type UpdateAlertRuleJSONRequestBody = AlertRuleInput
 type UpdateAlertRuleEnabledJSONRequestBody = AlertRuleEnabledInput
 
 // CreateInstanceJSONRequestBody defines body for CreateInstance for application/json ContentType.
-type CreateInstanceJSONRequestBody = InstanceInput
+type CreateInstanceJSONRequestBody = InstanceCreateInput
 
 // UpdateInstanceJSONRequestBody defines body for UpdateInstance for application/json ContentType.
-type UpdateInstanceJSONRequestBody = InstanceInput
+type UpdateInstanceJSONRequestBody = InstanceMetadataInput
 
 // UpdateCollectionTaskIntervalJSONRequestBody defines body for UpdateCollectionTaskInterval for application/json ContentType.
 type UpdateCollectionTaskIntervalJSONRequestBody = CollectionTaskIntervalInput
+
+// UpdateInstanceCredentialJSONRequestBody defines body for UpdateInstanceCredential for application/json ContentType.
+type UpdateInstanceCredentialJSONRequestBody = InstanceCredentialInput
 
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody CreateSessionJSONBody
@@ -563,6 +586,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/instances/{id}/collection/tasks/{task_id})
 	UpdateCollectionTaskInterval(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, taskId string)
+
+	// (PUT /api/v1/instances/{id}/credentials)
+	UpdateInstanceCredential(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params GetMetricSeriesParams)
@@ -877,6 +903,31 @@ func (siw *ServerInterfaceWrapper) UpdateCollectionTaskInterval(w http.ResponseW
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateCollectionTaskInterval(w, r, id, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateInstanceCredential operation middleware
+func (siw *ServerInterfaceWrapper) UpdateInstanceCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateInstanceCredential(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1245,6 +1296,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/capabilities", wrapper.ListCapabilitySnapshot)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks", wrapper.ListCollectionTaskStates)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks/{task_id}", wrapper.UpdateCollectionTaskInterval)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/credentials", wrapper.UpdateInstanceCredential)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
@@ -1439,6 +1491,15 @@ func (response CreateInstance201JSONResponse) VisitCreateInstanceResponse(w http
 	return json.NewEncoder(w).Encode(response)
 }
 
+type CreateInstance400JSONResponse Error
+
+func (response CreateInstance400JSONResponse) VisitCreateInstanceResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type DeleteInstanceRequestObject struct {
 	Id openapi_types.UUID `json:"id"`
 }
@@ -1486,6 +1547,15 @@ type UpdateInstance200JSONResponse Instance
 func (response UpdateInstance200JSONResponse) VisitUpdateInstanceResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateInstance400JSONResponse Error
+
+func (response UpdateInstance400JSONResponse) VisitUpdateInstanceResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1546,6 +1616,33 @@ func (response UpdateCollectionTaskInterval200JSONResponse) VisitUpdateCollectio
 type UpdateCollectionTaskInterval400JSONResponse Error
 
 func (response UpdateCollectionTaskInterval400JSONResponse) VisitUpdateCollectionTaskIntervalResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateInstanceCredentialRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateInstanceCredentialJSONRequestBody
+}
+
+type UpdateInstanceCredentialResponseObject interface {
+	VisitUpdateInstanceCredentialResponse(w http.ResponseWriter) error
+}
+
+type UpdateInstanceCredential200JSONResponse InstanceCredentialUpdated
+
+func (response UpdateInstanceCredential200JSONResponse) VisitUpdateInstanceCredentialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateInstanceCredential400JSONResponse Error
+
+func (response UpdateInstanceCredential400JSONResponse) VisitUpdateInstanceCredentialResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
 
@@ -1850,6 +1947,9 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/instances/{id}/collection/tasks/{task_id})
 	UpdateCollectionTaskInterval(ctx context.Context, request UpdateCollectionTaskIntervalRequestObject) (UpdateCollectionTaskIntervalResponseObject, error)
+
+	// (PUT /api/v1/instances/{id}/credentials)
+	UpdateInstanceCredential(ctx context.Context, request UpdateInstanceCredentialRequestObject) (UpdateInstanceCredentialResponseObject, error)
 
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(ctx context.Context, request GetMetricSeriesRequestObject) (GetMetricSeriesResponseObject, error)
@@ -2279,6 +2379,39 @@ func (sh *strictHandler) UpdateCollectionTaskInterval(w http.ResponseWriter, r *
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateCollectionTaskIntervalResponseObject); ok {
 		if err := validResponse.VisitUpdateCollectionTaskIntervalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateInstanceCredential operation middleware
+func (sh *strictHandler) UpdateInstanceCredential(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateInstanceCredentialRequestObject
+
+	request.Id = id
+
+	var body UpdateInstanceCredentialJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateInstanceCredential(ctx, request.(UpdateInstanceCredentialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateInstanceCredential")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateInstanceCredentialResponseObject); ok {
+		if err := validResponse.VisitUpdateInstanceCredentialResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

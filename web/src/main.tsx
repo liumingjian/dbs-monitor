@@ -4,13 +4,14 @@ import { ConfigProvider } from 'antd'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { instanceRoute } from './routes/instances.$id'
+import { instanceSettingsRoute } from './routes/instances.$id/settings'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { rootRoute } from './routes/root'
 import { usersRoute } from './routes/users'
 import './styles.css'
 
-const routeTree = rootRoute.addChildren([loginRoute, instancesRoute, instanceRoute, usersRoute])
+const routeTree = rootRoute.addChildren([loginRoute, instancesRoute, instanceRoute, instanceSettingsRoute, usersRoute])
 const router = createRouter({ routeTree, defaultPreload: 'intent' })
 const queryClient = new QueryClient()
 

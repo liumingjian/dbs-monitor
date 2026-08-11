@@ -8,7 +8,18 @@ Error:
       properties:
         code:
           type: string
-          enum: [VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, INTERNAL]
+          enum: [VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, INTERNAL, NETWORK_UNREACHABLE, AUTH_FAILED, VERSION_UNSUPPORTED]
+          x-enum-varnames:
+            - VALIDATIONFAILED
+            - UNAUTHENTICATED
+            - FORBIDDEN
+            - NOTFOUND
+            - CONFLICT
+            - INTERNAL
+            - NETWORKUNREACHABLE
+            - AUTHFAILED
+            # VERSIONUNSUPPORTED is already generated for the Unavailability enum.
+            - ONBOARDINGVERSIONUNSUPPORTED
         message:
           type: string
         field_errors:

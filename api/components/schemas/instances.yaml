@@ -1,4 +1,4 @@
-InstanceInput:
+InstanceCreateInput:
   type: object
   required: [name, host, port, database, username, password]
   properties:
@@ -8,15 +8,31 @@ InstanceInput:
     database: { type: string, minLength: 1 }
     username: { type: string, minLength: 1 }
     password: { type: string, minLength: 1 }
+InstanceMetadataInput:
+  type: object
+  required: [name, host, port, database]
+  properties:
+    name: { type: string, minLength: 1 }
+    host: { type: string, minLength: 1 }
+    port: { type: integer, minimum: 1, maximum: 65535 }
+    database: { type: string, minLength: 1 }
+InstanceCredentialInput:
+  type: object
+  required: [username, password]
+  properties:
+    username: { type: string, minLength: 1 }
+    password: { type: string, minLength: 1 }
+InstanceCredentialUpdated:
+  type: object
+  required: [username]
+  properties:
+    username: { type: string }
 InstanceCreated:
   type: object
-  required: [instance, agent_token]
+  required: [instance]
   properties:
     instance:
       $ref: '#/Instance'
-    agent_token:
-      type: string
-      description: Returned once when the instance is created.
 Instance:
   type: object
   required: [id, name, host, port, database, username, alert_status]

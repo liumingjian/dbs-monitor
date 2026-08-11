@@ -13,8 +13,8 @@ import (
 
 const createInstance = `-- name: CreateInstance :one
 WITH created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_token_hash)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING id, name, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
@@ -35,7 +35,6 @@ type CreateInstanceParams struct {
 	Username           string
 	PasswordCiphertext []byte
 	PasswordKeyVersion int32
-	AgentTokenHash     []byte
 }
 
 type CreateInstanceRow struct {
@@ -59,7 +58,6 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		arg.Username,
 		arg.PasswordCiphertext,
 		arg.PasswordKeyVersion,
-		arg.AgentTokenHash,
 	)
 	var i CreateInstanceRow
 	err := row.Scan(
@@ -133,6 +131,36 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 		&i.AgentTokenHash,
 		&i.AgentVersion,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getInstanceForUpdate = `-- name: GetInstanceForUpdate :one
+SELECT host, port, database_name, username, password_ciphertext, password_key_version
+FROM instance
+WHERE id = $1
+FOR UPDATE
+`
+
+type GetInstanceForUpdateRow struct {
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+}
+
+func (q *Queries) GetInstanceForUpdate(ctx context.Context, id pgtype.UUID) (GetInstanceForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getInstanceForUpdate, id)
+	var i GetInstanceForUpdateRow
+	err := row.Scan(
+		&i.Host,
+		&i.Port,
+		&i.DatabaseName,
+		&i.Username,
+		&i.PasswordCiphertext,
+		&i.PasswordKeyVersion,
 	)
 	return i, err
 }
@@ -267,32 +295,58 @@ func (q *Queries) SetCollectSuccess(ctx context.Context, arg SetCollectSuccessPa
 	return err
 }
 
-const updateInstance = `-- name: UpdateInstance :one
+const updateInstanceCredential = `-- name: UpdateInstanceCredential :one
 UPDATE instance
-SET name = $2,
-    host = $3,
-    port = $4,
-    database_name = $5,
-    username = $6,
-    password_ciphertext = $7,
-    password_key_version = $8,
+SET username = $2,
+    password_ciphertext = $3,
+    password_key_version = $4,
     credential_version = credential_version + 1
 WHERE id = $1
-RETURNING id, name, host, port, database_name, username, agent_version, created_at
+RETURNING username
 `
 
-type UpdateInstanceParams struct {
+type UpdateInstanceCredentialParams struct {
 	ID                 pgtype.UUID
-	Name               string
-	Host               string
-	Port               int32
-	DatabaseName       string
 	Username           string
 	PasswordCiphertext []byte
 	PasswordKeyVersion int32
 }
 
-type UpdateInstanceRow struct {
+func (q *Queries) UpdateInstanceCredential(ctx context.Context, arg UpdateInstanceCredentialParams) (string, error) {
+	row := q.db.QueryRow(ctx, updateInstanceCredential,
+		arg.ID,
+		arg.Username,
+		arg.PasswordCiphertext,
+		arg.PasswordKeyVersion,
+	)
+	var username string
+	err := row.Scan(&username)
+	return username, err
+}
+
+const updateInstanceMetadata = `-- name: UpdateInstanceMetadata :one
+UPDATE instance
+SET name = $2,
+    host = $3,
+    port = $4,
+    database_name = $5,
+    credential_version = credential_version + CASE
+        WHEN host <> $3 OR port <> $4 OR database_name <> $5 THEN 1
+        ELSE 0
+    END
+WHERE id = $1
+RETURNING id, name, host, port, database_name, username, agent_version
+`
+
+type UpdateInstanceMetadataParams struct {
+	ID           pgtype.UUID
+	Name         string
+	Host         string
+	Port         int32
+	DatabaseName string
+}
+
+type UpdateInstanceMetadataRow struct {
 	ID           pgtype.UUID
 	Name         string
 	Host         string
@@ -300,21 +354,17 @@ type UpdateInstanceRow struct {
 	DatabaseName string
 	Username     string
 	AgentVersion pgtype.Text
-	CreatedAt    pgtype.Timestamptz
 }
 
-func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (UpdateInstanceRow, error) {
-	row := q.db.QueryRow(ctx, updateInstance,
+func (q *Queries) UpdateInstanceMetadata(ctx context.Context, arg UpdateInstanceMetadataParams) (UpdateInstanceMetadataRow, error) {
+	row := q.db.QueryRow(ctx, updateInstanceMetadata,
 		arg.ID,
 		arg.Name,
 		arg.Host,
 		arg.Port,
 		arg.DatabaseName,
-		arg.Username,
-		arg.PasswordCiphertext,
-		arg.PasswordKeyVersion,
 	)
-	var i UpdateInstanceRow
+	var i UpdateInstanceMetadataRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -323,7 +373,6 @@ func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) 
 		&i.DatabaseName,
 		&i.Username,
 		&i.AgentVersion,
-		&i.CreatedAt,
 	)
 	return i, err
 }

@@ -54,6 +54,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateInstanceCredential"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/metrics/series": {
         parameters: {
             query?: never;
@@ -369,13 +387,26 @@ export interface components {
         AlertRuleEnabledInput: {
             enabled: boolean;
         };
-        InstanceInput: {
+        InstanceCreateInput: {
             name: string;
             host: string;
             port: number;
             database: string;
             username: string;
             password: string;
+        };
+        InstanceMetadataInput: {
+            name: string;
+            host: string;
+            port: number;
+            database: string;
+        };
+        InstanceCredentialInput: {
+            username: string;
+            password: string;
+        };
+        InstanceCredentialUpdated: {
+            username: string;
         };
         Instance: {
             /** Format: uuid */
@@ -391,8 +422,6 @@ export interface components {
         };
         InstanceCreated: {
             instance: components["schemas"]["Instance"];
-            /** @description Returned once when the instance is created. */
-            agent_token: string;
         };
         CollectionTaskState: {
             /** @enum {string} */
@@ -495,7 +524,7 @@ export interface components {
         Error: {
             error: {
                 /** @enum {string} */
-                code: "VALIDATION_FAILED" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INTERNAL";
+                code: "VALIDATION_FAILED" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INTERNAL" | "NETWORK_UNREACHABLE" | "AUTH_FAILED" | "VERSION_UNSUPPORTED";
                 message: string;
                 field_errors?: {
                     field: string;
@@ -589,7 +618,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InstanceInput"];
+                "application/json": components["schemas"]["InstanceCreateInput"];
             };
         };
         responses: {
@@ -600,6 +629,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InstanceCreated"];
+                };
+            };
+            /** @description Connection test or version gate failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -637,7 +675,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InstanceInput"];
+                "application/json": components["schemas"]["InstanceMetadataInput"];
             };
         };
         responses: {
@@ -648,6 +686,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Instance"];
+                };
+            };
+            /** @description Connection test failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -669,6 +716,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    updateInstanceCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstanceCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description Credential updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceCredentialUpdated"];
+                };
+            };
+            /** @description Connection test failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };

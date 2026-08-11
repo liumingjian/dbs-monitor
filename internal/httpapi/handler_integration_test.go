@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -89,31 +90,60 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	login.Body.Close()
 
-	targetPassword := env("PGPASSWORD", "dbs_monitor")
-	instanceInput := map[string]any{
-		"name": "target", "host": env("PGHOST", "localhost"), "port": envInt("PGPORT", 55432),
-		"database": env("PGDATABASE", "dbs_monitor"), "username": env("PGUSER", "dbs_monitor"),
-		"password": targetPassword,
+	instanceInput := api.InstanceCreateInput{
+		Name:     "target",
+		Host:     env("PGHOST", "localhost"),
+		Port:     envInt("PGPORT", 55432),
+		Database: env("PGDATABASE", "dbs_monitor"),
+		Username: env("PGUSER", "dbs_monitor"),
+		Password: env("PGPASSWORD", "dbs_monitor"),
+	}
+	assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
+		Name:     "unreachable",
+		Host:     instanceInput.Host,
+		Port:     1,
+		Database: instanceInput.Database,
+		Username: instanceInput.Username,
+		Password: instanceInput.Password,
+	}, api.NETWORKUNREACHABLE)
+	assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
+		Name:     "bad-auth",
+		Host:     instanceInput.Host,
+		Port:     instanceInput.Port,
+		Database: instanceInput.Database,
+		Username: instanceInput.Username,
+		Password: "definitely-wrong-password",
+	}, api.AUTHFAILED)
+	if os.Getenv("PG12PORT") != "" {
+		assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
+			Name:     "unsupported",
+			Host:     env("PG12HOST", "localhost"),
+			Port:     envInt("PG12PORT", 55431),
+			Database: env("PG12DATABASE", "monitored"),
+			Username: env("PG12USER", "monitored"),
+			Password: env("PG12PASSWORD", "monitored"),
+		}, api.ONBOARDINGVERSIONUNSUPPORTED)
 	}
 	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances", instanceInput, "")
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create instance status = %d, want 201", created.StatusCode)
 	}
-	var createBody struct {
-		AgentToken string `json:"agent_token"`
-		Instance   struct {
-			ID string `json:"id"`
-		} `json:"instance"`
-	}
+	var createBody api.InstanceCreated
 	if err := json.NewDecoder(created.Body).Decode(&createBody); err != nil {
 		t.Fatalf("decode created instance: %v", err)
 	}
 	created.Body.Close()
-	if createBody.AgentToken == "" || createBody.Instance.ID == "" {
-		t.Fatalf("create response missing token or instance: %+v", createBody)
+	if createBody.Instance.Id == uuid.Nil {
+		t.Fatalf("create response missing instance: %+v", createBody)
+	}
+	instanceID := createBody.Instance.Id.String()
+	agentToken := "integration-agent-token"
+	agentTokenHash := sha256.Sum256([]byte(agentToken))
+	if _, err := pool.Exec(ctx, "UPDATE instance SET agent_token_hash = $2 WHERE id = $1", instanceID, agentTokenHash[:]); err != nil {
+		t.Fatalf("seed explicit Agent token: %v", err)
 	}
 	var agentMetricsEnabled bool
-	if err := pool.QueryRow(ctx, "SELECT agent_metrics_enabled FROM instance_collection_config WHERE instance_id = $1", createBody.Instance.ID).Scan(&agentMetricsEnabled); err != nil {
+	if err := pool.QueryRow(ctx, "SELECT agent_metrics_enabled FROM instance_collection_config WHERE instance_id = $1", instanceID).Scan(&agentMetricsEnabled); err != nil {
 		t.Fatalf("read default agent collection setting: %v", err)
 	}
 	if !agentMetricsEnabled {
@@ -123,33 +153,117 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	var keyVersion int32
 	var credentialVersion int64
 	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, password_key_version, credential_version
-		FROM instance WHERE id = $1`, createBody.Instance.ID).Scan(&originalCiphertext, &keyVersion, &credentialVersion); err != nil {
+		FROM instance WHERE id = $1`, instanceID).Scan(&originalCiphertext, &keyVersion, &credentialVersion); err != nil {
 		t.Fatalf("read stored credential: %v", err)
 	}
-	if bytes.Contains(originalCiphertext, []byte(targetPassword)) {
+	if bytes.Contains(originalCiphertext, []byte(instanceInput.Password)) {
 		t.Fatal("stored credential contains plaintext password")
 	}
 	if keyVersion != 1 || credentialVersion != 1 {
 		t.Fatalf("initial key/credential versions = %d/%d, want 1/1", keyVersion, credentialVersion)
 	}
-	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, instanceInput, "")
+	failedMetadata := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+instanceID, api.InstanceMetadataInput{
+		Name:     "must-not-commit",
+		Host:     instanceInput.Host,
+		Port:     1,
+		Database: instanceInput.Database,
+	}, "")
+	if failedMetadata.StatusCode != http.StatusBadRequest {
+		t.Fatalf("failed metadata update status = %d, want 400", failedMetadata.StatusCode)
+	}
+	failedMetadata.Body.Close()
+	var storedName string
+	var storedPort int
+	if err := pool.QueryRow(ctx, "SELECT name, port FROM instance WHERE id = $1", instanceID).Scan(&storedName, &storedPort); err != nil {
+		t.Fatalf("read metadata after failed update: %v", err)
+	}
+	if storedName != "target" || storedPort != instanceInput.Port {
+		t.Fatalf("metadata after failed update = %q:%d, want target:%d", storedName, storedPort, instanceInput.Port)
+	}
+
+	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+instanceID, api.InstanceMetadataInput{
+		Name:     "renamed target",
+		Host:     instanceInput.Host,
+		Port:     instanceInput.Port,
+		Database: instanceInput.Database,
+	}, "")
 	if updated.StatusCode != http.StatusOK {
 		t.Fatalf("update instance status = %d, want 200", updated.StatusCode)
 	}
 	updated.Body.Close()
 	var updatedCiphertext []byte
-	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, createBody.Instance.ID).
+	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, instanceID).
+		Scan(&updatedCiphertext, &credentialVersion); err != nil {
+		t.Fatalf("read credential after metadata update: %v", err)
+	}
+	if !bytes.Equal(originalCiphertext, updatedCiphertext) || credentialVersion != 1 {
+		t.Fatal("metadata update changed the stored credential")
+	}
+
+	credentialsURL := server.URL + "/api/v1/instances/" + instanceID + "/credentials"
+	failedCredential := requestJSON(t, client, http.MethodPut, credentialsURL, api.InstanceCredentialInput{
+		Username: instanceInput.Username,
+		Password: "definitely-wrong-password",
+	}, "")
+	if failedCredential.StatusCode != http.StatusBadRequest {
+		t.Fatalf("failed credential update status = %d, want 400", failedCredential.StatusCode)
+	}
+	failedCredential.Body.Close()
+	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, instanceID).
+		Scan(&updatedCiphertext, &credentialVersion); err != nil {
+		t.Fatalf("read credential after failed rotation: %v", err)
+	}
+	if !bytes.Equal(originalCiphertext, updatedCiphertext) || credentialVersion != 1 {
+		t.Fatal("failed credential update changed the stored credential")
+	}
+
+	rotated := requestJSON(t, client, http.MethodPut, credentialsURL, api.InstanceCredentialInput{
+		Username: instanceInput.Username,
+		Password: instanceInput.Password,
+	}, "")
+	if rotated.StatusCode != http.StatusOK {
+		t.Fatalf("credential update status = %d, want 200", rotated.StatusCode)
+	}
+	var credentialResponse api.InstanceCredentialUpdated
+	if err := json.NewDecoder(rotated.Body).Decode(&credentialResponse); err != nil {
+		t.Fatalf("decode credential update response: %v", err)
+	}
+	rotated.Body.Close()
+	if credentialResponse.Username != instanceInput.Username {
+		t.Fatalf("credential response username = %q", credentialResponse.Username)
+	}
+	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, instanceID).
 		Scan(&updatedCiphertext, &credentialVersion); err != nil {
 		t.Fatalf("read updated credential: %v", err)
 	}
-	if bytes.Equal(originalCiphertext, updatedCiphertext) {
-		t.Fatal("credential update reused the previous ciphertext")
+	if bytes.Equal(originalCiphertext, updatedCiphertext) || credentialVersion != 2 {
+		t.Fatalf("successful credential update did not rotate ciphertext/version: version %d", credentialVersion)
 	}
-	if credentialVersion != 2 {
-		t.Fatalf("updated credential version = %d, want 2", credentialVersion)
+	rotatedCiphertext := bytes.Clone(updatedCiphertext)
+
+	updatedHost := "127.0.0.1"
+	if instanceInput.Host == updatedHost {
+		updatedHost = "localhost"
+	}
+	updatedConnection := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+instanceID, api.InstanceMetadataInput{
+		Name:     "renamed target",
+		Host:     updatedHost,
+		Port:     instanceInput.Port,
+		Database: instanceInput.Database,
+	}, "")
+	if updatedConnection.StatusCode != http.StatusOK {
+		t.Fatalf("connection metadata update status = %d, want 200", updatedConnection.StatusCode)
+	}
+	updatedConnection.Body.Close()
+	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, instanceID).
+		Scan(&updatedCiphertext, &credentialVersion); err != nil {
+		t.Fatalf("read credential after connection metadata update: %v", err)
+	}
+	if !bytes.Equal(rotatedCiphertext, updatedCiphertext) || credentialVersion != 3 {
+		t.Fatalf("connection metadata update did not preserve ciphertext and advance version: version %d", credentialVersion)
 	}
 
-	tasksURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/tasks", server.URL, createBody.Instance.ID)
+	tasksURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/tasks", server.URL, instanceID)
 	tasks := getResponse(t, client, tasksURL)
 	if tasks.StatusCode != http.StatusOK {
 		t.Fatalf("collection task states status = %d, want 200", tasks.StatusCode)
@@ -215,7 +329,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("updated interval = %d, want 7", updatedTask.IntervalSeconds)
 	}
 	var persistedInterval int
-	if err := pool.QueryRow(ctx, `SELECT interval_seconds FROM collection_task_config WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, createBody.Instance.ID).Scan(&persistedInterval); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT interval_seconds FROM collection_task_config WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, instanceID).Scan(&persistedInterval); err != nil {
 		t.Fatalf("read persisted collection interval: %v", err)
 	}
 	if persistedInterval != 7 {
@@ -223,7 +337,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 
 	seriesURL := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.total&from=%s&to=%s&step=raw",
-		server.URL, createBody.Instance.ID,
+		server.URL, instanceID,
 		url.QueryEscape(time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)),
 		url.QueryEscape(time.Now().Add(time.Minute).UTC().Format(time.RFC3339)))
 	assertUnavailability(t, client, seriesURL, "COLLECTION_FAILED")
@@ -275,7 +389,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("restore pg_monitor capability: %v", err)
 	}
 	tooWideRaw := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.total&from=%s&to=%s&step=raw",
-		server.URL, createBody.Instance.ID,
+		server.URL, instanceID,
 		url.QueryEscape(time.Now().Add(-7*time.Hour).UTC().Format(time.RFC3339)),
 		url.QueryEscape(time.Now().UTC().Format(time.RFC3339)))
 	tooWide := getResponse(t, client, tooWideRaw)
@@ -284,14 +398,14 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	tooWide.Body.Close()
 
-	if _, err := pool.Exec(ctx, "UPDATE instance SET port = 1 WHERE id = $1", createBody.Instance.ID); err != nil {
+	if _, err := pool.Exec(ctx, "UPDATE instance SET port = 1 WHERE id = $1", instanceID); err != nil {
 		t.Fatalf("make instance unreachable: %v", err)
 	}
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect unreachable instance: %v", err)
 	}
 	assertUnavailability(t, client, seriesURL, "DB_UNREACHABLE")
-	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", createBody.Instance.ID, envInt("PGPORT", 55432)); err != nil {
+	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", instanceID, instanceInput.Port); err != nil {
 		t.Fatalf("restore instance port: %v", err)
 	}
 	if err := collector.RunOnce(ctx); err != nil {
@@ -320,7 +434,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	report := func(timestamp time.Time, version, token string, backfill []map[string]any) *http.Response {
 		return requestJSON(t, client, http.MethodPost, server.URL+"/api/agent/v1/report", map[string]any{
-			"instance_id":          createBody.Instance.ID,
+			"instance_id":          instanceID,
 			"agent_version":        version,
 			"timestamp":            timestamp.UTC().Format(time.RFC3339Nano),
 			"metrics":              hostMetrics,
@@ -333,14 +447,14 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("wrong token status = %d, want 401", wrong.StatusCode)
 	}
 	wrong.Body.Close()
-	skewed := report(time.Now().Add(-31*time.Second), "2.4.0", createBody.AgentToken, nil)
+	skewed := report(time.Now().Add(-31*time.Second), "2.4.0", agentToken, nil)
 	if skewed.StatusCode != http.StatusBadRequest {
 		t.Fatalf("skewed timestamp status = %d, want 400", skewed.StatusCode)
 	}
 	skewed.Body.Close()
-	assertAgentState(t, ctx, pool, createBody.Instance.ID, "2.4.0", "CLOCK_SKEW", "时钟偏移")
+	assertAgentState(t, ctx, pool, instanceID, "2.4.0", "CLOCK_SKEW", "时钟偏移")
 
-	tooOld := report(time.Now(), "1.99.0", createBody.AgentToken, nil)
+	tooOld := report(time.Now(), "1.99.0", agentToken, nil)
 	if tooOld.StatusCode != http.StatusBadRequest {
 		t.Fatalf("old Agent version status = %d, want 400", tooOld.StatusCode)
 	}
@@ -356,7 +470,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if oldVersionError.Error.Message != "版本过旧，需升级" {
 		t.Fatalf("old version message = %q", oldVersionError.Error.Message)
 	}
-	assertAgentState(t, ctx, pool, createBody.Instance.ID, "1.99.0", "AGENT_VERSION_TOO_OLD", "版本过旧，需升级")
+	assertAgentState(t, ctx, pool, instanceID, "1.99.0", "AGENT_VERSION_TOO_OLD", "版本过旧，需升级")
 
 	alertUpdatedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
@@ -364,7 +478,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		SELECT $1, rule.metric_id, 'OK', $2, rule.id, rule.version, rule.severity, version.snapshot
 		FROM alert_rule rule
 		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = rule.version
-		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`, createBody.Instance.ID, alertUpdatedAt); err != nil {
+		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`, instanceID, alertUpdatedAt); err != nil {
 		t.Fatalf("seed alert state: %v", err)
 	}
 	now := time.Now().UTC()
@@ -373,7 +487,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		{"timestamp": now.Add(-4 * time.Minute).Format(time.RFC3339Nano), "metrics": metricsWithIOPS(20)},
 		{"timestamp": now.Add(-5*time.Minute - time.Second).Format(time.RFC3339Nano), "metrics": hostMetrics},
 	}
-	accepted := report(now, "2.4.0", createBody.AgentToken, backfill)
+	accepted := report(now, "2.4.0", agentToken, backfill)
 	if accepted.StatusCode != http.StatusNoContent {
 		t.Fatalf("valid report status = %d, want 204", accepted.StatusCode)
 	}
@@ -387,7 +501,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		var count int
 		if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
 			JOIN metric_series series ON series.series_id = sample.series_id
-			WHERE series.instance_id = $1 AND series.metric_id = $2`, createBody.Instance.ID, metricID).Scan(&count); err != nil {
+			WHERE series.instance_id = $1 AND series.metric_id = $2`, instanceID, metricID).Scan(&count); err != nil {
 			t.Fatalf("count %s points: %v", metricID, err)
 		}
 		if count != 3 {
@@ -397,13 +511,13 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	var iops []float64
 	if err := pool.QueryRow(ctx, `SELECT array_agg(sample.value ORDER BY sample.ts)
 		FROM metric_sample sample JOIN metric_series series ON series.series_id = sample.series_id
-		WHERE series.instance_id = $1 AND series.metric_id = 'host.disk.iops'`, createBody.Instance.ID).Scan(&iops); err != nil {
+		WHERE series.instance_id = $1 AND series.metric_id = 'host.disk.iops'`, instanceID).Scan(&iops); err != nil {
 		t.Fatalf("read backfilled IOPS values: %v", err)
 	}
 	if len(iops) != 3 || iops[0] != 20 || iops[1] != 9 || iops[2] != 15 {
 		t.Fatalf("backfilled IOPS values = %v, want [20 9 15] without reset reclassification", iops)
 	}
-	hostSeriesURL, err := url.Parse(fmt.Sprintf("%s/api/v1/instances/%s/metrics/series", server.URL, createBody.Instance.ID))
+	hostSeriesURL, err := url.Parse(fmt.Sprintf("%s/api/v1/instances/%s/metrics/series", server.URL, instanceID))
 	if err != nil {
 		t.Fatalf("parse host series URL: %v", err)
 	}
@@ -447,17 +561,17 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 			}
 		}
 	}
-	assertAgentState(t, ctx, pool, createBody.Instance.ID, "2.4.0", "", "")
+	assertAgentState(t, ctx, pool, instanceID, "2.4.0", "", "")
 
 	var unchanged time.Time
-	if err := pool.QueryRow(ctx, "SELECT updated_at FROM alert_instance WHERE instance_id = $1", createBody.Instance.ID).Scan(&unchanged); err != nil {
+	if err := pool.QueryRow(ctx, "SELECT updated_at FROM alert_instance WHERE instance_id = $1", instanceID).Scan(&unchanged); err != nil {
 		t.Fatalf("read alert state after backfill: %v", err)
 	}
 	if !unchanged.Equal(alertUpdatedAt) {
 		t.Fatalf("backfill changed alert evaluation state at %s, want %s", unchanged, alertUpdatedAt)
 	}
 
-	instanceResponse := getResponse(t, client, server.URL+"/api/v1/instances/"+createBody.Instance.ID)
+	instanceResponse := getResponse(t, client, server.URL+"/api/v1/instances/"+instanceID)
 	defer instanceResponse.Body.Close()
 	var instanceBody struct {
 		AgentVersion *string `json:"agent_version"`
@@ -469,7 +583,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("instance agent_version = %v, want 2.4.0", instanceBody.AgentVersion)
 	}
 
-	if _, err := pool.Exec(ctx, "UPDATE instance SET password_key_version = 999 WHERE id = $1", createBody.Instance.ID); err != nil {
+	if _, err := pool.Exec(ctx, "UPDATE instance SET password_key_version = 999 WHERE id = $1", instanceID); err != nil {
 		t.Fatalf("set unknown credential key version: %v", err)
 	}
 	err = collector.RunOnce(ctx)
@@ -479,11 +593,34 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	var lastErrorCode string
 	if err := pool.QueryRow(ctx, `SELECT COALESCE(last_error_code, '') FROM instance_collect_state
-		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, createBody.Instance.ID).Scan(&lastErrorCode); err != nil {
+		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, instanceID).Scan(&lastErrorCode); err != nil {
 		t.Fatalf("read collection state after credential fault: %v", err)
 	}
 	if lastErrorCode != "" {
 		t.Fatalf("credential fault was downgraded to target failure %q", lastErrorCode)
+	}
+}
+
+func assertCreateRejected(t *testing.T, ctx context.Context, client *http.Client, serverURL string, pool *pgxpool.Pool, input api.InstanceCreateInput, wantCode api.ErrorErrorCode) {
+	t.Helper()
+	response := requestJSON(t, client, http.MethodPost, serverURL+"/api/v1/instances", input, "")
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("create rejection status = %d, want 400", response.StatusCode)
+	}
+	var body api.Error
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode create rejection: %v", err)
+	}
+	if body.Error.Code != wantCode {
+		t.Fatalf("create rejection code = %q, want %q", body.Error.Code, wantCode)
+	}
+	var count int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM instance").Scan(&count); err != nil {
+		t.Fatalf("count rejected instances: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("instance count after rejected create = %d, want 0", count)
 	}
 }
 
