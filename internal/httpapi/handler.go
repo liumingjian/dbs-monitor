@@ -26,6 +26,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
 const (
@@ -49,6 +50,7 @@ type Handler struct {
 	serverVersion     string
 	caFingerprint     string
 	agentDistribution *AgentDistribution
+	health             *platformhealth.Store
 }
 
 func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {
@@ -60,11 +62,23 @@ func NewHandlerWithVersion(platform *db.Pool, currentClock clock.Clock, keyring 
 }
 
 func NewHandlerWithDialer(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string) *Handler {
-	return &Handler{platform: platform, clock: currentClock, keyring: keyring, dialer: dialer, serverVersion: serverVersion}
+	health := platformhealth.NewStore(serverVersion, time.Now().UTC(), nil)
+	return NewHandlerWithPlatformHealth(platform, currentClock, keyring, dialer, serverVersion, health)
+}
+
+func NewHandlerWithPlatformHealth(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store) *Handler {
+	return &Handler{platform: platform, clock: currentClock, keyring: keyring, dialer: dialer, serverVersion: serverVersion, health: health}
 }
 
 func NewHandlerWithAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string, distribution AgentDistribution) *Handler {
-	handler := NewHandlerWithVersion(platform, currentClock, keyring, serverVersion)
+	health := platformhealth.NewStore(serverVersion, time.Now().UTC(), nil)
+	return NewHandlerWithPlatformHealthAndAgentDistribution(
+		platform, currentClock, keyring, monitorpg.DirectDialer{}, serverVersion, health, distribution,
+	)
+}
+
+func NewHandlerWithPlatformHealthAndAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store, distribution AgentDistribution) *Handler {
+	handler := NewHandlerWithPlatformHealth(platform, currentClock, keyring, dialer, serverVersion, health)
 	handler.caFingerprint = distribution.CAFingerprint
 	handler.agentDistribution = &distribution
 	return handler
@@ -101,6 +115,37 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
 	}).String()
 	return api.CreateSession204Response{Headers: api.CreateSession204ResponseHeaders{SetCookie: cookie}}, nil
+}
+
+func (handler *Handler) GetPlatformHealth(context.Context, api.GetPlatformHealthRequestObject) (api.GetPlatformHealthResponseObject, error) {
+	snapshot := handler.health.Current()
+	sources := make([]api.PlatformHealthSourceSnapshot, 0, len(snapshot.Sources))
+	for _, source := range snapshot.Sources {
+		sources = append(sources, toAPIPlatformHealthSource(source))
+	}
+	return api.GetPlatformHealth200JSONResponse{
+		Status: api.PlatformHealthStatus(snapshot.Status), Sources: sources, AssembledAt: snapshot.AssembledAt,
+	}, nil
+}
+
+func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.PlatformHealthSourceSnapshot {
+	return api.PlatformHealthSourceSnapshot{
+		Source:                api.PlatformHealthSource(source.Source),
+		Status:                api.PlatformHealthStatus(source.Status),
+		Code:                  source.Code,
+		Version:               source.Version,
+		StartedAt:             source.StartedAt,
+		ExpiresAt:             source.ExpiresAt,
+		ProbeCapacity:         source.ProbeCapacity,
+		ProbeActive:           source.ProbeActive,
+		QueryCapacity:         source.QueryCapacity,
+		QueryActive:           source.QueryActive,
+		Pending:               source.Pending,
+		SkippedBackpressure:   source.SkippedBackpressure,
+		Backoff:               source.Backoff,
+		ConsecutiveFailures:   source.ConsecutiveFailures,
+		PrebuildDaysRemaining: source.PrebuildDaysRemaining,
+	}
 }
 
 func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
@@ -851,7 +896,15 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		return next(context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes)), writer, request, value)
+		response, err := next(context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes)), writer, request, value)
+		var credentialFault *instance.CredentialFault
+		if errors.As(err, &credentialFault) {
+			handler.health.Update(handler.clock.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{
+				Available:   true,
+				FailureCode: string(credentialFault.Code),
+			}))
+		}
+		return response, err
 	}
 }
 
@@ -859,7 +912,8 @@ var RequiredRoles = map[string]string{
 	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
 	"GetAgentRegistration": "READONLY", "RegisterAgent": "PLATFORM_ADMIN",
 	"RotateAgentToken": "PLATFORM_ADMIN", "RevokeAgentToken": "PLATFORM_ADMIN", "DisableAgent": "PLATFORM_ADMIN",
-	"ListAlertRules": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
+	"GetPlatformHealth": "PLATFORM_ADMIN",
+	"ListAlertRules":    "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"UpdateAlertRule": "ALERT_ADMIN", "UpdateAlertRuleEnabled": "ALERT_ADMIN",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",

@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -30,6 +32,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
@@ -398,6 +401,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1), "COLLECTION_FAILED")
 
 	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{}, keyring)
+	health := platformhealth.NewStore("3.0.0", time.Now().Add(-time.Hour), log.New(io.Discard, "", 0))
+	collector.SetPlatformHealth(health)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect samples: %v", err)
 	}
@@ -691,6 +696,10 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	var credentialFault *instance.CredentialFault
 	if !errors.As(err, &credentialFault) || credentialFault.Code != instance.CredentialFaultUnknownKeyVersion {
 		t.Fatalf("collection error = %v, want unknown credential key fault", err)
+	}
+	credentialHealth := health.Source(platformhealth.SourceCredentialKeyring)
+	if credentialHealth.Status != platformhealth.StatusFailed || credentialHealth.Code != string(instance.CredentialFaultUnknownKeyVersion) {
+		t.Fatalf("credential platform health = %+v, want FAILED/%s", credentialHealth, instance.CredentialFaultUnknownKeyVersion)
 	}
 	var lastErrorCode string
 	if err := pool.QueryRow(ctx, `SELECT COALESCE(last_error_code, '') FROM instance_collect_state

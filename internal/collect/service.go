@@ -22,6 +22,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
 const (
@@ -81,11 +82,16 @@ type Service struct {
 	clock    clock.Clock
 	config   Config
 	keyring  *instance.CredentialKeyring
+	health   *platformhealth.Store
 
 	queryConnectionMu       sync.Mutex
 	queryConnections        map[string]cachedConnection
 	queryConnectionRebuilds int64
 	statDatabaseRates       *statDatabaseRateState
+}
+
+func (service *Service) SetPlatformHealth(health *platformhealth.Store) {
+	service.health = health
 }
 
 func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Service {
@@ -497,11 +503,25 @@ func (service *Service) withPartitionRepair(ctx context.Context, observedAt time
 			return err
 		}
 		if err := metric.EnsurePartitions(ctx, service.platform, observedAt); err != nil {
+			service.publishPartitionWriteFailure(observedAt)
 			return err
 		}
-		return write()
+		if err := write(); err != nil {
+			service.publishPartitionWriteFailure(observedAt)
+			return err
+		}
 	}
 	return nil
+}
+
+func (service *Service) publishPartitionWriteFailure(observedAt time.Time) {
+	if service.health == nil {
+		return
+	}
+	service.health.Update(observedAt, platformhealth.PartitionSource(platformhealth.PartitionFacts{
+		ConsecutiveFailures: 1,
+		WriteFailed:         true,
+	}))
 }
 
 func isConnectionFailure(err error) bool {
@@ -516,6 +536,13 @@ func isConnectionFailure(err error) bool {
 func (service *Service) connectionConfig(target instance.ListCollectionTargetsRow) (*pgx.ConnConfig, error) {
 	password, err := service.keyring.DecryptPassword(uuid.UUID(target.ID.Bytes), target.PasswordCiphertext, target.PasswordKeyVersion)
 	if err != nil {
+		var fault *instance.CredentialFault
+		if service.health != nil && errors.As(err, &fault) {
+			service.health.Update(service.clock.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{
+				Available:   true,
+				FailureCode: string(fault.Code),
+			}))
+		}
 		return nil, err
 	}
 	return targetConnectionConfig(target, password)
@@ -552,13 +579,14 @@ func (service *Service) Run(ctx context.Context, interval time.Duration) {
 			scheduler.dispatch(ctx)
 		case <-ticks:
 			now := service.clock.Now().UTC()
-			if err := scheduler.refresh(ctx, now); err != nil {
-				log.Printf("collection scheduler refresh failed: %v", err)
-				continue
+			refreshErr := scheduler.refresh(ctx, now)
+			if refreshErr != nil {
+				log.Printf("collection scheduler refresh failed: %v", refreshErr)
+			} else {
+				scheduler.accrue(ctx, now)
+				scheduler.dispatch(ctx)
 			}
-			scheduler.accrue(ctx, now)
-			scheduler.dispatch(ctx)
-			scheduler.logSummary(now)
+			scheduler.logSummary(ctx, now, refreshErr)
 		}
 	}
 }

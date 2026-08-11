@@ -145,6 +145,23 @@ func certificateMatchesHost(certificatePath, keyPath, publicHost string) bool {
 	return err == nil && certificate.VerifyHostname(publicHost) == nil
 }
 
+func certificateExpiration(certificatePath string) (*time.Time, error) {
+	contents, err := os.ReadFile(certificatePath)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(contents)
+	if block == nil {
+		return nil, fmt.Errorf("decode TLS certificate")
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	expiresAt := certificate.NotAfter.UTC()
+	return &expiresAt, nil
+}
+
 func writePEM(path, kind string, contents []byte, mode os.FileMode) error {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {

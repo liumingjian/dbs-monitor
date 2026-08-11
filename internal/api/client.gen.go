@@ -113,6 +113,9 @@ type ClientInterface interface {
 
 	UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetPlatformHealth request
+	GetPlatformHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListInstances request
 	ListInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -307,6 +310,18 @@ func (c *Client) UpdateAlertRuleEnabledWithBody(ctx context.Context, id openapi_
 
 func (c *Client) UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateAlertRuleEnabledRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPlatformHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPlatformHealthRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -934,6 +949,33 @@ func NewUpdateAlertRuleEnabledRequestWithBody(server string, id openapi_types.UU
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetPlatformHealthRequest generates requests for GetPlatformHealth
+func NewGetPlatformHealthRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/health")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -2000,6 +2042,9 @@ type ClientWithResponsesInterface interface {
 
 	UpdateAlertRuleEnabledWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error)
 
+	// GetPlatformHealthWithResponse request
+	GetPlatformHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformHealthResponse, error)
+
 	// ListInstancesWithResponse request
 	ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error)
 
@@ -2206,6 +2251,28 @@ func (r UpdateAlertRuleEnabledResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateAlertRuleEnabledResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetPlatformHealthResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlatformHealthSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPlatformHealthResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPlatformHealthResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2855,6 +2922,15 @@ func (c *ClientWithResponses) UpdateAlertRuleEnabledWithResponse(ctx context.Con
 	return ParseUpdateAlertRuleEnabledResponse(rsp)
 }
 
+// GetPlatformHealthWithResponse request returning *GetPlatformHealthResponse
+func (c *ClientWithResponses) GetPlatformHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformHealthResponse, error) {
+	rsp, err := c.GetPlatformHealth(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPlatformHealthResponse(rsp)
+}
+
 // ListInstancesWithResponse request returning *ListInstancesResponse
 func (c *ClientWithResponses) ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error) {
 	rsp, err := c.ListInstances(ctx, reqEditors...)
@@ -3326,6 +3402,32 @@ func ParseUpdateAlertRuleEnabledResponse(rsp *http.Response) (*UpdateAlertRuleEn
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPlatformHealthResponse parses an HTTP response from a GetPlatformHealthWithResponse call
+func ParseGetPlatformHealthResponse(rsp *http.Response) (*GetPlatformHealthResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPlatformHealthResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformHealthSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

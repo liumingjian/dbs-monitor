@@ -47,6 +47,14 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		{"AlertRuleScope", mapKeys(map[api.AlertRuleScope]string{
 			api.ALL: "", api.INSTANCES: "",
 		})},
+		{"PlatformHealthStatus", mapKeys(map[api.PlatformHealthStatus]string{
+			api.PlatformHealthOK: "", api.PlatformHealthDegraded: "", api.PlatformHealthFailed: "", api.PlatformHealthUnknown: "",
+		})},
+		{"PlatformHealthSource", mapKeys(map[api.PlatformHealthSource]string{
+			api.HealthSourceServerProcess: "", api.HealthSourcePlatformDatabase: "", api.HealthSourceCollectionScheduler: "",
+			api.HealthSourcePartitionMaintenance: "", api.HealthSourceTLSCertificate: "", api.HealthSourceAgentIngress: "",
+			api.HealthSourceDisk: "", api.HealthSourceCredentialKeyring: "",
+		})},
 	}
 
 	for _, tt := range tests {

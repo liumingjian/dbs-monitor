@@ -68,6 +68,8 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 		"username": "operator", "password": createdUser.InitialPassword,
 	}), http.StatusNoContent)
 	assertUserStatus(t, userJSONRequest(t, operator, http.MethodGet, server.URL+"/api/v1/users", nil), http.StatusOK)
+	assertUserStatus(t, userJSONRequest(t, admin, http.MethodGet, server.URL+"/api/v1/diagnostics/health", nil), http.StatusOK)
+	assertUserStatus(t, userJSONRequest(t, operator, http.MethodGet, server.URL+"/api/v1/diagnostics/health", nil), http.StatusForbidden)
 	assertUserStatus(t, userJSONRequest(t, operator, http.MethodPost, server.URL+"/api/v1/users", map[string]any{
 		"username": "forbidden", "role": "READONLY",
 	}), http.StatusForbidden)

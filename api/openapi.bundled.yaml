@@ -12,6 +12,7 @@ tags:
   - name: agent
   - name: collection
   - name: users
+  - name: diagnostics
 paths:
   /api/v1/login:
     post:
@@ -835,6 +836,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/diagnostics/health:
+    get:
+      tags:
+        - diagnostics
+      operationId: getPlatformHealth
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory platform health snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSnapshot'
 components:
   securitySchemes:
     agentToken:
@@ -913,6 +927,38 @@ components:
       enum:
         - ALL
         - INSTANCES
+    PlatformHealthStatus:
+      type: string
+      enum:
+        - OK
+        - DEGRADED
+        - FAILED
+        - UNKNOWN
+      x-enum-varnames:
+        - PlatformHealthOK
+        - PlatformHealthDegraded
+        - PlatformHealthFailed
+        - PlatformHealthUnknown
+    PlatformHealthSource:
+      type: string
+      enum:
+        - SERVER_PROCESS
+        - PLATFORM_DATABASE
+        - COLLECTION_SCHEDULER
+        - PARTITION_MAINTENANCE
+        - TLS_CERTIFICATE
+        - AGENT_INGRESS
+        - DISK
+        - CREDENTIAL_KEYRING
+      x-enum-varnames:
+        - HealthSourceServerProcess
+        - HealthSourcePlatformDatabase
+        - HealthSourceCollectionScheduler
+        - HealthSourcePartitionMaintenance
+        - HealthSourceTLSCertificate
+        - HealthSourceAgentIngress
+        - HealthSourceDisk
+        - HealthSourceCredentialKeyring
     AlertRuleInput:
       type: object
       required:
@@ -1486,6 +1532,72 @@ components:
         new_password:
           type: string
           minLength: 12
+    PlatformHealthSourceSnapshot:
+      type: object
+      required:
+        - source
+        - status
+        - code
+      properties:
+        source:
+          $ref: '#/components/schemas/PlatformHealthSource'
+        status:
+          $ref: '#/components/schemas/PlatformHealthStatus'
+        code:
+          type: string
+        version:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        probe_capacity:
+          type: integer
+          minimum: 0
+        probe_active:
+          type: integer
+          minimum: 0
+        query_capacity:
+          type: integer
+          minimum: 0
+        query_active:
+          type: integer
+          minimum: 0
+        pending:
+          type: integer
+          minimum: 0
+        skipped_backpressure:
+          type: integer
+          format: int64
+          minimum: 0
+        backoff:
+          type: integer
+          format: int64
+          minimum: 0
+        consecutive_failures:
+          type: integer
+          minimum: 0
+        prebuild_days_remaining:
+          type: integer
+          minimum: 0
+    PlatformHealthSnapshot:
+      type: object
+      required:
+        - status
+        - sources
+        - assembled_at
+      properties:
+        status:
+          $ref: '#/components/schemas/PlatformHealthStatus'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+        assembled_at:
+          type: string
+          format: date-time
     Error:
       type: object
       required:
