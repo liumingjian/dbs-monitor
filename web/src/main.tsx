@@ -3,6 +3,9 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { ConfigProvider } from 'antd'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { alertsRoute } from './routes/alerts'
+import { instanceAlertDetailRoute } from './routes/instances.$id/alerts.$alertId'
+import { instanceAlertsRoute } from './routes/instances.$id/alerts'
 import { instanceRoute } from './routes/instances.$id'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
@@ -15,9 +18,12 @@ import './styles.css'
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
+  alertsRoute,
   instancesRoute,
   instanceRoute,
   standardMonitoringRoute,
+  instanceAlertsRoute,
+  instanceAlertDetailRoute,
   collectionManagementRoute,
   instanceSettingsRoute,
   usersRoute,

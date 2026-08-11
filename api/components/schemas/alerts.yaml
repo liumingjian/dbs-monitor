@@ -1,3 +1,83 @@
+AlertObservation:
+  type: object
+  required:
+    - id
+    - instance_id
+    - instance_name
+    - rule_id
+    - rule_name
+    - rule_version
+    - rule_snapshot
+    - metric_id
+    - status
+    - severity
+    - disposition
+    - paused
+    - updated_at
+    - duration_ms
+  properties:
+    id: { type: string, format: uuid }
+    instance_id: { type: string, format: uuid }
+    instance_name: { type: string }
+    rule_id: { type: string, format: uuid }
+    rule_name: { type: string }
+    rule_version: { type: integer, minimum: 1 }
+    rule_snapshot:
+      type: object
+      additionalProperties: true
+    metric_id: { type: string }
+    status: { $ref: ../enums.yaml#/AlertStatus }
+    severity: { $ref: ../enums.yaml#/AlertSeverity }
+    disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    paused: { type: boolean }
+    paused_at: { type: string, format: date-time }
+    in_maintenance:
+      type: boolean
+      nullable: true
+      description: Empty until maintenance-window projection is delivered.
+    current_value: { type: number, format: double }
+    threshold: { type: number, format: double }
+    first_triggered_at: { type: string, format: date-time }
+    updated_at: { type: string, format: date-time }
+    recovered_at: { type: string, format: date-time }
+    duration_ms: { type: integer, format: int64, minimum: 0 }
+    unavailability: { $ref: ../enums.yaml#/Unavailability }
+
+AlertObservationPage:
+  type: object
+  required: [total, items]
+  properties:
+    total: { type: integer, minimum: 0 }
+    items:
+      type: array
+      items: { $ref: '#/AlertObservation' }
+
+AlertRuleVersionRecord:
+  type: object
+  required: [version, snapshot, evaluated_at]
+  properties:
+    version: { type: integer, minimum: 1 }
+    snapshot:
+      type: object
+      additionalProperties: true
+    evaluated_at: { type: string, format: date-time }
+
+AlertDetail:
+  allOf:
+    - $ref: '#/AlertObservation'
+    - type: object
+      required: [rule_version_history, notification_results]
+      properties:
+        rule_version_history:
+          type: array
+          items: { $ref: '#/AlertRuleVersionRecord' }
+        notification_results:
+          type: array
+          description: Empty until notification delivery records are produced.
+          items:
+            type: object
+            additionalProperties: true
+
 AlertTriggerSnapshotResult:
   type: string
   enum: [SUCCESS, FAILED, NOT_APPLICABLE]

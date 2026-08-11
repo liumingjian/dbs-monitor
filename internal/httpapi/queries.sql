@@ -114,6 +114,69 @@ SELECT metric_id
 FROM alert_instance
 WHERE id = $1;
 
+-- name: CountAlertObservations :one
+SELECT count(*)
+FROM alert_instance alert
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE (sqlc.arg(recovered)::boolean = (alert.status = 'RECOVERED'))
+  AND (NOT sqlc.arg(has_instance)::boolean OR alert.instance_id = sqlc.arg(instance_id))
+  AND (sqlc.arg(include_paused)::boolean OR NOT coalesce(config.collection_paused, false));
+
+-- name: ListAlertObservations :many
+SELECT alert.id, alert.instance_id, identity.name AS instance_name,
+       alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
+       alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
+       alert.severity, alert.disposition,
+       coalesce(config.collection_paused, false) AS paused,
+       config.collection_pause_updated_at AS paused_at,
+       coalesce((SELECT event.current_value FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.kind = 'FIRED'
+                 ORDER BY event.evaluated_at, event.id LIMIT 1), alert.current_value) AS current_value,
+       coalesce((alert.first_rule_snapshot->>'threshold')::double precision,
+                (alert.rule_snapshot->>'threshold')::double precision)::double precision AS threshold,
+       alert.first_triggered_at, alert.updated_at, alert.recovered_at,
+       coalesce(alert.unavailability, (SELECT event.unavailability FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.unavailability IS NOT NULL
+                 ORDER BY event.evaluated_at DESC, event.id DESC LIMIT 1)) AS unavailability
+FROM alert_instance alert
+JOIN instance_identity identity ON identity.id = alert.instance_id
+JOIN alert_rule rule ON rule.id = alert.rule_id
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE (sqlc.arg(recovered)::boolean = (alert.status = 'RECOVERED'))
+  AND (NOT sqlc.arg(has_instance)::boolean OR alert.instance_id = sqlc.arg(instance_id))
+  AND (sqlc.arg(include_paused)::boolean OR NOT coalesce(config.collection_paused, false))
+ORDER BY coalesce(alert.first_triggered_at, alert.updated_at) DESC, alert.id
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
+-- name: GetAlertObservation :one
+SELECT alert.id, alert.instance_id, identity.name AS instance_name,
+       alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
+       alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
+       alert.severity, alert.disposition,
+       coalesce(config.collection_paused, false) AS paused,
+       config.collection_pause_updated_at AS paused_at,
+       coalesce((SELECT event.current_value FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.kind = 'FIRED'
+                 ORDER BY event.evaluated_at, event.id LIMIT 1), alert.current_value) AS current_value,
+       coalesce((alert.first_rule_snapshot->>'threshold')::double precision,
+                (alert.rule_snapshot->>'threshold')::double precision)::double precision AS threshold,
+       alert.first_triggered_at, alert.updated_at, alert.recovered_at,
+       coalesce(alert.unavailability, (SELECT event.unavailability FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.unavailability IS NOT NULL
+                 ORDER BY event.evaluated_at DESC, event.id DESC LIMIT 1)) AS unavailability
+FROM alert_instance alert
+JOIN instance_identity identity ON identity.id = alert.instance_id
+JOIN alert_rule rule ON rule.id = alert.rule_id
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE alert.id = $1;
+
+-- name: ListAlertRuleVersionHistory :many
+SELECT DISTINCT ON (rule_version) rule_version, rule_snapshot, evaluated_at
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind NOT IN ('ACKED', 'IGNORED')
+ORDER BY rule_version, evaluated_at;
+
 -- name: GetAlertTriggerSnapshot :one
 SELECT id, captured_at, result, original_match_count, truncated, failure_reason
 FROM alert_trigger_snapshot

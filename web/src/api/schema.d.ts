@@ -325,6 +325,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alerts/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCurrentAlerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAlertHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-instances/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAlertDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alert-instances/{id}/trigger-snapshot": {
         parameters: {
             query?: never;
@@ -894,6 +944,53 @@ export interface components {
             failure_reason?: string;
             sessions: components["schemas"]["AlertTriggerSnapshotSession"][];
         };
+        AlertObservation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            instance_id: string;
+            instance_name: string;
+            /** Format: uuid */
+            rule_id: string;
+            rule_name: string;
+            rule_version: number;
+            rule_snapshot: {
+                [key: string]: unknown;
+            };
+            metric_id: string;
+            status: components["schemas"]["AlertStatus"];
+            severity: components["schemas"]["AlertSeverity"];
+            disposition: components["schemas"]["AlertDisposition"];
+            paused: boolean;
+            /** Format: date-time */
+            paused_at?: string;
+            /** @description Empty until maintenance-window projection is delivered. */
+            in_maintenance?: boolean | null;
+            /** Format: double */
+            current_value?: number;
+            /** Format: double */
+            threshold?: number;
+            /** Format: date-time */
+            first_triggered_at?: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            recovered_at?: string;
+            /** Format: int64 */
+            duration_ms: number;
+            unavailability?: components["schemas"]["Unavailability"];
+        };
+        AlertObservationPage: {
+            total: number;
+            items: components["schemas"]["AlertObservation"][];
+        };
+        AlertDetail: components["schemas"]["AlertObservation"] & {
+            rule_version_history: components["schemas"]["AlertRuleVersionRecord"][];
+            /** @description Empty until notification delivery records are produced. */
+            notification_results: {
+                [key: string]: unknown;
+            }[];
+        };
         /** @enum {string} */
         PerformanceEventType: "LOCK_BLOCKING" | "LONG_TRANSACTION" | "IDLE_IN_TRANSACTION" | "ACTIVE_SESSIONS_HIGH" | "REPLICATION_LAG" | "TEMP_FILES_SURGE";
         PerformanceEvent: {
@@ -1227,6 +1324,14 @@ export interface components {
         };
         /** @enum {string} */
         CollectionTaskResult: "SUCCESS" | "FAILED" | "TIMED_OUT" | "SKIPPED_BACKPRESSURE" | "BACKOFF";
+        AlertRuleVersionRecord: {
+            version: number;
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            evaluated_at: string;
+        };
         AgentMetric: {
             /** @enum {string} */
             metric: "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec";
@@ -2043,6 +2148,104 @@ export interface operations {
             };
             /** @description Recovered alert instances cannot be disposed */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCurrentAlerts: {
+        parameters: {
+            query?: {
+                instance_id?: string;
+                include_paused?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current alert instances, excluding paused frozen alerts by default */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertObservationPage"];
+                };
+            };
+            /** @description Invalid pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertHistory: {
+        parameters: {
+            query?: {
+                instance_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recovered alert instance history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertObservationPage"];
+                };
+            };
+            /** @description Invalid pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alert observation detail and rule version history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDetail"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

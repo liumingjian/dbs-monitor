@@ -52,6 +52,12 @@ paths:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rule-templates~1{id}~1alert-rules
   /api/v1/alert-instances/{id}/disposition:
     $ref: paths/alert-instances.yaml#/~1api~1v1~1alert-instances~1{id}~1disposition
+  /api/v1/alerts/current:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alerts~1current
+  /api/v1/alerts/history:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alerts~1history
+  /api/v1/alert-instances/{id}:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}
   /api/v1/alert-instances/{id}/trigger-snapshot:
     $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1trigger-snapshot
   /api/v1/instances/{id}/performance-events:
@@ -152,6 +158,12 @@ components:
       $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshotSession
     AlertTriggerSnapshot:
       $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshot
+    AlertObservation:
+      $ref: components/schemas/alerts.yaml#/AlertObservation
+    AlertObservationPage:
+      $ref: components/schemas/alerts.yaml#/AlertObservationPage
+    AlertDetail:
+      $ref: components/schemas/alerts.yaml#/AlertDetail
     PerformanceEventType:
       $ref: components/enums.yaml#/PerformanceEventType
     PerformanceEvent:

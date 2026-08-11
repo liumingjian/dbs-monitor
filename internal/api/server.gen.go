@@ -373,6 +373,37 @@ type AgentTokenIssued struct {
 // AlertAggregation defines model for AlertAggregation.
 type AlertAggregation string
 
+// AlertDetail defines model for AlertDetail.
+type AlertDetail struct {
+	CurrentValue     *float64           `json:"current_value,omitempty"`
+	Disposition      AlertDisposition   `json:"disposition"`
+	DurationMs       int64              `json:"duration_ms"`
+	FirstTriggeredAt *time.Time         `json:"first_triggered_at,omitempty"`
+	Id               openapi_types.UUID `json:"id"`
+
+	// InMaintenance Empty until maintenance-window projection is delivered.
+	InMaintenance nullable.Nullable[bool] `json:"in_maintenance,omitempty"`
+	InstanceId    openapi_types.UUID      `json:"instance_id"`
+	InstanceName  string                  `json:"instance_name"`
+	MetricId      string                  `json:"metric_id"`
+
+	// NotificationResults Empty until notification delivery records are produced.
+	NotificationResults []map[string]interface{} `json:"notification_results"`
+	Paused              bool                     `json:"paused"`
+	PausedAt            *time.Time               `json:"paused_at,omitempty"`
+	RecoveredAt         *time.Time               `json:"recovered_at,omitempty"`
+	RuleId              openapi_types.UUID       `json:"rule_id"`
+	RuleName            string                   `json:"rule_name"`
+	RuleSnapshot        map[string]interface{}   `json:"rule_snapshot"`
+	RuleVersion         int                      `json:"rule_version"`
+	RuleVersionHistory  []AlertRuleVersionRecord `json:"rule_version_history"`
+	Severity            AlertSeverity            `json:"severity"`
+	Status              AlertStatus              `json:"status"`
+	Threshold           *float64                 `json:"threshold,omitempty"`
+	Unavailability      *Unavailability          `json:"unavailability,omitempty"`
+	UpdatedAt           time.Time                `json:"updated_at"`
+}
+
 // AlertDisposition defines model for AlertDisposition.
 type AlertDisposition string
 
@@ -415,6 +446,39 @@ type AlertDispositionInput struct {
 	IgnoreReasonCode   *IgnoreReasonCode `json:"ignore_reason_code,omitempty"`
 	IgnoreReasonDetail *string           `json:"ignore_reason_detail,omitempty"`
 	Note               *string           `json:"note,omitempty"`
+}
+
+// AlertObservation defines model for AlertObservation.
+type AlertObservation struct {
+	CurrentValue     *float64           `json:"current_value,omitempty"`
+	Disposition      AlertDisposition   `json:"disposition"`
+	DurationMs       int64              `json:"duration_ms"`
+	FirstTriggeredAt *time.Time         `json:"first_triggered_at,omitempty"`
+	Id               openapi_types.UUID `json:"id"`
+
+	// InMaintenance Empty until maintenance-window projection is delivered.
+	InMaintenance  nullable.Nullable[bool] `json:"in_maintenance,omitempty"`
+	InstanceId     openapi_types.UUID      `json:"instance_id"`
+	InstanceName   string                  `json:"instance_name"`
+	MetricId       string                  `json:"metric_id"`
+	Paused         bool                    `json:"paused"`
+	PausedAt       *time.Time              `json:"paused_at,omitempty"`
+	RecoveredAt    *time.Time              `json:"recovered_at,omitempty"`
+	RuleId         openapi_types.UUID      `json:"rule_id"`
+	RuleName       string                  `json:"rule_name"`
+	RuleSnapshot   map[string]interface{}  `json:"rule_snapshot"`
+	RuleVersion    int                     `json:"rule_version"`
+	Severity       AlertSeverity           `json:"severity"`
+	Status         AlertStatus             `json:"status"`
+	Threshold      *float64                `json:"threshold,omitempty"`
+	Unavailability *Unavailability         `json:"unavailability,omitempty"`
+	UpdatedAt      time.Time               `json:"updated_at"`
+}
+
+// AlertObservationPage defines model for AlertObservationPage.
+type AlertObservationPage struct {
+	Items []AlertObservation `json:"items"`
+	Total int                `json:"total"`
 }
 
 // AlertOperator defines model for AlertOperator.
@@ -517,6 +581,13 @@ type AlertRuleTemplateInstantiationInput struct {
 	Scope                    *AlertRuleScope       `json:"scope,omitempty"`
 	Severity                 *AlertSeverity        `json:"severity,omitempty"`
 	Threshold                *float64              `json:"threshold,omitempty"`
+}
+
+// AlertRuleVersionRecord defines model for AlertRuleVersionRecord.
+type AlertRuleVersionRecord struct {
+	EvaluatedAt time.Time              `json:"evaluated_at"`
+	Snapshot    map[string]interface{} `json:"snapshot"`
+	Version     int                    `json:"version"`
 }
 
 // AlertSeverity defines model for AlertSeverity.
@@ -914,6 +985,21 @@ type UserStatusInput struct {
 	Enabled bool `json:"enabled"`
 }
 
+// ListCurrentAlertsParams defines parameters for ListCurrentAlerts.
+type ListCurrentAlertsParams struct {
+	InstanceId    *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
+	IncludePaused *bool               `form:"include_paused,omitempty" json:"include_paused,omitempty"`
+	Limit         *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset        *int                `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListAlertHistoryParams defines parameters for ListAlertHistory.
+type ListAlertHistoryParams struct {
+	InstanceId *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
+	Limit      *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // ListLongQuerySamplesParams defines parameters for ListLongQuerySamples.
 type ListLongQuerySamplesParams struct {
 	From   time.Time `form:"from" json:"from"`
@@ -1011,6 +1097,9 @@ type ServerInterface interface {
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(w http.ResponseWriter, r *http.Request)
 
+	// (GET /api/v1/alert-instances/{id})
+	GetAlertDetail(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /api/v1/alert-instances/{id}/disposition)
 	GetAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
@@ -1043,6 +1132,12 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alerts/current)
+	ListCurrentAlerts(w http.ResponseWriter, r *http.Request, params ListCurrentAlertsParams)
+
+	// (GET /api/v1/alerts/history)
+	ListAlertHistory(w http.ResponseWriter, r *http.Request, params ListAlertHistoryParams)
 
 	// (GET /api/v1/diagnostics/certificate)
 	GetCertificateDiagnostics(w http.ResponseWriter, r *http.Request)
@@ -1173,6 +1268,31 @@ func (siw *ServerInterfaceWrapper) ReportAgentMetrics(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReportAgentMetrics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertDetail operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertDetail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertDetail(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1415,6 +1535,100 @@ func (siw *ServerInterfaceWrapper) UpdateAlertRuleEnabled(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateAlertRuleEnabled(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCurrentAlerts operation middleware
+func (siw *ServerInterfaceWrapper) ListCurrentAlerts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCurrentAlertsParams
+
+	// ------------- Optional query parameter "instance_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "instance_id", r.URL.Query(), &params.InstanceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "include_paused" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "include_paused", r.URL.Query(), &params.IncludePaused)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_paused", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCurrentAlerts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertHistory operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertHistoryParams
+
+	// ------------- Optional query parameter "instance_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "instance_id", r.URL.Query(), &params.InstanceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertHistory(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2486,6 +2700,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/api/agent/v1/report", wrapper.ReportAgentMetrics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}", wrapper.GetAlertDetail)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.GetAlertDisposition)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.UpdateAlertDisposition)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/trigger-snapshot", wrapper.GetAlertTriggerSnapshot)
@@ -2497,6 +2712,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules/{id}/copies", wrapper.CopyAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}/enabled", wrapper.UpdateAlertRuleEnabled)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alerts/current", wrapper.ListCurrentAlerts)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alerts/history", wrapper.ListAlertHistory)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/certificate", wrapper.GetCertificateDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/disk", wrapper.GetDiskDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/health", wrapper.GetPlatformHealth)
@@ -2567,6 +2784,32 @@ type ReportAgentMetrics401JSONResponse Error
 func (response ReportAgentMetrics401JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDetailRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertDetailResponseObject interface {
+	VisitGetAlertDetailResponse(w http.ResponseWriter) error
+}
+
+type GetAlertDetail200JSONResponse AlertDetail
+
+func (response GetAlertDetail200JSONResponse) VisitGetAlertDetailResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDetail404JSONResponse Error
+
+func (response GetAlertDetail404JSONResponse) VisitGetAlertDetailResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -2900,6 +3143,58 @@ type UpdateAlertRuleEnabled404JSONResponse Error
 func (response UpdateAlertRuleEnabled404JSONResponse) VisitUpdateAlertRuleEnabledResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCurrentAlertsRequestObject struct {
+	Params ListCurrentAlertsParams
+}
+
+type ListCurrentAlertsResponseObject interface {
+	VisitListCurrentAlertsResponse(w http.ResponseWriter) error
+}
+
+type ListCurrentAlerts200JSONResponse AlertObservationPage
+
+func (response ListCurrentAlerts200JSONResponse) VisitListCurrentAlertsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCurrentAlerts400JSONResponse Error
+
+func (response ListCurrentAlerts400JSONResponse) VisitListCurrentAlertsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertHistoryRequestObject struct {
+	Params ListAlertHistoryParams
+}
+
+type ListAlertHistoryResponseObject interface {
+	VisitListAlertHistoryResponse(w http.ResponseWriter) error
+}
+
+type ListAlertHistory200JSONResponse AlertObservationPage
+
+func (response ListAlertHistory200JSONResponse) VisitListAlertHistoryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertHistory400JSONResponse Error
+
+func (response ListAlertHistory400JSONResponse) VisitListAlertHistoryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -3723,6 +4018,9 @@ type StrictServerInterface interface {
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(ctx context.Context, request ReportAgentMetricsRequestObject) (ReportAgentMetricsResponseObject, error)
 
+	// (GET /api/v1/alert-instances/{id})
+	GetAlertDetail(ctx context.Context, request GetAlertDetailRequestObject) (GetAlertDetailResponseObject, error)
+
 	// (GET /api/v1/alert-instances/{id}/disposition)
 	GetAlertDisposition(ctx context.Context, request GetAlertDispositionRequestObject) (GetAlertDispositionResponseObject, error)
 
@@ -3755,6 +4053,12 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(ctx context.Context, request UpdateAlertRuleEnabledRequestObject) (UpdateAlertRuleEnabledResponseObject, error)
+
+	// (GET /api/v1/alerts/current)
+	ListCurrentAlerts(ctx context.Context, request ListCurrentAlertsRequestObject) (ListCurrentAlertsResponseObject, error)
+
+	// (GET /api/v1/alerts/history)
+	ListAlertHistory(ctx context.Context, request ListAlertHistoryRequestObject) (ListAlertHistoryResponseObject, error)
 
 	// (GET /api/v1/diagnostics/certificate)
 	GetCertificateDiagnostics(ctx context.Context, request GetCertificateDiagnosticsRequestObject) (GetCertificateDiagnosticsResponseObject, error)
@@ -3918,6 +4222,32 @@ func (sh *strictHandler) ReportAgentMetrics(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReportAgentMetricsResponseObject); ok {
 		if err := validResponse.VisitReportAgentMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertDetail operation middleware
+func (sh *strictHandler) GetAlertDetail(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertDetailRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertDetail(ctx, request.(GetAlertDetailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertDetail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertDetailResponseObject); ok {
+		if err := validResponse.VisitGetAlertDetailResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -4240,6 +4570,58 @@ func (sh *strictHandler) UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateAlertRuleEnabledResponseObject); ok {
 		if err := validResponse.VisitUpdateAlertRuleEnabledResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCurrentAlerts operation middleware
+func (sh *strictHandler) ListCurrentAlerts(w http.ResponseWriter, r *http.Request, params ListCurrentAlertsParams) {
+	var request ListCurrentAlertsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCurrentAlerts(ctx, request.(ListCurrentAlertsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCurrentAlerts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCurrentAlertsResponseObject); ok {
+		if err := validResponse.VisitListCurrentAlertsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertHistory operation middleware
+func (sh *strictHandler) ListAlertHistory(w http.ResponseWriter, r *http.Request, params ListAlertHistoryParams) {
+	var request ListAlertHistoryRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertHistory(ctx, request.(ListAlertHistoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertHistory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertHistoryResponseObject); ok {
+		if err := validResponse.VisitListAlertHistoryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

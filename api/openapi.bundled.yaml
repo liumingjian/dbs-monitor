@@ -760,6 +760,113 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/alerts/current:
+    get:
+      tags:
+        - alerts
+      operationId: listCurrentAlerts
+      x-required-role: READONLY
+      parameters:
+        - name: instance_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: include_paused
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Current alert instances, excluding paused frozen alerts by default
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertObservationPage'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alerts/history:
+    get:
+      tags:
+        - alerts
+      operationId: listAlertHistory
+      x-required-role: READONLY
+      parameters:
+        - name: instance_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Recovered alert instance history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertObservationPage'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: getAlertDetail
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Alert observation detail and rule version history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/alert-instances/{id}/trigger-snapshot:
     parameters:
       - name: id
@@ -1882,6 +1989,112 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/AlertTriggerSnapshotSession'
+    AlertObservation:
+      type: object
+      required:
+        - id
+        - instance_id
+        - instance_name
+        - rule_id
+        - rule_name
+        - rule_version
+        - rule_snapshot
+        - metric_id
+        - status
+        - severity
+        - disposition
+        - paused
+        - updated_at
+        - duration_ms
+      properties:
+        id:
+          type: string
+          format: uuid
+        instance_id:
+          type: string
+          format: uuid
+        instance_name:
+          type: string
+        rule_id:
+          type: string
+          format: uuid
+        rule_name:
+          type: string
+        rule_version:
+          type: integer
+          minimum: 1
+        rule_snapshot:
+          type: object
+          additionalProperties: true
+        metric_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/AlertStatus'
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        paused:
+          type: boolean
+        paused_at:
+          type: string
+          format: date-time
+        in_maintenance:
+          type: boolean
+          nullable: true
+          description: Empty until maintenance-window projection is delivered.
+        current_value:
+          type: number
+          format: double
+        threshold:
+          type: number
+          format: double
+        first_triggered_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        recovered_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        unavailability:
+          $ref: '#/components/schemas/Unavailability'
+    AlertObservationPage:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertObservation'
+    AlertDetail:
+      allOf:
+        - $ref: '#/components/schemas/AlertObservation'
+        - type: object
+          required:
+            - rule_version_history
+            - notification_results
+          properties:
+            rule_version_history:
+              type: array
+              items:
+                $ref: '#/components/schemas/AlertRuleVersionRecord'
+            notification_results:
+              type: array
+              description: Empty until notification delivery records are produced.
+              items:
+                type: object
+                additionalProperties: true
     PerformanceEventType:
       type: string
       enum:
@@ -2755,6 +2968,22 @@ components:
         - TIMED_OUT
         - SKIPPED_BACKPRESSURE
         - BACKOFF
+    AlertRuleVersionRecord:
+      type: object
+      required:
+        - version
+        - snapshot
+        - evaluated_at
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        snapshot:
+          type: object
+          additionalProperties: true
+        evaluated_at:
+          type: string
+          format: date-time
     AgentMetric:
       type: object
       required:
