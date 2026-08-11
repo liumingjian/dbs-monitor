@@ -8,18 +8,18 @@
 
 ## 0. 一句话结论
 
-**GitHub 托管的固定版本 arm64 macOS runner 负责唯一规范构建、签名、公证和自动验证，专用干净 Apple-silicon Mac 只验证同一候选资产的断网安装、重启与完整生命周期；v1 把 server、Agent、PostgreSQL 17 和管理工具合成一个 Developer ID 签名、公证并 stapled 的 flat installer package（`.pkg`），以 GitHub Release 为唯一正式渠道；发布必须依次通过精确提交的 `check-full`、原生构建与 PostgreSQL 自测、最终包安装冒烟、校验和/元数据核对、Environment 人工审批，Linux 四组合从该发布图中拆出且不构成 v1 门。**
+**GitHub 托管、固定 `macos-14` 大版本标签的 arm64 runner 负责唯一规范构建、签名、公证和自动验证，专用干净 Apple silicon Mac 只验证同一候选资产的断网安装、重启与完整生命周期；v1 把 server、Agent、PostgreSQL 17 和管理工具合成一个 Developer ID 签名、公证并 stapled 的 flat installer package（`.pkg`），以 GitHub Release 为唯一正式渠道；发布必须依次通过精确提交的 `check-full`、原生构建与 PostgreSQL 自测、最终包安装冒烟、校验和/元数据核对、Environment 人工审批，Linux 四组合从该发布图中拆出且不构成 v1 门。**
 
 ## 1. D1 · GitHub runner 产包，干净本机验最终包
 
 | 执行环境 | 规范职责 | 明确不做 |
 |---|---|---|
-| GitHub 托管 `macos-14` arm64 runner | 在最低支持系统上构建前端、`darwin/arm64` server/Agent 和 PostgreSQL 17；运行 PostgreSQL `make check`、原生测试、依赖审计、签名、公证和自动安装冒烟；产出唯一候选 `.pkg` | 不用 `macos-latest`，不把 Intel runner 或 Linux 交叉编译当 macOS 证据 |
-| 对发布 workflow 隔离的专用 Apple-silicon Mac | 下载并校验上述候选包，在恢复到干净基线后完成断网安装、首次启动、重启后自启、备份、同大版本升级/失败回滚、卸载和 purge；上传脱敏证据 | 不重新构建、不重签、不持有 Apple 签名凭据或 GitHub Release 写权限 |
+| GitHub 托管 `macos-14` arm64 runner | 在 v1 最低支持的 macOS 大版本上构建前端、`darwin/arm64` server/Agent 和 PostgreSQL 17；运行 PostgreSQL `make check`、原生测试、依赖审计、签名、公证和自动安装冒烟；产出唯一候选 `.pkg` | 不用 `macos-latest`，不把 Intel runner 或 Linux 交叉编译当 macOS 证据 |
+| 对发布 workflow 隔离的专用 Apple silicon Mac | 下载并校验上述候选包，在恢复到干净基线后完成断网安装、首次启动、重启后自启、备份、同大版本升级/失败回滚、卸载和 purge；上传脱敏证据 | 不重新构建、不重签、不持有 Apple 签名凭据或 GitHub Release 写权限 |
 
 规范产物只能来自 GitHub runner；本机不能以“最后修一下”产生第二份包。两边使用仓库内同一组脚本，本机验收按候选包 SHA-256 绑定证据，发布 job 只能提升这一个已验证字节流。
 
-`macos-14` 同时固定最低部署目标：Go 构建与 PostgreSQL/C 依赖设置 `MACOSX_DEPLOYMENT_TARGET=14.0`，并检查所有 Mach-O 的架构和最低系统版本。发布时支持清单中每个高于 14 的 macOS 大版本，还要在对应的固定 arm64 runner label 上跑原生启动和核心端到端冒烟；label 不存在或证据不全时，该大版本不得进入支持清单。
+`macos-14` 固定规范构建的 macOS 大版本，但不代替最低部署目标设置：Go 构建与 PostgreSQL/C 依赖必须用各自工具链支持的方式将最低部署目标固定为 14.0，并检查所有 Mach-O 的架构和最低系统版本。发布时支持清单中每个高于 14 的 macOS 大版本，还要在对应的固定 arm64 runner label 上跑原生启动和核心端到端冒烟；label 不存在或证据不全时，该大版本不得进入支持清单。
 
 专用 Mac 只能接收受保护 tag workflow 产生的候选资产，不运行 pull request 代码。其发布验收失败时阻止发布，但不允许在机器上修改候选包后继续。
 
@@ -29,7 +29,7 @@
 
 - 已嵌入前端的 `dbs-monitor-server` 与原生 arm64 Agent；
 - 项目从锁定源码构建的 PostgreSQL 17、客户端工具及全部非系统运行库；
-- 两个 LaunchDaemon plist、版本化 payload、安装/升级/备份/恢复/诊断/卸载管理工具和离线文档。
+- 平台 server 与 PostgreSQL 的两个 LaunchDaemon plist、版本化 payload、安装/升级/备份/恢复/诊断/卸载管理工具和离线文档。
 
 `.pkg` 只把不可变 payload 和管理入口安全地落到版本目录；它不在无输入的 `postinstall` 中猜测证书 SAN、数据卷或直接切换正在运行的版本。首次安装由包内管理命令显式接收 `--public-address` 和可选 `--data-dir` 后完成 [运行契约](19-v1-macos-runtime-and-postgresql.md) §4；升级同样先落新 payload，再由受管命令执行备份、原子切换与回滚。这样 `.pkg` 的非交互约束不会破坏既有两项安装输入和升级前备份门。
 
@@ -48,7 +48,7 @@ GitHub Release 是 v1 唯一正式下载与长期归档渠道。客户可在联�
 
 签名按嵌套顺序执行：逐个签所有 Mach-O 可执行文件和非系统动态库（Developer ID Application、hardened runtime、secure timestamp），再用 Developer ID Installer 签 flat `.pkg`。不得只给外层包签名，也不得用 ad-hoc 签名或 `codesign --deep` 掩盖漏签组件。
 
-签名后用 `notarytool` 提交 Apple 公证并等待成功，把 ticket staple 到 `.pkg`，再执行 `codesign --verify --strict`、`pkgutil --check-signature`、`spctl --assess --type install` 和 `stapler validate`。校验和只能在 stapling 和最终验证之后生成，因为 stapling 会改变包字节。干净机断网安装仍须通过 Gatekeeper 检查，证明 ticket 随包可用而非依赖在线查询。
+签名后用 `notarytool` 提交 Apple 公证并等待成功，把 ticket staple 到 `.pkg`。随后逐个对内层 Mach-O 执行 `codesign --verify --strict`，并对 `.pkg` 执行 `pkgutil --check-signature`、`spctl --assess --type install` 和 `stapler validate`。校验和只能在 stapling 和最终验证之后生成，因为 stapling 会改变包字节。干净机断网安装仍须通过 Gatekeeper 检查，证明 ticket 随包可用而非依赖在线查询。
 
 Apple 签名证书和公证凭据只注入 tag workflow 的签名 job，不进入构建产物、日志或专用验收 Mac。GitHub Release 写权限只授予最终发布 job。
 
@@ -66,7 +66,7 @@ Apple 签名证书和公证凭据只注入 tag workflow 的签名 job，不进�
 
 ## 5. D5 · Linux 四组合拆出 v1 发布图
 
-- 现有 Ubuntu `check` 和平台无关的 `check-full` 继续作为开发反馈与精确提交门；它们通过不代表 Linux 支持。
+- 现有 Ubuntu `check` 与拆出 Linux 交叉编译后的平台无关 `check-full` 继续作为开发反馈与精确提交门；它们通过不代表 Linux 支持。
 - 当前 `make check-full` 中显式的 `GOOS=linux` 双架构交叉编译要从 v1 必需路径拆出；Linux 打包目标和未来四组合原生构建只允许放在手动触发的 legacy workflow，且不加入 branch protection、`needs` 链、Environment 或 v1 Release 资产。
 - v1 不启用 [#92](https://github.com/liumingjian/dbs-monitor/issues/92) 规划的 Linux 四组合发布 workflow，也不删除已有脚本、验证记录和历史产物。其具体重命名、禁用标记与后续重启入口由 [#102](https://github.com/liumingjian/dbs-monitor/issues/102) 落地。
 - legacy Linux job 失败可以形成后续版本欠账，但不得阻止 macOS v1 tag、审批或发布。
@@ -83,7 +83,7 @@ Apple 签名证书和公证凭据只注入 tag workflow 的签名 job，不进�
 | App Store / Homebrew 分发 | 与系统级 LaunchDaemon、随包 PG 和完全离线版本闭环不匹配 |
 | PostgreSQL 独立下载或独立发包 | 允许混装后，产品版本不再唯一决定数据库二进制、依赖和回滚对象 |
 | 签名后重打包或验收后重建 | 校验和、签名、公证与安装证据不再指向发布的同一字节流 |
-| `macos-latest` 作为规范构建标签 | 标签会漂移，无法固定最低支持系统与构建证据 |
+| `macos-latest` 作为规范构建标签 | 标签会漂移，无法固定规范构建的 macOS 大版本与构建证据 |
 | 保留 Linux 四组合在 v1 `needs` 链中但口头声明“不阻塞” | workflow 依赖关系仍会让其失败阻止发布 |
 
 ## 7. 交给实现票
