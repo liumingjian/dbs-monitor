@@ -294,10 +294,17 @@ func DiskUnavailableSource(lastKnownLevel DiskLevel) SourceSnapshot {
 }
 
 type Store struct {
-	mu       sync.RWMutex
-	sources  map[Source]SourceSnapshot
-	snapshot Snapshot
-	logger   *log.Logger
+	mu              sync.RWMutex
+	sources         map[Source]SourceSnapshot
+	snapshot        Snapshot
+	logger          *log.Logger
+	failureObserver func(FailureFact)
+}
+
+type FailureFact struct {
+	Source     Source
+	Code       string
+	ObservedAt time.Time
 }
 
 func NewStore(version string, startedAt time.Time, logger *log.Logger) *Store {
@@ -321,9 +328,11 @@ func (store *Store) Update(now time.Time, source SourceSnapshot) {
 	store.sources[source.Source] = source
 	store.snapshot = store.assemble(now.UTC())
 	current := cloneSnapshot(store.snapshot)
+	observer := store.failureObserver
 	store.mu.Unlock()
 
 	store.writeChangeEvent(previous, current)
+	observeNewFailures(observer, previous, current)
 }
 
 func (store *Store) PublishSummary(now time.Time) {
@@ -331,9 +340,17 @@ func (store *Store) PublishSummary(now time.Time) {
 	previous := cloneSnapshot(store.snapshot)
 	store.snapshot = store.assemble(now.UTC())
 	snapshot := cloneSnapshot(store.snapshot)
+	observer := store.failureObserver
 	store.mu.Unlock()
 	store.writeChangeEvent(previous, snapshot)
+	observeNewFailures(observer, previous, snapshot)
 	store.writeJournal(summaryEvent{Event: "platform_health_summary", Snapshot: snapshot})
+}
+
+func (store *Store) SetFailureObserver(observer func(FailureFact)) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.failureObserver = observer
 }
 
 func (store *Store) Current() Snapshot {
@@ -442,6 +459,21 @@ func changedSources(previous, current []SourceSnapshot) []sourceChange {
 		})
 	}
 	return changes
+}
+
+func observeNewFailures(observer func(FailureFact), previous, current Snapshot) {
+	if observer == nil {
+		return
+	}
+	previousBySource := make(map[Source]Status, len(previous.Sources))
+	for _, source := range previous.Sources {
+		previousBySource[source.Source] = source.Status
+	}
+	for _, source := range current.Sources {
+		if source.Status == StatusFailed && previousBySource[source.Source] != StatusFailed {
+			observer(FailureFact{Source: source.Source, Code: source.Code, ObservedAt: current.AssembledAt})
+		}
+	}
 }
 
 func intPointer(value int) *int             { return &value }

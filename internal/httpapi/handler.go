@@ -46,14 +46,15 @@ type authenticatedAgentKey struct{}
 type authenticatedUserKey struct{}
 
 type Handler struct {
-	platform          *db.Pool
-	clock             clock.Clock
-	keyring           *instance.CredentialKeyring
-	dialer            monitorpg.Dialer
-	serverVersion     string
-	caFingerprint     string
-	agentDistribution *AgentDistribution
-	health            *platformhealth.Store
+	platform                 *db.Pool
+	clock                    clock.Clock
+	keyring                  *instance.CredentialKeyring
+	dialer                   monitorpg.Dialer
+	serverVersion            string
+	caFingerprint            string
+	agentDistribution        *AgentDistribution
+	health                   *platformhealth.Store
+	syncNotificationSnapshot func(context.Context) error
 }
 
 func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {

@@ -65,6 +65,9 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 			return credentialRotationResult{}, fmt.Errorf("rotate credentials: %w", err)
 		}
 	}
+	if err := notify.NewChannelSnapshotStore(notificationSnapshotPath(directory)).Sync(ctx, platform); err != nil {
+		return credentialRotationResult{}, fmt.Errorf("refresh notification snapshot after key rotation: %w", err)
+	}
 	if err := keyring.RemoveUnreferencedKeys(ctx, platformQueries); err != nil {
 		return credentialRotationResult{}, err
 	}

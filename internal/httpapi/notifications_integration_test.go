@@ -65,7 +65,11 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}
-	server := httptest.NewTLSServer(httpapi.NewHandler(platform, clock.Real{}, keyring).Routes())
+	snapshotPath := filepath.Join(t.TempDir(), "notification-channels.snapshot")
+	snapshotStore := notify.NewChannelSnapshotStore(snapshotPath)
+	handler := httpapi.NewHandler(platform, clock.Real{}, keyring)
+	handler.SetNotificationSnapshot(snapshotStore)
+	server := httptest.NewTLSServer(handler.Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
@@ -76,6 +80,36 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	login.Body.Close()
 	if login.StatusCode != http.StatusNoContent {
 		t.Fatalf("login status = %d, want 204", login.StatusCode)
+	}
+
+	const smtpPassword = "issue-83-smtp-password"
+	smtpResponse := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/notification-channels/smtp", map[string]any{
+		"enabled": true, "host": "smtp.example.com", "port": 465,
+		"from_address": "monitor@example.com", "recipient": "dba@example.com",
+		"auth_type": "PLAIN", "username": "monitor", "password": smtpPassword, "tls_mode": "IMPLICIT",
+	}, "")
+	smtpBody, err := io.ReadAll(smtpResponse.Body)
+	smtpResponse.Body.Close()
+	if err != nil || smtpResponse.StatusCode != http.StatusOK {
+		t.Fatalf("update SMTP channel = status %d, read error %v, body %s", smtpResponse.StatusCode, err, smtpBody)
+	}
+	var smtpCiphertext []byte
+	var smtpKeyVersion int32
+	if err := platform.QueryRow(ctx, `SELECT auth_ciphertext, auth_key_version FROM smtp_channel WHERE singleton`).
+		Scan(&smtpCiphertext, &smtpKeyVersion); err != nil {
+		t.Fatalf("read stored SMTP authentication configuration: %v", err)
+	}
+	snapshot, err := snapshotStore.Load()
+	if err != nil || snapshot.SMTP == nil || !bytes.Equal(snapshot.SMTP.AuthCiphertext, smtpCiphertext) ||
+		snapshot.SMTP.AuthKeyVersion == nil || *snapshot.SMTP.AuthKeyVersion != smtpKeyVersion {
+		t.Fatalf("SMTP notification snapshot = %+v, %v", snapshot.SMTP, err)
+	}
+	snapshotContents, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatalf("read SMTP notification snapshot: %v", err)
+	}
+	if bytes.Contains(snapshotContents, []byte(smtpPassword)) {
+		t.Fatal("SMTP notification snapshot contains plaintext authentication value")
 	}
 
 	createdResponse := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/notification-channels/webhooks", map[string]any{
@@ -111,6 +145,22 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	if got, err := keyring.DecryptWebhookSignatureHeader(target.Id, headerCiphertext, keyVersion); err != nil || got != signatureHeader {
 		t.Fatalf("decrypt stored Webhook signature header = %q, %v", got, err)
 	}
+	snapshot, err = snapshotStore.Load()
+	if err != nil || len(snapshot.Webhooks) != 1 ||
+		!bytes.Equal(snapshot.Webhooks[0].SigningValueCiphertext, valueCiphertext) ||
+		!bytes.Equal(snapshot.Webhooks[0].SignatureHeaderCiphertext, headerCiphertext) ||
+		snapshot.Webhooks[0].SigningKeyVersion != keyVersion {
+		t.Fatalf("Webhook notification snapshot = %+v, %v", snapshot.Webhooks, err)
+	}
+	snapshotContents, err = os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatalf("read Webhook notification snapshot: %v", err)
+	}
+	for _, plaintext := range []string{smtpPassword, signingValue, signatureHeader} {
+		if bytes.Contains(snapshotContents, []byte(plaintext)) {
+			t.Fatalf("notification snapshot contains plaintext secret %q", plaintext)
+		}
+	}
 
 	listed := getResponse(t, client, server.URL+"/api/v1/notification-channels/webhooks")
 	listedBody, err := io.ReadAll(listed.Body)
@@ -140,6 +190,10 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	}
 	if !bytes.Equal(retainedValue, valueCiphertext) || !bytes.Equal(retainedHeader, headerCiphertext) {
 		t.Fatal("metadata-only Webhook update replaced signing configuration")
+	}
+	snapshot, err = snapshotStore.Load()
+	if err != nil || len(snapshot.Webhooks) != 1 || snapshot.Webhooks[0].Name != "Primary on-call gateway" {
+		t.Fatalf("updated Webhook notification snapshot = %+v, %v", snapshot.Webhooks, err)
 	}
 
 	testResponse := requestJSON(t, client, http.MethodPost,
@@ -243,6 +297,10 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	var remaining []api.WebhookTarget
 	if err := json.NewDecoder(listed.Body).Decode(&remaining); err != nil || len(remaining) != 0 {
 		t.Fatalf("Webhook targets after delete = %+v, %v", remaining, err)
+	}
+	snapshot, err = snapshotStore.Load()
+	if err != nil || len(snapshot.Webhooks) != 0 || snapshot.SMTP == nil {
+		t.Fatalf("notification snapshot after Webhook delete = %+v, %v", snapshot, err)
 	}
 }
 

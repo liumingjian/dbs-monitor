@@ -27,6 +27,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 	"github.com/liumingjian/dbs-monitor/migrations"
@@ -96,6 +97,19 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	notificationSnapshot := notify.NewChannelSnapshotStore(notificationSnapshotPath(credentialDirectory))
+	if err := notificationSnapshot.Sync(ctx, platform); err != nil {
+		return fmt.Errorf("initialize notification channel snapshot: %w", err)
+	}
+	health.SetFailureObserver(func(failure platformhealth.FailureFact) {
+		go func() {
+			deliveryContext, cancel := context.WithTimeout(ctx, notificationDeliveryTimeout)
+			defer cancel()
+			if err := sendPlatformUnavailableNotification(deliveryContext, notificationSnapshot, keyring, failure); err != nil {
+				log.Printf("send platform unavailable notification: %v", err)
+			}
+		}()
+	})
 	health.Update(time.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
 	if err := metric.EnsurePartitions(ctx, platform, time.Now()); err != nil {
 		health.Update(time.Now().UTC(), platformhealth.PartitionSource(platformhealth.PartitionFacts{
@@ -183,9 +197,11 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	apiHandler := httpapi.NewHandlerWithPlatformHealthAndAgentDistribution(
+	apiService := httpapi.NewHandlerWithPlatformHealthAndAgentDistribution(
 		platform, clock.Real{}, keyring, monitorpg.DirectDialer{}, version, health, distribution,
-	).Routes()
+	)
+	apiService.SetNotificationSnapshot(notificationSnapshot)
+	apiHandler := apiService.Routes()
 	fileServer := http.FileServer(http.FS(static))
 	applicationHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if len(request.URL.Path) >= 5 && request.URL.Path[:5] == "/api/" {

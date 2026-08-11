@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -18,6 +19,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
@@ -127,6 +129,7 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
 	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 2)
 	assertRotatedWebhookValues(t, ctx, pool, credentialDirectory, webhookID, 2)
+	assertRotatedNotificationSnapshot(t, ctx, pool, credentialDirectory, webhookID, 2)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2"})
 
 	if _, err := pool.Exec(ctx, `CREATE FUNCTION fail_v3_rotation() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -169,7 +172,35 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 3)
 	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 3)
 	assertRotatedWebhookValues(t, ctx, pool, credentialDirectory, webhookID, 3)
+	assertRotatedNotificationSnapshot(t, ctx, pool, credentialDirectory, webhookID, 3)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v3"})
+}
+
+func assertRotatedNotificationSnapshot(t *testing.T, ctx context.Context, pool *pgxpool.Pool, directory string, targetID uuid.UUID, wantVersion int32) {
+	t.Helper()
+	snapshot, err := notify.NewChannelSnapshotStore(notificationSnapshotPath(directory)).Load()
+	if err != nil {
+		t.Fatalf("load rotated notification snapshot: %v", err)
+	}
+	if snapshot.SMTP == nil || snapshot.SMTP.AuthKeyVersion == nil || *snapshot.SMTP.AuthKeyVersion != wantVersion {
+		t.Fatalf("snapshot SMTP key version = %+v, want %d", snapshot.SMTP, wantVersion)
+	}
+	if len(snapshot.Webhooks) != 1 || snapshot.Webhooks[0].ID != targetID.String() || snapshot.Webhooks[0].SigningKeyVersion != wantVersion {
+		t.Fatalf("snapshot Webhook configuration = %+v, want target %s at key version %d", snapshot.Webhooks, targetID, wantVersion)
+	}
+	var smtpCiphertext, signingCiphertext, headerCiphertext []byte
+	if err := pool.QueryRow(ctx, `SELECT auth_ciphertext FROM smtp_channel WHERE singleton`).Scan(&smtpCiphertext); err != nil {
+		t.Fatalf("read rotated SMTP ciphertext: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT signing_value_ciphertext, signature_header_ciphertext FROM webhook_target WHERE id = $1`, targetID).
+		Scan(&signingCiphertext, &headerCiphertext); err != nil {
+		t.Fatalf("read rotated Webhook ciphertext: %v", err)
+	}
+	if !bytes.Equal(snapshot.SMTP.AuthCiphertext, smtpCiphertext) ||
+		!bytes.Equal(snapshot.Webhooks[0].SigningValueCiphertext, signingCiphertext) ||
+		!bytes.Equal(snapshot.Webhooks[0].SignatureHeaderCiphertext, headerCiphertext) {
+		t.Fatal("rotated notification snapshot ciphertext differs from database")
+	}
 }
 
 func assertRotatedWebhookValues(t *testing.T, ctx context.Context, pool *pgxpool.Pool, directory string, targetID uuid.UUID, wantVersion int32) {
