@@ -20,6 +20,12 @@ type Service struct {
 	clock    clock.Clock
 }
 
+type metricEvaluation struct {
+	outcome        alerting.Evaluation
+	currentValue   pgtype.Float8
+	unavailability pgtype.Text
+}
+
 func New(platform *db.Pool, currentClock clock.Clock) *Service {
 	return &Service{platform: platform, clock: currentClock}
 }
@@ -55,8 +61,13 @@ func (service *Service) evaluateInstance(ctx context.Context, targets []alerting
 	})
 }
 
-func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Queries, scheduledTarget alerting.ListEvaluationTargetsRow, now time.Time) error {
-	target, err := queries.GetEvaluationTarget(ctx, alerting.GetEvaluationTargetParams{
+func (service *Service) evaluateRule(
+	ctx context.Context,
+	queries *alerting.Queries,
+	scheduledTarget alerting.ListEvaluationTargetsRow,
+	now time.Time,
+) error {
+	evaluationTarget, err := queries.GetEvaluationTarget(ctx, alerting.GetEvaluationTargetParams{
 		RuleID:             scheduledTarget.RuleID,
 		InstanceID:         scheduledTarget.InstanceID,
 		MetricDimensionKey: scheduledTarget.MetricDimensionKey,
@@ -65,75 +76,43 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 		return fmt.Errorf("read evaluation target: %w", err)
 	}
 
-	current := alerting.Snapshot{State: alerting.OK}
-	if target.AlertInstanceID.Valid {
-		current.State = alerting.State(target.Status)
-		if target.EvaluatedRuleVersion == target.Version {
-			current.BreachCount = int(target.BreachCount)
-			current.RecoveryCount = int(target.RecoveryCount)
-			current.NoDataCount = int(target.NoDataCount)
-		}
-		current.StateBeforeNoData = alerting.State(target.StateBeforeNoData.String)
-	}
-	previousState := current.State
+	currentSnapshot := snapshotFromEvaluationTarget(evaluationTarget)
+	previousState := currentSnapshot.State
 	evaluatedAt := pgtype.Timestamptz{Time: now, Valid: true}
 	evaluationCheckpoint := alerting.MarkAlertRuleEvaluatedParams{
-		RuleID:             target.RuleID,
-		InstanceID:         target.InstanceID,
+		RuleID:             evaluationTarget.RuleID,
+		InstanceID:         evaluationTarget.InstanceID,
 		MetricDimensionKey: scheduledTarget.MetricDimensionKey,
 		LastEvaluatedAt:    evaluatedAt,
 	}
-	if structurallyNotApplicable(target.MetricID, target.LastErrorCode, target.AgentMetricsEnabled) {
+	if structurallyNotApplicable(
+		metric.MetricID(evaluationTarget.MetricID),
+		evaluationTarget.LastErrorCode,
+		evaluationTarget.AgentMetricsEnabled,
+	) {
 		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
 
-	evaluation := alerting.Missing
-	unavailability := pgtype.Text{String: "NO_SAMPLES_YET", Valid: true}
-	currentValue := pgtype.Float8{}
-	if strings.HasPrefix(target.MetricID, "pg.") && target.LastErrorCode.Valid {
-		unavailability = target.LastErrorCode
-	} else {
-		window := time.Duration(target.WindowSeconds) * time.Second
-		samples, err := queries.SamplesInRuleWindow(ctx, alerting.SamplesInRuleWindowParams{
-			InstanceID:         target.InstanceID,
-			MetricID:           target.MetricID,
-			MetricDimensionKey: scheduledTarget.MetricDimensionKey,
-			WindowStart:        pgtype.Timestamptz{Time: now.Add(-window), Valid: true},
-			WindowEnd:          pgtype.Timestamptz{Time: now, Valid: true},
-		})
-		if err != nil {
-			return fmt.Errorf("read rule samples: %w", err)
-		}
-		points := make([]alerting.Point, 0, len(samples))
-		for _, sample := range samples {
-			points = append(points, alerting.Point{
-				Timestamp: sample.Ts.Time,
-				Value:     sample.Value,
-			})
-		}
-		if value, ok := alerting.AggregateWindow(points, now, window, target.Aggregation); ok {
-			currentValue = pgtype.Float8{Float64: value, Valid: true}
-			unavailability = pgtype.Text{}
-			evaluation = alerting.Evaluate(
-				value,
-				target.Operator,
-				target.Threshold,
-				target.RecoveryOperator,
-				target.RecoveryThreshold,
-			)
-		}
+	metricResult, err := evaluateMetric(ctx, queries, evaluationTarget, scheduledTarget.MetricDimensionKey, now)
+	if err != nil {
+		return err
 	}
-	if evaluation == alerting.Missing && target.NoDataPolicy == "ignore" {
-		if target.AlertInstanceID.Valid && current.State != alerting.RECOVERED {
-			next := alerting.Step(current, alerting.MissingIgnored, int(target.ConsecutiveCount), int(target.RecoveryConsecutiveCount))
+	if metricResult.outcome == alerting.Missing && evaluationTarget.NoDataPolicy == "ignore" {
+		if evaluationTarget.AlertInstanceID.Valid && currentSnapshot.State != alerting.RECOVERED {
+			nextSnapshot := alerting.Step(
+				currentSnapshot,
+				alerting.MissingIgnored,
+				int(evaluationTarget.ConsecutiveCount),
+				int(evaluationTarget.RecoveryConsecutiveCount),
+			)
 			if err := queries.ResetIgnoredMissingAlert(ctx, alerting.ResetIgnoredMissingAlertParams{
-				ID:            target.AlertInstanceID,
-				RuleVersion:   target.Version,
-				Severity:      target.Severity,
-				RuleSnapshot:  target.RuleSnapshot,
-				BreachCount:   int32(next.BreachCount),
-				RecoveryCount: int32(next.RecoveryCount),
-				NoDataCount:   int32(next.NoDataCount),
+				ID:            evaluationTarget.AlertInstanceID,
+				RuleVersion:   evaluationTarget.Version,
+				Severity:      evaluationTarget.Severity,
+				RuleSnapshot:  evaluationTarget.RuleSnapshot,
+				BreachCount:   int32(nextSnapshot.BreachCount),
+				RecoveryCount: int32(nextSnapshot.RecoveryCount),
+				NoDataCount:   int32(nextSnapshot.NoDataCount),
 				UpdatedAt:     evaluatedAt,
 			}); err != nil {
 				return fmt.Errorf("reset alert counters for ignored missing data: %w", err)
@@ -141,60 +120,65 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 		}
 		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
-	if current.State == alerting.RECOVERED && evaluation != alerting.Breaching {
+	if currentSnapshot.State == alerting.RECOVERED && metricResult.outcome != alerting.Breaching {
 		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
 
-	next := alerting.Step(current, evaluation, int(target.ConsecutiveCount), int(target.RecoveryConsecutiveCount))
+	nextSnapshot := alerting.Step(
+		currentSnapshot,
+		metricResult.outcome,
+		int(evaluationTarget.ConsecutiveCount),
+		int(evaluationTarget.RecoveryConsecutiveCount),
+	)
 	stateBeforeNoData := pgtype.Text{}
-	if next.StateBeforeNoData != "" {
-		stateBeforeNoData = pgtype.Text{String: string(next.StateBeforeNoData), Valid: true}
+	if nextSnapshot.StateBeforeNoData != "" {
+		stateBeforeNoData = pgtype.Text{String: string(nextSnapshot.StateBeforeNoData), Valid: true}
 	}
-	if next.State != alerting.NO_DATA {
-		unavailability = pgtype.Text{}
+	if nextSnapshot.State != alerting.NO_DATA {
+		metricResult.unavailability = pgtype.Text{}
 	}
 	firstTriggeredAt := pgtype.Timestamptz{}
 	firstRuleVersion := pgtype.Int4{}
 	var firstRuleSnapshot []byte
-	if previousState != alerting.FIRING && next.State == alerting.FIRING {
+	if previousState != alerting.FIRING && nextSnapshot.State == alerting.FIRING {
 		firstTriggeredAt = evaluatedAt
-		firstRuleVersion = pgtype.Int4{Int32: target.Version, Valid: true}
-		firstRuleSnapshot = target.RuleSnapshot
+		firstRuleVersion = pgtype.Int4{Int32: evaluationTarget.Version, Valid: true}
+		firstRuleSnapshot = evaluationTarget.RuleSnapshot
 	}
 	recoveredAt := pgtype.Timestamptz{}
-	if previousState != alerting.RECOVERED && next.State == alerting.RECOVERED {
+	if previousState != alerting.RECOVERED && nextSnapshot.State == alerting.RECOVERED {
 		recoveredAt = evaluatedAt
 	}
 	var alertInstanceID pgtype.UUID
-	if next.State == alerting.RECOVERED {
+	if nextSnapshot.State == alerting.RECOVERED {
 		alertInstanceID, err = queries.RecoverAlertSnapshot(ctx, alerting.RecoverAlertSnapshotParams{
-			ID:            target.AlertInstanceID,
-			MetricID:      target.MetricID,
-			RuleVersion:   target.Version,
-			Severity:      target.Severity,
-			CurrentValue:  currentValue,
-			RuleSnapshot:  target.RuleSnapshot,
-			BreachCount:   int32(next.BreachCount),
-			RecoveryCount: int32(next.RecoveryCount),
-			NoDataCount:   int32(next.NoDataCount),
+			ID:            evaluationTarget.AlertInstanceID,
+			MetricID:      evaluationTarget.MetricID,
+			RuleVersion:   evaluationTarget.Version,
+			Severity:      evaluationTarget.Severity,
+			CurrentValue:  metricResult.currentValue,
+			RuleSnapshot:  evaluationTarget.RuleSnapshot,
+			BreachCount:   int32(nextSnapshot.BreachCount),
+			RecoveryCount: int32(nextSnapshot.RecoveryCount),
+			NoDataCount:   int32(nextSnapshot.NoDataCount),
 			UpdatedAt:     recoveredAt,
 		})
 	} else {
 		alertInstanceID, err = queries.SaveAlertSnapshot(ctx, alerting.SaveAlertSnapshotParams{
-			RuleID:             target.RuleID,
-			InstanceID:         target.InstanceID,
-			MetricID:           target.MetricID,
+			RuleID:             evaluationTarget.RuleID,
+			InstanceID:         evaluationTarget.InstanceID,
+			MetricID:           evaluationTarget.MetricID,
 			MetricDimensionKey: scheduledTarget.MetricDimensionKey,
-			Status:             string(next.State),
-			RuleVersion:        target.Version,
-			Severity:           target.Severity,
-			CurrentValue:       currentValue,
-			RuleSnapshot:       target.RuleSnapshot,
-			BreachCount:        int32(next.BreachCount),
-			RecoveryCount:      int32(next.RecoveryCount),
-			NoDataCount:        int32(next.NoDataCount),
+			Status:             string(nextSnapshot.State),
+			RuleVersion:        evaluationTarget.Version,
+			Severity:           evaluationTarget.Severity,
+			CurrentValue:       metricResult.currentValue,
+			RuleSnapshot:       evaluationTarget.RuleSnapshot,
+			BreachCount:        int32(nextSnapshot.BreachCount),
+			RecoveryCount:      int32(nextSnapshot.RecoveryCount),
+			NoDataCount:        int32(nextSnapshot.NoDataCount),
 			StateBeforeNoData:  stateBeforeNoData,
-			Unavailability:     unavailability,
+			Unavailability:     metricResult.unavailability,
 			UpdatedAt:          evaluatedAt,
 			FirstTriggeredAt:   firstTriggeredAt,
 			FirstRuleVersion:   firstRuleVersion,
@@ -205,20 +189,20 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 	if err != nil {
 		return fmt.Errorf("save alert state: %w", err)
 	}
-	for _, kind := range alerting.StateEvents(previousState, next.State) {
-		if kind == alerting.EventUpdated && !currentValue.Valid {
+	for _, kind := range alerting.StateEvents(previousState, nextSnapshot.State) {
+		if kind == alerting.EventUpdated && !metricResult.currentValue.Valid {
 			continue
 		}
 		if err := queries.CreateAlertEvent(ctx, alerting.CreateAlertEventParams{
 			AlertInstanceID: alertInstanceID,
-			RuleID:          target.RuleID,
-			RuleVersion:     target.Version,
+			RuleID:          evaluationTarget.RuleID,
+			RuleVersion:     evaluationTarget.Version,
 			Kind:            string(kind),
 			FromState:       string(previousState),
-			ToState:         string(next.State),
-			CurrentValue:    currentValue,
-			Unavailability:  unavailability,
-			RuleSnapshot:    target.RuleSnapshot,
+			ToState:         string(nextSnapshot.State),
+			CurrentValue:    metricResult.currentValue,
+			Unavailability:  metricResult.unavailability,
+			RuleSnapshot:    evaluationTarget.RuleSnapshot,
 			EvaluatedAt:     evaluatedAt,
 		}); err != nil {
 			return fmt.Errorf("save alert event: %w", err)
@@ -230,19 +214,86 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 	return nil
 }
 
-func structurallyNotApplicable(metricID string, lastErrorCode pgtype.Text, agentMetricsEnabled bool) bool {
+func snapshotFromEvaluationTarget(target alerting.GetEvaluationTargetRow) alerting.Snapshot {
+	snapshot := alerting.Snapshot{State: alerting.OK}
+	if !target.AlertInstanceID.Valid {
+		return snapshot
+	}
+
+	snapshot.State = alerting.State(target.Status)
+	snapshot.StateBeforeNoData = alerting.State(target.StateBeforeNoData.String)
+	if target.EvaluatedRuleVersion == target.Version {
+		snapshot.BreachCount = int(target.BreachCount)
+		snapshot.RecoveryCount = int(target.RecoveryCount)
+		snapshot.NoDataCount = int(target.NoDataCount)
+	}
+	return snapshot
+}
+
+func evaluateMetric(
+	ctx context.Context,
+	queries *alerting.Queries,
+	target alerting.GetEvaluationTargetRow,
+	metricDimensionKey string,
+	now time.Time,
+) (metricEvaluation, error) {
+	result := metricEvaluation{
+		outcome:        alerting.Missing,
+		unavailability: pgtype.Text{String: "NO_SAMPLES_YET", Valid: true},
+	}
+	if strings.HasPrefix(target.MetricID, "pg.") && target.LastErrorCode.Valid {
+		result.unavailability = target.LastErrorCode
+		return result, nil
+	}
+
+	window := time.Duration(target.WindowSeconds) * time.Second
+	samples, err := queries.SamplesInRuleWindow(ctx, alerting.SamplesInRuleWindowParams{
+		InstanceID:         target.InstanceID,
+		MetricID:           target.MetricID,
+		MetricDimensionKey: metricDimensionKey,
+		WindowStart:        pgtype.Timestamptz{Time: now.Add(-window), Valid: true},
+		WindowEnd:          pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	if err != nil {
+		return metricEvaluation{}, fmt.Errorf("read rule samples: %w", err)
+	}
+
+	points := make([]alerting.Point, 0, len(samples))
+	for _, sample := range samples {
+		points = append(points, alerting.Point{
+			Timestamp: sample.Ts.Time,
+			Value:     sample.Value,
+		})
+	}
+	value, ok := alerting.AggregateWindow(points, now, window, target.Aggregation)
+	if !ok {
+		return result, nil
+	}
+
+	result.currentValue = pgtype.Float8{Float64: value, Valid: true}
+	result.unavailability = pgtype.Text{}
+	result.outcome = alerting.Evaluate(
+		value,
+		target.Operator,
+		target.Threshold,
+		target.RecoveryOperator,
+		target.RecoveryThreshold,
+	)
+	return result, nil
+}
+
+func structurallyNotApplicable(metricID metric.MetricID, lastErrorCode pgtype.Text, agentMetricsEnabled bool) bool {
 	if lastErrorCode.Valid && lastErrorCode.String == "NOT_APPLICABLE_ROLE" {
 		return true
 	}
 	if agentMetricsEnabled {
 		return false
 	}
-	if metricID == metric.MetricAgentStatus.String() {
+	if metricID == metric.MetricAgentStatus {
 		return true
 	}
-	requestedMetricID := metric.MetricID(metricID)
 	for _, definition := range metric.Metrics {
-		if definition.ID == requestedMetricID {
+		if definition.ID == metricID {
 			return definition.Producer == metric.ProducerAgent
 		}
 	}

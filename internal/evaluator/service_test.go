@@ -4,21 +4,49 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
 
 func TestStructurallyNotApplicable(t *testing.T) {
 	tests := []struct {
 		name                string
-		metricID            string
+		metricID            metric.MetricID
 		lastErrorCode       pgtype.Text
 		agentMetricsEnabled bool
 		want                bool
 	}{
-		{name: "role mismatch", metricID: "pg.replication.wal_lag_bytes", lastErrorCode: pgtype.Text{String: "NOT_APPLICABLE_ROLE", Valid: true}, agentMetricsEnabled: true, want: true},
-		{name: "unenrolled agent state", metricID: "agent.status", agentMetricsEnabled: false, want: true},
-		{name: "unenrolled agent metric", metricID: "host.cpu.usage_percent", agentMetricsEnabled: false, want: true},
-		{name: "server metric remains applicable", metricID: "pg.connection.total", agentMetricsEnabled: false, want: false},
-		{name: "ordinary missing data remains applicable", metricID: "pg.connection.total", lastErrorCode: pgtype.Text{String: "COLLECTION_FAILED", Valid: true}, agentMetricsEnabled: true, want: false},
+		{
+			name:                "role mismatch",
+			metricID:            metric.MetricReplicationWALLagBytes,
+			lastErrorCode:       pgtype.Text{String: "NOT_APPLICABLE_ROLE", Valid: true},
+			agentMetricsEnabled: true,
+			want:                true,
+		},
+		{
+			name:                "unenrolled agent state",
+			metricID:            metric.MetricAgentStatus,
+			agentMetricsEnabled: false,
+			want:                true,
+		},
+		{
+			name:                "unenrolled agent metric",
+			metricID:            metric.MetricHostCPUUsagePercent,
+			agentMetricsEnabled: false,
+			want:                true,
+		},
+		{
+			name:                "server metric remains applicable",
+			metricID:            metric.MetricConnectionTotal,
+			agentMetricsEnabled: false,
+			want:                false,
+		},
+		{
+			name:                "ordinary missing data remains applicable",
+			metricID:            metric.MetricConnectionTotal,
+			lastErrorCode:       pgtype.Text{String: "COLLECTION_FAILED", Valid: true},
+			agentMetricsEnabled: true,
+			want:                false,
+		},
 	}
 
 	for _, test := range tests {

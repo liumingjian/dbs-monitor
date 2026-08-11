@@ -67,17 +67,12 @@ func Step(current Snapshot, evaluation Evaluation, triggerCount, recoveryCount i
 	if evaluation == Breaching {
 		current.RecoveryCount = 0
 		switch current.State {
-		case OK, RECOVERED:
+		case OK, PENDING, RECOVERED:
 			current.BreachCount++
 			if current.BreachCount >= triggerCount {
 				current.State = FIRING
 			} else {
 				current.State = PENDING
-			}
-		case PENDING:
-			current.BreachCount++
-			if current.BreachCount >= triggerCount {
-				current.State = FIRING
 			}
 		}
 		return current
