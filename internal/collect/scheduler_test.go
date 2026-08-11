@@ -151,11 +151,11 @@ func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
 	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), log.New(io.Discard, "", 0))
 	expiresAt := now.Add(90 * 24 * time.Hour)
-	health.Update(now, platformhealth.PartitionSource(0, 7, false))
+	health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{PrebuildDaysRemaining: 7}))
 	health.Update(now, platformhealth.CertificateSource(now, &expiresAt))
 	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY"})
 	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceDisk, Status: platformhealth.StatusOK, Code: "DISK_CLASSIFICATION_PENDING"})
-	health.Update(now, platformhealth.CredentialSource("", true))
+	health.Update(now, platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
 	service := &Service{health: health}
 	scheduler := &centralScheduler{
 		service:    service,

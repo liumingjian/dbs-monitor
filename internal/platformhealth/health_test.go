@@ -32,50 +32,81 @@ func TestAggregateStatusPrecedence(t *testing.T) {
 	}
 }
 
-func TestSchedulerAndCertificateFacts(t *testing.T) {
+func TestSourceClassifications(t *testing.T) {
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
-		name string
-		got  SourceSnapshot
-		want Status
-		code string
+		name   string
+		got    SourceSnapshot
+		source Source
+		status Status
+		code   string
 	}{
 		{
-			name: "scheduler healthy",
-			got:  SchedulerSource(SchedulerFacts{ProbeCapacity: 32, QueryCapacity: 32}),
-			want: StatusOK, code: "SCHEDULER_RUNNING",
+			name:   "scheduler healthy",
+			got:    SchedulerSource(SchedulerFacts{ProbeCapacity: 32, QueryCapacity: 32}),
+			source: SourceCollectionScheduler, status: StatusOK, code: "SCHEDULER_RUNNING",
 		},
 		{
-			name: "scheduler saturation preserves detail",
-			got:  SchedulerSource(SchedulerFacts{ProbeCapacity: 1, ProbeActive: 1, Pending: 3, SkippedBackpressure: 7}),
-			want: StatusDegraded, code: "SCHEDULER_BACKPRESSURE",
+			name:   "scheduler saturation preserves detail",
+			got:    SchedulerSource(SchedulerFacts{ProbeCapacity: 1, ProbeActive: 1, Pending: 3, SkippedBackpressure: 7}),
+			source: SourceCollectionScheduler, status: StatusDegraded, code: "SCHEDULER_BACKPRESSURE",
 		},
 		{
-			name: "scheduler refresh stopped",
-			got:  SchedulerSource(SchedulerFacts{RefreshFailed: true}),
-			want: StatusFailed, code: "SCHEDULER_REFRESH_FAILED",
+			name:   "scheduler refresh stopped",
+			got:    SchedulerSource(SchedulerFacts{RefreshFailed: true}),
+			source: SourceCollectionScheduler, status: StatusFailed, code: "SCHEDULER_REFRESH_FAILED",
 		},
 		{
-			name: "certificate unavailable",
-			got:  CertificateSource(now, nil),
-			want: StatusUnknown, code: "CERTIFICATE_UNAVAILABLE",
+			name:   "certificate unavailable",
+			got:    CertificateSource(now, nil),
+			source: SourceTLSCertificate, status: StatusUnknown, code: "CERTIFICATE_UNAVAILABLE",
 		},
 		{
-			name: "certificate warning window",
-			got:  CertificateSource(now, timePointer(now.Add(30*24*time.Hour))),
-			want: StatusDegraded, code: "CERTIFICATE_EXPIRING",
+			name:   "certificate warning window",
+			got:    CertificateSource(now, timePointer(now.Add(30*24*time.Hour))),
+			source: SourceTLSCertificate, status: StatusDegraded, code: "CERTIFICATE_EXPIRING",
 		},
 		{
-			name: "certificate expired",
-			got:  CertificateSource(now, timePointer(now.Add(-time.Second))),
-			want: StatusFailed, code: "CERTIFICATE_EXPIRED",
+			name:   "certificate expired",
+			got:    CertificateSource(now, timePointer(now.Add(-time.Second))),
+			source: SourceTLSCertificate, status: StatusFailed, code: "CERTIFICATE_EXPIRED",
+		},
+		{
+			name:   "credential keyring unavailable",
+			got:    CredentialSource(CredentialFacts{}),
+			source: SourceCredentialKeyring, status: StatusUnknown, code: "CREDENTIAL_KEYRING_UNAVAILABLE",
+		},
+		{
+			name:   "credential keyring ready",
+			got:    CredentialSource(CredentialFacts{Available: true}),
+			source: SourceCredentialKeyring, status: StatusOK, code: "CREDENTIAL_KEYRING_READY",
+		},
+		{
+			name:   "credential keyring failed",
+			got:    CredentialSource(CredentialFacts{Available: true, FailureCode: "UNKNOWN_KEY_VERSION"}),
+			source: SourceCredentialKeyring, status: StatusFailed, code: "UNKNOWN_KEY_VERSION",
+		},
+		{
+			name:   "partitions ready",
+			got:    PartitionSource(PartitionFacts{PrebuildDaysRemaining: 7}),
+			source: SourcePartitionMaintenance, status: StatusOK, code: "PARTITIONS_READY",
+		},
+		{
+			name:   "partition maintenance failed",
+			got:    PartitionSource(PartitionFacts{ConsecutiveFailures: 1, PrebuildDaysRemaining: 6}),
+			source: SourcePartitionMaintenance, status: StatusDegraded, code: "PARTITION_MAINTENANCE_FAILED",
+		},
+		{
+			name:   "partition write failed",
+			got:    PartitionSource(PartitionFacts{ConsecutiveFailures: 1, WriteFailed: true}),
+			source: SourcePartitionMaintenance, status: StatusFailed, code: "PARTITION_WRITE_FAILED",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.got.Status != test.want || test.got.Code != test.code {
-				t.Fatalf("source = %+v, want status/code %s/%s", test.got, test.want, test.code)
+			if test.got.Source != test.source || test.got.Status != test.status || test.got.Code != test.code {
+				t.Fatalf("source = %+v, want source/status/code %s/%s/%s", test.got, test.source, test.status, test.code)
 			}
 		})
 	}

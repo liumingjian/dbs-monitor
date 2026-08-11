@@ -75,6 +75,17 @@ type SchedulerFacts struct {
 	RefreshFailed       bool
 }
 
+type CredentialFacts struct {
+	Available   bool
+	FailureCode string
+}
+
+type PartitionFacts struct {
+	ConsecutiveFailures   int
+	PrebuildDaysRemaining int
+	WriteFailed           bool
+}
+
 func AggregateStatus(statuses []Status) Status {
 	if len(statuses) == 0 {
 		return StatusUnknown
@@ -145,25 +156,25 @@ func DatabaseSource(err error) SourceSnapshot {
 	return SourceSnapshot{Source: SourcePlatformDatabase, Status: StatusOK, Code: "PLATFORM_DATABASE_REACHABLE"}
 }
 
-func CredentialSource(code string, available bool) SourceSnapshot {
-	if !available {
+func CredentialSource(facts CredentialFacts) SourceSnapshot {
+	if !facts.Available {
 		return SourceSnapshot{Source: SourceCredentialKeyring, Status: StatusUnknown, Code: "CREDENTIAL_KEYRING_UNAVAILABLE"}
 	}
-	if code != "" {
-		return SourceSnapshot{Source: SourceCredentialKeyring, Status: StatusFailed, Code: code}
+	if facts.FailureCode != "" {
+		return SourceSnapshot{Source: SourceCredentialKeyring, Status: StatusFailed, Code: facts.FailureCode}
 	}
 	return SourceSnapshot{Source: SourceCredentialKeyring, Status: StatusOK, Code: "CREDENTIAL_KEYRING_READY"}
 }
 
-func PartitionSource(consecutiveFailures, prebuildDaysRemaining int, writeFailed bool) SourceSnapshot {
+func PartitionSource(facts PartitionFacts) SourceSnapshot {
 	result := SourceSnapshot{
 		Source: SourcePartitionMaintenance, Status: StatusOK, Code: "PARTITIONS_READY",
-		ConsecutiveFailures: intPointer(consecutiveFailures), PrebuildDaysRemaining: intPointer(prebuildDaysRemaining),
+		ConsecutiveFailures: intPointer(facts.ConsecutiveFailures), PrebuildDaysRemaining: intPointer(facts.PrebuildDaysRemaining),
 	}
-	if writeFailed {
+	if facts.WriteFailed {
 		result.Status = StatusFailed
 		result.Code = "PARTITION_WRITE_FAILED"
-	} else if consecutiveFailures > 0 || prebuildDaysRemaining < 7 {
+	} else if facts.ConsecutiveFailures > 0 || facts.PrebuildDaysRemaining < 7 {
 		result.Status = StatusDegraded
 		result.Code = "PARTITION_MAINTENANCE_FAILED"
 	}
@@ -200,14 +211,7 @@ func (store *Store) Update(now time.Time, source SourceSnapshot) {
 	current := cloneSnapshot(store.snapshot)
 	store.mu.Unlock()
 
-	changes := changedSources(previous.Sources, current.Sources)
-	if len(changes) > 0 {
-		store.writeJournal(changeEvent{
-			Event: "platform_health_change", AssembledAt: current.AssembledAt,
-			PreviousStatus: previous.Status, Status: current.Status,
-			Changes: changes,
-		})
-	}
+	store.writeChangeEvent(previous, current)
 }
 
 func (store *Store) PublishSummary(now time.Time) {
@@ -216,13 +220,7 @@ func (store *Store) PublishSummary(now time.Time) {
 	store.snapshot = store.assemble(now.UTC())
 	snapshot := cloneSnapshot(store.snapshot)
 	store.mu.Unlock()
-	changes := changedSources(previous.Sources, snapshot.Sources)
-	if len(changes) > 0 {
-		store.writeJournal(changeEvent{
-			Event: "platform_health_change", AssembledAt: snapshot.AssembledAt,
-			PreviousStatus: previous.Status, Status: snapshot.Status, Changes: changes,
-		})
-	}
+	store.writeChangeEvent(previous, snapshot)
 	store.writeJournal(summaryEvent{Event: "platform_health_summary", Snapshot: snapshot})
 }
 
@@ -260,6 +258,20 @@ func (store *Store) writeJournal(event any) {
 	if err == nil {
 		store.logger.Print(string(encoded))
 	}
+}
+
+func (store *Store) writeChangeEvent(previous, current Snapshot) {
+	changes := changedSources(previous.Sources, current.Sources)
+	if len(changes) == 0 {
+		return
+	}
+	store.writeJournal(changeEvent{
+		Event:          "platform_health_change",
+		AssembledAt:    current.AssembledAt,
+		PreviousStatus: previous.Status,
+		Status:         current.Status,
+		Changes:        changes,
+	})
 }
 
 type sourceChange struct {

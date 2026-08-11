@@ -456,19 +456,25 @@ func (service *Service) withPartitionRepair(ctx context.Context, observedAt time
 			return err
 		}
 		if err := metric.EnsurePartitions(ctx, service.platform, observedAt); err != nil {
-			if service.health != nil {
-				service.health.Update(observedAt, platformhealth.PartitionSource(1, 0, true))
-			}
+			service.publishPartitionWriteFailure(observedAt)
 			return err
 		}
 		if err := write(); err != nil {
-			if service.health != nil {
-				service.health.Update(observedAt, platformhealth.PartitionSource(1, 0, true))
-			}
+			service.publishPartitionWriteFailure(observedAt)
 			return err
 		}
 	}
 	return nil
+}
+
+func (service *Service) publishPartitionWriteFailure(observedAt time.Time) {
+	if service.health == nil {
+		return
+	}
+	service.health.Update(observedAt, platformhealth.PartitionSource(platformhealth.PartitionFacts{
+		ConsecutiveFailures: 1,
+		WriteFailed:         true,
+	}))
 }
 
 func isConnectionFailure(err error) bool {
@@ -485,7 +491,10 @@ func (service *Service) connectionConfig(target instance.ListCollectionTargetsRo
 	if err != nil {
 		var fault *instance.CredentialFault
 		if service.health != nil && errors.As(err, &fault) {
-			service.health.Update(service.clock.Now().UTC(), platformhealth.CredentialSource(string(fault.Code), true))
+			service.health.Update(service.clock.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{
+				Available:   true,
+				FailureCode: string(fault.Code),
+			}))
 		}
 		return nil, err
 	}

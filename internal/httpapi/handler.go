@@ -102,18 +102,31 @@ func (handler *Handler) GetPlatformHealth(context.Context, api.GetPlatformHealth
 	snapshot := handler.health.Current()
 	sources := make([]api.PlatformHealthSourceSnapshot, 0, len(snapshot.Sources))
 	for _, source := range snapshot.Sources {
-		sources = append(sources, api.PlatformHealthSourceSnapshot{
-			Source: api.PlatformHealthSource(source.Source), Status: api.PlatformHealthStatus(source.Status), Code: source.Code,
-			Version: source.Version, StartedAt: source.StartedAt, ExpiresAt: source.ExpiresAt,
-			ProbeCapacity: source.ProbeCapacity, ProbeActive: source.ProbeActive,
-			QueryCapacity: source.QueryCapacity, QueryActive: source.QueryActive,
-			Pending: source.Pending, SkippedBackpressure: source.SkippedBackpressure, Backoff: source.Backoff,
-			ConsecutiveFailures: source.ConsecutiveFailures, PrebuildDaysRemaining: source.PrebuildDaysRemaining,
-		})
+		sources = append(sources, toAPIPlatformHealthSource(source))
 	}
 	return api.GetPlatformHealth200JSONResponse{
 		Status: api.PlatformHealthStatus(snapshot.Status), Sources: sources, AssembledAt: snapshot.AssembledAt,
 	}, nil
+}
+
+func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.PlatformHealthSourceSnapshot {
+	return api.PlatformHealthSourceSnapshot{
+		Source:                api.PlatformHealthSource(source.Source),
+		Status:                api.PlatformHealthStatus(source.Status),
+		Code:                  source.Code,
+		Version:               source.Version,
+		StartedAt:             source.StartedAt,
+		ExpiresAt:             source.ExpiresAt,
+		ProbeCapacity:         source.ProbeCapacity,
+		ProbeActive:           source.ProbeActive,
+		QueryCapacity:         source.QueryCapacity,
+		QueryActive:           source.QueryActive,
+		Pending:               source.Pending,
+		SkippedBackpressure:   source.SkippedBackpressure,
+		Backoff:               source.Backoff,
+		ConsecutiveFailures:   source.ConsecutiveFailures,
+		PrebuildDaysRemaining: source.PrebuildDaysRemaining,
+	}
 }
 
 func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
@@ -719,7 +732,10 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 		response, err := next(context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes)), writer, request, value)
 		var credentialFault *instance.CredentialFault
 		if errors.As(err, &credentialFault) {
-			handler.health.Update(handler.clock.Now().UTC(), platformhealth.CredentialSource(string(credentialFault.Code), true))
+			handler.health.Update(handler.clock.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{
+				Available:   true,
+				FailureCode: string(credentialFault.Code),
+			}))
 		}
 		return response, err
 	}

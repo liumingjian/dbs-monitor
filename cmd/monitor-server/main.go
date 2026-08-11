@@ -67,12 +67,16 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	health.Update(time.Now().UTC(), platformhealth.CredentialSource("", true))
+	health.Update(time.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
 	if err := metric.EnsurePartitions(ctx, platform, time.Now()); err != nil {
-		health.Update(time.Now().UTC(), platformhealth.PartitionSource(1, 6, false))
+		health.Update(time.Now().UTC(), platformhealth.PartitionSource(platformhealth.PartitionFacts{
+			ConsecutiveFailures: 1, PrebuildDaysRemaining: 6,
+		}))
 		log.Printf("partition creation failed: %v", err)
 	} else {
-		health.Update(time.Now().UTC(), platformhealth.PartitionSource(0, 7, false))
+		health.Update(time.Now().UTC(), platformhealth.PartitionSource(platformhealth.PartitionFacts{
+			PrebuildDaysRemaining: 7,
+		}))
 	}
 	adminExists, err := httpapi.AdminExists(ctx, platform)
 	if err != nil {
@@ -175,19 +179,26 @@ func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *pla
 		case now := <-ticker.C:
 			if err := metric.EnsurePartitions(ctx, platform, now); err != nil {
 				consecutiveFailures++
-				health.Update(now, platformhealth.PartitionSource(consecutiveFailures, partitionDaysRemaining(lastSuccess, now), false))
+				health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{
+					ConsecutiveFailures:   consecutiveFailures,
+					PrebuildDaysRemaining: partitionDaysRemaining(lastSuccess, now),
+				}))
 				log.Printf("partition creation failed: %v", err)
 				continue
 			}
 			if err := metric.DropExpiredPartitions(ctx, platform, now); err != nil {
 				consecutiveFailures++
-				health.Update(now, platformhealth.PartitionSource(consecutiveFailures, 7, false))
+				health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{
+					ConsecutiveFailures: consecutiveFailures, PrebuildDaysRemaining: 7,
+				}))
 				log.Printf("partition retention failed: %v", err)
 				continue
 			}
 			lastSuccess = now.UTC()
 			consecutiveFailures = 0
-			health.Update(now, platformhealth.PartitionSource(0, 7, false))
+			health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{
+				PrebuildDaysRemaining: 7,
+			}))
 		}
 	}
 }
