@@ -93,6 +93,22 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 		 'PLAIN', 'monitor', $1, $2, 'IMPLICIT', now())`, smtpCiphertext, smtpVersion); err != nil {
 		t.Fatalf("insert SMTP authentication value: %v", err)
 	}
+	webhookID := uuid.MustParse("00000000-0000-0000-0000-000000000080")
+	webhookValue, webhookVersion, err := keyring.EncryptWebhookSigningValue(webhookID, "webhook-rotation-value")
+	if err != nil {
+		t.Fatalf("encrypt Webhook signing value: %v", err)
+	}
+	webhookHeader, headerVersion, err := keyring.EncryptWebhookSignatureHeader(webhookID, "X-DBS-Signature")
+	if err != nil || headerVersion != webhookVersion {
+		t.Fatalf("encrypt Webhook signature header: version %d, error %v", headerVersion, err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO webhook_target
+		(id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext,
+		 signing_key_version, created_at, updated_at)
+		VALUES ($1, 'rotation-webhook', true, 'https://example.com/webhook', $2, $3, $4, now(), now())`,
+		webhookID, webhookValue, webhookHeader, webhookVersion); err != nil {
+		t.Fatalf("insert Webhook signing configuration: %v", err)
+	}
 	stagedKey := make([]byte, 32)
 	if _, err := rand.Read(stagedKey); err != nil {
 		t.Fatalf("generate staged key fixture: %v", err)
@@ -105,11 +121,12 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rotate to v2: %v", err)
 	}
-	if result.KeyVersion != 2 || result.CredentialsRotated != int64(len(credentials)+1) {
-		t.Fatalf("rotation result = %+v, want version 2 and %d credentials", result, len(credentials)+1)
+	if result.KeyVersion != 2 || result.CredentialsRotated != int64(len(credentials)+2) {
+		t.Fatalf("rotation result = %+v, want version 2 and %d credentials", result, len(credentials)+2)
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
 	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 2)
+	assertRotatedWebhookValues(t, ctx, pool, credentialDirectory, webhookID, 2)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2"})
 
 	if _, err := pool.Exec(ctx, `CREATE FUNCTION fail_v3_rotation() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -128,12 +145,13 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
 	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 2)
+	assertRotatedWebhookValues(t, ctx, pool, credentialDirectory, webhookID, 2)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
 	interruptedKeyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
 	if err != nil {
 		t.Fatalf("open interrupted keyring: %v", err)
 	}
-	if err := interruptedKeyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err == nil || !strings.Contains(err.Error(), "still has 3 database references") {
+	if err := interruptedKeyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err == nil || !strings.Contains(err.Error(), "still has 4 database references") {
 		t.Fatalf("cleanup with old-key references error = %v, want reference diagnostic", err)
 	}
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
@@ -145,12 +163,36 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resume rotation to v3: %v", err)
 	}
-	if result.KeyVersion != 3 || result.CredentialsRotated != int64(len(credentials)+1) {
-		t.Fatalf("resumed rotation result = %+v, want version 3 and %d credentials", result, len(credentials)+1)
+	if result.KeyVersion != 3 || result.CredentialsRotated != int64(len(credentials)+2) {
+		t.Fatalf("resumed rotation result = %+v, want version 3 and %d credentials", result, len(credentials)+2)
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 3)
 	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 3)
+	assertRotatedWebhookValues(t, ctx, pool, credentialDirectory, webhookID, 3)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v3"})
+}
+
+func assertRotatedWebhookValues(t *testing.T, ctx context.Context, pool *pgxpool.Pool, directory string, targetID uuid.UUID, wantVersion int32) {
+	t.Helper()
+	keyring, err := instance.OpenCredentialKeyring(directory, true)
+	if err != nil {
+		t.Fatalf("reopen keyring for Webhook: %v", err)
+	}
+	var valueCiphertext, headerCiphertext []byte
+	var version int32
+	if err := pool.QueryRow(ctx, `SELECT signing_value_ciphertext, signature_header_ciphertext, signing_key_version
+		FROM webhook_target WHERE id = $1`, targetID).Scan(&valueCiphertext, &headerCiphertext, &version); err != nil {
+		t.Fatalf("read Webhook signing configuration: %v", err)
+	}
+	if version != wantVersion {
+		t.Fatalf("Webhook signing key version = %d, want %d", version, wantVersion)
+	}
+	if value, err := keyring.DecryptWebhookSigningValue(targetID, valueCiphertext, version); err != nil || value != "webhook-rotation-value" {
+		t.Fatalf("decrypt Webhook signing value = %q, %v", value, err)
+	}
+	if header, err := keyring.DecryptWebhookSignatureHeader(targetID, headerCiphertext, version); err != nil || header != "X-DBS-Signature" {
+		t.Fatalf("decrypt Webhook signature header = %q, %v", header, err)
+	}
 }
 
 func assertRotatedSMTPValue(t *testing.T, ctx context.Context, pool *pgxpool.Pool, directory string, wantVersion int32) {

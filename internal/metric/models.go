@@ -324,6 +324,7 @@ type NotificationDelivery struct {
 	LockedUntil     pgtype.Timestamptz
 	CreatedAt       pgtype.Timestamptz
 	CompletedAt     pgtype.Timestamptz
+	ChannelTargetID pgtype.UUID
 }
 
 type NotificationPolicy struct {
@@ -376,4 +377,16 @@ type UserSession struct {
 	TokenHash []byte
 	UserID    pgtype.UUID
 	ExpiresAt pgtype.Timestamptz
+}
+
+type WebhookTarget struct {
+	ID                        pgtype.UUID
+	Name                      string
+	Enabled                   bool
+	Url                       string
+	SigningValueCiphertext    []byte
+	SignatureHeaderCiphertext []byte
+	SigningKeyVersion         int32
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }

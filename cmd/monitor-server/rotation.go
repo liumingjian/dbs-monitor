@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,7 +55,11 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 			if err != nil {
 				return err
 			}
-			credentialsRotated = instanceCredentialsRotated + smtpCredentialsRotated
+			webhookCredentialsRotated, err := reencryptWebhookTargets(ctx, tx, keyring)
+			if err != nil {
+				return err
+			}
+			credentialsRotated = instanceCredentialsRotated + smtpCredentialsRotated + webhookCredentialsRotated
 			return nil
 		}); err != nil {
 			return credentialRotationResult{}, fmt.Errorf("rotate credentials: %w", err)
@@ -67,6 +72,47 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 		KeyVersion:         keyring.CurrentVersion(),
 		CredentialsRotated: credentialsRotated,
 	}, nil
+}
+
+func reencryptWebhookTargets(ctx context.Context, tx pgx.Tx, keyring *instance.CredentialKeyring) (int64, error) {
+	queries := notify.New(tx)
+	targets, err := queries.ListWebhookTargetsForKeyRotation(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("read Webhook signing configuration for key rotation: %w", err)
+	}
+	var rotated int64
+	for _, target := range targets {
+		if target.SigningKeyVersion == keyring.CurrentVersion() {
+			continue
+		}
+		targetID := uuid.UUID(target.ID.Bytes)
+		signingValue, err := keyring.DecryptWebhookSigningValue(targetID, target.SigningValueCiphertext, target.SigningKeyVersion)
+		if err != nil {
+			return 0, err
+		}
+		signatureHeader, err := keyring.DecryptWebhookSignatureHeader(targetID, target.SignatureHeaderCiphertext, target.SigningKeyVersion)
+		if err != nil {
+			return 0, err
+		}
+		signingValueCiphertext, signingKeyVersion, err := keyring.EncryptWebhookSigningValue(targetID, signingValue)
+		if err != nil {
+			return 0, err
+		}
+		signatureHeaderCiphertext, _, err := keyring.EncryptWebhookSignatureHeader(targetID, signatureHeader)
+		if err != nil {
+			return 0, err
+		}
+		if err := queries.UpdateWebhookTargetSigningKey(ctx, notify.UpdateWebhookTargetSigningKeyParams{
+			ID:                        target.ID,
+			SigningValueCiphertext:    signingValueCiphertext,
+			SignatureHeaderCiphertext: signatureHeaderCiphertext,
+			SigningKeyVersion:         signingKeyVersion,
+		}); err != nil {
+			return 0, fmt.Errorf("update Webhook signing key version: %w", err)
+		}
+		rotated++
+	}
+	return rotated, nil
 }
 
 func reencryptSMTPChannel(ctx context.Context, tx pgx.Tx, keyring *instance.CredentialKeyring) (int64, error) {

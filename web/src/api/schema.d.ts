@@ -461,6 +461,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notification-channels/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWebhookTargets"];
+        put?: never;
+        post: operations["createWebhookTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/webhooks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateWebhookTarget"];
+        post?: never;
+        delete: operations["deleteWebhookTarget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/webhooks/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["testWebhookTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/failures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getChannelFailures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/performance-events": {
         parameters: {
             query: {
@@ -1110,7 +1178,7 @@ export interface components {
             /** @enum {string} */
             event_type: "FIRING" | "RECOVERY" | "REPEAT" | "TEST";
             /** @enum {string} */
-            channel: "SMTP";
+            channel: "SMTP" | "WEBHOOK";
             target: string;
             template_id?: string;
             /** @enum {string} */
@@ -1126,6 +1194,52 @@ export interface components {
             result?: "SENT" | "FAILED";
             failure_reason?: string;
             retry_count?: number;
+        };
+        WebhookTargetInput: {
+            name: string;
+            enabled: boolean;
+            /** Format: uri */
+            url: string;
+            /** @description Required when creating; omit on update to retain the encrypted value. */
+            signing_value?: string;
+            /** @description Required when creating; omit on update to retain the encrypted value. */
+            signature_header?: string;
+        };
+        WebhookTarget: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            enabled: boolean;
+            /** Format: uri */
+            url: string;
+            signing_configured: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ChannelFailureRecord: {
+            /** Format: date-time */
+            failed_at: string;
+            target: string;
+            reason: string;
+            retry_count: number;
+        };
+        ChannelFailureSummary: {
+            /** @enum {string} */
+            channel: "SMTP" | "WEBHOOK";
+            /** Format: uuid */
+            target_id?: string;
+            target: string;
+            recent_failure_count: number;
+            last_failure_reason: string;
+            /** Format: date-time */
+            last_failed_at: string;
+            recent_failures: components["schemas"]["ChannelFailureRecord"][];
+        };
+        ChannelFailureOverview: {
+            has_failures: boolean;
+            channels: components["schemas"]["ChannelFailureSummary"][];
         };
         /** @enum {string} */
         PerformanceEventType: "LOCK_BLOCKING" | "LONG_TRANSACTION" | "IDLE_IN_TRANSACTION" | "ACTIVE_SESSIONS_HIGH" | "REPLICATION_LAG" | "TEMP_FILES_SURGE";
@@ -2606,6 +2720,192 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listWebhookTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook targets without signing material. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTarget"][];
+                };
+            };
+        };
+    };
+    createWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookTargetInput"];
+            };
+        };
+        responses: {
+            /** @description Created Webhook target without signing material. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTarget"];
+                };
+            };
+            /** @description Invalid Webhook target. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookTargetInput"];
+            };
+        };
+        responses: {
+            /** @description Updated Webhook target without signing material. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTarget"];
+                };
+            };
+            /** @description Invalid Webhook target. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Webhook target not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook target deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook target not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    testWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test request was durably queued through the normal delivery path. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationQueued"];
+                };
+            };
+            /** @description Webhook target is disabled. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Webhook target not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getChannelFailures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uncleared terminal channel failures and up to 20 recent records per target. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelFailureOverview"];
                 };
             };
         };

@@ -110,7 +110,8 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	evaluationDone := make(chan error, 1)
 	go func() { evaluationDone <- evaluation.RunOnce(ctx) }()
 	waitForNotificationLock(t, ctx, platform)
-	if processed, err := dispatcher.DispatchOne(ctx, now, channel); err != nil || processed {
+	channels := map[string]notify.Channel{notify.SMTPChannelKey: channel}
+	if processed, err := dispatcher.DispatchOne(ctx, now, channels); err != nil || processed {
 		t.Fatalf("delivery before evaluator commit = %t, %v; want false, nil", processed, err)
 	}
 	if _, err := blocker.Exec(ctx, "SELECT pg_advisory_unlock(79)"); err != nil {
@@ -122,7 +123,7 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	if _, err := platform.Exec(ctx, "DROP TRIGGER notification_commit_gate ON notification_delivery; DROP FUNCTION block_notification_commit()"); err != nil {
 		t.Fatal(err)
 	}
-	if processed, err := dispatcher.DispatchOne(ctx, now, channel); err != nil || !processed {
+	if processed, err := dispatcher.DispatchOne(ctx, now, channels); err != nil || !processed {
 		t.Fatalf("delivery after evaluator commit = %t, %v; want true, nil", processed, err)
 	}
 	if message := <-messages; !strings.Contains(message, "Agent tracer") || !strings.Contains(message, "dba@example.com") {
@@ -137,7 +138,7 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	if err := evaluation.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate recovery transition: %v", err)
 	}
-	if processed, err := dispatcher.DispatchOne(ctx, currentClock.now, channel); err != nil || !processed {
+	if processed, err := dispatcher.DispatchOne(ctx, currentClock.now, channels); err != nil || !processed {
 		t.Fatalf("recovery delivery = %t, %v; want true, nil", processed, err)
 	}
 	if message := <-messages; !strings.Contains(message, "告警恢复") {
@@ -163,13 +164,14 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	failing := notify.NewSMTPChannel(notify.SMTPConfig{
 		Host: "127.0.0.1", Port: 1, From: "monitor@example.com", TLSMode: notify.TLSImplicit, AuthType: notify.AuthNone,
 	})
+	failingChannels := map[string]notify.Channel{notify.SMTPChannelKey: failing}
 	for attempt, attemptedAt := range []time.Time{now, now.Add(time.Second), now.Add(3 * time.Second)} {
-		if processed, err := notify.NewDispatcher(platform).DispatchOne(ctx, attemptedAt, failing); err != nil || !processed {
+		if processed, err := notify.NewDispatcher(platform).DispatchOne(ctx, attemptedAt, failingChannels); err != nil || !processed {
 			t.Fatalf("failed attempt %d = %t, %v", attempt+1, processed, err)
 		}
 		if attempt < 2 {
 			early := attemptedAt.Add(500 * time.Millisecond)
-			if processed, err := notify.NewDispatcher(platform).DispatchOne(ctx, early, failing); err != nil || processed {
+			if processed, err := notify.NewDispatcher(platform).DispatchOne(ctx, early, failingChannels); err != nil || processed {
 				t.Fatalf("early retry after attempt %d = %t, %v; want false, nil", attempt+1, processed, err)
 			}
 		}

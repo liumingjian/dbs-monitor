@@ -130,6 +130,12 @@ const (
 	UNKNOWN       CapabilityStatus = "UNKNOWN"
 )
 
+// Defines values for ChannelFailureSummaryChannel.
+const (
+	FailureSMTP    ChannelFailureSummaryChannel = "SMTP"
+	FailureWebhook ChannelFailureSummaryChannel = "WEBHOOK"
+)
+
 // Defines values for CollectionTaskResult.
 const (
 	BACKOFF             CollectionTaskResult = "BACKOFF"
@@ -209,7 +215,8 @@ const (
 
 // Defines values for NotificationAttemptChannel.
 const (
-	NotificationSMTP NotificationAttemptChannel = "SMTP"
+	NotificationSMTP    NotificationAttemptChannel = "SMTP"
+	NotificationWebhook NotificationAttemptChannel = "WEBHOOK"
 )
 
 // Defines values for NotificationAttemptEventType.
@@ -687,6 +694,34 @@ type CapabilitySnapshotEntryClass string
 // CapabilityStatus defines model for CapabilityStatus.
 type CapabilityStatus string
 
+// ChannelFailureOverview defines model for ChannelFailureOverview.
+type ChannelFailureOverview struct {
+	Channels    []ChannelFailureSummary `json:"channels"`
+	HasFailures bool                    `json:"has_failures"`
+}
+
+// ChannelFailureRecord defines model for ChannelFailureRecord.
+type ChannelFailureRecord struct {
+	FailedAt   time.Time `json:"failed_at"`
+	Reason     string    `json:"reason"`
+	RetryCount int       `json:"retry_count"`
+	Target     string    `json:"target"`
+}
+
+// ChannelFailureSummary defines model for ChannelFailureSummary.
+type ChannelFailureSummary struct {
+	Channel            ChannelFailureSummaryChannel `json:"channel"`
+	LastFailedAt       time.Time                    `json:"last_failed_at"`
+	LastFailureReason  string                       `json:"last_failure_reason"`
+	RecentFailureCount int                          `json:"recent_failure_count"`
+	RecentFailures     []ChannelFailureRecord       `json:"recent_failures"`
+	Target             string                       `json:"target"`
+	TargetId           *openapi_types.UUID          `json:"target_id,omitempty"`
+}
+
+// ChannelFailureSummaryChannel defines model for ChannelFailureSummary.Channel.
+type ChannelFailureSummaryChannel string
+
 // CollectionPauseInput defines model for CollectionPauseInput.
 type CollectionPauseInput struct {
 	Paused bool    `json:"paused"`
@@ -1126,6 +1161,30 @@ type UserStatusInput struct {
 	Enabled bool `json:"enabled"`
 }
 
+// WebhookTarget defines model for WebhookTarget.
+type WebhookTarget struct {
+	CreatedAt         time.Time          `json:"created_at"`
+	Enabled           bool               `json:"enabled"`
+	Id                openapi_types.UUID `json:"id"`
+	Name              string             `json:"name"`
+	SigningConfigured bool               `json:"signing_configured"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	Url               string             `json:"url"`
+}
+
+// WebhookTargetInput defines model for WebhookTargetInput.
+type WebhookTargetInput struct {
+	Enabled bool   `json:"enabled"`
+	Name    string `json:"name"`
+
+	// SignatureHeader Required when creating; omit on update to retain the encrypted value.
+	SignatureHeader *string `json:"signature_header,omitempty"`
+
+	// SigningValue Required when creating; omit on update to retain the encrypted value.
+	SigningValue *string `json:"signing_value,omitempty"`
+	Url          string  `json:"url"`
+}
+
 // ListCurrentAlertsParams defines parameters for ListCurrentAlerts.
 type ListCurrentAlertsParams struct {
 	InstanceId    *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
@@ -1225,6 +1284,12 @@ type UpdateSMTPChannelJSONRequestBody = SMTPChannelInput
 
 // TestSMTPChannelJSONRequestBody defines body for TestSMTPChannel for application/json ContentType.
 type TestSMTPChannelJSONRequestBody = SMTPTestInput
+
+// CreateWebhookTargetJSONRequestBody defines body for CreateWebhookTarget for application/json ContentType.
+type CreateWebhookTargetJSONRequestBody = WebhookTargetInput
+
+// UpdateWebhookTargetJSONRequestBody defines body for UpdateWebhookTarget for application/json ContentType.
+type UpdateWebhookTargetJSONRequestBody = WebhookTargetInput
 
 // ChangeOwnPasswordJSONRequestBody defines body for ChangeOwnPassword for application/json ContentType.
 type ChangeOwnPasswordJSONRequestBody = PasswordChangeInput
@@ -1382,6 +1447,9 @@ type ServerInterface interface {
 	// (GET /api/v1/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
 
+	// (GET /api/v1/notification-channels/failures)
+	GetChannelFailures(w http.ResponseWriter, r *http.Request)
+
 	// (GET /api/v1/notification-channels/smtp)
 	GetSMTPChannel(w http.ResponseWriter, r *http.Request)
 
@@ -1390,6 +1458,21 @@ type ServerInterface interface {
 
 	// (POST /api/v1/notification-channels/smtp/test)
 	TestSMTPChannel(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/notification-channels/webhooks)
+	ListWebhookTargets(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-channels/webhooks)
+	CreateWebhookTarget(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-channels/webhooks/{id})
+	DeleteWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-channels/webhooks/{id})
+	UpdateWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/notification-channels/webhooks/{id}/test)
+	TestWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
@@ -2677,6 +2760,20 @@ func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetChannelFailures operation middleware
+func (siw *ServerInterfaceWrapper) GetChannelFailures(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetChannelFailures(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSMTPChannel operation middleware
 func (siw *ServerInterfaceWrapper) GetSMTPChannel(w http.ResponseWriter, r *http.Request) {
 
@@ -2710,6 +2807,109 @@ func (siw *ServerInterfaceWrapper) TestSMTPChannel(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.TestSMTPChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWebhookTargets operation middleware
+func (siw *ServerInterfaceWrapper) ListWebhookTargets(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWebhookTargets(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) CreateWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWebhookTarget(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWebhookTarget(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) UpdateWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateWebhookTarget(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) TestWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestWebhookTarget(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3028,9 +3228,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/sessions", wrapper.GetSessionSnapshot)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/failures", wrapper.GetChannelFailures)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.GetSMTPChannel)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.UpdateSMTPChannel)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/smtp/test", wrapper.TestSMTPChannel)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/webhooks", wrapper.ListWebhookTargets)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/webhooks", wrapper.CreateWebhookTarget)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}", wrapper.DeleteWebhookTarget)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}", wrapper.UpdateWebhookTarget)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}/test", wrapper.TestWebhookTarget)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
@@ -4151,6 +4357,22 @@ func (response GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetChannelFailuresRequestObject struct {
+}
+
+type GetChannelFailuresResponseObject interface {
+	VisitGetChannelFailuresResponse(w http.ResponseWriter) error
+}
+
+type GetChannelFailures200JSONResponse ChannelFailureOverview
+
+func (response GetChannelFailures200JSONResponse) VisitGetChannelFailuresResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetSMTPChannelRequestObject struct {
 }
 
@@ -4215,6 +4437,144 @@ type TestSMTPChannel400JSONResponse Error
 func (response TestSMTPChannel400JSONResponse) VisitTestSMTPChannelResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListWebhookTargetsRequestObject struct {
+}
+
+type ListWebhookTargetsResponseObject interface {
+	VisitListWebhookTargetsResponse(w http.ResponseWriter) error
+}
+
+type ListWebhookTargets200JSONResponse []WebhookTarget
+
+func (response ListWebhookTargets200JSONResponse) VisitListWebhookTargetsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateWebhookTargetRequestObject struct {
+	Body *CreateWebhookTargetJSONRequestBody
+}
+
+type CreateWebhookTargetResponseObject interface {
+	VisitCreateWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type CreateWebhookTarget201JSONResponse WebhookTarget
+
+func (response CreateWebhookTarget201JSONResponse) VisitCreateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateWebhookTarget400JSONResponse Error
+
+func (response CreateWebhookTarget400JSONResponse) VisitCreateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteWebhookTargetRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteWebhookTargetResponseObject interface {
+	VisitDeleteWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type DeleteWebhookTarget204Response struct {
+}
+
+func (response DeleteWebhookTarget204Response) VisitDeleteWebhookTargetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWebhookTarget404JSONResponse Error
+
+func (response DeleteWebhookTarget404JSONResponse) VisitDeleteWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateWebhookTargetRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateWebhookTargetJSONRequestBody
+}
+
+type UpdateWebhookTargetResponseObject interface {
+	VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type UpdateWebhookTarget200JSONResponse WebhookTarget
+
+func (response UpdateWebhookTarget200JSONResponse) VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateWebhookTarget400JSONResponse Error
+
+func (response UpdateWebhookTarget400JSONResponse) VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateWebhookTarget404JSONResponse Error
+
+func (response UpdateWebhookTarget404JSONResponse) VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestWebhookTargetRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type TestWebhookTargetResponseObject interface {
+	VisitTestWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type TestWebhookTarget202JSONResponse NotificationQueued
+
+func (response TestWebhookTarget202JSONResponse) VisitTestWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestWebhookTarget400JSONResponse Error
+
+func (response TestWebhookTarget400JSONResponse) VisitTestWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestWebhookTarget404JSONResponse Error
+
+func (response TestWebhookTarget404JSONResponse) VisitTestWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -4572,6 +4932,9 @@ type StrictServerInterface interface {
 	// (GET /api/v1/me)
 	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
 
+	// (GET /api/v1/notification-channels/failures)
+	GetChannelFailures(ctx context.Context, request GetChannelFailuresRequestObject) (GetChannelFailuresResponseObject, error)
+
 	// (GET /api/v1/notification-channels/smtp)
 	GetSMTPChannel(ctx context.Context, request GetSMTPChannelRequestObject) (GetSMTPChannelResponseObject, error)
 
@@ -4580,6 +4943,21 @@ type StrictServerInterface interface {
 
 	// (POST /api/v1/notification-channels/smtp/test)
 	TestSMTPChannel(ctx context.Context, request TestSMTPChannelRequestObject) (TestSMTPChannelResponseObject, error)
+
+	// (GET /api/v1/notification-channels/webhooks)
+	ListWebhookTargets(ctx context.Context, request ListWebhookTargetsRequestObject) (ListWebhookTargetsResponseObject, error)
+
+	// (POST /api/v1/notification-channels/webhooks)
+	CreateWebhookTarget(ctx context.Context, request CreateWebhookTargetRequestObject) (CreateWebhookTargetResponseObject, error)
+
+	// (DELETE /api/v1/notification-channels/webhooks/{id})
+	DeleteWebhookTarget(ctx context.Context, request DeleteWebhookTargetRequestObject) (DeleteWebhookTargetResponseObject, error)
+
+	// (PUT /api/v1/notification-channels/webhooks/{id})
+	UpdateWebhookTarget(ctx context.Context, request UpdateWebhookTargetRequestObject) (UpdateWebhookTargetResponseObject, error)
+
+	// (POST /api/v1/notification-channels/webhooks/{id}/test)
+	TestWebhookTarget(ctx context.Context, request TestWebhookTargetRequestObject) (TestWebhookTargetResponseObject, error)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
@@ -5919,6 +6297,30 @@ func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// GetChannelFailures operation middleware
+func (sh *strictHandler) GetChannelFailures(w http.ResponseWriter, r *http.Request) {
+	var request GetChannelFailuresRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetChannelFailures(ctx, request.(GetChannelFailuresRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetChannelFailures")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetChannelFailuresResponseObject); ok {
+		if err := validResponse.VisitGetChannelFailuresResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetSMTPChannel operation middleware
 func (sh *strictHandler) GetSMTPChannel(w http.ResponseWriter, r *http.Request) {
 	var request GetSMTPChannelRequestObject
@@ -5998,6 +6400,146 @@ func (sh *strictHandler) TestSMTPChannel(w http.ResponseWriter, r *http.Request)
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TestSMTPChannelResponseObject); ok {
 		if err := validResponse.VisitTestSMTPChannelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWebhookTargets operation middleware
+func (sh *strictHandler) ListWebhookTargets(w http.ResponseWriter, r *http.Request) {
+	var request ListWebhookTargetsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWebhookTargets(ctx, request.(ListWebhookTargetsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWebhookTargets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWebhookTargetsResponseObject); ok {
+		if err := validResponse.VisitListWebhookTargetsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWebhookTarget operation middleware
+func (sh *strictHandler) CreateWebhookTarget(w http.ResponseWriter, r *http.Request) {
+	var request CreateWebhookTargetRequestObject
+
+	var body CreateWebhookTargetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWebhookTarget(ctx, request.(CreateWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitCreateWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWebhookTarget operation middleware
+func (sh *strictHandler) DeleteWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteWebhookTargetRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWebhookTarget(ctx, request.(DeleteWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitDeleteWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateWebhookTarget operation middleware
+func (sh *strictHandler) UpdateWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateWebhookTargetRequestObject
+
+	request.Id = id
+
+	var body UpdateWebhookTargetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateWebhookTarget(ctx, request.(UpdateWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitUpdateWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestWebhookTarget operation middleware
+func (sh *strictHandler) TestWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request TestWebhookTargetRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestWebhookTarget(ctx, request.(TestWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitTestWebhookTargetResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
