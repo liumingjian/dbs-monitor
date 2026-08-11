@@ -144,6 +144,26 @@ const (
 	MarkNoData NoDataPolicy = "mark_no_data"
 )
 
+// Defines values for PlatformHealthSource.
+const (
+	HealthSourceAgentIngress         PlatformHealthSource = "AGENT_INGRESS"
+	HealthSourceCollectionScheduler  PlatformHealthSource = "COLLECTION_SCHEDULER"
+	HealthSourceCredentialKeyring    PlatformHealthSource = "CREDENTIAL_KEYRING"
+	HealthSourceDisk                 PlatformHealthSource = "DISK"
+	HealthSourcePartitionMaintenance PlatformHealthSource = "PARTITION_MAINTENANCE"
+	HealthSourcePlatformDatabase     PlatformHealthSource = "PLATFORM_DATABASE"
+	HealthSourceServerProcess        PlatformHealthSource = "SERVER_PROCESS"
+	HealthSourceTLSCertificate       PlatformHealthSource = "TLS_CERTIFICATE"
+)
+
+// Defines values for PlatformHealthStatus.
+const (
+	PlatformHealthDegraded PlatformHealthStatus = "DEGRADED"
+	PlatformHealthFailed   PlatformHealthStatus = "FAILED"
+	PlatformHealthOK       PlatformHealthStatus = "OK"
+	PlatformHealthUnknown  PlatformHealthStatus = "UNKNOWN"
+)
+
 // Defines values for Role.
 const (
 	ALERTADMIN    Role = "ALERT_ADMIN"
@@ -448,6 +468,38 @@ type PasswordIssued struct {
 	Password string `json:"password"`
 }
 
+// PlatformHealthSnapshot defines model for PlatformHealthSnapshot.
+type PlatformHealthSnapshot struct {
+	AssembledAt time.Time                      `json:"assembled_at"`
+	Sources     []PlatformHealthSourceSnapshot `json:"sources"`
+	Status      PlatformHealthStatus           `json:"status"`
+}
+
+// PlatformHealthSource defines model for PlatformHealthSource.
+type PlatformHealthSource string
+
+// PlatformHealthSourceSnapshot defines model for PlatformHealthSourceSnapshot.
+type PlatformHealthSourceSnapshot struct {
+	Backoff               *int64               `json:"backoff,omitempty"`
+	Code                  string               `json:"code"`
+	ConsecutiveFailures   *int                 `json:"consecutive_failures,omitempty"`
+	ExpiresAt             *time.Time           `json:"expires_at,omitempty"`
+	Pending               *int                 `json:"pending,omitempty"`
+	PrebuildDaysRemaining *int                 `json:"prebuild_days_remaining,omitempty"`
+	ProbeActive           *int                 `json:"probe_active,omitempty"`
+	ProbeCapacity         *int                 `json:"probe_capacity,omitempty"`
+	QueryActive           *int                 `json:"query_active,omitempty"`
+	QueryCapacity         *int                 `json:"query_capacity,omitempty"`
+	SkippedBackpressure   *int64               `json:"skipped_backpressure,omitempty"`
+	Source                PlatformHealthSource `json:"source"`
+	StartedAt             *time.Time           `json:"started_at,omitempty"`
+	Status                PlatformHealthStatus `json:"status"`
+	Version               *string              `json:"version,omitempty"`
+}
+
+// PlatformHealthStatus defines model for PlatformHealthStatus.
+type PlatformHealthStatus string
+
 // Role defines model for Role.
 type Role string
 
@@ -562,6 +614,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/diagnostics/health)
+	GetPlatformHealth(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/instances)
 	ListInstances(w http.ResponseWriter, r *http.Request)
@@ -716,6 +771,20 @@ func (siw *ServerInterfaceWrapper) UpdateAlertRuleEnabled(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateAlertRuleEnabled(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlatformHealth operation middleware
+func (siw *ServerInterfaceWrapper) GetPlatformHealth(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlatformHealth(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1288,6 +1357,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}/enabled", wrapper.UpdateAlertRuleEnabled)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/health", wrapper.GetPlatformHealth)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances", wrapper.ListInstances)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances", wrapper.CreateInstance)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
@@ -1454,6 +1524,22 @@ type UpdateAlertRuleEnabled404JSONResponse Error
 func (response UpdateAlertRuleEnabled404JSONResponse) VisitUpdateAlertRuleEnabledResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPlatformHealthRequestObject struct {
+}
+
+type GetPlatformHealthResponseObject interface {
+	VisitGetPlatformHealthResponse(w http.ResponseWriter) error
+}
+
+type GetPlatformHealth200JSONResponse PlatformHealthSnapshot
+
+func (response GetPlatformHealth200JSONResponse) VisitGetPlatformHealthResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1924,6 +2010,9 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(ctx context.Context, request UpdateAlertRuleEnabledRequestObject) (UpdateAlertRuleEnabledResponseObject, error)
 
+	// (GET /api/v1/diagnostics/health)
+	GetPlatformHealth(ctx context.Context, request GetPlatformHealthRequestObject) (GetPlatformHealthResponseObject, error)
+
 	// (GET /api/v1/instances)
 	ListInstances(ctx context.Context, request ListInstancesRequestObject) (ListInstancesResponseObject, error)
 
@@ -2153,6 +2242,30 @@ func (sh *strictHandler) UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateAlertRuleEnabledResponseObject); ok {
 		if err := validResponse.VisitUpdateAlertRuleEnabledResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlatformHealth operation middleware
+func (sh *strictHandler) GetPlatformHealth(w http.ResponseWriter, r *http.Request) {
+	var request GetPlatformHealthRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlatformHealth(ctx, request.(GetPlatformHealthRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlatformHealth")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlatformHealthResponseObject); ok {
+		if err := validResponse.VisitGetPlatformHealthResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

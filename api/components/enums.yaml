@@ -42,3 +42,31 @@ NoDataPolicy:
 AlertRuleScope:
   type: string
   enum: [ALL, INSTANCES]
+PlatformHealthStatus:
+  type: string
+  enum: [OK, DEGRADED, FAILED, UNKNOWN]
+  x-enum-varnames:
+    - PlatformHealthOK
+    - PlatformHealthDegraded
+    - PlatformHealthFailed
+    - PlatformHealthUnknown
+PlatformHealthSource:
+  type: string
+  enum:
+    - SERVER_PROCESS
+    - PLATFORM_DATABASE
+    - COLLECTION_SCHEDULER
+    - PARTITION_MAINTENANCE
+    - TLS_CERTIFICATE
+    - AGENT_INGRESS
+    - DISK
+    - CREDENTIAL_KEYRING
+  x-enum-varnames:
+    - HealthSourceServerProcess
+    - HealthSourcePlatformDatabase
+    - HealthSourceCollectionScheduler
+    - HealthSourcePartitionMaintenance
+    - HealthSourceTLSCertificate
+    - HealthSourceAgentIngress
+    - HealthSourceDisk
+    - HealthSourceCredentialKeyring

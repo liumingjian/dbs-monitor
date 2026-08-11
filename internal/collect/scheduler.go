@@ -11,6 +11,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
 type workClass uint8
@@ -388,7 +389,7 @@ func (scheduler *centralScheduler) complete(outcome executionOutcome) {
 		outcome.run.key.instanceID, outcome.run.key.taskID, outcome.result, outcome.duration.Milliseconds())
 }
 
-func (scheduler *centralScheduler) logSummary(now time.Time) {
+func (scheduler *centralScheduler) logSummary(ctx context.Context, now time.Time, refreshErr error) {
 	if now.Sub(scheduler.lastLog) < time.Minute {
 		return
 	}
@@ -410,7 +411,27 @@ func (scheduler *centralScheduler) logSummary(now time.Time) {
 		log.Printf("collection scheduler task summary: task_id=%s count=%d duration_avg_ms=%d duration_max_ms=%d",
 			taskID, duration.count, average.Milliseconds(), duration.max.Milliseconds())
 	}
+	if scheduler.service.health != nil {
+		pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		databaseErr := scheduler.service.platform.Ping(pingCtx)
+		cancel()
+		scheduler.publishPlatformHealth(now, refreshErr, databaseErr)
+	}
 	scheduler.counts = newSchedulerCounts()
+}
+
+func (scheduler *centralScheduler) publishPlatformHealth(now time.Time, refreshErr, databaseErr error) {
+	if scheduler.service.health == nil {
+		return
+	}
+	scheduler.service.health.Update(now, platformhealth.DatabaseSource(databaseErr))
+	scheduler.service.health.Update(now, platformhealth.SchedulerSource(platformhealth.SchedulerFacts{
+		ProbeCapacity: scheduler.dispatcher.probeLimit, ProbeActive: scheduler.dispatcher.activeProbes,
+		QueryCapacity: scheduler.dispatcher.queryLimit, QueryActive: scheduler.dispatcher.activeQueries,
+		Pending: scheduler.pending.len(), SkippedBackpressure: scheduler.counts.skipped,
+		Backoff: scheduler.counts.backoff, RefreshFailed: refreshErr != nil,
+	}))
+	scheduler.service.health.PublishSummary(now)
 }
 
 func newSchedulerCounts() schedulerCounts {

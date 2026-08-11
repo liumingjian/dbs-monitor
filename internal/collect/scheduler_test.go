@@ -1,10 +1,13 @@
 package collect
 
 import (
+	"io"
+	"log"
 	"testing"
 	"time"
 
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
 func TestInitialPhaseIsStableAndDistributed(t *testing.T) {
@@ -141,5 +144,37 @@ func TestPendingRunsPrioritizeCapabilitySnapshot(t *testing.T) {
 	}
 	if got := classFor(capabilitySnapshotTask); got != workCapabilitySnapshot {
 		t.Fatalf("capability work class = %d, want %d", got, workCapabilitySnapshot)
+	}
+}
+
+func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.T) {
+	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), log.New(io.Discard, "", 0))
+	expiresAt := now.Add(90 * 24 * time.Hour)
+	health.Update(now, platformhealth.PartitionSource(0, 7, false))
+	health.Update(now, platformhealth.CertificateSource(now, &expiresAt))
+	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY"})
+	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceDisk, Status: platformhealth.StatusOK, Code: "DISK_CLASSIFICATION_PENDING"})
+	health.Update(now, platformhealth.CredentialSource("", true))
+	service := &Service{health: health}
+	scheduler := &centralScheduler{
+		service:    service,
+		dispatcher: newDispatcher(1, 2),
+		pending:    newPendingRuns(),
+		counts:     newSchedulerCounts(),
+	}
+	scheduler.dispatcher.activeProbes = 1
+	scheduler.pending.put(scheduledRun{key: taskKey{instanceID: "one", taskID: metric.TaskProbe}})
+	scheduler.counts.skipped = 7
+
+	scheduler.publishPlatformHealth(now, nil, nil)
+
+	source := health.Source(platformhealth.SourceCollectionScheduler)
+	if source.Status != platformhealth.StatusDegraded || source.Pending == nil || *source.Pending != 1 ||
+		source.SkippedBackpressure == nil || *source.SkippedBackpressure != 7 {
+		t.Fatalf("scheduler platform health = %+v, want DEGRADED pending=1 skipped_backpressure=7", source)
+	}
+	if got := health.Current().Status; got != platformhealth.StatusDegraded {
+		t.Fatalf("aggregate platform health = %s, want DEGRADED", got)
 	}
 }

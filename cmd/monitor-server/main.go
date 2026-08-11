@@ -26,6 +26,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 	"github.com/liumingjian/dbs-monitor/migrations"
 	webassets "github.com/liumingjian/dbs-monitor/web"
 )
@@ -42,6 +43,8 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	startedAt := time.Now().UTC()
+	health := platformhealth.NewStore(version, startedAt, log.Default())
 	connectionString := env("DATABASE_URL", "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable")
 	credentialDirectory := env("CREDENTIALS_DIR", "/opt/dbs-monitor/etc/credentials")
 	pool, err := pgxpool.New(ctx, connectionString)
@@ -64,8 +67,12 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	health.Update(time.Now().UTC(), platformhealth.CredentialSource("", true))
 	if err := metric.EnsurePartitions(ctx, platform, time.Now()); err != nil {
-		return err
+		health.Update(time.Now().UTC(), platformhealth.PartitionSource(1, 6, false))
+		log.Printf("partition creation failed: %v", err)
+	} else {
+		health.Update(time.Now().UTC(), platformhealth.PartitionSource(0, 7, false))
 	}
 	adminExists, err := httpapi.AdminExists(ctx, platform)
 	if err != nil {
@@ -93,9 +100,27 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("collection scheduler config: %w", err)
 	}
+	collector.SetPlatformHealth(health)
+	refreshPlatformDatabaseHealth(ctx, platform, health, time.Now().UTC())
+	health.Update(time.Now().UTC(), platformhealth.SourceSnapshot{
+		Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY",
+	})
+	health.Update(time.Now().UTC(), platformhealth.SourceSnapshot{
+		Source: platformhealth.SourceDisk, Status: platformhealth.StatusOK, Code: "DISK_CLASSIFICATION_PENDING",
+	})
+	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
+	if err != nil {
+		return err
+	}
+	expiresAt, certificateErr := certificateExpiration(certificate)
+	if certificateErr != nil {
+		health.Update(time.Now().UTC(), platformhealth.CertificateSource(time.Now().UTC(), nil))
+		return certificateErr
+	}
+	health.Update(time.Now().UTC(), platformhealth.CertificateSource(time.Now().UTC(), expiresAt))
 	evaluation := evaluator.New(platform, clock.Real{})
 	go collector.Run(ctx, time.Second)
-	go runPartitionMaintenance(ctx, platform)
+	go runPartitionMaintenance(ctx, platform, health)
 	go func() {
 		timer := time.NewTimer(time.Second)
 		defer timer.Stop()
@@ -111,9 +136,9 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	apiHandler := httpapi.NewHandlerWithVersion(platform, clock.Real{}, keyring, version).Routes()
+	apiHandler := httpapi.NewHandlerWithPlatformHealth(platform, clock.Real{}, keyring, monitorpg.DirectDialer{}, version, health).Routes()
 	fileServer := http.FileServer(http.FS(static))
-	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	applicationHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if len(request.URL.Path) >= 5 && request.URL.Path[:5] == "/api/" {
 			apiHandler.ServeHTTP(writer, request)
 			return
@@ -123,6 +148,7 @@ func run(ctx context.Context) error {
 		}
 		fileServer.ServeHTTP(writer, request)
 	})
+	handler := platformFailureHandler(applicationHandler, health)
 	server := &http.Server{Addr: env("LISTEN_ADDR", ":8443"), Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
@@ -130,10 +156,6 @@ func run(ctx context.Context) error {
 		defer cancel()
 		server.Shutdown(shutdown)
 	}()
-	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
-	if err != nil {
-		return err
-	}
 	server.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	if err := server.ListenAndServeTLS(certificate, key); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
@@ -141,23 +163,41 @@ func run(ctx context.Context) error {
 	return nil
 }
 
-func runPartitionMaintenance(ctx context.Context, platform *db.Pool) {
+func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *platformhealth.Store) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
+	lastSuccess := time.Now().UTC()
+	consecutiveFailures := 0
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
 			if err := metric.EnsurePartitions(ctx, platform, now); err != nil {
+				consecutiveFailures++
+				health.Update(now, platformhealth.PartitionSource(consecutiveFailures, partitionDaysRemaining(lastSuccess, now), false))
 				log.Printf("partition creation failed: %v", err)
 				continue
 			}
 			if err := metric.DropExpiredPartitions(ctx, platform, now); err != nil {
+				consecutiveFailures++
+				health.Update(now, platformhealth.PartitionSource(consecutiveFailures, 7, false))
 				log.Printf("partition retention failed: %v", err)
+				continue
 			}
+			lastSuccess = now.UTC()
+			consecutiveFailures = 0
+			health.Update(now, platformhealth.PartitionSource(0, 7, false))
 		}
 	}
+}
+
+func partitionDaysRemaining(lastSuccess, now time.Time) int {
+	remaining := 7 - int(now.UTC().Sub(lastSuccess.UTC())/(24*time.Hour))
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
 }
 
 func randomPassword() (string, error) {

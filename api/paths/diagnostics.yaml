@@ -1,0 +1,11 @@
+/api/v1/diagnostics/health:
+  get:
+    tags: [diagnostics]
+    operationId: getPlatformHealth
+    x-required-role: PLATFORM_ADMIN
+    responses:
+      '200':
+        description: Current in-memory platform health snapshot
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/diagnostics.yaml#/PlatformHealthSnapshot }

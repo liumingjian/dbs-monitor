@@ -12,6 +12,7 @@ tags:
   - name: agent
   - name: collection
   - name: users
+  - name: diagnostics
 paths:
   /api/v1/login:
     $ref: paths/auth.yaml#/~1api~1v1~1login
@@ -49,6 +50,8 @@ paths:
     $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1password
   /api/v1/password:
     $ref: paths/users.yaml#/~1api~1v1~1password
+  /api/v1/diagnostics/health:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1health
 components:
   securitySchemes:
     agentToken:
@@ -71,6 +74,10 @@ components:
       $ref: components/enums.yaml#/NoDataPolicy
     AlertRuleScope:
       $ref: components/enums.yaml#/AlertRuleScope
+    PlatformHealthStatus:
+      $ref: components/enums.yaml#/PlatformHealthStatus
+    PlatformHealthSource:
+      $ref: components/enums.yaml#/PlatformHealthSource
     AlertRuleInput:
       $ref: components/schemas/alert-rules.yaml#/AlertRuleInput
     AlertRule:
@@ -115,5 +122,9 @@ components:
       $ref: components/schemas/users.yaml#/PasswordIssued
     PasswordChangeInput:
       $ref: components/schemas/users.yaml#/PasswordChangeInput
+    PlatformHealthSourceSnapshot:
+      $ref: components/schemas/diagnostics.yaml#/PlatformHealthSourceSnapshot
+    PlatformHealthSnapshot:
+      $ref: components/schemas/diagnostics.yaml#/PlatformHealthSnapshot
     Error:
       $ref: components/errors.yaml#/Error

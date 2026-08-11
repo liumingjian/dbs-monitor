@@ -2,6 +2,8 @@ package httpapi_test
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,6 +13,17 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 )
+
+func TestPlatformHealthEndpointIsRegistered(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics/health", nil)
+	response := httptest.NewRecorder()
+
+	httpapi.NewHandler(nil, nil, nil).Routes().ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated platform health status = %d, want 401", response.Code)
+	}
+}
 
 func TestEveryOperationDeclaresRequiredRole(t *testing.T) {
 	doc := loadSpec(t)

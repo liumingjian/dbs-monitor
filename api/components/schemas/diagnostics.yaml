@@ -1,0 +1,28 @@
+PlatformHealthSourceSnapshot:
+  type: object
+  required: [source, status, code]
+  properties:
+    source: { $ref: ../enums.yaml#/PlatformHealthSource }
+    status: { $ref: ../enums.yaml#/PlatformHealthStatus }
+    code: { type: string }
+    version: { type: string }
+    started_at: { type: string, format: date-time }
+    expires_at: { type: string, format: date-time }
+    probe_capacity: { type: integer, minimum: 0 }
+    probe_active: { type: integer, minimum: 0 }
+    query_capacity: { type: integer, minimum: 0 }
+    query_active: { type: integer, minimum: 0 }
+    pending: { type: integer, minimum: 0 }
+    skipped_backpressure: { type: integer, format: int64, minimum: 0 }
+    backoff: { type: integer, format: int64, minimum: 0 }
+    consecutive_failures: { type: integer, minimum: 0 }
+    prebuild_days_remaining: { type: integer, minimum: 0 }
+PlatformHealthSnapshot:
+  type: object
+  required: [status, sources, assembled_at]
+  properties:
+    status: { $ref: ../enums.yaml#/PlatformHealthStatus }
+    sources:
+      type: array
+      items: { $ref: '#/PlatformHealthSourceSnapshot' }
+    assembled_at: { type: string, format: date-time }
