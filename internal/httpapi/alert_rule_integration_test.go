@@ -158,13 +158,18 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	}
 	detailResponse := getResponse(t, client, server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String())
 	defer detailResponse.Body.Close()
+	if detailResponse.StatusCode != http.StatusOK {
+		t.Fatalf("get alert rule status = %d, want 200", detailResponse.StatusCode)
+	}
 	var detailedRule api.AlertRule
-	if detailResponse.StatusCode != http.StatusOK || json.NewDecoder(detailResponse.Body).Decode(&detailedRule) != nil {
-		t.Fatalf("get alert rule status = %d", detailResponse.StatusCode)
+	if err := json.NewDecoder(detailResponse.Body).Decode(&detailedRule); err != nil {
+		t.Fatalf("decode alert rule detail: %v", err)
 	}
 	if !reflect.DeepEqual(detailedRule, databaseRule) {
 		t.Fatalf("alert rule detail = %+v, want %+v", detailedRule, databaseRule)
 	}
+	missingDetailResponse := getResponse(t, client, server.URL+"/api/v1/alert-rules/"+uuid.New().String())
+	assertRuleErrorCode(t, missingDetailResponse, http.StatusNotFound, api.NOTFOUND)
 
 	disabledBuiltin := requestJSON(t, client, http.MethodPut,
 		server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String()+"/enabled", map[string]any{"enabled": false}, "")
