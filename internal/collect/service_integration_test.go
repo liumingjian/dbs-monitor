@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
+	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
@@ -481,6 +482,33 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	for _, declaration := range metric.Capabilities {
 		if unknown[declaration.ID] != metric.CapabilityUnknown {
 			t.Errorf("status after partial probe failure for %s = %s, want UNKNOWN", declaration.ID, unknown[declaration.ID])
+		}
+	}
+
+	metric.Capabilities[probeIndex].Probe = originalProbe
+	targets, err := instance.New(pool).ListCollectionTargets(ctx)
+	if err != nil || len(targets) != 1 {
+		t.Fatalf("list capability target: targets=%d error=%v", len(targets), err)
+	}
+	timeoutCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base.Add(18 * time.Minute)}, keyring)
+	conn, err := timeoutCollector.queryConnection(ctx, targets[0])
+	if err != nil {
+		t.Fatalf("open capability probe connection: %v", err)
+	}
+	defer timeoutCollector.closeQueryConnections()
+	probeCtx, cancelProbe := context.WithCancel(ctx)
+	cancelProbe()
+	complete, err := capability.Probe(probeCtx, ctx, platform, conn, pgID, base.Add(18*time.Minute))
+	if err != nil {
+		t.Fatalf("persist canceled capability probe: %v", err)
+	}
+	if complete {
+		t.Fatal("canceled capability probe was reported complete")
+	}
+	unknown = storedCapabilityStates(t, ctx, pool, pgID)
+	for _, declaration := range metric.Capabilities {
+		if unknown[declaration.ID] != metric.CapabilityUnknown {
+			t.Errorf("status after canceled probe for %s = %s, want UNKNOWN", declaration.ID, unknown[declaration.ID])
 		}
 	}
 }

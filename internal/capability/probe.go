@@ -18,18 +18,18 @@ type probeResult struct {
 	err        error
 }
 
-func Probe(ctx context.Context, platform *db.Pool, conn *monitorpg.TargetConn, instanceID pgtype.UUID, observedAt time.Time) (bool, error) {
+func Probe(probeCtx, persistCtx context.Context, platform *db.Pool, conn *monitorpg.TargetConn, instanceID pgtype.UUID, observedAt time.Time) (bool, error) {
 	results := make([]probeResult, 0, len(metric.Capabilities))
 	for _, declaration := range metric.Capabilities {
 		var present bool
-		err := conn.QueryRow(ctx, declaration.Probe).Scan(&present)
+		err := conn.QueryRow(probeCtx, declaration.Probe).Scan(&present)
 		results = append(results, probeResult{capability: declaration, present: present, err: err})
 		if err != nil {
 			break
 		}
 	}
 	states, complete := snapshotForProbeResults(results)
-	if err := storeSnapshot(ctx, platform, instanceID, observedAt, states); err != nil {
+	if err := storeSnapshot(persistCtx, platform, instanceID, observedAt, states); err != nil {
 		return false, err
 	}
 	return complete, nil

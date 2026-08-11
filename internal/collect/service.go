@@ -247,7 +247,7 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 		outcome.duration = time.Since(startedWall)
 		return outcome
 	}
-	complete, err := capability.Probe(taskCtx, service.platform, conn, run.target.ID, observedAt)
+	complete, err := capability.Probe(taskCtx, ctx, service.platform, conn, run.target.ID, observedAt)
 	if err != nil {
 		outcome.err = err
 	} else if complete {
