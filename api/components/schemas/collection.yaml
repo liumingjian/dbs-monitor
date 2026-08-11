@@ -3,7 +3,7 @@ CollectionTaskResult:
   enum: [SUCCESS, FAILED, TIMED_OUT, SKIPPED_BACKPRESSURE, BACKOFF]
 CollectionTaskState:
   type: object
-  required: [task_id, kind, interval_seconds, consecutive_failures]
+  required: [task_id, kind, interval_seconds, consecutive_failures, metric_ids, required_capabilities]
   properties:
     task_id:
       type: string
@@ -30,6 +30,14 @@ CollectionTaskState:
     next_eligible_at: { type: string, format: date-time }
     last_error_code: { type: string }
     last_error_message: { type: string }
+    metric_ids:
+      type: array
+      description: Metrics produced by this task, derived from the collection task dictionary.
+      items: { type: string }
+    required_capabilities:
+      type: array
+      description: Capabilities required by this task, derived from the collection task dictionary.
+      items: { type: string }
 CollectionTaskIntervalInput:
   type: object
   required: [interval_seconds]

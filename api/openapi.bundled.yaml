@@ -1460,6 +1460,7 @@ components:
         - username
         - alert_status
         - collection_pause
+        - agent_metrics_enabled
       properties:
         id:
           type: string
@@ -1477,6 +1478,9 @@ components:
         agent_version:
           type: string
           description: Version reported by the Agent, when one has reported.
+        agent_metrics_enabled:
+          type: boolean
+          description: Current collection setting for Agent-provided metrics.
         alert_status:
           $ref: '#/components/schemas/AlertStatus'
         collection_pause:
@@ -1495,6 +1499,8 @@ components:
         - kind
         - interval_seconds
         - consecutive_failures
+        - metric_ids
+        - required_capabilities
       properties:
         task_id:
           type: string
@@ -1540,6 +1546,16 @@ components:
           type: string
         last_error_message:
           type: string
+        metric_ids:
+          type: array
+          description: Metrics produced by this task, derived from the collection task dictionary.
+          items:
+            type: string
+        required_capabilities:
+          type: array
+          description: Capabilities required by this task, derived from the collection task dictionary.
+          items:
+            type: string
     CollectionTaskIntervalInput:
       type: object
       required:
@@ -1708,6 +1724,10 @@ components:
           format: date-time
         agent_version:
           type: string
+        last_reported_at:
+          type: string
+          format: date-time
+          description: Latest accepted Agent heartbeat from the collection control plane.
         installation:
           $ref: '#/components/schemas/AgentInstallation'
     AgentTokenIssued:

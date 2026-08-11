@@ -59,6 +59,10 @@ AgentRegistration:
     revoked_at: { type: string, format: date-time }
     first_registered_at: { type: string, format: date-time }
     agent_version: { type: string }
+    last_reported_at:
+      type: string
+      format: date-time
+      description: Latest accepted Agent heartbeat from the collection control plane.
     installation: { $ref: '#/AgentInstallation' }
 AgentTokenIssued:
   type: object

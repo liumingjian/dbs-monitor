@@ -641,6 +641,8 @@ export interface components {
             username: string;
             /** @description Version reported by the Agent, when one has reported. */
             agent_version?: string;
+            /** @description Current collection setting for Agent-provided metrics. */
+            agent_metrics_enabled: boolean;
             alert_status: components["schemas"]["AlertStatus"];
             collection_pause: components["schemas"]["CollectionPauseStatus"];
         };
@@ -667,6 +669,10 @@ export interface components {
             next_eligible_at?: string;
             last_error_code?: string;
             last_error_message?: string;
+            /** @description Metrics produced by this task, derived from the collection task dictionary. */
+            metric_ids: string[];
+            /** @description Capabilities required by this task, derived from the collection task dictionary. */
+            required_capabilities: string[];
         };
         CollectionTaskIntervalInput: {
             interval_seconds: number;
@@ -733,6 +739,11 @@ export interface components {
             /** Format: date-time */
             first_registered_at?: string;
             agent_version?: string;
+            /**
+             * Format: date-time
+             * @description Latest accepted Agent heartbeat from the collection control plane.
+             */
+            last_reported_at?: string;
             installation: components["schemas"]["AgentInstallation"];
         };
         AgentTokenIssued: {

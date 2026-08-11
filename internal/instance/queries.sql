@@ -15,6 +15,7 @@ JOIN configured ON configured.instance_id = created.id;
 -- name: ListInstances :many
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
+       config.agent_metrics_enabled,
        config.collection_paused, config.collection_pause_updated_by,
        config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
@@ -24,6 +25,7 @@ ORDER BY name, id;
 -- name: GetInstance :one
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
+       config.agent_metrics_enabled,
        config.collection_paused, config.collection_pause_updated_by,
        config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
@@ -51,7 +53,10 @@ RETURNING id, name, host, port, database_name, username, agent_version;
 
 -- name: GetAgentRegistration :one
 SELECT agent_expected, agent_token_issued_at, agent_token_revoked_at,
-       agent_first_registered_at, agent_version
+       agent_first_registered_at, agent_version,
+       (SELECT state.last_report_at
+        FROM instance_collect_state state
+        WHERE state.instance_id = instance.id AND state.source = 'AGENT') AS last_reported_at
 FROM instance
 WHERE id = $1;
 
