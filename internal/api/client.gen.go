@@ -135,6 +135,14 @@ type ClientInterface interface {
 	// ListCapabilitySnapshot request
 	ListCapabilitySnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCollectionPause request
+	GetCollectionPause(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateCollectionPauseWithBody request with any body
+	UpdateCollectionPauseWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateCollectionPause(ctx context.Context, id openapi_types.UUID, body UpdateCollectionPauseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListCollectionTaskStates request
 	ListCollectionTaskStates(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -380,6 +388,42 @@ func (c *Client) UpdateInstance(ctx context.Context, id openapi_types.UUID, body
 
 func (c *Client) ListCapabilitySnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListCapabilitySnapshotRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCollectionPause(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCollectionPauseRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateCollectionPauseWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateCollectionPauseRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateCollectionPause(ctx context.Context, id openapi_types.UUID, body UpdateCollectionPauseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateCollectionPauseRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1035,6 +1079,87 @@ func NewListCapabilitySnapshotRequest(server string, id openapi_types.UUID) (*ht
 	return req, nil
 }
 
+// NewGetCollectionPauseRequest generates requests for GetCollectionPause
+func NewGetCollectionPauseRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/collection/pause", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateCollectionPauseRequest calls the generic UpdateCollectionPause builder with application/json body
+func NewUpdateCollectionPauseRequest(server string, id openapi_types.UUID, body UpdateCollectionPauseJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateCollectionPauseRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateCollectionPauseRequestWithBody generates requests for UpdateCollectionPause with any type of body
+func NewUpdateCollectionPauseRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/collection/pause", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListCollectionTaskStatesRequest generates requests for ListCollectionTaskStates
 func NewListCollectionTaskStatesRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -1652,6 +1777,14 @@ type ClientWithResponsesInterface interface {
 	// ListCapabilitySnapshotWithResponse request
 	ListCapabilitySnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCapabilitySnapshotResponse, error)
 
+	// GetCollectionPauseWithResponse request
+	GetCollectionPauseWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCollectionPauseResponse, error)
+
+	// UpdateCollectionPauseWithBodyWithResponse request with any body
+	UpdateCollectionPauseWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateCollectionPauseResponse, error)
+
+	UpdateCollectionPauseWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateCollectionPauseJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateCollectionPauseResponse, error)
+
 	// ListCollectionTaskStatesWithResponse request
 	ListCollectionTaskStatesWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCollectionTaskStatesResponse, error)
 
@@ -1946,6 +2079,50 @@ func (r ListCapabilitySnapshotResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListCapabilitySnapshotResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCollectionPauseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CollectionPauseStatus
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCollectionPauseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCollectionPauseResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateCollectionPauseResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CollectionPauseStatus
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateCollectionPauseResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateCollectionPauseResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2372,6 +2549,32 @@ func (c *ClientWithResponses) ListCapabilitySnapshotWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParseListCapabilitySnapshotResponse(rsp)
+}
+
+// GetCollectionPauseWithResponse request returning *GetCollectionPauseResponse
+func (c *ClientWithResponses) GetCollectionPauseWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCollectionPauseResponse, error) {
+	rsp, err := c.GetCollectionPause(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCollectionPauseResponse(rsp)
+}
+
+// UpdateCollectionPauseWithBodyWithResponse request with arbitrary body returning *UpdateCollectionPauseResponse
+func (c *ClientWithResponses) UpdateCollectionPauseWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateCollectionPauseResponse, error) {
+	rsp, err := c.UpdateCollectionPauseWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateCollectionPauseResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateCollectionPauseWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateCollectionPauseJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateCollectionPauseResponse, error) {
+	rsp, err := c.UpdateCollectionPause(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateCollectionPauseResponse(rsp)
 }
 
 // ListCollectionTaskStatesWithResponse request returning *ListCollectionTaskStatesResponse
@@ -2860,6 +3063,58 @@ func ParseListCapabilitySnapshotResponse(rsp *http.Response) (*ListCapabilitySna
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []CapabilitySnapshotEntry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCollectionPauseResponse parses an HTTP response from a GetCollectionPauseWithResponse call
+func ParseGetCollectionPauseResponse(rsp *http.Response) (*GetCollectionPauseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCollectionPauseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CollectionPauseStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateCollectionPauseResponse parses an HTTP response from a UpdateCollectionPauseWithResponse call
+func ParseUpdateCollectionPauseResponse(rsp *http.Response) (*UpdateCollectionPauseResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateCollectionPauseResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CollectionPauseStatus
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

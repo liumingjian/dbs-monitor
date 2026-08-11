@@ -20,6 +20,7 @@ type AlertEvent struct {
 	Unavailability  pgtype.Text
 	RuleSnapshot    []byte
 	EvaluatedAt     pgtype.Timestamptz
+	ActorID         pgtype.UUID
 }
 
 type AlertInstance struct {
@@ -135,9 +136,13 @@ type InstanceCollectState struct {
 }
 
 type InstanceCollectionConfig struct {
-	InstanceID          pgtype.UUID
-	AgentMetricsEnabled bool
-	UpdatedAt           pgtype.Timestamptz
+	InstanceID               pgtype.UUID
+	AgentMetricsEnabled      bool
+	UpdatedAt                pgtype.Timestamptz
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
 }
 
 type InstanceCollectionConnectionState struct {

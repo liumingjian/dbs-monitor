@@ -135,6 +135,16 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 			t.Fatalf("collection plan table %q is missing", table)
 		}
 	}
+	var pauseColumns int
+	if err := database.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'instance_collection_config'
+		  AND column_name IN ('collection_paused', 'collection_pause_updated_by',
+		                      'collection_pause_updated_at', 'collection_pause_reason')`).Scan(&pauseColumns); err != nil {
+		t.Fatalf("inspect collection pause columns: %v", err)
+	}
+	if pauseColumns != 4 {
+		t.Fatalf("collection pause columns = %d, want 4", pauseColumns)
+	}
 	var seedMetric, seedScope string
 	var seedVersion int
 	var seedEvaluationInterval int

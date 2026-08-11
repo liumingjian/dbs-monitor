@@ -92,6 +92,8 @@ const (
 	EventRecovered      EventKind = "RECOVERED"
 	EventNoDataEntered  EventKind = "NO_DATA_ENTERED"
 	EventNoDataExited   EventKind = "NO_DATA_EXITED"
+	EventFrozen         EventKind = "FROZEN"
+	EventUnfrozen       EventKind = "UNFROZEN"
 )
 
 func StateEvents(before, after State) []EventKind {

@@ -325,6 +325,20 @@ type CapabilitySnapshotEntryClass string
 // CapabilityStatus defines model for CapabilityStatus.
 type CapabilityStatus string
 
+// CollectionPauseInput defines model for CollectionPauseInput.
+type CollectionPauseInput struct {
+	Paused bool    `json:"paused"`
+	Reason *string `json:"reason,omitempty"`
+}
+
+// CollectionPauseStatus defines model for CollectionPauseStatus.
+type CollectionPauseStatus struct {
+	Paused    bool                `json:"paused"`
+	Reason    *string             `json:"reason,omitempty"`
+	UpdatedAt *time.Time          `json:"updated_at,omitempty"`
+	UpdatedBy *openapi_types.UUID `json:"updated_by,omitempty"`
+}
+
 // CollectionTaskIntervalInput defines model for CollectionTaskIntervalInput.
 type CollectionTaskIntervalInput struct {
 	IntervalSeconds int `json:"interval_seconds"`
@@ -373,14 +387,15 @@ type ErrorErrorCode string
 // Instance defines model for Instance.
 type Instance struct {
 	// AgentVersion Version reported by the Agent, when one has reported.
-	AgentVersion *string            `json:"agent_version,omitempty"`
-	AlertStatus  AlertStatus        `json:"alert_status"`
-	Database     string             `json:"database"`
-	Host         string             `json:"host"`
-	Id           openapi_types.UUID `json:"id"`
-	Name         string             `json:"name"`
-	Port         int                `json:"port"`
-	Username     string             `json:"username"`
+	AgentVersion    *string               `json:"agent_version,omitempty"`
+	AlertStatus     AlertStatus           `json:"alert_status"`
+	CollectionPause CollectionPauseStatus `json:"collection_pause"`
+	Database        string                `json:"database"`
+	Host            string                `json:"host"`
+	Id              openapi_types.UUID    `json:"id"`
+	Name            string                `json:"name"`
+	Port            int                   `json:"port"`
+	Username        string                `json:"username"`
 }
 
 // InstanceCreateInput defines model for InstanceCreateInput.
@@ -524,6 +539,9 @@ type CreateInstanceJSONRequestBody = InstanceCreateInput
 // UpdateInstanceJSONRequestBody defines body for UpdateInstance for application/json ContentType.
 type UpdateInstanceJSONRequestBody = InstanceMetadataInput
 
+// UpdateCollectionPauseJSONRequestBody defines body for UpdateCollectionPause for application/json ContentType.
+type UpdateCollectionPauseJSONRequestBody = CollectionPauseInput
+
 // UpdateCollectionTaskIntervalJSONRequestBody defines body for UpdateCollectionTaskInterval for application/json ContentType.
 type UpdateCollectionTaskIntervalJSONRequestBody = CollectionTaskIntervalInput
 
@@ -580,6 +598,12 @@ type ServerInterface interface {
 
 	// (GET /api/v1/instances/{id}/collection/capabilities)
 	ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/collection/pause)
+	GetCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/instances/{id}/collection/pause)
+	UpdateCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/instances/{id}/collection/tasks)
 	ListCollectionTaskStates(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -844,6 +868,56 @@ func (siw *ServerInterfaceWrapper) ListCapabilitySnapshot(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListCapabilitySnapshot(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCollectionPause operation middleware
+func (siw *ServerInterfaceWrapper) GetCollectionPause(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCollectionPause(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCollectionPause operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCollectionPause(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCollectionPause(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1294,6 +1368,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}", wrapper.GetInstance)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}", wrapper.UpdateInstance)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/capabilities", wrapper.ListCapabilitySnapshot)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/pause", wrapper.GetCollectionPause)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/pause", wrapper.UpdateCollectionPause)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks", wrapper.ListCollectionTaskStates)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks/{task_id}", wrapper.UpdateCollectionTaskInterval)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/credentials", wrapper.UpdateInstanceCredential)
@@ -1571,6 +1647,41 @@ type ListCapabilitySnapshotResponseObject interface {
 type ListCapabilitySnapshot200JSONResponse []CapabilitySnapshotEntry
 
 func (response ListCapabilitySnapshot200JSONResponse) VisitListCapabilitySnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCollectionPauseRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetCollectionPauseResponseObject interface {
+	VisitGetCollectionPauseResponse(w http.ResponseWriter) error
+}
+
+type GetCollectionPause200JSONResponse CollectionPauseStatus
+
+func (response GetCollectionPause200JSONResponse) VisitGetCollectionPauseResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateCollectionPauseRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateCollectionPauseJSONRequestBody
+}
+
+type UpdateCollectionPauseResponseObject interface {
+	VisitUpdateCollectionPauseResponse(w http.ResponseWriter) error
+}
+
+type UpdateCollectionPause200JSONResponse CollectionPauseStatus
+
+func (response UpdateCollectionPause200JSONResponse) VisitUpdateCollectionPauseResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
@@ -1941,6 +2052,12 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/instances/{id}/collection/capabilities)
 	ListCapabilitySnapshot(ctx context.Context, request ListCapabilitySnapshotRequestObject) (ListCapabilitySnapshotResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/collection/pause)
+	GetCollectionPause(ctx context.Context, request GetCollectionPauseRequestObject) (GetCollectionPauseResponseObject, error)
+
+	// (PUT /api/v1/instances/{id}/collection/pause)
+	UpdateCollectionPause(ctx context.Context, request UpdateCollectionPauseRequestObject) (UpdateCollectionPauseResponseObject, error)
 
 	// (GET /api/v1/instances/{id}/collection/tasks)
 	ListCollectionTaskStates(ctx context.Context, request ListCollectionTaskStatesRequestObject) (ListCollectionTaskStatesResponseObject, error)
@@ -2319,6 +2436,65 @@ func (sh *strictHandler) ListCapabilitySnapshot(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListCapabilitySnapshotResponseObject); ok {
 		if err := validResponse.VisitListCapabilitySnapshotResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCollectionPause operation middleware
+func (sh *strictHandler) GetCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetCollectionPauseRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCollectionPause(ctx, request.(GetCollectionPauseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCollectionPause")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCollectionPauseResponseObject); ok {
+		if err := validResponse.VisitGetCollectionPauseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCollectionPause operation middleware
+func (sh *strictHandler) UpdateCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateCollectionPauseRequestObject
+
+	request.Id = id
+
+	var body UpdateCollectionPauseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCollectionPause(ctx, request.(UpdateCollectionPauseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCollectionPause")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCollectionPauseResponseObject); ok {
+		if err := validResponse.VisitUpdateCollectionPauseResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

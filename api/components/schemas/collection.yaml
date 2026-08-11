@@ -35,6 +35,20 @@ CollectionTaskIntervalInput:
   required: [interval_seconds]
   properties:
     interval_seconds: { type: integer, minimum: 5 }
+CollectionPauseInput:
+  type: object
+  required: [paused]
+  properties:
+    paused: { type: boolean }
+    reason: { type: string }
+CollectionPauseStatus:
+  type: object
+  required: [paused]
+  properties:
+    paused: { type: boolean }
+    updated_by: { type: string, format: uuid }
+    updated_at: { type: string, format: date-time }
+    reason: { type: string }
 CapabilitySnapshotEntry:
   type: object
   required: [capability_id, class, status, affected_metric_count]

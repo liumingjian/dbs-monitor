@@ -102,7 +102,10 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 		if err != nil {
 			return nil, err
 		}
-		response = append(response, toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status))
+		response = append(response, toAPIInstance(
+			row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status,
+			collectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+		))
 	}
 	return response, nil
 }
@@ -142,7 +145,7 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		return nil, err
 	}
 	return api.CreateInstance201JSONResponse{
-		Instance: toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK),
+		Instance: toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK, api.CollectionPauseStatus{}),
 	}, nil
 }
 
@@ -155,7 +158,10 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	if err != nil {
 		return nil, err
 	}
-	return api.GetInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status)), nil
+	return api.GetInstance200JSONResponse(toAPIInstance(
+		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status,
+		collectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+	)), nil
 }
 
 func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateInstanceRequestObject) (api.UpdateInstanceResponseObject, error) {
@@ -211,6 +217,10 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 	if err != nil {
 		return nil, err
 	}
+	pause, err := New(handler.platform).GetCollectionPause(ctx, updatedInstance.ID)
+	if err != nil {
+		return nil, err
+	}
 	return api.UpdateInstance200JSONResponse(toAPIInstance(
 		updatedInstance.ID,
 		updatedInstance.Name,
@@ -220,6 +230,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		updatedInstance.Username,
 		updatedInstance.AgentVersion,
 		status,
+		collectionPauseStatus(pause.CollectionPaused, pause.CollectionPauseUpdatedBy, pause.CollectionPauseUpdatedAt, pause.CollectionPauseReason),
 	)), nil
 }
 
@@ -419,6 +430,10 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		return api.GetMetricSeries400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
 	}
 	result := api.MetricSeriesResponse{From: request.Params.From, To: request.Params.To, Step: step.name}
+	pause, err := New(handler.platform).GetCollectionPause(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+	if err != nil {
+		return nil, err
+	}
 	queries := metric.New(handler.platform)
 	var capabilityStates map[metric.CapabilityID]metric.CapabilityStatus
 	capabilityStatesLoaded := false
@@ -435,6 +450,11 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			Labels map[string]string `json:"labels"`
 			Points [][]*float64      `json:"points"`
 		}{}, Unavailability: nullable.NewNullNullable[api.Unavailability]()}
+		if pause.CollectionPaused {
+			entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONPAUSED)
+			result.Metrics = append(result.Metrics, entry)
+			continue
+		}
 
 		if strings.HasPrefix(string(metricID), "pg.") {
 			var probeResult pgtype.Text
@@ -590,6 +610,22 @@ func (handler *Handler) storeAgentReport(ctx context.Context, instanceID uuid.UU
 	databaseInstanceID := pgtype.UUID{Bytes: instanceID, Valid: true}
 
 	return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "UPDATE instance SET agent_version = $2 WHERE id = $1", instanceID, report.AgentVersion); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_report_at)
+				VALUES ($1, 'AGENT', $2) ON CONFLICT (instance_id, source)
+				DO UPDATE SET last_report_at = EXCLUDED.last_report_at, last_error_code = NULL, last_error_message = NULL`, instanceID, receivedAt); err != nil {
+			return err
+		}
+		var paused bool
+		if err := tx.QueryRow(ctx, `SELECT collection_paused FROM instance_collection_config
+				WHERE instance_id = $1 FOR SHARE`, instanceID).Scan(&paused); err != nil {
+			return err
+		}
+		if paused {
+			return nil
+		}
 		queries := metric.New(tx)
 		for _, batch := range samples {
 			if batch.Timestamp.Before(oldestSample) {
@@ -609,13 +645,7 @@ func (handler *Handler) storeAgentReport(ctx context.Context, instanceID uuid.UU
 				}
 			}
 		}
-		if _, err := tx.Exec(ctx, "UPDATE instance SET agent_version = $2 WHERE id = $1", instanceID, report.AgentVersion); err != nil {
-			return err
-		}
-		_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_report_at)
-			VALUES ($1, 'AGENT', $2) ON CONFLICT (instance_id, source)
-			DO UPDATE SET last_report_at = EXCLUDED.last_report_at, last_error_code = NULL, last_error_message = NULL`, instanceID, receivedAt)
-		return err
+		return nil
 	})
 }
 
@@ -700,7 +730,8 @@ var RequiredRoles = map[string]string{
 	"ListAlertRules": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"UpdateAlertRule": "ALERT_ADMIN", "UpdateAlertRuleEnabled": "ALERT_ADMIN",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
-	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "UpdateCollectionTaskInterval": "PLATFORM_ADMIN",
+	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
+	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",
 	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "ALERT_ADMIN", "UpdateInstanceCredential": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
 	"GetCurrentUser": "READONLY", "ChangeOwnPassword": "READONLY", "ListUsers": "READONLY",
 	"CreateUser": "PLATFORM_ADMIN", "ResetUserPassword": "PLATFORM_ADMIN",
@@ -726,8 +757,8 @@ func SeedAdmin(ctx context.Context, platform *db.Pool, username, password string
 	})
 }
 
-func toAPIInstance(id pgtype.UUID, name, host string, port int32, database, username string, agentVersion pgtype.Text, status api.AlertStatus) api.Instance {
-	result := api.Instance{Id: id.Bytes, Name: name, Host: host, Port: int(port), Database: database, Username: username, AlertStatus: status}
+func toAPIInstance(id pgtype.UUID, name, host string, port int32, database, username string, agentVersion pgtype.Text, status api.AlertStatus, pause api.CollectionPauseStatus) api.Instance {
+	result := api.Instance{Id: id.Bytes, Name: name, Host: host, Port: int(port), Database: database, Username: username, AlertStatus: status, CollectionPause: pause}
 	if agentVersion.Valid {
 		result.AgentVersion = &agentVersion.String
 	}

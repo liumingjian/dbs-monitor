@@ -27,6 +27,8 @@ paths:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks
   /api/v1/instances/{id}/collection/capabilities:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1capabilities
+  /api/v1/instances/{id}/collection/pause:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1pause
   /api/v1/instances/{id}/collection/tasks/{task_id}:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks~1{task_id}
   /api/v1/alert-rules:
@@ -95,6 +97,10 @@ components:
       $ref: components/schemas/collection.yaml#/CollectionTaskIntervalInput
     CapabilitySnapshotEntry:
       $ref: components/schemas/collection.yaml#/CapabilitySnapshotEntry
+    CollectionPauseInput:
+      $ref: components/schemas/collection.yaml#/CollectionPauseInput
+    CollectionPauseStatus:
+      $ref: components/schemas/collection.yaml#/CollectionPauseStatus
     MetricSeriesResponse:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
     AgentReport:

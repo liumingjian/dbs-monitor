@@ -284,6 +284,7 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 	for key := range scheduler.schedule {
 		if _, exists := active[key]; !exists {
 			delete(scheduler.schedule, key)
+			_, _ = scheduler.pending.take(key)
 		}
 	}
 	return nil

@@ -34,6 +34,37 @@
             schema:
               type: array
               items: { $ref: ../components/schemas/collection.yaml#/CapabilitySnapshotEntry }
+/api/v1/instances/{id}/collection/pause:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: getCollectionPause
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Current collection pause status
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/CollectionPauseStatus }
+  put:
+    tags: [collection]
+    operationId: updateCollectionPause
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/collection.yaml#/CollectionPauseInput }
+    responses:
+      '200':
+        description: Updated collection pause status
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/CollectionPauseStatus }
 /api/v1/instances/{id}/collection/tasks/{task_id}:
   parameters:
     - name: id
