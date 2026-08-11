@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -50,9 +49,14 @@ func (handler *Handler) ListPerformanceEvents(ctx context.Context, request api.L
 		return nil, err
 	}
 	rows, err := queries.ListPerformanceEvents(ctx, ListPerformanceEventsParams{
-		InstanceID: filter.InstanceID, FromTime: filter.FromTime, ToTime: filter.ToTime,
-		Recovered: filter.Recovered, Disposition: filter.Disposition,
-		SortOrder: sortOrder, PageLimit: int32(limit), PageOffset: int32(offset),
+		InstanceID:  filter.InstanceID,
+		FromTime:    filter.FromTime,
+		ToTime:      filter.ToTime,
+		Recovered:   filter.Recovered,
+		Disposition: filter.Disposition,
+		SortOrder:   sortOrder,
+		PageLimit:   int32(limit),
+		PageOffset:  int32(offset),
 	})
 	if err != nil {
 		return nil, err
@@ -60,11 +64,20 @@ func (handler *Handler) ListPerformanceEvents(ctx context.Context, request api.L
 	items := make([]api.PerformanceEvent, 0, len(rows))
 	for _, row := range rows {
 		item, err := handler.performanceEventResponse(performanceEventProjection{
-			id: row.ID, alertInstanceID: row.AlertInstanceID, eventType: row.EventType,
-			derivedAt: row.DerivedAt, instanceID: row.InstanceID, alertStatus: row.AlertStatus,
-			severity: row.Severity, disposition: row.Disposition, updatedAt: row.UpdatedAt,
-			recoveredAt: row.RecoveredAt, metricID: row.MetricID, triggerValue: row.TriggerValue,
-			threshold: row.Threshold, triggerSnapshotResult: row.TriggerSnapshotResult,
+			id:                    row.ID,
+			alertInstanceID:       row.AlertInstanceID,
+			eventType:             row.EventType,
+			derivedAt:             row.DerivedAt,
+			instanceID:            row.InstanceID,
+			alertStatus:           row.AlertStatus,
+			severity:              row.Severity,
+			disposition:           row.Disposition,
+			updatedAt:             row.UpdatedAt,
+			recoveredAt:           row.RecoveredAt,
+			metricID:              row.MetricID,
+			triggerValue:          row.TriggerValue,
+			threshold:             row.Threshold,
+			triggerSnapshotResult: row.TriggerSnapshotResult,
 		})
 		if err != nil {
 			return nil, err
@@ -83,11 +96,20 @@ func (handler *Handler) GetPerformanceEvent(ctx context.Context, request api.Get
 		return nil, err
 	}
 	response, err := handler.performanceEventResponse(performanceEventProjection{
-		id: row.ID, alertInstanceID: row.AlertInstanceID, eventType: row.EventType,
-		derivedAt: row.DerivedAt, instanceID: row.InstanceID, alertStatus: row.AlertStatus,
-		severity: row.Severity, disposition: row.Disposition, updatedAt: row.UpdatedAt,
-		recoveredAt: row.RecoveredAt, metricID: row.MetricID, triggerValue: row.TriggerValue,
-		threshold: row.Threshold, triggerSnapshotResult: row.TriggerSnapshotResult,
+		id:                    row.ID,
+		alertInstanceID:       row.AlertInstanceID,
+		eventType:             row.EventType,
+		derivedAt:             row.DerivedAt,
+		instanceID:            row.InstanceID,
+		alertStatus:           row.AlertStatus,
+		severity:              row.Severity,
+		disposition:           row.Disposition,
+		updatedAt:             row.UpdatedAt,
+		recoveredAt:           row.RecoveredAt,
+		metricID:              row.MetricID,
+		triggerValue:          row.TriggerValue,
+		threshold:             row.Threshold,
+		triggerSnapshotResult: row.TriggerSnapshotResult,
 	})
 	if err != nil {
 		return nil, err
@@ -116,15 +138,17 @@ func (handler *Handler) performanceEventResponse(row performanceEventProjection)
 	if !row.triggerValue.Valid {
 		return api.PerformanceEvent{}, fmt.Errorf("performance event %s has no trigger value", uuid.UUID(row.id.Bytes))
 	}
-	template, ok := alerting.KnowledgeTemplateForEventType(alerting.PerformanceEventType(row.eventType))
+	knowledge, ok := alerting.RenderPerformanceEventKnowledge(
+		alerting.PerformanceEventType(row.eventType),
+		alerting.PerformanceEventKnowledgeContext{
+			MetricID:     row.metricID,
+			Threshold:    row.threshold,
+			TriggerValue: row.triggerValue.Float64,
+		},
+	)
 	if !ok {
 		return api.PerformanceEvent{}, fmt.Errorf("performance event %s has unknown type %q", uuid.UUID(row.id.Bytes), row.eventType)
 	}
-	knowledge := template.Render(alerting.KnowledgeContext{
-		MetricID:     row.metricID,
-		Threshold:    strconv.FormatFloat(row.threshold, 'g', -1, 64),
-		TriggerValue: strconv.FormatFloat(row.triggerValue.Float64, 'g', -1, 64),
-	})
 	end := handler.clock.Now().UTC()
 	if row.recoveredAt.Valid {
 		end = row.recoveredAt.Time.UTC()
@@ -138,14 +162,23 @@ func (handler *Handler) performanceEventResponse(row performanceEventProjection)
 		snapshotResult = api.AlertTriggerSnapshotResult(row.triggerSnapshotResult.String)
 	}
 	return api.PerformanceEvent{
-		Id: uuid.UUID(row.id.Bytes), InstanceId: uuid.UUID(row.instanceID.Bytes),
-		AlertInstanceId: uuid.UUID(row.alertInstanceID.Bytes), EventType: api.PerformanceEventType(row.eventType),
-		AlertStatus: api.AlertStatus(row.alertStatus), Severity: api.AlertSeverity(row.severity),
-		Disposition: api.AlertDisposition(row.disposition), DerivedAt: row.derivedAt.Time.UTC(),
-		UpdatedAt: row.updatedAt.Time.UTC(), RecoveredAt: timePointer(row.recoveredAt),
-		DurationMs: duration.Milliseconds(), MetricId: row.metricID, Threshold: row.threshold,
-		TriggerValue: row.triggerValue.Float64, CauseSummary: knowledge.CauseSummary,
-		SuggestedAction: knowledge.SuggestedAction, TriggerSnapshotResult: snapshotResult,
+		Id:                    uuid.UUID(row.id.Bytes),
+		InstanceId:            uuid.UUID(row.instanceID.Bytes),
+		AlertInstanceId:       uuid.UUID(row.alertInstanceID.Bytes),
+		EventType:             api.PerformanceEventType(row.eventType),
+		AlertStatus:           api.AlertStatus(row.alertStatus),
+		Severity:              api.AlertSeverity(row.severity),
+		Disposition:           api.AlertDisposition(row.disposition),
+		DerivedAt:             row.derivedAt.Time.UTC(),
+		UpdatedAt:             row.updatedAt.Time.UTC(),
+		RecoveredAt:           timePointer(row.recoveredAt),
+		DurationMs:            duration.Milliseconds(),
+		MetricId:              row.metricID,
+		Threshold:             row.threshold,
+		TriggerValue:          row.triggerValue.Float64,
+		CauseSummary:          knowledge.CauseSummary,
+		SuggestedAction:       knowledge.SuggestedAction,
+		TriggerSnapshotResult: snapshotResult,
 	}, nil
 }
 

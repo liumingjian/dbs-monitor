@@ -1,6 +1,9 @@
 package alerting
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 type PerformanceEventType string
 
@@ -41,31 +44,23 @@ func PerformanceEventTypeForMetric(metricID string) (PerformanceEventType, bool)
 	}
 }
 
-type KnowledgeContext struct {
+type PerformanceEventKnowledgeContext struct {
 	MetricID     string
-	Threshold    string
-	TriggerValue string
+	Threshold    float64
+	TriggerValue float64
 }
 
-type RenderedKnowledge struct {
+type PerformanceEventKnowledge struct {
 	CauseSummary    string
 	SuggestedAction string
 }
 
-type KnowledgeTemplate struct {
+type performanceEventKnowledgeTemplate struct {
 	cause  string
 	action string
 }
 
-func (template KnowledgeTemplate) Render(context KnowledgeContext) RenderedKnowledge {
-	prefix := fmt.Sprintf("指标 %s 的触发值为 %s，达到告警条件（阈值 %s）。", context.MetricID, context.TriggerValue, context.Threshold)
-	return RenderedKnowledge{
-		CauseSummary:    prefix + template.cause,
-		SuggestedAction: template.action,
-	}
-}
-
-var performanceEventKnowledge = map[PerformanceEventType]KnowledgeTemplate{
+var performanceEventKnowledgeTemplates = map[PerformanceEventType]performanceEventKnowledgeTemplate{
 	PerformanceEventLockBlocking: {
 		cause:  "检测到锁等待或阻塞会话积压，通常由长时间持锁事务或并发访问冲突引起。",
 		action: "查看告警触发时的阻塞链，定位最上游阻塞会话，并评估提交、回滚或终止相关事务。",
@@ -92,7 +87,16 @@ var performanceEventKnowledge = map[PerformanceEventType]KnowledgeTemplate{
 	},
 }
 
-func KnowledgeTemplateForEventType(eventType PerformanceEventType) (KnowledgeTemplate, bool) {
-	template, ok := performanceEventKnowledge[eventType]
-	return template, ok
+func RenderPerformanceEventKnowledge(eventType PerformanceEventType, context PerformanceEventKnowledgeContext) (PerformanceEventKnowledge, bool) {
+	template, ok := performanceEventKnowledgeTemplates[eventType]
+	if !ok {
+		return PerformanceEventKnowledge{}, false
+	}
+	triggerValue := strconv.FormatFloat(context.TriggerValue, 'g', -1, 64)
+	threshold := strconv.FormatFloat(context.Threshold, 'g', -1, 64)
+	prefix := fmt.Sprintf("指标 %s 的触发值为 %s，达到告警条件（阈值 %s）。", context.MetricID, triggerValue, threshold)
+	return PerformanceEventKnowledge{
+		CauseSummary:    prefix + template.cause,
+		SuggestedAction: template.action,
+	}, true
 }

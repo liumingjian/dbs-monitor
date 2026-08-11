@@ -38,20 +38,19 @@ func TestPerformanceEventTypeForMetric(t *testing.T) {
 }
 
 func TestPerformanceEventKnowledgeCoverage(t *testing.T) {
-	if len(performanceEventKnowledge) != len(performanceEventTypes) {
-		t.Fatalf("knowledge templates = %d, event types = %d", len(performanceEventKnowledge), len(performanceEventTypes))
+	if len(performanceEventKnowledgeTemplates) != len(performanceEventTypes) {
+		t.Fatalf("knowledge templates = %d, event types = %d", len(performanceEventKnowledgeTemplates), len(performanceEventTypes))
 	}
 	for _, eventType := range performanceEventTypes {
-		template, ok := KnowledgeTemplateForEventType(eventType)
+		knowledge, ok := RenderPerformanceEventKnowledge(eventType, PerformanceEventKnowledgeContext{
+			MetricID:     "pg.example.metric",
+			Threshold:    10,
+			TriggerValue: 12,
+		})
 		if !ok {
 			t.Errorf("event type %q has no knowledge template", eventType)
 			continue
 		}
-		knowledge := template.Render(KnowledgeContext{
-			MetricID:     "pg.example.metric",
-			Threshold:    "10",
-			TriggerValue: "12",
-		})
 		for _, value := range []string{"pg.example.metric", "10", "12"} {
 			if !strings.Contains(knowledge.CauseSummary, value) {
 				t.Errorf("event type %q cause summary does not contain context %q", eventType, value)

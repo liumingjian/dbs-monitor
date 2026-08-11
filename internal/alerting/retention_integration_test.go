@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
@@ -89,17 +90,22 @@ func TestDeleteRecoveredAlertHistoryAtNinetyDayBoundary(t *testing.T) {
 			t.Errorf("alert %s was deleted before reaching the retention boundary", retainedID)
 		}
 	}
-	for _, table := range []string{"alert_instance", "alert_event", "alert_trigger_snapshot", "performance_event"} {
+	cascadeChecks := []struct {
+		table string
+		query string
+	}{
+		{table: "alert_instance", query: "SELECT count(*) FROM alert_instance WHERE id = $1"},
+		{table: "alert_event", query: "SELECT count(*) FROM alert_event WHERE alert_instance_id = $1"},
+		{table: "alert_trigger_snapshot", query: "SELECT count(*) FROM alert_trigger_snapshot WHERE alert_instance_id = $1"},
+		{table: "performance_event", query: "SELECT count(*) FROM performance_event WHERE alert_instance_id = $1"},
+	}
+	for _, check := range cascadeChecks {
 		var count int
-		column := "alert_instance_id"
-		if table == "alert_instance" {
-			column = "id"
-		}
-		if err := pool.QueryRow(ctx, fmt.Sprintf("SELECT count(*) FROM %s WHERE %s = $1", table, column), boundaryID).Scan(&count); err != nil {
-			t.Fatalf("count deleted %s rows: %v", table, err)
+		if err := pool.QueryRow(ctx, check.query, boundaryID).Scan(&count); err != nil {
+			t.Fatalf("count deleted %s rows: %v", check.table, err)
 		}
 		if count != 0 {
-			t.Errorf("%s rows after cascade = %d, want 0", table, count)
+			t.Errorf("%s rows after cascade = %d, want 0", check.table, count)
 		}
 	}
 }
@@ -107,9 +113,9 @@ func TestDeleteRecoveredAlertHistoryAtNinetyDayBoundary(t *testing.T) {
 func insertRetentionAlert(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, dimension, status string, changedAt time.Time) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
-	var recoveredAt any
+	recoveredAt := pgtype.Timestamptz{}
 	if status == "RECOVERED" {
-		recoveredAt = changedAt
+		recoveredAt = pgtype.Timestamptz{Time: changedAt, Valid: true}
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
 		(id, instance_id, metric_id, status, updated_at, rule_id, rule_version, severity,

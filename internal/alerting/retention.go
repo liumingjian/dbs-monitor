@@ -7,9 +7,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const AlertHistoryRetention = 90 * 24 * time.Hour
+const alertHistoryRetention = 90 * 24 * time.Hour
 
 func DeleteRecoveredAlertHistory(ctx context.Context, database DBTX, now time.Time) (int64, error) {
-	cutoff := now.UTC().Add(-AlertHistoryRetention)
+	cutoff := now.UTC().Add(-alertHistoryRetention)
 	return New(database).DeleteRecoveredAlertHistoryBefore(ctx, pgtype.Timestamptz{Time: cutoff, Valid: true})
 }

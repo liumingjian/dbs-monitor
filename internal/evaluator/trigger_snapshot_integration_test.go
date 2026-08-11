@@ -241,14 +241,9 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	}
 	eventListURL := fmt.Sprintf("%s/api/v1/instances/%s/performance-events?from=%s&to=%s",
 		server.URL, instanceID, now.Add(-time.Minute).Format(time.RFC3339Nano), now.Add(time.Minute).Format(time.RFC3339Nano))
-	eventListResponse := snapshotRequestJSON(t, client, http.MethodGet, eventListURL, nil)
-	var eventPage api.PerformanceEventPage
-	if err := json.NewDecoder(eventListResponse.Body).Decode(&eventPage); err != nil {
-		t.Fatalf("decode performance event page: %v", err)
-	}
-	eventListResponse.Body.Close()
-	if eventListResponse.StatusCode != http.StatusOK || eventPage.Total != 1 || len(eventPage.Items) != 1 {
-		t.Fatalf("performance event page = status %d body %+v", eventListResponse.StatusCode, eventPage)
+	eventPage := readPerformanceEventPage(t, client, eventListURL)
+	if eventPage.Total != 1 || len(eventPage.Items) != 1 {
+		t.Fatalf("performance event page = %+v", eventPage)
 	}
 	eventItem := eventPage.Items[0]
 	if eventItem.Id != performanceEventID || eventItem.AlertInstanceId != alertInstanceID ||
@@ -285,13 +280,9 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	if storedDisposition != "ACKED" {
 		t.Fatalf("event-backed alert disposition = %s, want ACKED", storedDisposition)
 	}
-	ackedListResponse := snapshotRequestJSON(t, client, http.MethodGet, eventListURL+"&disposition=ACKED", nil)
-	if err := json.NewDecoder(ackedListResponse.Body).Decode(&eventPage); err != nil {
-		t.Fatalf("decode acknowledged performance event page: %v", err)
-	}
-	ackedListResponse.Body.Close()
-	if ackedListResponse.StatusCode != http.StatusOK || eventPage.Total != 1 {
-		t.Fatalf("acknowledged performance event page = status %d body %+v", ackedListResponse.StatusCode, eventPage)
+	eventPage = readPerformanceEventPage(t, client, eventListURL+"&disposition=ACKED")
+	if eventPage.Total != 1 {
+		t.Fatalf("acknowledged performance event page = %+v", eventPage)
 	}
 
 	currentClock.now = currentClock.now.Add(5 * time.Second)
@@ -324,13 +315,9 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	if eventDetail.AlertStatus != api.RECOVERED || eventDetail.RecoveredAt == nil || eventDetail.DurationMs != 10_000 {
 		t.Fatalf("recovered performance event projection = %+v, want RECOVERED after 10000ms", eventDetail)
 	}
-	recoveredListResponse := snapshotRequestJSON(t, client, http.MethodGet, eventListURL+"&recovered=true", nil)
-	if err := json.NewDecoder(recoveredListResponse.Body).Decode(&eventPage); err != nil {
-		t.Fatalf("decode recovered performance event page: %v", err)
-	}
-	recoveredListResponse.Body.Close()
-	if recoveredListResponse.StatusCode != http.StatusOK || eventPage.Total != 1 {
-		t.Fatalf("recovered performance event page = status %d body %+v", recoveredListResponse.StatusCode, eventPage)
+	eventPage = readPerformanceEventPage(t, client, eventListURL+"&recovered=true")
+	if eventPage.Total != 1 {
+		t.Fatalf("recovered performance event page = %+v", eventPage)
 	}
 
 	nonApplicableRuleID := uuid.New()
@@ -483,6 +470,20 @@ func readPerformanceEvent(t *testing.T, client *http.Client, address string) api
 		t.Fatalf("decode performance event detail: %v", err)
 	}
 	return event
+}
+
+func readPerformanceEventPage(t *testing.T, client *http.Client, address string) api.PerformanceEventPage {
+	t.Helper()
+	response := snapshotRequestJSON(t, client, http.MethodGet, address, nil)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("performance event list status = %d, want 200", response.StatusCode)
+	}
+	var page api.PerformanceEventPage
+	if err := json.NewDecoder(response.Body).Decode(&page); err != nil {
+		t.Fatalf("decode performance event page: %v", err)
+	}
+	return page
 }
 
 func openSnapshotSQL(t *testing.T, databaseName string) *sql.DB {
