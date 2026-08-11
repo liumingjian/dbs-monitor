@@ -15,6 +15,8 @@ import { parseAlertListSearch, type AlertListSearch } from './search'
 type AlertObservation = components['schemas']['AlertObservation']
 type AlertSeverity = components['schemas']['AlertSeverity']
 
+const alertPageSize = 50
+
 export const alertsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/alerts',
@@ -46,11 +48,25 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
   heading?: string
 }) {
   const page = search.page ?? 1
+  const offset = (page - 1) * alertPageSize
   const current = $api.useQuery('get', '/api/v1/alerts/current', {
-    params: { query: { instance_id: search.instance_id, include_paused: search.include_paused, limit: 50, offset: (page - 1) * 50 } },
+    params: {
+      query: {
+        instance_id: search.instance_id,
+        include_paused: search.include_paused,
+        limit: alertPageSize,
+        offset,
+      },
+    },
   }, { refetchInterval: pollingIntervals.currentAlerts })
   const history = $api.useQuery('get', '/api/v1/alerts/history', {
-    params: { query: { instance_id: search.instance_id, limit: 50, offset: (page - 1) * 50 } },
+    params: {
+      query: {
+        instance_id: search.instance_id,
+        limit: alertPageSize,
+        offset,
+      },
+    },
   }, { refetchInterval: pollingIntervals.history })
 
   return <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -87,7 +103,13 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
               loading={current.isPending}
               dataSource={current.data?.items ?? []}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有符合筛选的当前告警" /> }}
-              pagination={{ current: page, pageSize: 50, total: current.data?.total, showSizeChanger: false, onChange: (nextPage) => onSearchChange({ ...search, page: nextPage }) }}
+              pagination={{
+                current: page,
+                pageSize: alertPageSize,
+                total: current.data?.total,
+                showSizeChanger: false,
+                onChange: (nextPage) => onSearchChange({ ...search, page: nextPage }),
+              }}
               scroll={{ x: 1320 }}
               columns={currentColumns}
             />
@@ -103,7 +125,13 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
               loading={history.isPending}
               dataSource={history.data?.items ?? []}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无告警历史" /> }}
-              pagination={{ current: page, pageSize: 50, total: history.data?.total, showSizeChanger: false, onChange: (nextPage) => onSearchChange({ ...search, page: nextPage }) }}
+              pagination={{
+                current: page,
+                pageSize: alertPageSize,
+                total: history.data?.total,
+                showSizeChanger: false,
+                onChange: (nextPage) => onSearchChange({ ...search, page: nextPage }),
+              }}
               scroll={{ x: 1620 }}
               columns={historyColumns}
             />
@@ -159,7 +187,7 @@ const historyColumns: TableColumnsType<AlertObservation> = [
   { title: '规则快照 / 版本', width: 150, render: (_, alert) => `版本 ${alert.rule_version}` },
   { title: '通知结果', width: 110, render: () => '—' },
   { title: '处置记录', width: 110, render: (_, alert) => dispositionLabel(alert.disposition) },
-  { title: '维护窗口', width: 110, render: (_, alert) => alert.in_maintenance === undefined ? '—' : alert.in_maintenance ? '是' : '否' },
+  { title: '维护窗口', width: 110, render: (_, alert) => maintenanceWindowLabel(alert.in_maintenance) },
   {
     title: '操作',
     fixed: 'right',
@@ -187,6 +215,11 @@ function dispositionLabel(disposition: components['schemas']['AlertDisposition']
     case 'IGNORED': return '已忽略'
     default: return assertNever(disposition)
   }
+}
+
+function maintenanceWindowLabel(inMaintenance: boolean | null | undefined): string {
+  if (inMaintenance === undefined) return '—'
+  return inMaintenance ? '是' : '否'
 }
 
 function optionalNumber(value: number | undefined): string {

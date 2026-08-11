@@ -31,36 +31,51 @@ test('global alert lists reuse detail and preserve trigger context into monitori
   await page.route('**/api/v1/me', (route) => route.fulfill({ json: { username: 'reader', role: 'READONLY' } }))
   await page.route('**/api/v1/alerts/current*', (route) => {
     const includePaused = new URL(route.request().url()).searchParams.get('include_paused') === 'true'
-    return route.fulfill({ json: { total: includePaused ? 2 : 1, items: includePaused
-      ? [alertObservation(activeAlertID, false), alertObservation(pausedAlertID, true)]
-      : [alertObservation(activeAlertID, false)] } })
+    const items = [alertObservation(activeAlertID, false)]
+    if (includePaused) items.push(alertObservation(pausedAlertID, true))
+    return route.fulfill({ json: { total: items.length, items } })
   })
   await page.route('**/api/v1/alerts/history*', (route) => route.fulfill({ json: { total: 0, items: [] } }))
-  await page.route(`**/api/v1/alert-instances/${activeAlertID}`, (route) => route.fulfill({ json: {
-    ...alertObservation(activeAlertID, false),
-    rule_version_history: [{ version: 1, snapshot: { threshold: 75 }, evaluated_at: '2026-08-11T10:15:00Z' }],
-    notification_results: [],
-  } }))
-  await page.route(`**/api/v1/instances/${instanceID}`, (route) => route.fulfill({ json: {
-    id: instanceID,
-    name: 'payments-primary',
-    host: '127.0.0.1',
-    port: 5432,
-    database: 'payments',
-    username: 'monitor',
-    agent_metrics_enabled: true,
-    alert_status: 'FIRING',
-    health: { status: 'CRITICAL', counts: { critical: 1, warning: 0, info: 0 }, flags: { no_data: false, in_maintenance: false, recently_recovered: false, ignored: 0, configuration_missing: 0 } },
-    agent_status: 'online',
-    last_collected_at: '2026-08-11T10:45:00Z',
-    collection_pause: { paused: false },
-  } }))
-  await page.route('**/api/v1/instances/*/metrics/series*', (route) => route.fulfill({ json: {
-    from: '2026-08-11T10:15:00Z',
-    to: '2026-08-11T10:45:00Z',
-    step: '1m',
-    metrics: [{ metric: 'pg.connection.total', unit: 'count', unavailability: null, series: [{ labels: {}, points: [[1786443300, 96]] }] }],
-  } }))
+  await page.route(`**/api/v1/alert-instances/${activeAlertID}`, (route) => route.fulfill({
+    json: {
+      ...alertObservation(activeAlertID, false),
+      rule_version_history: [{ version: 1, snapshot: { threshold: 75 }, evaluated_at: '2026-08-11T10:15:00Z' }],
+      notification_results: [],
+    },
+  }))
+  await page.route(`**/api/v1/instances/${instanceID}`, (route) => route.fulfill({
+    json: {
+      id: instanceID,
+      name: 'payments-primary',
+      host: '127.0.0.1',
+      port: 5432,
+      database: 'payments',
+      username: 'monitor',
+      agent_metrics_enabled: true,
+      alert_status: 'FIRING',
+      health: {
+        status: 'CRITICAL',
+        counts: { critical: 1, warning: 0, info: 0 },
+        flags: { no_data: false, in_maintenance: false, recently_recovered: false, ignored: 0, configuration_missing: 0 },
+      },
+      agent_status: 'online',
+      last_collected_at: '2026-08-11T10:45:00Z',
+      collection_pause: { paused: false },
+    },
+  }))
+  await page.route('**/api/v1/instances/*/metrics/series*', (route) => route.fulfill({
+    json: {
+      from: '2026-08-11T10:15:00Z',
+      to: '2026-08-11T10:45:00Z',
+      step: '1m',
+      metrics: [{
+        metric: 'pg.connection.total',
+        unit: 'count',
+        unavailability: null,
+        series: [{ labels: {}, points: [[1786443300, 96]] }],
+      }],
+    },
+  }))
 
   await page.goto('/alerts')
   await expect(page.getByRole('heading', { name: '全局告警' })).toBeVisible()

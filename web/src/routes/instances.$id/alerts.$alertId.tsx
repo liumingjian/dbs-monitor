@@ -14,6 +14,7 @@ import { alertMonitoringSearch } from '../alerts/search'
 import { metricOptions } from './metricOptions'
 
 type AlertDetail = components['schemas']['AlertDetail']
+type Instance = components['schemas']['Instance']
 type RuleVersionRecord = components['schemas']['AlertRuleVersionRecord']
 
 export const instanceAlertDetailRoute = createRoute({
@@ -80,7 +81,20 @@ function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; 
       size="small"
       column={{ xs: 1, sm: 2, lg: 3 }}
       items={[
-        { key: 'status', label: '状态与标记', children: <><AlertStatus status={detail.status} /> <AlertSuppressionTags inMaintenance={detail.in_maintenance} disposition={detail.disposition} paused={detail.paused} pausedAt={detail.paused_at} /></> },
+        {
+          key: 'status',
+          label: '状态与标记',
+          children: <>
+            <AlertStatus status={detail.status} />
+            {' '}
+            <AlertSuppressionTags
+              inMaintenance={detail.in_maintenance}
+              disposition={detail.disposition}
+              paused={detail.paused}
+              pausedAt={detail.paused_at}
+            />
+          </>,
+        },
         { key: 'severity', label: '级别', children: severityLabel(detail.severity) },
         { key: 'value', label: '触发值 / 阈值', children: `${optionalNumber(detail.current_value)} / ${optionalNumber(detail.threshold)}` },
         { key: 'first', label: '首次触发', children: optionalTime(detail.first_triggered_at) },
@@ -123,7 +137,7 @@ function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; 
       <Descriptions size="small" bordered column={{ xs: 1, sm: 3 }} items={[
         { key: 'agent', label: 'Agent', children: instance.data ? agentStatusLabel(instance.data.agent_status) : '—' },
         { key: 'collected', label: '最近成功采集', children: optionalTime(instance.data?.last_collected_at) },
-        { key: 'pause', label: '采集暂停', children: instance.data?.collection_pause.paused ? <Tag>已暂停</Tag> : instance.data ? '否' : '—' },
+        { key: 'pause', label: '采集暂停', children: collectionPauseStatus(instance.data) },
       ]} />
     </section>
 
@@ -134,9 +148,7 @@ function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; 
       </section>
       <section className="alert-detail-section" aria-labelledby="disposition-heading">
         <Typography.Title id="disposition-heading" level={3}>处置记录</Typography.Title>
-        {detail.disposition === 'NONE'
-          ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无处置记录" />
-          : <Typography.Text>{detail.disposition === 'ACKED' ? '已确认' : '已忽略'}</Typography.Text>}
+        <DispositionRecord disposition={detail.disposition} />
       </section>
       <section className="alert-detail-section" aria-labelledby="trigger-snapshot-heading">
         <Typography.Title id="trigger-snapshot-heading" level={3}>触发现场快照</Typography.Title>
@@ -158,7 +170,12 @@ function AlertMetricChart({ detail, metricID, monitoringSearch }: {
   const metrics = $api.useQuery('get', '/api/v1/instances/{id}/metrics/series', {
     params: {
       path: { id: detail.instance_id },
-      query: { metric: [metricID], from: monitoringSearch.from, to: monitoringSearch.to, step: monitoringSearch.step },
+      query: {
+        metric: [metricID],
+        from: monitoringSearch.from,
+        to: monitoringSearch.to,
+        step: monitoringSearch.step,
+      },
     },
   })
   const response = metrics.data?.metrics[0]
@@ -180,6 +197,25 @@ const ruleVersionColumns: TableColumnsType<RuleVersionRecord> = [
   { title: '版本', dataIndex: 'version', width: 80 },
   { title: '生效评估时间', render: (_, record) => optionalTime(record.evaluated_at) },
 ]
+
+function collectionPauseStatus(instance: Instance | undefined) {
+  if (!instance) return '—'
+  if (!instance.collection_pause.paused) return '否'
+  return <Tag>已暂停</Tag>
+}
+
+function DispositionRecord({ disposition }: { disposition: components['schemas']['AlertDisposition'] }) {
+  switch (disposition) {
+    case 'NONE':
+      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无处置记录" />
+    case 'ACKED':
+      return <Typography.Text>已确认</Typography.Text>
+    case 'IGNORED':
+      return <Typography.Text>已忽略</Typography.Text>
+    default:
+      return assertNever(disposition)
+  }
+}
 
 function severityLabel(severity: components['schemas']['AlertSeverity']): string {
   switch (severity) {

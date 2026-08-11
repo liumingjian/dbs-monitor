@@ -19,18 +19,22 @@ type AlertMonitoringContext = {
 
 export function parseAlertListSearch(search: Record<string, unknown>): AlertListSearch | InvalidAlertListSearch {
   const tab = search.tab ?? 'current'
-  const includePaused = parseBoolean(search.include_paused) ?? false
+  const includePaused = parseBoolean(search.include_paused)
   const instanceID = search.instance_id
-  const page = parsePage(search.page) ?? 1
+  const page = parsePage(search.page)
 
   if ((tab !== 'current' && tab !== 'history')
-    || (search.include_paused !== undefined && parseBoolean(search.include_paused) === undefined)
+    || (search.include_paused !== undefined && includePaused === undefined)
     || (instanceID !== undefined && !isUUID(instanceID))
-    || (search.page !== undefined && parsePage(search.page) === undefined)) {
+    || (search.page !== undefined && page === undefined)) {
     return { error: '告警筛选链接无效' }
   }
 
-  const result: AlertListSearch = { tab, include_paused: includePaused, page }
+  const result: AlertListSearch = {
+    tab,
+    include_paused: includePaused ?? false,
+    page: page ?? 1,
+  }
   if (typeof instanceID === 'string') result.instance_id = instanceID
   return result
 }
