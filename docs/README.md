@@ -35,17 +35,18 @@
 | [`docs/design/06-metric-dictionary-and-collection-plan.md`](design/06-metric-dictionary-and-collection-plan.md) | R2 · 指标字典载体与采集计划：载体形态、采集任务模型、能力枚举与三态、PG13–17 矩阵、采集管线分层、可扩展性边界 | **v1.0** |
 | [`docs/design/07-api-contract-and-codegen.md`](design/07-api-contract-and-codegen.md) | R2 · API 契约组织与代码生成流水线：spec 拆分与生成流水线、资源与 URL 模型、空状态码表、枚举穷尽性、认证授权、实时性 | **v1.0** |
 | [`docs/design/08-frontend-stack-and-ui.md`](design/08-frontend-stack-and-ui.md) | R2 · 前端技术栈与 UI 体系：UI 组件体系、图表库与领域组件、数据获取层、路由、状态归属三桶、目录结构、状态视觉词汇、测试策略 | **v1.0** |
-| [`docs/design/09-packaging-and-deployment.md`](design/09-packaging-and-deployment.md) | R2 · 打包、部署与运行形态：交付物形态、自建 PG 与双架构、运行形态与自举、Agent 分发、首次启动、升级与回滚、资源基线与前置检查 | **v1.0** |
+| [`docs/design/09-packaging-and-deployment.md`](design/09-packaging-and-deployment.md) | R2 · Linux 打包、部署与运行形态的历史设计；macOS v1 由文档 18–21 接替 | **v1.0，Linux 后续参考** |
 | [`docs/design/10-ai-guardrails-and-verification.md`](design/10-ai-guardrails-and-verification.md) | R2 · AI 开发护栏与验证闭环：两层验证闭环、本地开发环境、强制测试清单与准入判据、`CLAUDE.md` 边界与两份草案、不变式的可执行化、强制点与工作方式 | **v1.0** |
 | [`docs/design/11-walking-skeleton-slice.md`](design/11-walking-skeleton-slice.md) | R2 · Walking skeleton 切片定义与验收标准：两条采集通路的切法、告警与前端的深度、鉴权与凭据、分区机制、验收标准三层、禁止清单、推翻选型的处理规则 | **v1.0** |
 | [`docs/design/12-collection-concurrency-timeouts-and-backpressure.md`](design/12-collection-concurrency-timeouts-and-backpressure.md) | R2 · 采集并发、超时与背压：中央调度、双连接生命周期、超时与退避、能力探测份额、任务状态与完整性水位、自观测边界 | **v1.0** |
 | [`docs/design/13-credential-encryption-rotation-and-revocation.md`](design/13-credential-encryption-rotation-and-revocation.md) | R2 · 凭据加密、轮换与吊销：威胁模型、PG 密文、Agent 登记与令牌生命周期、主密钥、备份恢复和回显边界 | **v1.0** |
 | [`docs/design/14-platform-observability-and-diagnostics.md`](design/14-platform-observability-and-diagnostics.md) | R2 · 平台自身运行可观测性与诊断出口：journal + 只读诊断 API、四态平台健康快照、非递归告警边界、磁盘分级保护、故障注入验收 | **v1.0** |
-| [`docs/design/15-ci-and-release-pipeline.md`](design/15-ci-and-release-pipeline.md) | R2 · CI 与发布流水线：GitHub Actions 唯一规范执行者、PR 门与 `check-full`、tag + 精确提交校验 + 人工审批发布、四组合构建矩阵、留痕规则 | **v1.0** |
+| [`docs/design/15-ci-and-release-pipeline.md`](design/15-ci-and-release-pipeline.md) | R2 · CI 与发布流水线；通用门禁继续有效，Linux 四组合矩阵不进入 macOS v1 | **v1.0，部分被 20–21 接替** |
 | [`docs/design/16-r2-decision-index.md`](design/16-r2-decision-index.md) | R2 收口索引：固化地图 #15 的 `Decisions so far`，以 `make check ≤120 秒` 为当前真值 | **v1.0** |
 | [`docs/design/18-v1-macos-support-boundary.md`](design/18-v1-macos-support-boundary.md) | v1 macOS 首发支持边界：macOS 14.0+、仅原生 arm64，以及开发/CI/安装/交付运行的最低验收语义 | **v1.0** |
 | [`docs/design/19-v1-macos-runtime-and-postgresql.md`](design/19-v1-macos-runtime-and-postgresql.md) | v1 macOS 运行与 PostgreSQL 交付：随包 PG 17、系统级 launchd、离线安装，以及备份/升级/卸载闭环 | **v1.0** |
 | [`docs/design/20-v1-macos-build-validation-and-release.md`](design/20-v1-macos-build-validation-and-release.md) | v1 macOS 构建、验证与发布：原生 runner/干净机分工、签名公证 `.pkg`、tag/审批门与 Linux 四组合拆分 | **v1.0** |
+| [`docs/design/21-v1-linux-release-disposition.md`](design/21-v1-linux-release-disposition.md) | 现有 Linux 发布票 #92 的 v1 处置：可复用资产、legacy 隔离、票务结论与 post-v1 重启入口 | **v1.0** |
 | [`docs/validation/t11-windows-amd64-progress.md`](validation/t11-windows-amd64-progress.md) | T11 · Windows amd64 环境验证记录、Docker Desktop 兼容性结论与 Linux amd64 后续验收清单 | 已完成（T11 已验收） |
 
 ### 2.1 四条跨文档不变式
