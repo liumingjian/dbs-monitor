@@ -72,12 +72,12 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 		if err != nil {
 			t.Fatalf("encrypt credential %d: %v", index, err)
 		}
-		if _, err := pool.Exec(ctx, `WITH identity AS (
+		if _, err := pool.Exec(ctx, `WITH created_identity AS (
 			INSERT INTO instance_identity (id, name) VALUES ($1, $2) RETURNING id
 		)
 			INSERT INTO instance
 			(id, name, host, port, database_name, username, password_ciphertext, password_key_version)
-			SELECT id, $2, 'localhost', 5432, 'postgres', 'monitor', $3, $4 FROM identity`,
+			SELECT id, $2, 'localhost', 5432, 'postgres', 'monitor', $3, $4 FROM created_identity`,
 			target.id, fmt.Sprintf("rotation-%d", index), ciphertext, version); err != nil {
 			t.Fatalf("insert credential %d: %v", index, err)
 		}

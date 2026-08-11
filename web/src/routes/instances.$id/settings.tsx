@@ -41,9 +41,9 @@ function InstanceSettingsPage() {
   const [issuedAgentToken, setIssuedAgentToken] = useState<IssuedAgentToken | null>(null)
   const [actionError, setActionError] = useState('')
   const canEditMetadata = currentUserQuery.data?.role === 'ALERT_ADMIN' || currentUserQuery.data?.role === 'PLATFORM_ADMIN'
-  const canEditCredential = currentUserQuery.data?.role === 'PLATFORM_ADMIN'
+  const isPlatformAdmin = currentUserQuery.data?.role === 'PLATFORM_ADMIN'
   const metadataDisabledReason = canEditMetadata ? undefined : '需要告警管理员角色'
-  const credentialDisabledReason = canEditCredential ? undefined : '需要平台管理员角色'
+  const credentialDisabledReason = isPlatformAdmin ? undefined : '需要平台管理员角色'
   const agentActionPending = registerAgentMutation.isPending || rotateAgentMutation.isPending ||
     revokeAgentMutation.isPending || disableAgentMutation.isPending
 
@@ -180,7 +180,7 @@ function InstanceSettingsPage() {
           </div>
           <Tooltip title={credentialDisabledReason}>
             <span>
-              <Button icon={<KeyOutlined />} disabled={!canEditCredential} onClick={openCredentialModal}>更新凭据</Button>
+              <Button icon={<KeyOutlined />} disabled={!isPlatformAdmin} onClick={openCredentialModal}>更新凭据</Button>
             </span>
           </Tooltip>
         </Space>
@@ -192,7 +192,7 @@ function InstanceSettingsPage() {
         {agentRegistrationQuery.data && (
           <AgentRegistrationPanel
             registration={agentRegistrationQuery.data}
-            canManage={canEditCredential}
+            canManage={isPlatformAdmin}
             actionPending={agentActionPending}
             onRegister={issueAgentToken}
             onRotate={rotateAgentToken}
@@ -207,7 +207,7 @@ function InstanceSettingsPage() {
         <Typography.Title id="danger-heading" level={4} type="danger">危险区</Typography.Title>
         <InstanceRemovalPanel
           instanceName={instanceQuery.data?.name ?? ''}
-          canRemove={canEditCredential}
+          canRemove={isPlatformAdmin}
           actionPending={deleteInstanceMutation.isPending}
           onRemove={removeInstance}
         />

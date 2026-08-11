@@ -89,13 +89,13 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 
 	var seriesID int64
 	err = database.QueryRowContext(ctx, `
-		WITH identity AS (
+		WITH created_identity AS (
 			INSERT INTO instance_identity (id, name)
 			VALUES ('00000000-0000-0000-0000-000000000001', 'test')
 			RETURNING id
 		), created_instance AS (
 			INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version)
-			SELECT id, 'test', 'localhost', 5432, 'postgres', 'postgres', '\\x01', 1 FROM identity
+			SELECT id, 'test', 'localhost', 5432, 'postgres', 'postgres', '\\x01', 1 FROM created_identity
 			RETURNING id
 		)
 		INSERT INTO metric_series (instance_id, metric_id, labels_key, last_seen)

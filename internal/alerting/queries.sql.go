@@ -38,14 +38,14 @@ func (q *Queries) AlertRuleTargetInstanceExists(ctx context.Context, id pgtype.U
 }
 
 const closeAlertsForInstanceRemoval = `-- name: CloseAlertsForInstanceRemoval :exec
-WITH unresolved AS MATERIALIZED (
+WITH unresolved_alerts AS MATERIALIZED (
     SELECT id, rule_id, rule_version, status, current_value,
            unavailability, rule_snapshot
     FROM alert_instance
     WHERE alert_instance.instance_id = $1
       AND status <> 'RECOVERED'
     FOR UPDATE
-), events AS (
+), removal_events AS (
     INSERT INTO alert_event (
         alert_instance_id, rule_id, rule_version, kind,
         from_state, to_state, current_value, unavailability,
@@ -54,7 +54,7 @@ WITH unresolved AS MATERIALIZED (
     SELECT id, rule_id, rule_version, 'INSTANCE_REMOVED',
            status, 'RECOVERED', current_value, unavailability,
            rule_snapshot, $2, $3
-    FROM unresolved
+    FROM unresolved_alerts
     RETURNING alert_instance_id
 )
 UPDATE alert_instance
@@ -63,7 +63,7 @@ SET status = 'RECOVERED',
     unavailability = NULL,
     updated_at = $2,
     recovered_at = $2
-WHERE id IN (SELECT alert_instance_id FROM events)
+WHERE id IN (SELECT alert_instance_id FROM removal_events)
 `
 
 type CloseAlertsForInstanceRemovalParams struct {

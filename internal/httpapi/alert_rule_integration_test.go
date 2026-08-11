@@ -442,17 +442,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if err := pool.SendBatch(ctx, configurationBatch).Close(); err != nil {
 		t.Fatalf("seed removable instance configuration: %v", err)
 	}
-	var retainedSamples, retainedSeries, retainedAlerts, unresolvedBeforeRemoval, retainedEvents, retainedSnapshots int
-	if err := pool.QueryRow(ctx, `SELECT
-		(SELECT count(*) FROM metric_sample sample JOIN metric_series series ON series.series_id = sample.series_id WHERE series.instance_id = $1),
-		(SELECT count(*) FROM metric_series WHERE instance_id = $1),
-		(SELECT count(*) FROM alert_instance WHERE instance_id = $1),
-		(SELECT count(*) FROM alert_instance WHERE instance_id = $1 AND status <> 'RECOVERED'),
-		(SELECT count(*) FROM alert_event event JOIN alert_instance alert ON alert.id = event.alert_instance_id WHERE alert.instance_id = $1),
-		(SELECT count(*) FROM alert_trigger_snapshot snapshot JOIN alert_instance alert ON alert.id = snapshot.alert_instance_id WHERE alert.instance_id = $1)`, targetID).
-		Scan(&retainedSamples, &retainedSeries, &retainedAlerts, &unresolvedBeforeRemoval, &retainedEvents, &retainedSnapshots); err != nil {
-		t.Fatalf("count history before instance removal: %v", err)
-	}
+	retainedHistory := readInstanceHistoryCounts(t, ctx, pool, targetID)
 
 	removed := requestJSON(t, client, http.MethodDelete, server.URL+"/api/v1/instances/"+targetID.String(), nil, "")
 	removed.Body.Close()
@@ -484,22 +474,12 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if removedName != "target" || !removedAt.Equal(currentClock.now) {
 		t.Fatalf("removed instance identity = %q at %s, want target at %s", removedName, removedAt, currentClock.now)
 	}
-	var samplesAfterRemoval, seriesAfterRemoval, alertsAfterRemoval, unresolvedAfterRemoval, eventsAfterRemoval, snapshotsAfterRemoval int
-	if err := pool.QueryRow(ctx, `SELECT
-		(SELECT count(*) FROM metric_sample sample JOIN metric_series series ON series.series_id = sample.series_id WHERE series.instance_id = $1),
-		(SELECT count(*) FROM metric_series WHERE instance_id = $1),
-		(SELECT count(*) FROM alert_instance WHERE instance_id = $1),
-		(SELECT count(*) FROM alert_instance WHERE instance_id = $1 AND status <> 'RECOVERED'),
-		(SELECT count(*) FROM alert_event event JOIN alert_instance alert ON alert.id = event.alert_instance_id WHERE alert.instance_id = $1),
-		(SELECT count(*) FROM alert_trigger_snapshot snapshot JOIN alert_instance alert ON alert.id = snapshot.alert_instance_id WHERE alert.instance_id = $1)`, targetID).
-		Scan(&samplesAfterRemoval, &seriesAfterRemoval, &alertsAfterRemoval, &unresolvedAfterRemoval, &eventsAfterRemoval, &snapshotsAfterRemoval); err != nil {
-		t.Fatalf("count history after instance removal: %v", err)
-	}
-	if samplesAfterRemoval != retainedSamples || seriesAfterRemoval != retainedSeries || alertsAfterRemoval != retainedAlerts ||
-		unresolvedAfterRemoval != 0 || eventsAfterRemoval != retainedEvents+unresolvedBeforeRemoval || snapshotsAfterRemoval != retainedSnapshots {
-		t.Fatalf("retained history after removal = samples %d/%d series %d/%d alerts %d/%d unresolved %d events %d/%d snapshots %d/%d",
-			samplesAfterRemoval, retainedSamples, seriesAfterRemoval, retainedSeries, alertsAfterRemoval, retainedAlerts,
-			unresolvedAfterRemoval, eventsAfterRemoval, retainedEvents+unresolvedBeforeRemoval, snapshotsAfterRemoval, retainedSnapshots)
+	historyAfterRemoval := readInstanceHistoryCounts(t, ctx, pool, targetID)
+	wantHistoryAfterRemoval := retainedHistory
+	wantHistoryAfterRemoval.unresolvedAlerts = 0
+	wantHistoryAfterRemoval.events += retainedHistory.unresolvedAlerts
+	if historyAfterRemoval != wantHistoryAfterRemoval {
+		t.Fatalf("history after instance removal = %+v, want %+v", historyAfterRemoval, wantHistoryAfterRemoval)
 	}
 	var removalEvents, firingRemovalEvents, recoveredRemovalEvents, removalActors int
 	if err := pool.QueryRow(ctx, `SELECT count(*),
@@ -512,9 +492,9 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		Scan(&removalEvents, &firingRemovalEvents, &recoveredRemovalEvents, &removalActors); err != nil {
 		t.Fatalf("read instance removal alert event: %v", err)
 	}
-	if removalEvents != unresolvedBeforeRemoval || firingRemovalEvents == 0 || recoveredRemovalEvents != removalEvents || removalActors != 1 {
+	if removalEvents != retainedHistory.unresolvedAlerts || firingRemovalEvents == 0 || recoveredRemovalEvents != removalEvents || removalActors != 1 {
 		t.Fatalf("instance removal alert events = total %d firing %d recovered %d actors %d, want %d/all/one actor",
-			removalEvents, firingRemovalEvents, recoveredRemovalEvents, removalActors, unresolvedBeforeRemoval)
+			removalEvents, firingRemovalEvents, recoveredRemovalEvents, removalActors, retainedHistory.unresolvedAlerts)
 	}
 	var dispositionEventsAfterRemoval int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alert_event WHERE alert_instance_id = $1 AND kind IN ('ACKED', 'IGNORED')", firstAlertID).
@@ -535,15 +515,41 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if replacementID == targetID {
 		t.Fatal("re-onboarding reused the removed instance identity")
 	}
-	var inheritedAlerts, inheritedSeries int
+	replacementHistory := readInstanceHistoryCounts(t, ctx, pool, replacementID)
+	if replacementHistory.alerts != 0 || replacementHistory.series != 0 {
+		t.Fatalf("replacement inherited alerts/series = %d/%d, want 0/0", replacementHistory.alerts, replacementHistory.series)
+	}
+}
+
+type instanceHistoryCounts struct {
+	samples          int
+	series           int
+	alerts           int
+	unresolvedAlerts int
+	events           int
+	snapshots        int
+}
+
+func readInstanceHistoryCounts(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID) instanceHistoryCounts {
+	t.Helper()
+	var counts instanceHistoryCounts
 	if err := pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM metric_sample sample JOIN metric_series series ON series.series_id = sample.series_id WHERE series.instance_id = $1),
+		(SELECT count(*) FROM metric_series WHERE instance_id = $1),
 		(SELECT count(*) FROM alert_instance WHERE instance_id = $1),
-		(SELECT count(*) FROM metric_series WHERE instance_id = $1)`, replacementID).Scan(&inheritedAlerts, &inheritedSeries); err != nil {
-		t.Fatalf("count replacement instance history: %v", err)
+		(SELECT count(*) FROM alert_instance WHERE instance_id = $1 AND status <> 'RECOVERED'),
+		(SELECT count(*) FROM alert_event event JOIN alert_instance alert ON alert.id = event.alert_instance_id WHERE alert.instance_id = $1),
+		(SELECT count(*) FROM alert_trigger_snapshot snapshot JOIN alert_instance alert ON alert.id = snapshot.alert_instance_id WHERE alert.instance_id = $1)`, instanceID).Scan(
+		&counts.samples,
+		&counts.series,
+		&counts.alerts,
+		&counts.unresolvedAlerts,
+		&counts.events,
+		&counts.snapshots,
+	); err != nil {
+		t.Fatalf("count instance history: %v", err)
 	}
-	if inheritedAlerts != 0 || inheritedSeries != 0 {
-		t.Fatalf("replacement inherited alerts/series = %d/%d, want 0/0", inheritedAlerts, inheritedSeries)
-	}
+	return counts
 }
 
 func alertRuleInput(instanceID uuid.UUID) map[string]any {
