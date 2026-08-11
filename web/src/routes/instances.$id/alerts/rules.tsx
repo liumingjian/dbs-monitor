@@ -255,7 +255,7 @@ function RuleEditor({ form, open, editingRule, instances, pending, onCancel, onS
   const consecutiveCount = Form.useWatch('consecutive_count', form)
   const evaluationInterval = Form.useWatch('evaluation_interval_seconds', form)
   const scope = Form.useWatch('scope', form)
-  const builtin = editingRule?.is_builtin === true
+  const isBuiltin = editingRule?.is_builtin === true
 
   return <Modal
     title={editingRule ? '编辑告警规则' : '新建告警规则'}
@@ -281,7 +281,7 @@ function RuleEditor({ form, open, editingRule, instances, pending, onCancel, onS
         <Form.Item name="metric_id" label="指标" rules={[{ required: true }]}>
           <Select
             showSearch
-            disabled={builtin}
+            disabled={isBuiltin}
             optionFilterProp="label"
             options={alertableMetricOptions.map((option) => ({ value: option.id, label: `${option.label} · ${option.id}` }))}
           />
@@ -325,13 +325,13 @@ function RuleEditor({ form, open, editingRule, instances, pending, onCancel, onS
           <InputNumber min={1} precision={0} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item name="severity" label="级别" rules={[{ required: true }]}>
-          <Select options={builtin ? severityOptions.filter((option) => option.value !== 'info') : severityOptions} />
+          <Select options={isBuiltin ? builtinSeverityOptions : severityOptions} />
         </Form.Item>
         <Form.Item name="no_data_policy" label="无数据策略" rules={[{ required: true }]}>
           <Select options={noDataOptions} />
         </Form.Item>
         <Form.Item name="scope" label="作用范围" rules={[{ required: true }]}>
-          <Select disabled={builtin} options={scopeOptions} />
+          <Select disabled={isBuiltin} options={scopeOptions} />
         </Form.Item>
         <Form.Item
           name="instance_ids"
@@ -340,7 +340,7 @@ function RuleEditor({ form, open, editingRule, instances, pending, onCancel, onS
         >
           <Select
             mode="multiple"
-            disabled={scope !== 'INSTANCES' || builtin}
+            disabled={scope !== 'INSTANCES' || isBuiltin}
             options={instances.map((instance) => ({ value: instance.id, label: instance.name }))}
           />
         </Form.Item>
@@ -349,7 +349,7 @@ function RuleEditor({ form, open, editingRule, instances, pending, onCancel, onS
         </Form.Item>
         <Form.Item name="notification_policy_id" hidden><Input /></Form.Item>
         <Form.Item name="enabled" label="启用" valuePropName="checked">
-          <Switch disabled={builtin} />
+          <Switch disabled={isBuiltin} />
         </Form.Item>
       </div>
       <Button type="primary" htmlType="submit" loading={pending}>保存</Button>
@@ -368,7 +368,15 @@ function TemplateModal({ open, templates, loading, canWrite, disabledReason, act
   onCreate: (template: AlertRuleTemplate) => void
 }) {
   const columns: TableColumnsType<AlertRuleTemplate> = [
-    { title: '模板', render: (_, template) => <Space direction="vertical" size={0}><Typography.Text strong>{template.name}</Typography.Text><Typography.Text type="secondary">v{template.version}</Typography.Text></Space> },
+    {
+      title: '模板',
+      render: (_, template) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Text strong>{template.name}</Typography.Text>
+          <Typography.Text type="secondary">v{template.version}</Typography.Text>
+        </Space>
+      ),
+    },
     { title: '指标', render: (_, template) => metricName(template.metric_id) },
     { title: '条件', render: (_, template) => `${aggregationLabel(template.aggregation)} ${template.operator} ${template.threshold}` },
     { title: '持续', render: (_, template) => consecutiveDurationLabel(template.consecutive_count, template.evaluation_interval_seconds) },
@@ -405,28 +413,102 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
   actionPending: boolean
 }): TableColumnsType<AlertRule> {
   return [
-    { title: '名称', fixed: 'left', width: 190, render: (_, rule) => <Space direction="vertical" size={0}><Typography.Text strong>{rule.name}</Typography.Text>{rule.is_builtin && <Typography.Text type="secondary">内置规则</Typography.Text>}</Space> },
+    {
+      title: '名称',
+      fixed: 'left',
+      width: 190,
+      render: (_, rule) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Text strong>{rule.name}</Typography.Text>
+          {rule.is_builtin && <Typography.Text type="secondary">内置规则</Typography.Text>}
+        </Space>
+      ),
+    },
     { title: '范围', width: 120, render: (_, rule) => scopeLabel(rule.scope, rule.instance_ids.length) },
-    { title: '指标', width: 210, render: (_, rule) => <Tooltip title={rule.metric_id}><span>{metricName(rule.metric_id)}</span></Tooltip> },
-    { title: '条件', width: 250, render: (_, rule) => <Space direction="vertical" size={0}><span>{aggregationLabel(rule.aggregation)} {rule.operator} {rule.threshold}</span><Typography.Text type="secondary">恢复 {rule.recovery_operator} {rule.recovery_threshold}</Typography.Text></Space> },
+    {
+      title: '指标',
+      width: 210,
+      render: (_, rule) => (
+        <Tooltip title={rule.metric_id}>
+          <span>{metricName(rule.metric_id)}</span>
+        </Tooltip>
+      ),
+    },
+    {
+      title: '条件',
+      width: 250,
+      render: (_, rule) => (
+        <Space direction="vertical" size={0}>
+          <span>{aggregationLabel(rule.aggregation)} {rule.operator} {rule.threshold}</span>
+          <Typography.Text type="secondary">
+            恢复 {rule.recovery_operator} {rule.recovery_threshold}
+          </Typography.Text>
+        </Space>
+      ),
+    },
     { title: '评估周期', width: 110, render: (_, rule) => formatRuleDuration(rule.evaluation_interval_seconds) },
     { title: '窗口', width: 100, render: (_, rule) => formatRuleDuration(rule.window_seconds) },
     { title: '连续次数', width: 245, render: (_, rule) => consecutiveDurationLabel(rule.consecutive_count, rule.evaluation_interval_seconds) },
     { title: '级别', width: 90, render: (_, rule) => severityTag(rule.severity) },
     {
-      title: '启停状态', width: 120, render: (_, rule) => rule.is_builtin
-        ? <Tag color="blue">不可停用</Tag>
-        : <Tooltip title={disabledReason}><span><Switch size="small" checked={rule.enabled} disabled={!canWrite || actionPending} onChange={(checked) => onEnabledChange(rule, checked)} /></span></Tooltip>,
+      title: '启停状态',
+      width: 120,
+      render: (_, rule) => {
+        if (rule.is_builtin) {
+          return <Tag color="blue">不可停用</Tag>
+        }
+        return <Tooltip title={disabledReason}>
+          <span>
+            <Switch
+              size="small"
+              checked={rule.enabled}
+              disabled={!canWrite || actionPending}
+              onChange={(checked) => onEnabledChange(rule, checked)}
+            />
+          </span>
+        </Tooltip>
+      },
     },
     { title: '生效通知策略', width: 180, dataIndex: 'effective_notification_policy_name' },
-    { title: '最近触发时间', width: 180, render: (_, rule) => rule.last_triggered_at ? new Date(rule.last_triggered_at).toLocaleString() : '尚未触发' },
+    {
+      title: '最近触发时间',
+      width: 180,
+      render: (_, rule) => rule.last_triggered_at
+        ? new Date(rule.last_triggered_at).toLocaleString()
+        : '尚未触发',
+    },
     { title: '当前告警数', width: 110, dataIndex: 'current_alert_count' },
     { title: '所需能力', width: 120, render: (_, rule) => capabilityFitTag(capabilityFit(rule.metric_id, tasks, capabilities, currentInstance)) },
     {
-      title: '操作', fixed: 'right', width: 170, render: (_, rule) => <Space size="small">
-        <Tooltip title={disabledReason}><span><Button aria-label={`编辑 ${rule.name}`} type="text" icon={<EditOutlined />} disabled={!canWrite} onClick={() => onEdit(rule)} /></span></Tooltip>
-        <Tooltip title={disabledReason}><span><Button aria-label={`复制 ${rule.name}`} type="text" icon={<CopyOutlined />} disabled={!canWrite || actionPending} onClick={() => onCopy(rule)} /></span></Tooltip>
-      </Space>,
+      title: '操作',
+      fixed: 'right',
+      width: 170,
+      render: (_, rule) => (
+        <Space size="small">
+          <Tooltip title={disabledReason}>
+            <span>
+              <Button
+                aria-label={`编辑 ${rule.name}`}
+                type="text"
+                icon={<EditOutlined />}
+                disabled={!canWrite}
+                onClick={() => onEdit(rule)}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={disabledReason}>
+            <span>
+              <Button
+                aria-label={`复制 ${rule.name}`}
+                type="text"
+                icon={<CopyOutlined />}
+                disabled={!canWrite || actionPending}
+                onClick={() => onCopy(rule)}
+              />
+            </span>
+          </Tooltip>
+        </Space>
+      ),
     },
   ]
 }
@@ -435,23 +517,34 @@ export function formatRuleDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
-  return [hours > 0 ? `${hours} 小时` : '', minutes > 0 ? `${minutes} 分` : '', seconds > 0 ? `${seconds} 秒` : '']
-    .filter(Boolean)
-    .join(' ')
+  const parts: string[] = []
+
+  if (hours > 0) parts.push(`${hours} 小时`)
+  if (minutes > 0) parts.push(`${minutes} 分`)
+  if (seconds > 0) parts.push(`${seconds} 秒`)
+
+  return parts.join(' ')
 }
 
 export function consecutiveDurationLabel(count: number, intervalSeconds: number): string {
   return `连续 ${count} 次 × ${formatRuleDuration(intervalSeconds)} ≈ ${formatRuleDuration(count * intervalSeconds)}`
 }
 
-export function capabilityFit(metricID: string, tasks: CollectionTask[], capabilities: Capability[], instance: Instance | undefined): CapabilityFit {
+export function capabilityFit(
+  metricID: string,
+  tasks: CollectionTask[],
+  capabilities: Capability[],
+  instance: Instance | undefined,
+): CapabilityFit {
   if (metricID.startsWith('host.')) {
     if (!instance) return 'UNKNOWN'
-    return instance.agent_metrics_enabled && instance.agent_status === 'online' ? 'SATISFIED' : 'UNSATISFIED'
+    if (instance.agent_metrics_enabled && instance.agent_status === 'online') return 'SATISFIED'
+    return 'UNSATISFIED'
   }
   if (metricID === 'agent.status') {
     if (!instance) return 'UNKNOWN'
-    return instance.agent_status === 'not_installed' ? 'UNSATISFIED' : 'SATISFIED'
+    if (instance.agent_status === 'not_installed') return 'UNSATISFIED'
+    return 'SATISFIED'
   }
   const task = tasks.find((item) => item.metric_ids.includes(metricID))
   if (!task || task.required_capabilities.length === 0) return 'SATISFIED'
@@ -608,5 +701,6 @@ function assertNever(value: never): never {
 const aggregationOptions = (['latest', 'avg', 'max', 'min', 'sum', 'count'] as const).map((value) => ({ value, label: aggregationLabel(value) }))
 const operatorOptions = (['>', '>=', '<', '<=', '=', '!='] as const).map((value) => ({ value, label: value }))
 const severityOptions = (['critical', 'warning', 'info'] as const).map((value) => ({ value, label: severityLabel(value) }))
+const builtinSeverityOptions = severityOptions.filter((option) => option.value !== 'info')
 const noDataOptions = (['ignore', 'mark_no_data'] as const).map((value) => ({ value, label: noDataLabel(value) }))
 const scopeOptions = (['ALL', 'INSTANCES'] as const).map((value) => ({ value, label: scopeLabel(value, 0) }))

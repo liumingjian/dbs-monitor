@@ -629,7 +629,7 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 	if err != nil {
 		return api.AlertRule{}, err
 	}
-	stats, err := queries.GetAlertRuleListStats(ctx, rule.ID)
+	stats, err := queries.GetAlertRuleStats(ctx, rule.ID)
 	if err != nil {
 		return api.AlertRule{}, err
 	}

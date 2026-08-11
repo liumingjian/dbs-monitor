@@ -1,4 +1,10 @@
 import { expect, test } from '@playwright/test'
+import type { components } from '../src/api/schema'
+
+type AlertRule = components['schemas']['AlertRule']
+type AlertRuleInput = components['schemas']['AlertRuleInput']
+type AlertRuleTemplate = components['schemas']['AlertRuleTemplate']
+type Instance = components['schemas']['Instance']
 
 const instanceID = '11111111-1111-4111-8111-111111111111'
 const builtinRuleID = '22222222-2222-4222-8222-222222222222'
@@ -20,7 +26,7 @@ const instance = {
     flags: { no_data: false, in_maintenance: false, recently_recovered: false, ignored: 0, configuration_missing: 0 },
   },
   collection_pause: { paused: false },
-}
+} satisfies Instance
 
 const builtinRule = {
   id: builtinRuleID,
@@ -46,7 +52,7 @@ const builtinRule = {
   version: 1,
   created_at: '2026-08-11T12:00:00Z',
   updated_at: '2026-08-11T12:00:00Z',
-}
+} satisfies AlertRule
 
 const template = {
   id: 'cpu_high',
@@ -64,11 +70,11 @@ const template = {
   severity: 'warning',
   no_data_policy: 'mark_no_data',
   evaluation_interval_seconds: 60,
-}
+} satisfies AlertRuleTemplate
 
 test('creates alert rules and keeps built-in protections visible', async ({ page }) => {
-  const rules = [{ ...builtinRule }]
-  let submittedRule: Record<string, unknown> | undefined
+  const rules: AlertRule[] = [{ ...builtinRule }]
+  let submittedRule: AlertRuleInput | undefined
 
   await page.route('**/api/v1/me', (route) => route.fulfill({ json: { username: 'alert-admin', role: 'ALERT_ADMIN' } }))
   await page.route(`**/api/v1/instances/${instanceID}`, (route) => route.fulfill({ json: instance }))
@@ -89,13 +95,13 @@ test('creates alert rules and keeps built-in protections visible', async ({ page
       current_alert_count: 0,
       created_at: '2026-08-11T12:01:00Z',
       updated_at: '2026-08-11T12:01:00Z',
-    }
+    } satisfies AlertRule
     rules.push(fromTemplate)
     return route.fulfill({ status: 201, json: fromTemplate })
   })
   await page.route('**/api/v1/alert-rules', async (route) => {
     if (route.request().method() === 'GET') return route.fulfill({ json: rules })
-    submittedRule = route.request().postDataJSON() as Record<string, unknown>
+    submittedRule = route.request().postDataJSON() as AlertRuleInput
     const created = {
       ...builtinRule,
       ...submittedRule,
@@ -105,7 +111,7 @@ test('creates alert rules and keeps built-in protections visible', async ({ page
       current_alert_count: 0,
       created_at: '2026-08-11T12:02:00Z',
       updated_at: '2026-08-11T12:02:00Z',
-    }
+    } satisfies AlertRule
     rules.push(created)
     return route.fulfill({ status: 201, json: created })
   })

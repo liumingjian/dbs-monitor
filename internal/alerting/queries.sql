@@ -22,7 +22,7 @@ FROM alert_rule_scope_instance
 WHERE rule_id = $1
 ORDER BY instance_id;
 
--- name: GetAlertRuleListStats :one
+-- name: GetAlertRuleStats :one
 SELECT max(first_triggered_at)::timestamptz AS last_triggered_at,
        count(*) FILTER (WHERE status IN ('FIRING', 'NO_DATA'))::integer AS current_alert_count
 FROM alert_instance

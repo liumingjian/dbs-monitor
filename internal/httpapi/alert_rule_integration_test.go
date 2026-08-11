@@ -195,12 +195,19 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if updatedRulesResponse.StatusCode != http.StatusOK || json.NewDecoder(updatedRulesResponse.Body).Decode(&updatedRules) != nil {
 		t.Fatalf("list updated alert rules status = %d", updatedRulesResponse.StatusCode)
 	}
+	foundDatabaseRule := false
 	for _, rule := range updatedRules {
-		if rule.Id == databaseRule.Id {
-			if rule.CurrentAlertCount != 2 || rule.LastTriggeredAt == nil || !rule.LastTriggeredAt.Equal(currentClock.now) {
-				t.Fatalf("database rule list projection = %+v", rule)
-			}
+		if rule.Id != databaseRule.Id {
+			continue
 		}
+		foundDatabaseRule = true
+		if rule.CurrentAlertCount != 2 || rule.LastTriggeredAt == nil || !rule.LastTriggeredAt.Equal(currentClock.now) {
+			t.Fatalf("database rule list projection = %+v", rule)
+		}
+		break
+	}
+	if !foundDatabaseRule {
+		t.Fatal("database rule missing from updated alert rule list")
 	}
 
 	invalidInput := alertRuleInput(targetID)

@@ -525,21 +525,21 @@ func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, 
 	return i, err
 }
 
-const getAlertRuleListStats = `-- name: GetAlertRuleListStats :one
+const getAlertRuleStats = `-- name: GetAlertRuleStats :one
 SELECT max(first_triggered_at)::timestamptz AS last_triggered_at,
        count(*) FILTER (WHERE status IN ('FIRING', 'NO_DATA'))::integer AS current_alert_count
 FROM alert_instance
 WHERE rule_id = $1
 `
 
-type GetAlertRuleListStatsRow struct {
+type GetAlertRuleStatsRow struct {
 	LastTriggeredAt   pgtype.Timestamptz
 	CurrentAlertCount int32
 }
 
-func (q *Queries) GetAlertRuleListStats(ctx context.Context, ruleID pgtype.UUID) (GetAlertRuleListStatsRow, error) {
-	row := q.db.QueryRow(ctx, getAlertRuleListStats, ruleID)
-	var i GetAlertRuleListStatsRow
+func (q *Queries) GetAlertRuleStats(ctx context.Context, ruleID pgtype.UUID) (GetAlertRuleStatsRow, error) {
+	row := q.db.QueryRow(ctx, getAlertRuleStats, ruleID)
+	var i GetAlertRuleStatsRow
 	err := row.Scan(&i.LastTriggeredAt, &i.CurrentAlertCount)
 	return i, err
 }
