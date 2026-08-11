@@ -11,6 +11,8 @@ import { contactSettingsRoute } from './routes/alert-settings/contacts'
 import { maintenanceSettingsRoute } from './routes/alert-settings/maintenance'
 import { policySettingsRoute } from './routes/alert-settings/policies'
 import { instanceRoute } from './routes/instances.$id'
+import { performanceEventDetailRoute } from './routes/instances.$id/performanceEventDetail'
+import { performanceEventsRoute } from './routes/instances.$id/performanceEventsPage'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
 import { alertRulesRoute } from './routes/instances.$id/alerts/rules'
@@ -30,6 +32,8 @@ const routeTree = rootRoute.addChildren([
   instancesRoute,
   instanceRoute,
   standardMonitoringRoute,
+  performanceEventsRoute,
+  performanceEventDetailRoute,
   instanceAlertsRoute,
   instanceAlertDetailRoute,
   alertRulesRoute,

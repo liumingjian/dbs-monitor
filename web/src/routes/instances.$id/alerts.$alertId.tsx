@@ -11,6 +11,7 @@ import { AlertSuppressionTags } from '../../domain/SuppressionTags'
 import { UnavailabilityBlock, unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { alertMonitoringSearch } from '../alerts/search'
+import { DispositionSection, TriggerSnapshotSection } from './alertEvidence'
 import { metricOptions } from './metricOptions'
 
 type AlertDetail = components['schemas']['AlertDetail']
@@ -36,10 +37,18 @@ function InstanceAlertDetailPage() {
       action={<Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}><Button>返回告警列表</Button></Link>}
     />
   }
-  return <AlertDetailContent detail={detail.data} routeInstanceID={id} />
+  return <AlertDetailContent
+    detail={detail.data}
+    routeInstanceID={id}
+    onDispositionChanged={() => void detail.refetch()}
+  />
 }
 
-function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; routeInstanceID: string }) {
+function AlertDetailContent({ detail, routeInstanceID, onDispositionChanged }: {
+  detail: AlertDetail
+  routeInstanceID: string
+  onDispositionChanged: () => void
+}) {
   const metric = metricOptions.find((option) => option.id === detail.metric_id)
   const monitoringSearch = metric ? alertMonitoringSearch({
     metric_id: metric.id,
@@ -157,14 +166,12 @@ function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; 
         <Typography.Title id="notification-heading" level={3}>通知结果</Typography.Title>
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={detail.notification_results.length === 0 ? '暂无通知结果' : `${detail.notification_results.length} 条通知结果`} />
       </section>
-      <section className="alert-detail-section" aria-labelledby="disposition-heading">
-        <Typography.Title id="disposition-heading" level={3}>处置记录</Typography.Title>
-        <DispositionRecord disposition={detail.disposition} />
-      </section>
-      <section className="alert-detail-section" aria-labelledby="trigger-snapshot-heading">
-        <Typography.Title id="trigger-snapshot-heading" level={3}>触发现场快照</Typography.Title>
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无触发现场快照" />
-      </section>
+      <DispositionSection
+        alertInstanceID={detail.id}
+        recovered={detail.status === 'RECOVERED'}
+        onChanged={onDispositionChanged}
+      />
+      <TriggerSnapshotSection alertInstanceID={detail.id} />
       <section className="alert-detail-section" aria-labelledby="performance-event-heading">
         <Typography.Title id="performance-event-heading" level={3}>关联性能事件</Typography.Title>
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无关联性能事件" />
@@ -240,19 +247,6 @@ function collectionPauseStatus(instance: Instance | undefined) {
   if (!instance) return '—'
   if (!instance.collection_pause.paused) return '否'
   return <Tag>已暂停</Tag>
-}
-
-function DispositionRecord({ disposition }: { disposition: components['schemas']['AlertDisposition'] }) {
-  switch (disposition) {
-    case 'NONE':
-      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无处置记录" />
-    case 'ACKED':
-      return <Typography.Text>已确认</Typography.Text>
-    case 'IGNORED':
-      return <Typography.Text>已忽略</Typography.Text>
-    default:
-      return assertNever(disposition)
-  }
 }
 
 function severityLabel(severity: components['schemas']['AlertSeverity']): string {

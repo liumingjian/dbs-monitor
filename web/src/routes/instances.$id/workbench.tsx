@@ -7,7 +7,7 @@ import type { MonitoringSearch } from './timeRange'
 type WorkbenchHeaderProps = {
   id: string
   instanceName: string | undefined
-  activeKey: 'overview' | 'monitoring' | 'sessions' | 'alerts'
+  activeKey: 'overview' | 'monitoring' | 'sessions' | 'events' | 'alerts'
   search: MonitoringSearch
 }
 
@@ -34,7 +34,14 @@ export function WorkbenchHeader({ id, instanceName, activeKey, search }: Workben
         label: <Link to="/instances/$id/monitoring" params={{ id }} search={search}>监控与报警</Link>,
       },
       { key: 'sessions', label: <a href={sessionPageHref(id, search)}>会话与阻塞</a> },
-      { key: 'events', label: '性能事件', disabled: true },
+      {
+        key: 'events',
+        label: <Link
+          to="/instances/$id/performance-events"
+          params={{ id }}
+          search={{ from: search.from, to: search.to, tab: 'firing', disposition: 'ACKED', page: 1 }}
+        >性能事件</Link>,
+      },
       {
         key: 'alerts',
         label: <Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}>告警</Link>,
