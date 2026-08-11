@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -41,11 +42,13 @@ type authenticatedAgentKey struct{}
 type authenticatedUserKey struct{}
 
 type Handler struct {
-	platform      *db.Pool
-	clock         clock.Clock
-	keyring       *instance.CredentialKeyring
-	dialer        monitorpg.Dialer
-	serverVersion string
+	platform          *db.Pool
+	clock             clock.Clock
+	keyring           *instance.CredentialKeyring
+	dialer            monitorpg.Dialer
+	serverVersion     string
+	caFingerprint     string
+	agentDistribution *AgentDistribution
 }
 
 func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {
@@ -60,9 +63,18 @@ func NewHandlerWithDialer(platform *db.Pool, currentClock clock.Clock, keyring *
 	return &Handler{platform: platform, clock: currentClock, keyring: keyring, dialer: dialer, serverVersion: serverVersion}
 }
 
+func NewHandlerWithAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string, distribution AgentDistribution) *Handler {
+	handler := NewHandlerWithVersion(platform, currentClock, keyring, serverVersion)
+	handler.caFingerprint = distribution.CAFingerprint
+	handler.agentDistribution = &distribution
+	return handler
+}
+
 func (handler *Handler) Routes() http.Handler {
 	strict := api.NewStrictHandler(handler, []api.StrictMiddlewareFunc{handler.authenticate})
-	return api.HandlerFromMux(strict, http.NewServeMux())
+	mux := http.NewServeMux()
+	handler.registerAgentDistributionRoutes(mux)
+	return api.HandlerFromMux(strict, mux)
 }
 
 func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSessionRequestObject) (api.CreateSessionResponseObject, error) {
@@ -281,6 +293,99 @@ func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteIn
 		return nil, err
 	}
 	return api.DeleteInstance204Response{}, nil
+}
+
+func (handler *Handler) GetAgentRegistration(ctx context.Context, request api.GetAgentRegistrationRequestObject) (api.GetAgentRegistrationResponseObject, error) {
+	row, err := instance.New(handler.platform).GetAgentRegistration(ctx, databaseUUID(request.Id))
+	if err != nil {
+		return nil, err
+	}
+	return api.GetAgentRegistration200JSONResponse(handler.agentRegistration(
+		row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+		row.AgentFirstRegisteredAt, row.AgentVersion,
+	)), nil
+}
+
+func (handler *Handler) RegisterAgent(ctx context.Context, request api.RegisterAgentRequestObject) (api.RegisterAgentResponseObject, error) {
+	token, tokenHash, err := newAgentToken()
+	if err != nil {
+		return nil, err
+	}
+	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	row, err := instance.New(handler.platform).RegisterAgent(ctx, instance.RegisterAgentParams{
+		ID:                 databaseUUID(request.Id),
+		AgentTokenHash:     tokenHash,
+		AgentTokenIssuedAt: now,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.RegisterAgent409JSONResponse(errorBody(api.CONFLICT, "Agent is already registered or cannot be re-enabled")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.RegisterAgent200JSONResponse{
+		AgentToken: &token,
+		Registration: handler.agentRegistration(
+			row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+			row.AgentFirstRegisteredAt, row.AgentVersion,
+		),
+	}, nil
+}
+
+func (handler *Handler) RotateAgentToken(ctx context.Context, request api.RotateAgentTokenRequestObject) (api.RotateAgentTokenResponseObject, error) {
+	token, tokenHash, err := newAgentToken()
+	if err != nil {
+		return nil, err
+	}
+	row, err := instance.New(handler.platform).RotateAgentToken(ctx, instance.RotateAgentTokenParams{
+		ID:                 databaseUUID(request.Id),
+		AgentTokenHash:     tokenHash,
+		AgentTokenIssuedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.RotateAgentToken409JSONResponse(errorBody(api.CONFLICT, "Agent has no active token to rotate")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.RotateAgentToken200JSONResponse{
+		AgentToken: &token,
+		Registration: handler.agentRegistration(
+			row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+			row.AgentFirstRegisteredAt, row.AgentVersion,
+		),
+	}, nil
+}
+
+func (handler *Handler) RevokeAgentToken(ctx context.Context, request api.RevokeAgentTokenRequestObject) (api.RevokeAgentTokenResponseObject, error) {
+	row, err := instance.New(handler.platform).RevokeAgentToken(ctx, instance.RevokeAgentTokenParams{
+		ID:                  databaseUUID(request.Id),
+		AgentTokenRevokedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.RevokeAgentToken409JSONResponse(errorBody(api.CONFLICT, "Agent has no active token to revoke")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.RevokeAgentToken200JSONResponse(handler.agentRegistration(
+		row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+		row.AgentFirstRegisteredAt, row.AgentVersion,
+	)), nil
+}
+
+func (handler *Handler) DisableAgent(ctx context.Context, request api.DisableAgentRequestObject) (api.DisableAgentResponseObject, error) {
+	row, err := instance.New(handler.platform).DisableAgent(ctx, databaseUUID(request.Id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.DisableAgent409JSONResponse(errorBody(api.CONFLICT, "Agent is not currently expected online")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.DisableAgent200JSONResponse(handler.agentRegistration(
+		row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+		row.AgentFirstRegisteredAt, row.AgentVersion,
+	)), nil
 }
 
 func (handler *Handler) ListCollectionTaskStates(ctx context.Context, request api.ListCollectionTaskStatesRequestObject) (api.ListCollectionTaskStatesResponseObject, error) {
@@ -752,6 +857,8 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 
 var RequiredRoles = map[string]string{
 	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
+	"GetAgentRegistration": "READONLY", "RegisterAgent": "PLATFORM_ADMIN",
+	"RotateAgentToken": "PLATFORM_ADMIN", "RevokeAgentToken": "PLATFORM_ADMIN", "DisableAgent": "PLATFORM_ADMIN",
 	"ListAlertRules": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"UpdateAlertRule": "ALERT_ADMIN", "UpdateAlertRuleEnabled": "ALERT_ADMIN",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
@@ -813,12 +920,59 @@ func timePointer(value pgtype.Timestamptz) *time.Time {
 	return &result
 }
 
+func databaseUUID(value uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: value, Valid: true}
+}
+
+func (handler *Handler) agentRegistration(
+	expected bool,
+	issuedAt, revokedAt, firstRegisteredAt pgtype.Timestamptz,
+	agentVersion pgtype.Text,
+) api.AgentRegistration {
+	state := api.NEVERREGISTERED
+	if firstRegisteredAt.Valid && !expected {
+		state = api.DISABLED
+	} else if expected && revokedAt.Valid {
+		state = api.REVOKED
+	} else if expected {
+		state = api.EXPECTEDONLINE
+	}
+	result := api.AgentRegistration{
+		AgentExpected:     expected,
+		State:             state,
+		IssuedAt:          timePointer(issuedAt),
+		RevokedAt:         timePointer(revokedAt),
+		FirstRegisteredAt: timePointer(firstRegisteredAt),
+		Installation: api.AgentInstallation{
+			CaFingerprintSha256: handler.caFingerprint,
+			InstallerPath:       "/api/agent/install/install.sh",
+			AuthenticationPath:  "/etc/dbs-monitor-agent/token",
+			FileMode:            api.N0600,
+			RestartCommand:      "systemctl restart dbs-monitor-agent.service",
+		},
+	}
+	if agentVersion.Valid {
+		result.AgentVersion = &agentVersion.String
+	}
+	return result
+}
+
 func newToken() (string, []byte, error) {
 	value := make([]byte, 32)
 	if _, err := rand.Read(value); err != nil {
 		return "", nil, err
 	}
 	token := hex.EncodeToString(value)
+	hash := sha256.Sum256([]byte(token))
+	return token, hash[:], nil
+}
+
+func newAgentToken() (string, []byte, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", nil, err
+	}
+	token := base64.RawURLEncoding.EncodeToString(value)
 	hash := sha256.Sum256([]byte(token))
 	return token, hash[:], nil
 }

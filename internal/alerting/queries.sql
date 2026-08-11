@@ -124,7 +124,8 @@ SELECT rule.id AS rule_id,
        COALESCE(alert.recovery_count, 0) AS recovery_count,
        COALESCE(alert.no_data_count, 0) AS no_data_count,
        alert.state_before_no_data,
-       COALESCE(collection_config.agent_metrics_enabled, true) AS agent_metrics_enabled
+       COALESCE(collection_config.agent_metrics_enabled, true) AS agent_metrics_enabled,
+       instance.agent_expected
 FROM alert_rule rule
 JOIN alert_rule_version version
   ON version.rule_id = rule.id AND version.version = rule.version

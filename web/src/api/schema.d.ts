@@ -229,6 +229,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/agent/registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAgentRegistration"];
+        put?: never;
+        post: operations["registerAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/agent/token/rotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rotateAgentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/agent/token/revocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeAgentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/agent/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disableAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -518,6 +590,23 @@ export interface components {
             /** @description Unacknowledged samples from the Agent's five-minute in-memory window. */
             backfill?: components["schemas"]["AgentSample"][];
         };
+        AgentRegistration: {
+            state: components["schemas"]["AgentRegistrationState"];
+            agent_expected: boolean;
+            /** Format: date-time */
+            issued_at?: string;
+            /** Format: date-time */
+            revoked_at?: string;
+            /** Format: date-time */
+            first_registered_at?: string;
+            agent_version?: string;
+            installation: components["schemas"]["AgentInstallation"];
+        };
+        AgentTokenIssued: {
+            /** @description One-time 32-byte base64url Agent token. It cannot be read again. */
+            agent_token: string;
+            registration: components["schemas"]["AgentRegistration"];
+        };
         /** @enum {string} */
         Role: "READONLY" | "ALERT_ADMIN" | "PLATFORM_ADMIN";
         User: {
@@ -575,6 +664,17 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             metrics: components["schemas"]["AgentMetric"][];
+        };
+        /** @enum {string} */
+        AgentRegistrationState: "NEVER_REGISTERED" | "EXPECTED_ONLINE" | "REVOKED" | "DISABLED";
+        AgentInstallation: {
+            /** @description Lowercase SHA-256 fingerprint of the platform CA certificate in DER form. */
+            ca_fingerprint_sha256: string;
+            installer_path: string;
+            authentication_path: string;
+            /** @enum {string} */
+            file_mode: "0600";
+            restart_command: string;
         };
     };
     responses: never;
@@ -1121,6 +1221,152 @@ export interface operations {
             };
             /** @description Invalid token */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAgentRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persisted Agent registration lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRegistration"];
+                };
+            };
+        };
+    };
+    registerAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent registered and token issued once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenIssued"];
+                };
+            };
+            /** @description Agent is already registered or cannot be re-enabled */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rotateAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent token rotated and returned once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenIssued"];
+                };
+            };
+            /** @description Agent has no active token to rotate */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent token revoked while the Agent remains expected online */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRegistration"];
+                };
+            };
+            /** @description Agent has no active token to revoke */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disableAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent disabled and its token invalidated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRegistration"];
+                };
+            };
+            /** @description Agent is not currently expected online */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -23,7 +23,7 @@ ORDER BY name, id;
 
 -- name: GetInstance :one
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
-       instance.username, instance.agent_token_hash, instance.agent_version, instance.created_at,
+       instance.username, instance.agent_version, instance.created_at,
        config.collection_paused, config.collection_pause_updated_by,
        config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
@@ -48,6 +48,57 @@ SET name = $2,
     END
 WHERE id = $1
 RETURNING id, name, host, port, database_name, username, agent_version;
+
+-- name: GetAgentRegistration :one
+SELECT agent_expected, agent_token_issued_at, agent_token_revoked_at,
+       agent_first_registered_at, agent_version
+FROM instance
+WHERE id = $1;
+
+-- name: RegisterAgent :one
+UPDATE instance
+SET agent_expected = true,
+    agent_token_hash = $2,
+    agent_token_issued_at = $3,
+    agent_token_revoked_at = NULL,
+    agent_first_registered_at = COALESCE(agent_first_registered_at, $3)
+WHERE id = $1
+  AND NOT agent_expected
+  AND agent_token_hash IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version;
+
+-- name: RotateAgentToken :one
+UPDATE instance
+SET agent_token_hash = $2,
+    agent_token_issued_at = $3,
+    agent_token_revoked_at = NULL
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version;
+
+-- name: RevokeAgentToken :one
+UPDATE instance
+SET agent_token_hash = NULL,
+    agent_token_revoked_at = $2
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version;
+
+-- name: DisableAgent :one
+UPDATE instance
+SET agent_expected = false,
+    agent_token_hash = NULL
+WHERE id = $1
+  AND agent_expected
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version;
 
 -- name: UpdateInstanceCredential :one
 UPDATE instance

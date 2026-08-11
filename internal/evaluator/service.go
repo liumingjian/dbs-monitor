@@ -97,6 +97,7 @@ func (service *Service) evaluateRule(
 		metric.MetricID(evaluationTarget.MetricID),
 		evaluationTarget.LastErrorCode,
 		evaluationTarget.AgentMetricsEnabled,
+		evaluationTarget.AgentExpected,
 	) {
 		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
@@ -292,11 +293,11 @@ func evaluateMetric(
 	return result, nil
 }
 
-func structurallyNotApplicable(metricID metric.MetricID, lastErrorCode pgtype.Text, agentMetricsEnabled bool) bool {
+func structurallyNotApplicable(metricID metric.MetricID, lastErrorCode pgtype.Text, agentMetricsEnabled, agentExpected bool) bool {
 	if lastErrorCode.Valid && lastErrorCode.String == "NOT_APPLICABLE_ROLE" {
 		return true
 	}
-	if agentMetricsEnabled {
+	if agentMetricsEnabled && agentExpected {
 		return false
 	}
 	if metricID == metric.MetricAgentStatus {

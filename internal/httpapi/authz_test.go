@@ -81,8 +81,24 @@ func TestResponseSchemasDoNotExposeSecrets(t *testing.T) {
 	}
 }
 
+func TestOneTimeAgentTokenResponseExceptionIsNarrow(t *testing.T) {
+	for _, path := range []string{
+		"/api/v1/instances/{id}/agent/registration",
+		"/api/v1/instances/{id}/agent/token/rotation",
+	} {
+		if !responseMayExposeOneTimeSecret("POST", path, "200") {
+			t.Errorf("POST %s response 200 is not registered as a one-time secret response", path)
+		}
+	}
+	if responseMayExposeOneTimeSecret("POST", "/api/v1/instances", "201") {
+		t.Fatal("instance creation response must not expose a one-time secret")
+	}
+}
+
 func responseMayExposeOneTimeSecret(method, path, status string) bool {
 	switch {
+	case method == "POST" && status == "200" && (path == "/api/v1/instances/{id}/agent/registration" || path == "/api/v1/instances/{id}/agent/token/rotation"):
+		return true
 	case method == "POST" && status == "201" && path == "/api/v1/users":
 		return true
 	case method == "POST" && status == "200" && strings.HasSuffix(path, "/password"):

@@ -3,6 +3,7 @@ package migrations_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -145,6 +146,23 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	if pauseColumns != 4 {
 		t.Fatalf("collection pause columns = %d, want 4", pauseColumns)
 	}
+	var lifecycleColumns int
+	if err := database.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'instance' AND is_nullable = 'NO'
+		AND column_name IN ('agent_expected')`).Scan(&lifecycleColumns); err != nil {
+		t.Fatalf("inspect Agent lifecycle columns: %v", err)
+	}
+	if lifecycleColumns != 1 {
+		t.Fatalf("required Agent lifecycle columns = %d, want 1", lifecycleColumns)
+	}
+	var tokenIndexUnique bool
+	if err := database.QueryRowContext(ctx, `SELECT indisunique FROM pg_index
+		WHERE indexrelid = 'instance_agent_token_hash_unique_idx'::regclass`).Scan(&tokenIndexUnique); err != nil {
+		t.Fatalf("inspect Agent token hash index: %v", err)
+	}
+	if !tokenIndexUnique {
+		t.Fatal("Agent token hash index is not unique")
+	}
 	var seedMetric, seedScope string
 	var seedVersion int
 	var seedEvaluationInterval int
@@ -200,9 +218,10 @@ func TestPlaintextCredentialMigration(t *testing.T) {
 	}
 	instanceID := uuid.MustParse("00000000-0000-0000-0000-000000000067")
 	password := env("PGPASSWORD", "dbs_monitor")
+	legacyAgentTokenHash := sha256.Sum256([]byte("legacy-agent-token"))
 	if _, err := database.ExecContext(ctx, `INSERT INTO instance
-		(id, name, host, port, database_name, username, password)
-		VALUES ($1, 'legacy', 'localhost', 5432, 'postgres', 'postgres', $2)`, instanceID, password); err != nil {
+		(id, name, host, port, database_name, username, password, agent_token_hash)
+		VALUES ($1, 'legacy', 'localhost', 5432, 'postgres', 'postgres', $2, $3)`, instanceID, password, legacyAgentTokenHash[:]); err != nil {
 		t.Fatalf("insert legacy instance: %v", err)
 	}
 
@@ -242,6 +261,18 @@ func TestPlaintextCredentialMigration(t *testing.T) {
 	}
 	if credentialVersion != 1 {
 		t.Fatalf("credential version = %d, want 1", credentialVersion)
+	}
+	var agentExpected bool
+	var tokenIssuedAt, firstRegisteredAt time.Time
+	var tokenRevokedAt sql.NullTime
+	if err := database.QueryRowContext(ctx, `SELECT agent_expected, agent_token_issued_at,
+		agent_token_revoked_at, agent_first_registered_at FROM instance WHERE id = $1`, instanceID).
+		Scan(&agentExpected, &tokenIssuedAt, &tokenRevokedAt, &firstRegisteredAt); err != nil {
+		t.Fatalf("read migrated Agent lifecycle: %v", err)
+	}
+	if !agentExpected || tokenIssuedAt.IsZero() || firstRegisteredAt.IsZero() || tokenRevokedAt.Valid {
+		t.Fatalf("migrated Agent lifecycle = expected %t issued %s revoked %v first %s",
+			agentExpected, tokenIssuedAt, tokenRevokedAt, firstRegisteredAt)
 	}
 	keyring, err := instance.OpenCredentialKeyring(keyringDirectory, true)
 	if err != nil {

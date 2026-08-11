@@ -82,6 +82,65 @@ func (q *Queries) DeleteInstance(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
+const disableAgent = `-- name: DisableAgent :one
+UPDATE instance
+SET agent_expected = false,
+    agent_token_hash = NULL
+WHERE id = $1
+  AND agent_expected
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type DisableAgentRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) DisableAgent(ctx context.Context, id pgtype.UUID) (DisableAgentRow, error) {
+	row := q.db.QueryRow(ctx, disableAgent, id)
+	var i DisableAgentRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
+}
+
+const getAgentRegistration = `-- name: GetAgentRegistration :one
+SELECT agent_expected, agent_token_issued_at, agent_token_revoked_at,
+       agent_first_registered_at, agent_version
+FROM instance
+WHERE id = $1
+`
+
+type GetAgentRegistrationRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) GetAgentRegistration(ctx context.Context, id pgtype.UUID) (GetAgentRegistrationRow, error) {
+	row := q.db.QueryRow(ctx, getAgentRegistration, id)
+	var i GetAgentRegistrationRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
+}
+
 const getCollectState = `-- name: GetCollectState :one
 SELECT last_success_at, last_error_code
 FROM instance_collect_state
@@ -102,7 +161,7 @@ func (q *Queries) GetCollectState(ctx context.Context, instanceID pgtype.UUID) (
 
 const getInstance = `-- name: GetInstance :one
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
-       instance.username, instance.agent_token_hash, instance.agent_version, instance.created_at,
+       instance.username, instance.agent_version, instance.created_at,
        config.collection_paused, config.collection_pause_updated_by,
        config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
@@ -117,7 +176,6 @@ type GetInstanceRow struct {
 	Port                     int32
 	DatabaseName             string
 	Username                 string
-	AgentTokenHash           []byte
 	AgentVersion             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
 	CollectionPaused         bool
@@ -136,7 +194,6 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 		&i.Port,
 		&i.DatabaseName,
 		&i.Username,
-		&i.AgentTokenHash,
 		&i.AgentVersion,
 		&i.CreatedAt,
 		&i.CollectionPaused,
@@ -281,6 +338,125 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 		return nil, err
 	}
 	return items, nil
+}
+
+const registerAgent = `-- name: RegisterAgent :one
+UPDATE instance
+SET agent_expected = true,
+    agent_token_hash = $2,
+    agent_token_issued_at = $3,
+    agent_token_revoked_at = NULL,
+    agent_first_registered_at = COALESCE(agent_first_registered_at, $3)
+WHERE id = $1
+  AND NOT agent_expected
+  AND agent_token_hash IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type RegisterAgentParams struct {
+	ID                 pgtype.UUID
+	AgentTokenHash     []byte
+	AgentTokenIssuedAt pgtype.Timestamptz
+}
+
+type RegisterAgentRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) RegisterAgent(ctx context.Context, arg RegisterAgentParams) (RegisterAgentRow, error) {
+	row := q.db.QueryRow(ctx, registerAgent, arg.ID, arg.AgentTokenHash, arg.AgentTokenIssuedAt)
+	var i RegisterAgentRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
+}
+
+const revokeAgentToken = `-- name: RevokeAgentToken :one
+UPDATE instance
+SET agent_token_hash = NULL,
+    agent_token_revoked_at = $2
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type RevokeAgentTokenParams struct {
+	ID                  pgtype.UUID
+	AgentTokenRevokedAt pgtype.Timestamptz
+}
+
+type RevokeAgentTokenRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) RevokeAgentToken(ctx context.Context, arg RevokeAgentTokenParams) (RevokeAgentTokenRow, error) {
+	row := q.db.QueryRow(ctx, revokeAgentToken, arg.ID, arg.AgentTokenRevokedAt)
+	var i RevokeAgentTokenRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
+}
+
+const rotateAgentToken = `-- name: RotateAgentToken :one
+UPDATE instance
+SET agent_token_hash = $2,
+    agent_token_issued_at = $3,
+    agent_token_revoked_at = NULL
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type RotateAgentTokenParams struct {
+	ID                 pgtype.UUID
+	AgentTokenHash     []byte
+	AgentTokenIssuedAt pgtype.Timestamptz
+}
+
+type RotateAgentTokenRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) RotateAgentToken(ctx context.Context, arg RotateAgentTokenParams) (RotateAgentTokenRow, error) {
+	row := q.db.QueryRow(ctx, rotateAgentToken, arg.ID, arg.AgentTokenHash, arg.AgentTokenIssuedAt)
+	var i RotateAgentTokenRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
 }
 
 const setCollectFailure = `-- name: SetCollectFailure :exec

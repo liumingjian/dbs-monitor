@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -111,7 +112,18 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	apiHandler := httpapi.NewHandlerWithVersion(platform, clock.Real{}, keyring, version).Routes()
+	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
+	if err != nil {
+		return err
+	}
+	distribution, err := httpapi.LoadAgentDistribution(
+		filepath.Join(env("CERT_DIR", "certs"), "ca.crt"),
+		env("AGENT_BINARY_DIR", "/opt/dbs-monitor/bin"),
+	)
+	if err != nil {
+		return err
+	}
+	apiHandler := httpapi.NewHandlerWithAgentDistribution(platform, clock.Real{}, keyring, version, distribution).Routes()
 	fileServer := http.FileServer(http.FS(static))
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if len(request.URL.Path) >= 5 && request.URL.Path[:5] == "/api/" {
@@ -130,10 +142,6 @@ func run(ctx context.Context) error {
 		defer cancel()
 		server.Shutdown(shutdown)
 	}()
-	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
-	if err != nil {
-		return err
-	}
 	server.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	if err := server.ListenAndServeTLS(certificate, key); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
