@@ -10,6 +10,16 @@ import (
 	"testing"
 )
 
+func requireMakeTarget(t *testing.T, makefileContents, target string) string {
+	t.Helper()
+	pattern := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(target) + `:[^\n]*\n(?:\t[^\n]*\n)*`)
+	contents := pattern.FindString(makefileContents)
+	if contents == "" {
+		t.Fatalf("Makefile is missing the %s target", target)
+	}
+	return contents
+}
+
 func TestMigrationsContainOnlyUpSections(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..", "migrations")
 	entries, err := os.ReadDir(root)
@@ -128,10 +138,7 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 	}
 	contents := string(makefile)
 
-	checkFull := regexp.MustCompile(`(?m)^check-full:[^\n]*\n(?:\t[^\n]*\n)*`).FindString(contents)
-	if checkFull == "" {
-		t.Fatal("Makefile is missing the check-full target")
-	}
+	checkFull := requireMakeTarget(t, contents, "check-full")
 	if strings.Contains(checkFull, "GOOS=linux") {
 		t.Error("check-full must remain host-neutral; deferred Linux builds cannot gate the v1 release")
 	}
@@ -161,24 +168,10 @@ func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Makefile: %v", err)
 	}
-	checkFull := regexp.MustCompile(`(?m)^check-full:[^\n]*\n(?:\t[^\n]*\n)*`).FindString(string(makefile))
+	checkFull := requireMakeTarget(t, string(makefile), "check-full")
 	for _, required := range []string{"$(MAKE) check-pg-matrix", "$(MAKE) check-sqlc-vet"} {
 		if !strings.Contains(checkFull, required) {
 			t.Errorf("check-full is missing %q", required)
-		}
-	}
-
-	config, err := os.ReadFile(filepath.Join(root, "sqlc.yaml"))
-	if err != nil {
-		t.Fatalf("read sqlc config: %v", err)
-	}
-	for value, want := range map[string]int{
-		`uri: ${DATABASE_URL}`: 4,
-		`database: false`:      4,
-		`- sqlc/db-prepare`:    4,
-	} {
-		if got := strings.Count(string(config), value); got != want {
-			t.Errorf("sqlc config contains %q %d times, want %d", value, got, want)
 		}
 	}
 
@@ -186,9 +179,25 @@ func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read check-full workflow: %v", err)
 	}
+	contents := string(workflow)
 	for _, required := range []string{"name: check-full", "      - main", "  workflow_dispatch:", "      - run: make check-full"} {
-		if !strings.Contains(string(workflow), required) {
+		if !strings.Contains(contents, required) {
 			t.Errorf("check-full workflow is missing %q", required)
+		}
+	}
+}
+
+func TestSQLCVetCoversAllQuerySets(t *testing.T) {
+	config, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "sqlc.yaml"))
+	if err != nil {
+		t.Fatalf("read sqlc config: %v", err)
+	}
+
+	const querySetCount = 4
+	contents := string(config)
+	for _, required := range []string{`uri: ${DATABASE_URL}`, `database: false`, `- sqlc/db-prepare`} {
+		if got := strings.Count(contents, required); got != querySetCount {
+			t.Errorf("sqlc config contains %q %d times, want %d", required, got, querySetCount)
 		}
 	}
 }
