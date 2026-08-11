@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	diagnosticBundleCommand  = "diagnostic-bundle"
-	diagnosticBundleMaxBytes = int64(64 << 20)
-	diagnosticJournalUnit    = "dbs-monitor-server.service"
+	diagnosticBundleCommand   = "diagnostic-bundle"
+	diagnosticBundleMaxBytes  = int64(64 << 20)
+	diagnosticArchiveFileMode = 0600
+	diagnosticJournalUnit     = "dbs-monitor-server.service"
 )
 
 type diagnosticManifest struct {
@@ -54,7 +55,15 @@ func runDiagnosticBundleCommand(ctx context.Context, output string) error {
 }
 
 func readPlatformJournal(ctx context.Context, maximumBytes int64) ([]byte, bool, error) {
-	command := exec.CommandContext(ctx, "journalctl", "--unit", diagnosticJournalUnit, "--since=-24 hours", "--reverse", "--no-pager", "--output=cat")
+	command := exec.CommandContext(
+		ctx,
+		"journalctl",
+		"--unit", diagnosticJournalUnit,
+		"--since=-24 hours",
+		"--reverse",
+		"--no-pager",
+		"--output=cat",
+	)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		return nil, false, fmt.Errorf("open journal output: %w", err)
@@ -66,19 +75,19 @@ func readPlatformJournal(ctx context.Context, maximumBytes int64) ([]byte, bool,
 	}
 
 	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 64*1024), 2<<20)
-	newestFirst := make([][]byte, 0)
-	var total int64
+	scanner.Buffer(make([]byte, 64<<10), 2<<20)
+	var newestFirst [][]byte
+	var totalBytes int64
 	truncated := false
 	for scanner.Scan() {
 		line := append([]byte(nil), scanner.Bytes()...)
 		line = append(line, '\n')
-		if total+int64(len(line)) > maximumBytes {
+		if totalBytes+int64(len(line)) > maximumBytes {
 			truncated = true
 			break
 		}
 		newestFirst = append(newestFirst, line)
-		total += int64(len(line))
+		totalBytes += int64(len(line))
 	}
 	if truncated {
 		_ = command.Process.Kill()
@@ -119,11 +128,11 @@ func createDiagnosticBundleWithInputTruncation(output string, journal []byte, ge
 	if err != nil {
 		return err
 	}
-	baseFiles, err := diagnosticSnapshotFiles(snapshot, generatedAt, shape)
+	snapshotFiles, err := diagnosticSnapshotFiles(snapshot, shape)
 	if err != nil {
 		return err
 	}
-	for _, file := range baseFiles {
+	for _, file := range snapshotFiles {
 		if err := scanDiagnosticContent(file.name, file.content); err != nil {
 			return err
 		}
@@ -133,12 +142,12 @@ func createDiagnosticBundleWithInputTruncation(output string, journal []byte, ge
 	if len(lines) > 0 && len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
 	}
-	archive, err := renderDiagnosticArchive(baseFiles, journal, generatedAt, maximumBytes, inputTruncated)
+	archive, err := renderDiagnosticArchive(snapshotFiles, journal, generatedAt, maximumBytes, inputTruncated)
 	if err != nil {
 		return err
 	}
 	if int64(len(archive)) > maximumBytes {
-		archive, err = largestFittingDiagnosticArchive(baseFiles, lines, generatedAt, maximumBytes)
+		archive, err = largestFittingDiagnosticArchive(snapshotFiles, lines, generatedAt, maximumBytes)
 		if err != nil {
 			return err
 		}
@@ -174,7 +183,7 @@ func latestHealthSummary(journal []byte) (platformhealth.Snapshot, error) {
 	return latest, nil
 }
 
-func diagnosticSnapshotFiles(snapshot platformhealth.Snapshot, generatedAt time.Time, shape string) ([]diagnosticFile, error) {
+func diagnosticSnapshotFiles(snapshot platformhealth.Snapshot, shape string) ([]diagnosticFile, error) {
 	files := make([]diagnosticFile, 0, 8)
 	health, err := marshalDiagnosticJSON(snapshot)
 	if err != nil {
@@ -212,8 +221,14 @@ func diagnosticSnapshotFiles(snapshot platformhealth.Snapshot, generatedAt time.
 	}
 
 	process := bySource[platformhealth.SourceServerProcess]
+	version := ""
+	if process.Version != nil {
+		version = *process.Version
+	}
 	deployment, err := marshalDiagnosticJSON(deploymentSummary{
-		Version: pointerValue(process.Version), StartedAt: process.StartedAt, Shape: shape,
+		Version:   version,
+		StartedAt: process.StartedAt,
+		Shape:     shape,
 	})
 	if err != nil {
 		return nil, err
@@ -230,24 +245,32 @@ func marshalDiagnosticJSON(value any) ([]byte, error) {
 	return append(encoded, '\n'), nil
 }
 
-func renderDiagnosticArchive(baseFiles []diagnosticFile, journal []byte, generatedAt time.Time, maximumBytes int64, truncated bool) ([]byte, error) {
+func renderDiagnosticArchive(snapshotFiles []diagnosticFile, journal []byte, generatedAt time.Time, maximumBytes int64, journalTruncated bool) ([]byte, error) {
 	manifest, err := marshalDiagnosticJSON(diagnosticManifest{
-		GeneratedAt: generatedAt.UTC(), JournalWindow: "24h", JournalTruncated: truncated, MaximumBytes: maximumBytes,
+		GeneratedAt:      generatedAt.UTC(),
+		JournalWindow:    "24h",
+		JournalTruncated: journalTruncated,
+		MaximumBytes:     maximumBytes,
 	})
 	if err != nil {
 		return nil, err
 	}
-	files := make([]diagnosticFile, 0, len(baseFiles)+2)
+	files := make([]diagnosticFile, 0, len(snapshotFiles)+2)
 	files = append(files, diagnosticFile{name: "manifest.json", content: manifest})
 	files = append(files, diagnosticFile{name: "journal.log", content: journal})
-	files = append(files, baseFiles...)
+	files = append(files, snapshotFiles...)
 
 	var output bytes.Buffer
 	gzipWriter := gzip.NewWriter(&output)
 	gzipWriter.Header.ModTime = generatedAt.UTC()
 	tarWriter := tar.NewWriter(gzipWriter)
 	for _, file := range files {
-		header := &tar.Header{Name: file.name, Mode: 0600, Size: int64(len(file.content)), ModTime: generatedAt.UTC()}
+		header := &tar.Header{
+			Name:    file.name,
+			Mode:    diagnosticArchiveFileMode,
+			Size:    int64(len(file.content)),
+			ModTime: generatedAt.UTC(),
+		}
 		if err := tarWriter.WriteHeader(header); err != nil {
 			return nil, fmt.Errorf("write diagnostic archive header: %w", err)
 		}
@@ -264,35 +287,35 @@ func renderDiagnosticArchive(baseFiles []diagnosticFile, journal []byte, generat
 	return output.Bytes(), nil
 }
 
-func largestFittingDiagnosticArchive(baseFiles []diagnosticFile, lines [][]byte, generatedAt time.Time, maximumBytes int64) ([]byte, error) {
-	empty, err := renderDiagnosticArchive(baseFiles, nil, generatedAt, maximumBytes, true)
+func largestFittingDiagnosticArchive(snapshotFiles []diagnosticFile, lines [][]byte, generatedAt time.Time, maximumBytes int64) ([]byte, error) {
+	emptyJournalArchive, err := renderDiagnosticArchive(snapshotFiles, nil, generatedAt, maximumBytes, true)
 	if err != nil {
 		return nil, err
 	}
-	if int64(len(empty)) > maximumBytes {
+	if int64(len(emptyJournalArchive)) > maximumBytes {
 		return nil, fmt.Errorf("diagnostic metadata exceeds maximum bundle size of %d bytes", maximumBytes)
 	}
-	best := empty
-	low, high := 0, len(lines)
-	for low <= high {
-		kept := low + (high-low)/2
-		journal := bytes.Join(lines[len(lines)-kept:], nil)
-		candidate, err := renderDiagnosticArchive(baseFiles, journal, generatedAt, maximumBytes, true)
+	largestArchive := emptyJournalArchive
+	minimumLines, maximumLines := 0, len(lines)
+	for minimumLines <= maximumLines {
+		keptLineCount := minimumLines + (maximumLines-minimumLines)/2
+		journal := bytes.Join(lines[len(lines)-keptLineCount:], nil)
+		candidate, err := renderDiagnosticArchive(snapshotFiles, journal, generatedAt, maximumBytes, true)
 		if err != nil {
 			return nil, err
 		}
 		if int64(len(candidate)) <= maximumBytes {
-			best = candidate
-			low = kept + 1
+			largestArchive = candidate
+			minimumLines = keptLineCount + 1
 		} else {
-			high = kept - 1
+			maximumLines = keptLineCount - 1
 		}
 	}
-	return best, nil
+	return largestArchive, nil
 }
 
 func scanDiagnosticContent(name string, content []byte) error {
-	lower := bytes.ToLower(content)
+	lowercaseContent := bytes.ToLower(content)
 	for _, forbidden := range [][]byte{
 		[]byte("password"), []byte("ciphertext"), []byte("master_key"), []byte("master key"),
 		[]byte("token"), []byte("authorization"), []byte("dsn"), []byte("request_body"), []byte("raw_sql"),
@@ -300,14 +323,14 @@ func scanDiagnosticContent(name string, content []byte) error {
 		[]byte("select "), []byte("insert into "), []byte("update "), []byte("delete from "),
 		[]byte("create table "), []byte("alter table "), []byte("drop table "),
 	} {
-		if bytes.Contains(lower, forbidden) {
+		if bytes.Contains(lowercaseContent, forbidden) {
 			return fmt.Errorf("diagnostic bundle secret scan rejected %s: forbidden marker %q", name, forbidden)
 		}
 	}
 	return nil
 }
 
-func publishDiagnosticArchive(output string, archive []byte) (returnErr error) {
+func publishDiagnosticArchive(output string, archive []byte) error {
 	directory := filepath.Dir(output)
 	temporary, err := os.CreateTemp(directory, ".dbs-monitor-diagnostics-*.tmp")
 	if err != nil {
@@ -316,11 +339,9 @@ func publishDiagnosticArchive(output string, archive []byte) (returnErr error) {
 	temporaryName := temporary.Name()
 	defer func() {
 		_ = temporary.Close()
-		if returnErr != nil {
-			_ = os.Remove(temporaryName)
-		}
+		_ = os.Remove(temporaryName)
 	}()
-	if err := temporary.Chmod(0600); err != nil {
+	if err := temporary.Chmod(diagnosticArchiveFileMode); err != nil {
 		return fmt.Errorf("secure diagnostic bundle temporary file: %w", err)
 	}
 	if _, err := io.Copy(temporary, bytes.NewReader(archive)); err != nil {
@@ -333,11 +354,4 @@ func publishDiagnosticArchive(output string, archive []byte) (returnErr error) {
 		return fmt.Errorf("publish diagnostic bundle: %w", err)
 	}
 	return nil
-}
-
-func pointerValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
