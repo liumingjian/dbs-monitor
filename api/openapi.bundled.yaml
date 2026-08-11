@@ -1545,6 +1545,7 @@ components:
         - enabled
         - is_builtin
         - effective_notification_policy_name
+        - current_alert_count
         - version
         - created_at
         - updated_at
@@ -1598,6 +1599,12 @@ components:
           format: uuid
         effective_notification_policy_name:
           type: string
+        last_triggered_at:
+          type: string
+          format: date-time
+        current_alert_count:
+          type: integer
+          minimum: 0
         source_template_id:
           type: string
         source_template_version:

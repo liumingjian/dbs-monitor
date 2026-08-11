@@ -1,4 +1,4 @@
-import { DatabaseOutlined, InfoCircleOutlined, ProfileOutlined, SettingOutlined } from '@ant-design/icons'
+import { BellOutlined, DatabaseOutlined, InfoCircleOutlined, ProfileOutlined, SettingOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Card, Descriptions, Modal, Segmented, Select, Space, Spin, Switch, Tabs, Typography } from 'antd'
 import { $api } from '../../api/client'
@@ -95,7 +95,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
         { key: 'monitoring', label: '监控与报警' },
         { key: 'sessions', label: '会话与阻塞', disabled: true },
         { key: 'events', label: '性能事件', disabled: true },
-        { key: 'alerts', label: '告警', disabled: true },
+        { key: 'alerts', label: <Link to="/instances/$id/alerts/rules" params={{ id }}><BellOutlined /> 告警</Link> },
         { key: 'collection', label: '采集管理', disabled: true },
       ]}
     />

@@ -629,6 +629,10 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 	if err != nil {
 		return api.AlertRule{}, err
 	}
+	stats, err := queries.GetAlertRuleListStats(ctx, rule.ID)
+	if err != nil {
+		return api.AlertRule{}, err
+	}
 	policyName := policy.Name
 	if !rule.NotificationPolicyID.Valid {
 		policyName += "（继承）"
@@ -653,9 +657,14 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 		Enabled:                         rule.Enabled,
 		IsBuiltin:                       rule.BuiltinIdentifier.Valid,
 		EffectiveNotificationPolicyName: policyName,
+		CurrentAlertCount:               int(stats.CurrentAlertCount),
 		Version:                         int(rule.Version),
 		CreatedAt:                       rule.CreatedAt.Time,
 		UpdatedAt:                       rule.UpdatedAt.Time,
+	}
+	if stats.LastTriggeredAt.Valid {
+		value := stats.LastTriggeredAt.Time
+		result.LastTriggeredAt = &value
 	}
 	if rule.EnabledUpdatedBy.Valid {
 		value := openapi_types.UUID(rule.EnabledUpdatedBy.Bytes)
