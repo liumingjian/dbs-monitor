@@ -102,20 +102,21 @@ func TestLegacyUpgradeBacksUpControlPlaneBeforeReplacingFiles(t *testing.T) {
 			t.Errorf("upgrade script is missing %q", required)
 		}
 	}
-	stopServer := strings.Index(script, "systemctl stop dbs-monitor-server.service")
-	backup := strings.Index(script, "--format=custom")
-	stopPostgres := strings.Index(script, "systemctl stop dbs-monitor-postgres.service")
-	startPostgres := strings.Index(script, "systemctl start dbs-monitor-postgres.service")
-	startServer := strings.Index(script, "systemctl start dbs-monitor-server.service")
-	if !(stopServer < backup && backup < stopPostgres && stopPostgres < startPostgres && startPostgres < startServer) {
+	stopServerIndex := strings.Index(script, "systemctl stop dbs-monitor-server.service")
+	backupIndex := strings.Index(script, "--format=custom")
+	stopPostgresIndex := strings.Index(script, "systemctl stop dbs-monitor-postgres.service")
+	startPostgresIndex := strings.Index(script, "systemctl start dbs-monitor-postgres.service")
+	startServerIndex := strings.Index(script, "systemctl start dbs-monitor-server.service")
+	if stopServerIndex >= backupIndex || backupIndex >= stopPostgresIndex ||
+		stopPostgresIndex >= startPostgresIndex || startPostgresIndex >= startServerIndex {
 		t.Error("upgrade order must be stop server, back up, replace/restart PostgreSQL, then start server")
 	}
 
-	packager, err := os.ReadFile(filepath.Join(root, "scripts", "package-linux.sh"))
+	packagerContents, err := os.ReadFile(filepath.Join(root, "scripts", "package-linux.sh"))
 	if err != nil {
 		t.Fatalf("read Linux packager: %v", err)
 	}
-	if !strings.Contains(string(packager), "packaging/bundle/upgrade.sh") {
+	if !strings.Contains(string(packagerContents), "packaging/bundle/upgrade.sh") {
 		t.Error("legacy Linux archive does not include upgrade.sh")
 	}
 }

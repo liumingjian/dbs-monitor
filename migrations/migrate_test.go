@@ -76,10 +76,16 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		t.Fatalf("reserve migration lock connection: %v", err)
 	}
 	defer lockConnection.Close()
-	const migrationLockSQL = `SELECT pg_advisory_lock(
-		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | 1145197389
-	)`
-	if _, err := lockConnection.ExecContext(ctx, migrationLockSQL); err != nil {
+	const (
+		migrationLockID  int64 = 0x4442534d
+		migrationLockSQL       = `SELECT pg_advisory_lock(
+			((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
+		)`
+		migrationUnlockSQL = `SELECT pg_advisory_unlock(
+			((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
+		)`
+	)
+	if _, err := lockConnection.ExecContext(ctx, migrationLockSQL, migrationLockID); err != nil {
 		t.Fatalf("hold migration advisory lock: %v", err)
 	}
 	type migrationResult struct {
@@ -96,8 +102,7 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		t.Fatalf("concurrent migration completed while advisory lock was held: %+v", completed)
 	case <-time.After(200 * time.Millisecond):
 	}
-	if _, err := lockConnection.ExecContext(ctx, "SELECT pg_advisory_unlock("+
-		"((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | 1145197389)"); err != nil {
+	if _, err := lockConnection.ExecContext(ctx, migrationUnlockSQL, migrationLockID); err != nil {
 		t.Fatalf("release migration advisory lock: %v", err)
 	}
 	select {

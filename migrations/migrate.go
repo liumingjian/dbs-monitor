@@ -19,7 +19,7 @@ var files embed.FS
 const (
 	credentialSchemaVersion               = 6
 	plaintextPasswordRemovalVersion       = 7
-	migrationAdvisoryLockID         int64 = 0x4442534d // "DBSM", scoped further by the platform database OID.
+	migrationAdvisoryLockID         int64 = 0x4442534d // "DBSM"; the database OID provides the remaining scope.
 	migrationAdvisoryLockSQL              = `SELECT pg_advisory_lock(
 		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
 	)`
@@ -49,12 +49,17 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (appl
 		var unlocked bool
 		unlockErr := lockConnection.QueryRowContext(context.Background(), migrationAdvisoryUnlockSQL, migrationAdvisoryLockID).Scan(&unlocked)
 		closeErr := lockConnection.Close()
-		if returnedErr == nil && unlockErr != nil {
-			returnedErr = fmt.Errorf("release migration advisory lock: %w", unlockErr)
-		} else if returnedErr == nil && !unlocked {
-			returnedErr = fmt.Errorf("release migration advisory lock: lock was not held")
-		} else if returnedErr == nil && closeErr != nil {
-			returnedErr = fmt.Errorf("close migration lock connection: %w", closeErr)
+		var releaseErr error
+		switch {
+		case unlockErr != nil:
+			releaseErr = fmt.Errorf("release migration advisory lock: %w", unlockErr)
+		case !unlocked:
+			releaseErr = fmt.Errorf("release migration advisory lock: lock was not held")
+		case closeErr != nil:
+			releaseErr = fmt.Errorf("close migration lock connection: %w", closeErr)
+		}
+		if returnedErr == nil {
+			returnedErr = releaseErr
 		}
 	}()
 
@@ -70,7 +75,6 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (appl
 	if err != nil {
 		return 0, fmt.Errorf("read migration version: %w", err)
 	}
-	applied = 0
 	if current < credentialSchemaVersion {
 		results, err := provider.UpTo(ctx, credentialSchemaVersion)
 		if err != nil {
