@@ -24,9 +24,15 @@ export function unavailabilityCopy(code: Unavailability): Copy {
   }
 }
 
-export function UnavailabilityBlock({ code, href }: { code: Unavailability; href: string }) {
+export function UnavailabilityBlock({ code, href, detail }: { code: Unavailability; href: string; detail?: string }) {
   const copy = unavailabilityCopy(code)
-  return <Alert type="info" showIcon title={copy.title} description={copy.description} action={<Button size="small" href={href}>{copy.action}</Button>} />
+  return <Alert
+    type="info"
+    showIcon
+    title={copy.title}
+    description={<><div>{copy.description}</div>{detail && <div>{detail}</div>}</>}
+    action={<Button size="small" href={href}>{copy.action}</Button>}
+  />
 }
 
 function assertNever(value: never): never {

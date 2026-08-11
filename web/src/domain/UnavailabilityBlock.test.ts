@@ -30,4 +30,14 @@ describe('unavailability copy', () => {
     expect(text).not.toContain('采集失败')
     expect(text).not.toContain('数据库不可达')
   })
+
+  it('renders page-specific context after the canonical reason copy', () => {
+    const view = render(createElement(UnavailabilityBlock, {
+      code: 'COLLECTION_FAILED',
+      href: '/collection',
+      detail: '平台自我保护：最近一次采集因背压被跳过。',
+    }))
+    expect(view.getByText('最近一次采集未能完成。')).toBeTruthy()
+    expect(view.getByText('平台自我保护：最近一次采集因背压被跳过。')).toBeTruthy()
+  })
 })

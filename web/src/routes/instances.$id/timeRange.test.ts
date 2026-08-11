@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseTimeRange, serializeTimeRange } from './timeRange'
+import { defaultEnhancedTimeRange, parseTimeRange, serializeTimeRange } from './timeRange'
 
 describe('time range search', () => {
   it('round-trips absolute RFC3339 values', () => {
@@ -66,6 +66,29 @@ describe('time range search', () => {
     expect(parseTimeRange({
       from: '2026-08-03T00:00:00.000Z',
       to: '2026-08-03T01:00:00.000Z',
+      ...extra,
+    })).toEqual({ error })
+  })
+
+  it('builds and round-trips the enhanced 30-minute raw baseline', () => {
+    const value = defaultEnhancedTimeRange(new Date('2026-08-11T11:00:00.000Z'))
+    expect(value).toEqual({
+      from: '2026-08-11T10:30:00.000Z',
+      to: '2026-08-11T11:00:00.000Z',
+      monitoring: 'enhanced',
+      step: 'raw',
+    })
+    expect(parseTimeRange(serializeTimeRange(value))).toEqual(value)
+  })
+
+  it.each([
+    [{ monitoring: 'enhanced', step: 'auto' }, '增强监控固定读取原始粒度'],
+    [{ monitoring: 'enhanced', step: 'raw', from: '2026-08-03T00:00:00.000Z', to: '2026-08-03T02:00:00.000Z' }, '增强监控时间窗口必须是 30 分钟、1 小时、3 小时或 6 小时'],
+    [{ monitoring: 'other' }, '监控页签参数无效'],
+  ])('rejects malformed enhanced search params %o', (extra, error) => {
+    expect(parseTimeRange({
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T00:30:00.000Z',
       ...extra,
     })).toEqual({ error })
   })

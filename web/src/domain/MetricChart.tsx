@@ -22,6 +22,7 @@ type MetricChartProps = {
   step: string
   unavailability: Unavailability | null
   unavailabilityHref: string
+  unavailabilityDetail?: string
   connectionGroup?: string
   loading?: boolean
 }
@@ -45,10 +46,11 @@ export function MetricChart({
   step,
   unavailability,
   unavailabilityHref,
+  unavailabilityDetail,
   connectionGroup,
   loading = false,
 }: MetricChartProps) {
-  if (unavailability) return <UnavailabilityBlock code={unavailability} href={unavailabilityHref} />
+  if (unavailability) return <UnavailabilityBlock code={unavailability} href={unavailabilityHref} detail={unavailabilityDetail} />
   return <ChartCanvas label={label} series={series} step={step} loading={loading} connectionGroup={connectionGroup} />
 }
 
