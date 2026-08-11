@@ -408,11 +408,11 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		WHERE instance_id = $1`, createBody.Instance.Id); err != nil {
 		t.Fatalf("set missing pg_stat_statements capability: %v", err)
 	}
-	assertQueryStatisticsUnavailability(t, client, queryStatsURL, "EXTENSION_MISSING")
+	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.EXTENSIONMISSING)
 	if _, err := pool.Exec(ctx, "DELETE FROM instance_capability_snapshot WHERE instance_id = $1", createBody.Instance.Id); err != nil {
 		t.Fatalf("restore absent capability snapshot: %v", err)
 	}
-	assertQueryStatisticsUnavailability(t, client, queryStatsURL, "FEATURE_DISABLED")
+	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.FEATUREDISABLED)
 
 	readOnlyToken := "read-only-token"
 	readOnlyHash := sha256.Sum256([]byte(readOnlyToken))
@@ -482,16 +482,22 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("query statistics status = %d, want 200", queryStatsResponse.StatusCode)
 	}
 	var queryStats struct {
-		SampledAt      *time.Time       `json:"sampled_at"`
-		Unavailability *string          `json:"unavailability"`
-		Items          []map[string]any `json:"items"`
+		SampledAt      *time.Time                   `json:"sampled_at"`
+		Unavailability *api.Unavailability          `json:"unavailability"`
+		Items          []map[string]json.RawMessage `json:"items"`
 	}
 	if err := json.NewDecoder(queryStatsResponse.Body).Decode(&queryStats); err != nil {
 		t.Fatalf("decode query statistics snapshot: %v", err)
 	}
 	queryStatsResponse.Body.Close()
-	if queryStats.SampledAt == nil || queryStats.Unavailability != nil || len(queryStats.Items) == 0 {
-		t.Fatalf("query statistics snapshot = %+v, want available rows", queryStats)
+	if queryStats.SampledAt == nil {
+		t.Fatal("query statistics snapshot is missing sampled_at")
+	}
+	if queryStats.Unavailability != nil {
+		t.Fatalf("query statistics snapshot is unavailable: %s", *queryStats.Unavailability)
+	}
+	if len(queryStats.Items) == 0 {
+		t.Fatal("query statistics snapshot has no entries")
 	}
 	for _, forbidden := range []string{"query", "sql", "query_text", "sql_text"} {
 		if _, exists := queryStats.Items[0][forbidden]; exists {
@@ -1024,7 +1030,7 @@ func assertUnavailability(t *testing.T, client *http.Client, address, want strin
 	}
 }
 
-func assertQueryStatisticsUnavailability(t *testing.T, client *http.Client, address, want string) {
+func assertQueryStatisticsUnavailability(t *testing.T, client *http.Client, address string, want api.Unavailability) {
 	t.Helper()
 	response := getResponse(t, client, address)
 	if response.StatusCode != http.StatusOK {
@@ -1034,13 +1040,19 @@ func assertQueryStatisticsUnavailability(t *testing.T, client *http.Client, addr
 	defer response.Body.Close()
 	var body struct {
 		Items          []api.QueryStatisticsEntry `json:"items"`
-		Unavailability *string                    `json:"unavailability"`
+		Unavailability *api.Unavailability        `json:"unavailability"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode query statistics unavailability: %v", err)
 	}
-	if len(body.Items) != 0 || body.Unavailability == nil || *body.Unavailability != want {
-		t.Fatalf("query statistics response = %+v, want empty items/%s", body, want)
+	if len(body.Items) != 0 {
+		t.Fatalf("query statistics response has %d items, want 0", len(body.Items))
+	}
+	if body.Unavailability == nil {
+		t.Fatalf("query statistics response is missing unavailability, want %s", want)
+	}
+	if *body.Unavailability != want {
+		t.Fatalf("query statistics unavailability = %s, want %s", *body.Unavailability, want)
 	}
 }
 

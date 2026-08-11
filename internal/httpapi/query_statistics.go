@@ -19,9 +19,10 @@ func (handler *Handler) GetQueryStatisticsSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	if states[metric.CapabilityExtensionPGStatStatements] != metric.CapabilityPresent {
+	capabilityStatus := states[metric.CapabilityExtensionPGStatStatements]
+	if capabilityStatus != metric.CapabilityPresent {
 		reason := api.FEATUREDISABLED
-		if states[metric.CapabilityExtensionPGStatStatements] == metric.CapabilityMissing {
+		if capabilityStatus == metric.CapabilityMissing {
 			reason = api.EXTENSIONMISSING
 		}
 		return unavailableQueryStatistics(reason), nil
@@ -35,26 +36,26 @@ func (handler *Handler) GetQueryStatisticsSnapshot(
 	if err != nil {
 		return nil, err
 	}
-	rows, err := queries.ListQueryStatisticsSnapshotEntries(ctx, ListQueryStatisticsSnapshotEntriesParams{
+	entries, err := queries.ListQueryStatisticsSnapshotEntries(ctx, ListQueryStatisticsSnapshotEntriesParams{
 		InstanceID: instanceID,
 		SampledAt:  sampledAt,
 	})
 	if err != nil {
 		return nil, err
 	}
-	items := make([]api.QueryStatisticsEntry, 0, len(rows))
-	for _, row := range rows {
+	items := make([]api.QueryStatisticsEntry, 0, len(entries))
+	for _, entry := range entries {
 		items = append(items, api.QueryStatisticsEntry{
-			Queryid:         strconv.FormatInt(row.Queryid, 10),
-			DatabaseOid:     int64(row.DatabaseOid.Uint32),
-			UserOid:         int64(row.UserOid.Uint32),
-			Calls:           row.Calls,
-			TotalExecTimeMs: row.TotalExecTimeMs,
+			Queryid:         strconv.FormatInt(entry.Queryid, 10),
+			DatabaseOid:     int64(entry.DatabaseOid.Uint32),
+			UserOid:         int64(entry.UserOid.Uint32),
+			Calls:           entry.Calls,
+			TotalExecTimeMs: entry.TotalExecTimeMs,
 		})
 	}
-	observedAt := sampledAt.Time.UTC()
+	sampledAtTime := sampledAt.Time.UTC()
 	return api.GetQueryStatisticsSnapshot200JSONResponse{
-		SampledAt: &observedAt,
+		SampledAt: &sampledAtTime,
 		Items:     items,
 	}, nil
 }

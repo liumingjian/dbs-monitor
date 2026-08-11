@@ -135,8 +135,9 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		WHERE instance_id = $1 AND last_result = 'SUCCESS'`, pgID).Scan(&successfulTasks); err != nil {
 		t.Fatalf("count successful collection tasks: %v", err)
 	}
-	if successfulTasks != 8 {
-		t.Fatalf("successful task count = %d, want 8", successfulTasks)
+	wantSuccessfulTasks := len(scheduledTasks())
+	if successfulTasks != wantSuccessfulTasks {
+		t.Fatalf("successful task count = %d, want %d", successfulTasks, wantSuccessfulTasks)
 	}
 	var samplesBeforeEmergency int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
@@ -655,9 +656,14 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 		WHERE instance_id = $1`, pgID).Scan(&queryStatisticsSnapshots); err != nil {
 		t.Fatalf("count gated query statistics snapshots: %v", err)
 	}
-	if queryStatisticsStarted.Valid || queryStatisticsError != "EXTENSION_MISSING" || queryStatisticsSnapshots != 0 {
-		t.Fatalf("gated query statistics start/error/snapshots = %v/%s/%d, want absent/EXTENSION_MISSING/0",
-			queryStatisticsStarted, queryStatisticsError, queryStatisticsSnapshots)
+	if queryStatisticsStarted.Valid {
+		t.Fatalf("gated query statistics started at %v, want no start time", queryStatisticsStarted)
+	}
+	if queryStatisticsError != "EXTENSION_MISSING" {
+		t.Fatalf("gated query statistics error = %q, want EXTENSION_MISSING", queryStatisticsError)
+	}
+	if queryStatisticsSnapshots != 0 {
+		t.Fatalf("gated query statistics snapshots = %d, want 0", queryStatisticsSnapshots)
 	}
 	var samplesBefore int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
