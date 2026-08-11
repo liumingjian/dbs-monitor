@@ -72,7 +72,8 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("encrypt target password: %v", err)
 	}
-	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
+	instanceQueries := instance.New(pool)
+	if _, err := instanceQueries.CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "pause target",
 		Host: env("PGHOST", "localhost"), Port: int32(envInt("PGPORT", 55432)),
 		DatabaseName: env("PGDATABASE", "dbs_monitor"), Username: env("PGUSER", "dbs_monitor"),
@@ -82,7 +83,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	}
 	agentToken := "pause-agent-token"
 	agentTokenHash := sha256.Sum256([]byte(agentToken))
-	if _, err := instance.New(pool).RegisterAgent(ctx, instance.RegisterAgentParams{
+	if _, err := instanceQueries.RegisterAgent(ctx, instance.RegisterAgentParams{
 		ID:                 pgtype.UUID{Bytes: instanceID, Valid: true},
 		AgentTokenHash:     agentTokenHash[:],
 		AgentTokenIssuedAt: pgtype.Timestamptz{Time: currentClock.now, Valid: true},
