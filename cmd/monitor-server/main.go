@@ -38,6 +38,7 @@ const (
 	defaultCredentialDirectory   = "/opt/dbs-monitor/etc/credentials"
 	defaultPostgresDataDirectory = "/opt/dbs-monitor/var/lib/postgresql"
 	rotateMasterKeyCommand       = "rotate-master-key"
+	commandUsage                 = "usage: dbs-monitor-server [rotate-master-key|diagnostic-bundle [output]]"
 )
 
 var version = "1.0.0"
@@ -57,9 +58,17 @@ func runCommand(ctx context.Context, arguments []string) error {
 		return run(ctx)
 	case len(arguments) == 1 && arguments[0] == rotateMasterKeyCommand:
 		return runMasterKeyRotationCommand(ctx)
+	case len(arguments) == 1 && arguments[0] == diagnosticBundleCommand:
+		return runDiagnosticBundleCommand(ctx, defaultDiagnosticBundleOutput(time.Now().UTC()))
+	case len(arguments) == 2 && arguments[0] == diagnosticBundleCommand:
+		return runDiagnosticBundleCommand(ctx, arguments[1])
 	default:
-		return fmt.Errorf("usage: dbs-monitor-server [%s]", rotateMasterKeyCommand)
+		return errors.New(commandUsage)
 	}
+}
+
+func defaultDiagnosticBundleOutput(now time.Time) string {
+	return fmt.Sprintf("dbs-monitor-diagnostics-%s.tar.gz", now.UTC().Format("20060102T150405Z"))
 }
 
 func run(ctx context.Context) error {

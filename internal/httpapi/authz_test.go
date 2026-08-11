@@ -25,6 +25,32 @@ func TestPlatformHealthEndpointIsRegistered(t *testing.T) {
 	}
 }
 
+func TestDiagnosticAPIIsCompleteAndReadOnly(t *testing.T) {
+	doc := loadSpec(t)
+	paths := []string{
+		"/api/v1/diagnostics/health",
+		"/api/v1/diagnostics/disk",
+		"/api/v1/diagnostics/scheduler",
+		"/api/v1/diagnostics/partitions",
+		"/api/v1/diagnostics/certificate",
+		"/api/v1/diagnostics/keyring",
+		"/api/v1/diagnostics/platform",
+	}
+	for _, path := range paths {
+		item := doc.Paths.Find(path)
+		if item == nil || item.Get == nil {
+			t.Errorf("diagnostic endpoint GET %s is not declared", path)
+			continue
+		}
+		if item.Get.Extensions["x-required-role"] != "PLATFORM_ADMIN" {
+			t.Errorf("diagnostic endpoint GET %s role = %v, want PLATFORM_ADMIN", path, item.Get.Extensions["x-required-role"])
+		}
+		if len(item.Operations()) != 1 {
+			t.Errorf("diagnostic endpoint %s exposes methods other than GET", path)
+		}
+	}
+}
+
 func TestEveryOperationDeclaresRequiredRole(t *testing.T) {
 	doc := loadSpec(t)
 	allowed := map[string]bool{

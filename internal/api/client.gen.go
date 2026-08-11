@@ -124,8 +124,26 @@ type ClientInterface interface {
 
 	UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCertificateDiagnostics request
+	GetCertificateDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetDiskDiagnostics request
+	GetDiskDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetPlatformHealth request
 	GetPlatformHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetKeyringDiagnostics request
+	GetKeyringDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPartitionDiagnostics request
+	GetPartitionDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPlatformDiagnostics request
+	GetPlatformDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSchedulerDiagnostics request
+	GetSchedulerDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListInstances request
 	ListInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -391,8 +409,80 @@ func (c *Client) UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UU
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetCertificateDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCertificateDiagnosticsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetDiskDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetDiskDiagnosticsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetPlatformHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetPlatformHealthRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetKeyringDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetKeyringDiagnosticsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPartitionDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPartitionDiagnosticsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPlatformDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPlatformDiagnosticsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSchedulerDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSchedulerDiagnosticsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -1187,6 +1277,60 @@ func NewUpdateAlertRuleEnabledRequestWithBody(server string, id openapi_types.UU
 	return req, nil
 }
 
+// NewGetCertificateDiagnosticsRequest generates requests for GetCertificateDiagnostics
+func NewGetCertificateDiagnosticsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/certificate")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetDiskDiagnosticsRequest generates requests for GetDiskDiagnostics
+func NewGetDiskDiagnosticsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/disk")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetPlatformHealthRequest generates requests for GetPlatformHealth
 func NewGetPlatformHealthRequest(server string) (*http.Request, error) {
 	var err error
@@ -1197,6 +1341,114 @@ func NewGetPlatformHealthRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/diagnostics/health")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetKeyringDiagnosticsRequest generates requests for GetKeyringDiagnostics
+func NewGetKeyringDiagnosticsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/keyring")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetPartitionDiagnosticsRequest generates requests for GetPartitionDiagnostics
+func NewGetPartitionDiagnosticsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/partitions")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetPlatformDiagnosticsRequest generates requests for GetPlatformDiagnostics
+func NewGetPlatformDiagnosticsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/platform")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSchedulerDiagnosticsRequest generates requests for GetSchedulerDiagnostics
+func NewGetSchedulerDiagnosticsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/diagnostics/scheduler")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2611,8 +2863,26 @@ type ClientWithResponsesInterface interface {
 
 	UpdateAlertRuleEnabledWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error)
 
+	// GetCertificateDiagnosticsWithResponse request
+	GetCertificateDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCertificateDiagnosticsResponse, error)
+
+	// GetDiskDiagnosticsWithResponse request
+	GetDiskDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDiskDiagnosticsResponse, error)
+
 	// GetPlatformHealthWithResponse request
 	GetPlatformHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformHealthResponse, error)
+
+	// GetKeyringDiagnosticsWithResponse request
+	GetKeyringDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetKeyringDiagnosticsResponse, error)
+
+	// GetPartitionDiagnosticsWithResponse request
+	GetPartitionDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPartitionDiagnosticsResponse, error)
+
+	// GetPlatformDiagnosticsWithResponse request
+	GetPlatformDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformDiagnosticsResponse, error)
+
+	// GetSchedulerDiagnosticsWithResponse request
+	GetSchedulerDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSchedulerDiagnosticsResponse, error)
 
 	// ListInstancesWithResponse request
 	ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error)
@@ -2909,6 +3179,50 @@ func (r UpdateAlertRuleEnabledResponse) StatusCode() int {
 	return 0
 }
 
+type GetCertificateDiagnosticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlatformHealthSourceSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCertificateDiagnosticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCertificateDiagnosticsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetDiskDiagnosticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlatformHealthSourceSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetDiskDiagnosticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetDiskDiagnosticsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetPlatformHealthResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2925,6 +3239,94 @@ func (r GetPlatformHealthResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetPlatformHealthResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetKeyringDiagnosticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlatformHealthSourceSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetKeyringDiagnosticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetKeyringDiagnosticsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetPartitionDiagnosticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlatformHealthSourceSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPartitionDiagnosticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPartitionDiagnosticsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetPlatformDiagnosticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlatformHealthSourceSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPlatformDiagnosticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPlatformDiagnosticsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetSchedulerDiagnosticsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlatformHealthSourceSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSchedulerDiagnosticsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSchedulerDiagnosticsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3700,6 +4102,24 @@ func (c *ClientWithResponses) UpdateAlertRuleEnabledWithResponse(ctx context.Con
 	return ParseUpdateAlertRuleEnabledResponse(rsp)
 }
 
+// GetCertificateDiagnosticsWithResponse request returning *GetCertificateDiagnosticsResponse
+func (c *ClientWithResponses) GetCertificateDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCertificateDiagnosticsResponse, error) {
+	rsp, err := c.GetCertificateDiagnostics(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCertificateDiagnosticsResponse(rsp)
+}
+
+// GetDiskDiagnosticsWithResponse request returning *GetDiskDiagnosticsResponse
+func (c *ClientWithResponses) GetDiskDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetDiskDiagnosticsResponse, error) {
+	rsp, err := c.GetDiskDiagnostics(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetDiskDiagnosticsResponse(rsp)
+}
+
 // GetPlatformHealthWithResponse request returning *GetPlatformHealthResponse
 func (c *ClientWithResponses) GetPlatformHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformHealthResponse, error) {
 	rsp, err := c.GetPlatformHealth(ctx, reqEditors...)
@@ -3707,6 +4127,42 @@ func (c *ClientWithResponses) GetPlatformHealthWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseGetPlatformHealthResponse(rsp)
+}
+
+// GetKeyringDiagnosticsWithResponse request returning *GetKeyringDiagnosticsResponse
+func (c *ClientWithResponses) GetKeyringDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetKeyringDiagnosticsResponse, error) {
+	rsp, err := c.GetKeyringDiagnostics(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetKeyringDiagnosticsResponse(rsp)
+}
+
+// GetPartitionDiagnosticsWithResponse request returning *GetPartitionDiagnosticsResponse
+func (c *ClientWithResponses) GetPartitionDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPartitionDiagnosticsResponse, error) {
+	rsp, err := c.GetPartitionDiagnostics(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPartitionDiagnosticsResponse(rsp)
+}
+
+// GetPlatformDiagnosticsWithResponse request returning *GetPlatformDiagnosticsResponse
+func (c *ClientWithResponses) GetPlatformDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetPlatformDiagnosticsResponse, error) {
+	rsp, err := c.GetPlatformDiagnostics(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPlatformDiagnosticsResponse(rsp)
+}
+
+// GetSchedulerDiagnosticsWithResponse request returning *GetSchedulerDiagnosticsResponse
+func (c *ClientWithResponses) GetSchedulerDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSchedulerDiagnosticsResponse, error) {
+	rsp, err := c.GetSchedulerDiagnostics(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSchedulerDiagnosticsResponse(rsp)
 }
 
 // ListInstancesWithResponse request returning *ListInstancesResponse
@@ -4335,6 +4791,58 @@ func ParseUpdateAlertRuleEnabledResponse(rsp *http.Response) (*UpdateAlertRuleEn
 	return response, nil
 }
 
+// ParseGetCertificateDiagnosticsResponse parses an HTTP response from a GetCertificateDiagnosticsWithResponse call
+func ParseGetCertificateDiagnosticsResponse(rsp *http.Response) (*GetCertificateDiagnosticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCertificateDiagnosticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformHealthSourceSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetDiskDiagnosticsResponse parses an HTTP response from a GetDiskDiagnosticsWithResponse call
+func ParseGetDiskDiagnosticsResponse(rsp *http.Response) (*GetDiskDiagnosticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetDiskDiagnosticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformHealthSourceSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetPlatformHealthResponse parses an HTTP response from a GetPlatformHealthWithResponse call
 func ParseGetPlatformHealthResponse(rsp *http.Response) (*GetPlatformHealthResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4351,6 +4859,110 @@ func ParseGetPlatformHealthResponse(rsp *http.Response) (*GetPlatformHealthRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest PlatformHealthSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetKeyringDiagnosticsResponse parses an HTTP response from a GetKeyringDiagnosticsWithResponse call
+func ParseGetKeyringDiagnosticsResponse(rsp *http.Response) (*GetKeyringDiagnosticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetKeyringDiagnosticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformHealthSourceSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPartitionDiagnosticsResponse parses an HTTP response from a GetPartitionDiagnosticsWithResponse call
+func ParseGetPartitionDiagnosticsResponse(rsp *http.Response) (*GetPartitionDiagnosticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPartitionDiagnosticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformHealthSourceSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPlatformDiagnosticsResponse parses an HTTP response from a GetPlatformDiagnosticsWithResponse call
+func ParseGetPlatformDiagnosticsResponse(rsp *http.Response) (*GetPlatformDiagnosticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPlatformDiagnosticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformHealthSourceSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSchedulerDiagnosticsResponse parses an HTTP response from a GetSchedulerDiagnosticsWithResponse call
+func ParseGetSchedulerDiagnosticsResponse(rsp *http.Response) (*GetSchedulerDiagnosticsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSchedulerDiagnosticsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlatformHealthSourceSnapshot
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

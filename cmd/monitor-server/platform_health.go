@@ -17,7 +17,7 @@ func refreshPlatformDatabaseHealth(ctx context.Context, platform *db.Pool, healt
 func platformFailureHandler(next http.Handler, health *platformhealth.Store) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		databaseFailed := health.Source(platformhealth.SourcePlatformDatabase).Status == platformhealth.StatusFailed
-		if !databaseFailed || request.URL.Path == "/api/v1/diagnostics/health" {
+		if !databaseFailed || strings.HasPrefix(request.URL.Path, "/api/v1/diagnostics/") {
 			next.ServeHTTP(writer, request)
 			return
 		}

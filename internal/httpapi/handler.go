@@ -131,6 +131,30 @@ func (handler *Handler) GetPlatformHealth(context.Context, api.GetPlatformHealth
 	}, nil
 }
 
+func (handler *Handler) GetDiskDiagnostics(context.Context, api.GetDiskDiagnosticsRequestObject) (api.GetDiskDiagnosticsResponseObject, error) {
+	return api.GetDiskDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceDisk))), nil
+}
+
+func (handler *Handler) GetSchedulerDiagnostics(context.Context, api.GetSchedulerDiagnosticsRequestObject) (api.GetSchedulerDiagnosticsResponseObject, error) {
+	return api.GetSchedulerDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceCollectionScheduler))), nil
+}
+
+func (handler *Handler) GetPartitionDiagnostics(context.Context, api.GetPartitionDiagnosticsRequestObject) (api.GetPartitionDiagnosticsResponseObject, error) {
+	return api.GetPartitionDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourcePartitionMaintenance))), nil
+}
+
+func (handler *Handler) GetCertificateDiagnostics(context.Context, api.GetCertificateDiagnosticsRequestObject) (api.GetCertificateDiagnosticsResponseObject, error) {
+	return api.GetCertificateDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceTLSCertificate))), nil
+}
+
+func (handler *Handler) GetKeyringDiagnostics(context.Context, api.GetKeyringDiagnosticsRequestObject) (api.GetKeyringDiagnosticsResponseObject, error) {
+	return api.GetKeyringDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceCredentialKeyring))), nil
+}
+
+func (handler *Handler) GetPlatformDiagnostics(context.Context, api.GetPlatformDiagnosticsRequestObject) (api.GetPlatformDiagnosticsResponseObject, error) {
+	return api.GetPlatformDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceServerProcess))), nil
+}
+
 func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.PlatformHealthSourceSnapshot {
 	var diskLevel *string
 	if source.DiskLevel != nil {
@@ -1101,8 +1125,14 @@ var RequiredRoles = map[string]string{
 	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
 	"GetAgentRegistration": "READONLY", "RegisterAgent": "PLATFORM_ADMIN",
 	"RotateAgentToken": "PLATFORM_ADMIN", "RevokeAgentToken": "PLATFORM_ADMIN", "DisableAgent": "PLATFORM_ADMIN",
-	"GetPlatformHealth": "PLATFORM_ADMIN",
-	"ListAlertRules":    "READONLY", "CreateAlertRule": "ALERT_ADMIN",
+	"GetPlatformHealth":         "PLATFORM_ADMIN",
+	"GetDiskDiagnostics":        "PLATFORM_ADMIN",
+	"GetSchedulerDiagnostics":   "PLATFORM_ADMIN",
+	"GetPartitionDiagnostics":   "PLATFORM_ADMIN",
+	"GetCertificateDiagnostics": "PLATFORM_ADMIN",
+	"GetKeyringDiagnostics":     "PLATFORM_ADMIN",
+	"GetPlatformDiagnostics":    "PLATFORM_ADMIN",
+	"ListAlertRules":            "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"UpdateAlertRule": "ALERT_ADMIN", "UpdateAlertRuleEnabled": "ALERT_ADMIN",
 	"GetAlertDisposition": "READONLY", "UpdateAlertDisposition": "ALERT_ADMIN",
 	"GetAlertTriggerSnapshot": "READONLY", "ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
