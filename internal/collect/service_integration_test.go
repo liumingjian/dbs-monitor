@@ -277,7 +277,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make target unreachable: %v", err)
 	}
-	for range 2 {
+	for range 3 {
 		currentClock.Advance(30 * time.Second)
 		if err := collector.RunOnce(ctx); err != nil {
 			t.Fatalf("record unreachable target: %v", err)
@@ -287,6 +287,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		}
 	}
 	assertStatus(t, ctx, pool, pgID, alerting.NO_DATA)
+	assertBuiltinStatus(t, ctx, pool, pgID, "database_unreachable", alerting.FIRING)
 	var failedWatermark time.Time
 	if err := pool.QueryRow(ctx, `SELECT last_success_at FROM instance_collect_state
 		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, pgID).Scan(&failedWatermark); err != nil {
@@ -326,6 +327,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		}
 	}
 	assertStatus(t, ctx, pool, pgID, alerting.RECOVERED)
+	assertBuiltinStatus(t, ctx, pool, pgID, "database_unreachable", alerting.RECOVERED)
 	var recoveredWatermark time.Time
 	if err := pool.QueryRow(ctx, `SELECT last_success_at FROM instance_collect_state
 		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, pgID).Scan(&recoveredWatermark); err != nil {
@@ -780,7 +782,8 @@ func assertLifecycleEvents(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	rows, err := pool.Query(ctx, `SELECT DISTINCT event.kind, event.rule_version, event.rule_snapshot
 		FROM alert_event event
 		JOIN alert_instance instance ON instance.id = event.alert_instance_id
-		WHERE instance.instance_id = $1`, instanceID)
+		WHERE instance.instance_id = $1
+		  AND instance.metric_id = 'pg.connection.total'`, instanceID)
 	if err != nil {
 		t.Fatalf("read alert events: %v", err)
 	}
@@ -832,7 +835,8 @@ func assertStatus(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanc
 	var breach, recovery, noData int
 	var before pgtype.Text
 	err := pool.QueryRow(ctx, `SELECT status, breach_count, recovery_count, no_data_count, state_before_no_data
-		FROM alert_instance WHERE instance_id = $1`, instanceID).Scan(&got, &breach, &recovery, &noData, &before)
+		FROM alert_instance WHERE instance_id = $1 AND metric_id = 'pg.connection.total'`, instanceID).
+		Scan(&got, &breach, &recovery, &noData, &before)
 	if err != nil {
 		t.Fatalf("get alert status: %v", err)
 	}
@@ -844,6 +848,20 @@ func assertStatus(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanc
 			ORDER BY sample.ts DESC LIMIT 1`, instanceID).Scan(&latest)
 		t.Fatalf("alert status = %s, want %s (breach=%d recovery=%d no_data=%d before=%q latest=%v)",
 			got, want, breach, recovery, noData, before.String, latest)
+	}
+}
+
+func assertBuiltinStatus(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID pgtype.UUID, identifier string, want alerting.State) {
+	t.Helper()
+	var got string
+	if err := pool.QueryRow(ctx, `SELECT alert.status
+		FROM alert_instance alert
+		JOIN alert_rule rule ON rule.id = alert.rule_id
+		WHERE alert.instance_id = $1 AND rule.builtin_identifier = $2`, instanceID, identifier).Scan(&got); err != nil {
+		t.Fatalf("get built-in alert status: %v", err)
+	}
+	if alerting.State(got) != want {
+		t.Fatalf("built-in alert %s status = %s, want %s", identifier, got, want)
 	}
 }
 

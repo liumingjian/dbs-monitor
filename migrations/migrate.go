@@ -89,7 +89,11 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (appl
 	if err != nil {
 		return applied, fmt.Errorf("apply migrations: %w", err)
 	}
-	return applied + len(results), nil
+	applied += len(results)
+	if err := reconcileAlertingSeeds(ctx, database); err != nil {
+		return applied, err
+	}
+	return applied, nil
 }
 
 func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentialDirectory string, backfillPlaintext bool) error {

@@ -62,6 +62,23 @@
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
+  delete:
+    tags: [alert-rules]
+    operationId: deleteAlertRule
+    x-required-role: ALERT_ADMIN
+    responses:
+      '204':
+        description: Deleted
+      '404':
+        description: Alert rule not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '409':
+        description: Built-in alert rules cannot be deleted
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
 /api/v1/alert-rules/{id}/enabled:
   parameters:
     - name: id
@@ -90,6 +107,81 @@
             schema: { $ref: ../components/errors.yaml#/Error }
       '404':
         description: Alert rule not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/alert-rules/{id}/copies:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  post:
+    tags: [alert-rules]
+    operationId: copyAlertRule
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRuleCopyInput }
+    responses:
+      '201':
+        description: Copied alert rule
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRule }
+      '400':
+        description: Invalid copied rule
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: Alert rule not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/alert-rule-templates:
+  get:
+    tags: [alert-rules]
+    operationId: listAlertRuleTemplates
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Read-only built-in alert rule templates
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/alert-rules.yaml#/AlertRuleTemplate }
+/api/v1/alert-rule-templates/{id}/alert-rules:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+  post:
+    tags: [alert-rules]
+    operationId: createAlertRuleFromTemplate
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRuleTemplateInstantiationInput }
+    responses:
+      '201':
+        description: Created from template defaults
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRule }
+      '400':
+        description: Invalid template overrides
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: Alert rule template not found
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }

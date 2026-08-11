@@ -161,6 +161,9 @@ const (
 // Defines values for ErrorErrorCode.
 const (
 	AUTHFAILED                   ErrorErrorCode = "AUTH_FAILED"
+	BUILTINRULEDELETEFORBIDDEN   ErrorErrorCode = "BUILTIN_RULE_DELETE_FORBIDDEN"
+	BUILTINRULEDISABLEFORBIDDEN  ErrorErrorCode = "BUILTIN_RULE_DISABLE_FORBIDDEN"
+	BUILTINRULESEVERITYTOOLOW    ErrorErrorCode = "BUILTIN_RULE_SEVERITY_TOO_LOW"
 	CONFLICT                     ErrorErrorCode = "CONFLICT"
 	FORBIDDEN                    ErrorErrorCode = "FORBIDDEN"
 	INTERNAL                     ErrorErrorCode = "INTERNAL"
@@ -401,28 +404,39 @@ type AlertOperator string
 
 // AlertRule defines model for AlertRule.
 type AlertRule struct {
-	Aggregation               AlertAggregation     `json:"aggregation"`
-	ConsecutiveCount          int                  `json:"consecutive_count"`
-	CreatedAt                 time.Time            `json:"created_at"`
-	Enabled                   bool                 `json:"enabled"`
-	EnabledUpdatedAt          *time.Time           `json:"enabled_updated_at,omitempty"`
-	EnabledUpdatedBy          *openapi_types.UUID  `json:"enabled_updated_by,omitempty"`
-	EvaluationIntervalSeconds int                  `json:"evaluation_interval_seconds"`
-	Id                        openapi_types.UUID   `json:"id"`
-	InstanceIds               []openapi_types.UUID `json:"instance_ids"`
-	MetricId                  string               `json:"metric_id"`
-	Name                      string               `json:"name"`
-	NoDataPolicy              NoDataPolicy         `json:"no_data_policy"`
-	Operator                  AlertOperator        `json:"operator"`
-	RecoveryConsecutiveCount  int                  `json:"recovery_consecutive_count"`
-	RecoveryOperator          AlertOperator        `json:"recovery_operator"`
-	RecoveryThreshold         float64              `json:"recovery_threshold"`
-	Scope                     AlertRuleScope       `json:"scope"`
-	Severity                  AlertSeverity        `json:"severity"`
-	Threshold                 float64              `json:"threshold"`
-	UpdatedAt                 time.Time            `json:"updated_at"`
-	Version                   int                  `json:"version"`
-	WindowSeconds             int                  `json:"window_seconds"`
+	Aggregation                     AlertAggregation     `json:"aggregation"`
+	BuiltinIdentifier               *string              `json:"builtin_identifier,omitempty"`
+	ConsecutiveCount                int                  `json:"consecutive_count"`
+	CreatedAt                       time.Time            `json:"created_at"`
+	EffectiveNotificationPolicyName string               `json:"effective_notification_policy_name"`
+	Enabled                         bool                 `json:"enabled"`
+	EnabledUpdatedAt                *time.Time           `json:"enabled_updated_at,omitempty"`
+	EnabledUpdatedBy                *openapi_types.UUID  `json:"enabled_updated_by,omitempty"`
+	EvaluationIntervalSeconds       int                  `json:"evaluation_interval_seconds"`
+	Id                              openapi_types.UUID   `json:"id"`
+	InstanceIds                     []openapi_types.UUID `json:"instance_ids"`
+	IsBuiltin                       bool                 `json:"is_builtin"`
+	MetricId                        string               `json:"metric_id"`
+	Name                            string               `json:"name"`
+	NoDataPolicy                    NoDataPolicy         `json:"no_data_policy"`
+	NotificationPolicyId            *openapi_types.UUID  `json:"notification_policy_id,omitempty"`
+	Operator                        AlertOperator        `json:"operator"`
+	RecoveryConsecutiveCount        int                  `json:"recovery_consecutive_count"`
+	RecoveryOperator                AlertOperator        `json:"recovery_operator"`
+	RecoveryThreshold               float64              `json:"recovery_threshold"`
+	Scope                           AlertRuleScope       `json:"scope"`
+	Severity                        AlertSeverity        `json:"severity"`
+	SourceTemplateId                *string              `json:"source_template_id,omitempty"`
+	SourceTemplateVersion           *int                 `json:"source_template_version,omitempty"`
+	Threshold                       float64              `json:"threshold"`
+	UpdatedAt                       time.Time            `json:"updated_at"`
+	Version                         int                  `json:"version"`
+	WindowSeconds                   int                  `json:"window_seconds"`
+}
+
+// AlertRuleCopyInput defines model for AlertRuleCopyInput.
+type AlertRuleCopyInput struct {
+	Name *string `json:"name,omitempty"`
 }
 
 // AlertRuleEnabledInput defines model for AlertRuleEnabledInput.
@@ -440,6 +454,7 @@ type AlertRuleInput struct {
 	MetricId                  string               `json:"metric_id"`
 	Name                      string               `json:"name"`
 	NoDataPolicy              NoDataPolicy         `json:"no_data_policy"`
+	NotificationPolicyId      *openapi_types.UUID  `json:"notification_policy_id,omitempty"`
 	Operator                  AlertOperator        `json:"operator"`
 	RecoveryConsecutiveCount  *int                 `json:"recovery_consecutive_count,omitempty"`
 	RecoveryOperator          AlertOperator        `json:"recovery_operator"`
@@ -452,6 +467,39 @@ type AlertRuleInput struct {
 
 // AlertRuleScope defines model for AlertRuleScope.
 type AlertRuleScope string
+
+// AlertRuleTemplate defines model for AlertRuleTemplate.
+type AlertRuleTemplate struct {
+	Aggregation               AlertAggregation `json:"aggregation"`
+	ConsecutiveCount          int              `json:"consecutive_count"`
+	EvaluationIntervalSeconds int              `json:"evaluation_interval_seconds"`
+	Id                        string           `json:"id"`
+	MetricId                  string           `json:"metric_id"`
+	Name                      string           `json:"name"`
+	NoDataPolicy              NoDataPolicy     `json:"no_data_policy"`
+	Operator                  AlertOperator    `json:"operator"`
+	RecoveryConsecutiveCount  int              `json:"recovery_consecutive_count"`
+	RecoveryOperator          AlertOperator    `json:"recovery_operator"`
+	RecoveryThreshold         float64          `json:"recovery_threshold"`
+	Severity                  AlertSeverity    `json:"severity"`
+	Threshold                 float64          `json:"threshold"`
+	Version                   int              `json:"version"`
+	WindowSeconds             int              `json:"window_seconds"`
+}
+
+// AlertRuleTemplateInstantiationInput defines model for AlertRuleTemplateInstantiationInput.
+type AlertRuleTemplateInstantiationInput struct {
+	ConsecutiveCount         *int                  `json:"consecutive_count,omitempty"`
+	Enabled                  *bool                 `json:"enabled,omitempty"`
+	InstanceIds              *[]openapi_types.UUID `json:"instance_ids,omitempty"`
+	Name                     *string               `json:"name,omitempty"`
+	NotificationPolicyId     *openapi_types.UUID   `json:"notification_policy_id,omitempty"`
+	RecoveryConsecutiveCount *int                  `json:"recovery_consecutive_count,omitempty"`
+	RecoveryThreshold        *float64              `json:"recovery_threshold,omitempty"`
+	Scope                    *AlertRuleScope       `json:"scope,omitempty"`
+	Severity                 *AlertSeverity        `json:"severity,omitempty"`
+	Threshold                *float64              `json:"threshold,omitempty"`
+}
 
 // AlertSeverity defines model for AlertSeverity.
 type AlertSeverity string
@@ -854,11 +902,17 @@ type ReportAgentMetricsJSONRequestBody = AgentReport
 // UpdateAlertDispositionJSONRequestBody defines body for UpdateAlertDisposition for application/json ContentType.
 type UpdateAlertDispositionJSONRequestBody = AlertDispositionInput
 
+// CreateAlertRuleFromTemplateJSONRequestBody defines body for CreateAlertRuleFromTemplate for application/json ContentType.
+type CreateAlertRuleFromTemplateJSONRequestBody = AlertRuleTemplateInstantiationInput
+
 // CreateAlertRuleJSONRequestBody defines body for CreateAlertRule for application/json ContentType.
 type CreateAlertRuleJSONRequestBody = AlertRuleInput
 
 // UpdateAlertRuleJSONRequestBody defines body for UpdateAlertRule for application/json ContentType.
 type UpdateAlertRuleJSONRequestBody = AlertRuleInput
+
+// CopyAlertRuleJSONRequestBody defines body for CopyAlertRule for application/json ContentType.
+type CopyAlertRuleJSONRequestBody = AlertRuleCopyInput
 
 // UpdateAlertRuleEnabledJSONRequestBody defines body for UpdateAlertRuleEnabled for application/json ContentType.
 type UpdateAlertRuleEnabledJSONRequestBody = AlertRuleEnabledInput
@@ -908,14 +962,26 @@ type ServerInterface interface {
 	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
 	GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (GET /api/v1/alert-rule-templates)
+	ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/alert-rule-templates/{id}/alert-rules)
+	CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request, id string)
+
 	// (GET /api/v1/alert-rules)
 	ListAlertRules(w http.ResponseWriter, r *http.Request)
 
 	// (POST /api/v1/alert-rules)
 	CreateAlertRule(w http.ResponseWriter, r *http.Request)
 
+	// (DELETE /api/v1/alert-rules/{id})
+	DeleteAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (PUT /api/v1/alert-rules/{id})
 	UpdateAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/alert-rules/{id}/copies)
+	CopyAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1133,6 +1199,45 @@ func (siw *ServerInterfaceWrapper) GetAlertTriggerSnapshot(w http.ResponseWriter
 	handler.ServeHTTP(w, r)
 }
 
+// ListAlertRuleTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertRuleTemplates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAlertRuleFromTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAlertRuleFromTemplate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListAlertRules operation middleware
 func (siw *ServerInterfaceWrapper) ListAlertRules(w http.ResponseWriter, r *http.Request) {
 
@@ -1161,6 +1266,31 @@ func (siw *ServerInterfaceWrapper) CreateAlertRule(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAlertRule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UpdateAlertRule operation middleware
 func (siw *ServerInterfaceWrapper) UpdateAlertRule(w http.ResponseWriter, r *http.Request) {
 
@@ -1177,6 +1307,31 @@ func (siw *ServerInterfaceWrapper) UpdateAlertRule(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateAlertRule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CopyAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) CopyAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CopyAlertRule(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2276,9 +2431,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.GetAlertDisposition)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.UpdateAlertDisposition)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/trigger-snapshot", wrapper.GetAlertTriggerSnapshot)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rule-templates", wrapper.ListAlertRuleTemplates)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rule-templates/{id}/alert-rules", wrapper.CreateAlertRuleFromTemplate)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules", wrapper.ListAlertRules)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.DeleteAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules/{id}/copies", wrapper.CopyAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}/enabled", wrapper.UpdateAlertRuleEnabled)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/certificate", wrapper.GetCertificateDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/disk", wrapper.GetDiskDiagnostics)
@@ -2451,6 +2610,58 @@ func (response GetAlertTriggerSnapshot404JSONResponse) VisitGetAlertTriggerSnaps
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListAlertRuleTemplatesRequestObject struct {
+}
+
+type ListAlertRuleTemplatesResponseObject interface {
+	VisitListAlertRuleTemplatesResponse(w http.ResponseWriter) error
+}
+
+type ListAlertRuleTemplates200JSONResponse []AlertRuleTemplate
+
+func (response ListAlertRuleTemplates200JSONResponse) VisitListAlertRuleTemplatesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleFromTemplateRequestObject struct {
+	Id   string `json:"id"`
+	Body *CreateAlertRuleFromTemplateJSONRequestBody
+}
+
+type CreateAlertRuleFromTemplateResponseObject interface {
+	VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error
+}
+
+type CreateAlertRuleFromTemplate201JSONResponse AlertRule
+
+func (response CreateAlertRuleFromTemplate201JSONResponse) VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleFromTemplate400JSONResponse Error
+
+func (response CreateAlertRuleFromTemplate400JSONResponse) VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleFromTemplate404JSONResponse Error
+
+func (response CreateAlertRuleFromTemplate404JSONResponse) VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ListAlertRulesRequestObject struct {
 }
 
@@ -2493,6 +2704,40 @@ func (response CreateAlertRule400JSONResponse) VisitCreateAlertRuleResponse(w ht
 	return json.NewEncoder(w).Encode(response)
 }
 
+type DeleteAlertRuleRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteAlertRuleResponseObject interface {
+	VisitDeleteAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type DeleteAlertRule204Response struct {
+}
+
+func (response DeleteAlertRule204Response) VisitDeleteAlertRuleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteAlertRule404JSONResponse Error
+
+func (response DeleteAlertRule404JSONResponse) VisitDeleteAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteAlertRule409JSONResponse Error
+
+func (response DeleteAlertRule409JSONResponse) VisitDeleteAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type UpdateAlertRuleRequestObject struct {
 	Id   openapi_types.UUID `json:"id"`
 	Body *UpdateAlertRuleJSONRequestBody
@@ -2523,6 +2768,42 @@ func (response UpdateAlertRule400JSONResponse) VisitUpdateAlertRuleResponse(w ht
 type UpdateAlertRule404JSONResponse Error
 
 func (response UpdateAlertRule404JSONResponse) VisitUpdateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CopyAlertRuleRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *CopyAlertRuleJSONRequestBody
+}
+
+type CopyAlertRuleResponseObject interface {
+	VisitCopyAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type CopyAlertRule201JSONResponse AlertRule
+
+func (response CopyAlertRule201JSONResponse) VisitCopyAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CopyAlertRule400JSONResponse Error
+
+func (response CopyAlertRule400JSONResponse) VisitCopyAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CopyAlertRule404JSONResponse Error
+
+func (response CopyAlertRule404JSONResponse) VisitCopyAlertRuleResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(404)
 
@@ -3393,14 +3674,26 @@ type StrictServerInterface interface {
 	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
 	GetAlertTriggerSnapshot(ctx context.Context, request GetAlertTriggerSnapshotRequestObject) (GetAlertTriggerSnapshotResponseObject, error)
 
+	// (GET /api/v1/alert-rule-templates)
+	ListAlertRuleTemplates(ctx context.Context, request ListAlertRuleTemplatesRequestObject) (ListAlertRuleTemplatesResponseObject, error)
+
+	// (POST /api/v1/alert-rule-templates/{id}/alert-rules)
+	CreateAlertRuleFromTemplate(ctx context.Context, request CreateAlertRuleFromTemplateRequestObject) (CreateAlertRuleFromTemplateResponseObject, error)
+
 	// (GET /api/v1/alert-rules)
 	ListAlertRules(ctx context.Context, request ListAlertRulesRequestObject) (ListAlertRulesResponseObject, error)
 
 	// (POST /api/v1/alert-rules)
 	CreateAlertRule(ctx context.Context, request CreateAlertRuleRequestObject) (CreateAlertRuleResponseObject, error)
 
+	// (DELETE /api/v1/alert-rules/{id})
+	DeleteAlertRule(ctx context.Context, request DeleteAlertRuleRequestObject) (DeleteAlertRuleResponseObject, error)
+
 	// (PUT /api/v1/alert-rules/{id})
 	UpdateAlertRule(ctx context.Context, request UpdateAlertRuleRequestObject) (UpdateAlertRuleResponseObject, error)
+
+	// (POST /api/v1/alert-rules/{id}/copies)
+	CopyAlertRule(ctx context.Context, request CopyAlertRuleRequestObject) (CopyAlertRuleResponseObject, error)
 
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(ctx context.Context, request UpdateAlertRuleEnabledRequestObject) (UpdateAlertRuleEnabledResponseObject, error)
@@ -3659,6 +3952,63 @@ func (sh *strictHandler) GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.
 	}
 }
 
+// ListAlertRuleTemplates operation middleware
+func (sh *strictHandler) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
+	var request ListAlertRuleTemplatesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertRuleTemplates(ctx, request.(ListAlertRuleTemplatesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertRuleTemplates")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertRuleTemplatesResponseObject); ok {
+		if err := validResponse.VisitListAlertRuleTemplatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAlertRuleFromTemplate operation middleware
+func (sh *strictHandler) CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request, id string) {
+	var request CreateAlertRuleFromTemplateRequestObject
+
+	request.Id = id
+
+	var body CreateAlertRuleFromTemplateJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAlertRuleFromTemplate(ctx, request.(CreateAlertRuleFromTemplateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAlertRuleFromTemplate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAlertRuleFromTemplateResponseObject); ok {
+		if err := validResponse.VisitCreateAlertRuleFromTemplateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ListAlertRules operation middleware
 func (sh *strictHandler) ListAlertRules(w http.ResponseWriter, r *http.Request) {
 	var request ListAlertRulesRequestObject
@@ -3714,6 +4064,32 @@ func (sh *strictHandler) CreateAlertRule(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// DeleteAlertRule operation middleware
+func (sh *strictHandler) DeleteAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteAlertRuleRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteAlertRule(ctx, request.(DeleteAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteAlertRuleResponseObject); ok {
+		if err := validResponse.VisitDeleteAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // UpdateAlertRule operation middleware
 func (sh *strictHandler) UpdateAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	var request UpdateAlertRuleRequestObject
@@ -3740,6 +4116,39 @@ func (sh *strictHandler) UpdateAlertRule(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateAlertRuleResponseObject); ok {
 		if err := validResponse.VisitUpdateAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CopyAlertRule operation middleware
+func (sh *strictHandler) CopyAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request CopyAlertRuleRequestObject
+
+	request.Id = id
+
+	var body CopyAlertRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CopyAlertRule(ctx, request.(CopyAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CopyAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CopyAlertRuleResponseObject); ok {
+		if err := validResponse.VisitCopyAlertRuleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

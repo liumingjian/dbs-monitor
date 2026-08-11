@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
@@ -152,6 +153,35 @@ func TestRecoveryCountDefaultsToTriggerCount(t *testing.T) {
 	rule.RecoveryConsecutiveCount = &explicit
 	if got := recoveryConsecutiveCount(rule); got != explicit {
 		t.Fatalf("recovery count = %d, want explicit count %d", got, explicit)
+	}
+}
+
+func TestBuiltinRuleTemplatesPassRuleValidation(t *testing.T) {
+	for _, template := range alerting.BuiltinRuleTemplates {
+		t.Run(template.Identifier, func(t *testing.T) {
+			recoveryThreshold := template.RecoveryThreshold
+			recoveryCount := template.RecoveryConsecutiveCount
+			rule := api.AlertRuleInput{
+				Name:                      template.Name,
+				MetricId:                  template.MetricID,
+				Aggregation:               api.AlertAggregation(template.Aggregation),
+				Operator:                  api.AlertOperator(template.Operator),
+				Threshold:                 template.Threshold,
+				RecoveryOperator:          api.AlertOperator(template.RecoveryOperator),
+				RecoveryThreshold:         &recoveryThreshold,
+				WindowSeconds:             template.WindowSeconds,
+				ConsecutiveCount:          template.ConsecutiveCount,
+				RecoveryConsecutiveCount:  &recoveryCount,
+				Severity:                  api.AlertSeverity(template.Severity),
+				NoDataPolicy:              api.NoDataPolicy(template.NoDataPolicy),
+				Scope:                     api.ALL,
+				EvaluationIntervalSeconds: template.EvaluationIntervalSeconds,
+				Enabled:                   true,
+			}
+			if fieldErrors := validateAlertRule(rule); len(fieldErrors) != 0 {
+				t.Fatalf("validation errors = %+v, want none", fieldErrors)
+			}
+		})
 	}
 }
 

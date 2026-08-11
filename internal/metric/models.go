@@ -81,6 +81,10 @@ type AlertRule struct {
 	EvaluationIntervalSeconds int32
 	EnabledUpdatedBy          pgtype.UUID
 	EnabledUpdatedAt          pgtype.Timestamptz
+	BuiltinIdentifier         pgtype.Text
+	NotificationPolicyID      pgtype.UUID
+	SourceTemplateID          pgtype.Text
+	SourceTemplateVersion     pgtype.Int4
 }
 
 type AlertRuleEvaluationState struct {
@@ -93,6 +97,24 @@ type AlertRuleEvaluationState struct {
 type AlertRuleScopeInstance struct {
 	RuleID     pgtype.UUID
 	InstanceID pgtype.UUID
+}
+
+type AlertRuleTemplate struct {
+	Identifier                string
+	Version                   int32
+	Name                      string
+	MetricID                  string
+	Aggregation               string
+	Operator                  string
+	Threshold                 float64
+	RecoveryOperator          string
+	RecoveryThreshold         float64
+	WindowSeconds             int32
+	ConsecutiveCount          int32
+	RecoveryConsecutiveCount  int32
+	Severity                  string
+	NoDataPolicy              string
+	EvaluationIntervalSeconds int32
 }
 
 type AlertRuleVersion struct {
@@ -277,6 +299,15 @@ type MetricSeries struct {
 	LabelsKey  string
 	FirstSeen  pgtype.Timestamptz
 	LastSeen   pgtype.Timestamptz
+}
+
+type NotificationPolicy struct {
+	ID         pgtype.UUID
+	Identifier string
+	Name       string
+	IsDefault  bool
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
 }
 
 type PerformanceEvent struct {
