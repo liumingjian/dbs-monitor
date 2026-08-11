@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -89,7 +90,7 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 		t.Fatalf("create snapshot rule: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_rule_version (rule_id, version, snapshot, created_at)
-		VALUES ($1, 1, '{"metric_id":"pg.session.blocked_count"}', $2)`, ruleID, now); err != nil {
+		VALUES ($1, 1, '{"metric_id":"pg.session.blocked_count","threshold":1}', $2)`, ruleID, now); err != nil {
 		t.Fatalf("create snapshot rule version: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_rule_scope_instance (rule_id, instance_id) VALUES ($1, $2)`, ruleID, instanceID); err != nil {
@@ -193,6 +194,18 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	if eventSnapshotID != snapshotID {
 		t.Fatalf("FIRED event snapshot = %s, want %s", eventSnapshotID, snapshotID)
 	}
+	var performanceEventID uuid.UUID
+	var performanceEventType string
+	var performanceEventDerivedAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT id, event_type, derived_at FROM performance_event
+		WHERE alert_instance_id = $1`, alertInstanceID).
+		Scan(&performanceEventID, &performanceEventType, &performanceEventDerivedAt); err != nil {
+		t.Fatalf("read derived performance event: %v", err)
+	}
+	if performanceEventType != "LOCK_BLOCKING" || !performanceEventDerivedAt.Equal(now) {
+		t.Fatalf("derived performance event = %s at %s, want LOCK_BLOCKING at %s",
+			performanceEventType, performanceEventDerivedAt, now)
+	}
 	if err := httpapi.SeedAdmin(ctx, platform, "snapshot-admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed snapshot API administrator: %v", err)
 	}
@@ -226,6 +239,60 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 		snapshotBody.OriginalMatchCount != 2 || len(snapshotBody.Sessions) != 2 {
 		t.Fatalf("successful snapshot API response = status %d body %+v", snapshotResponse.StatusCode, snapshotBody)
 	}
+	eventListURL := fmt.Sprintf("%s/api/v1/instances/%s/performance-events?from=%s&to=%s",
+		server.URL, instanceID, now.Add(-time.Minute).Format(time.RFC3339Nano), now.Add(time.Minute).Format(time.RFC3339Nano))
+	eventListResponse := snapshotRequestJSON(t, client, http.MethodGet, eventListURL, nil)
+	var eventPage api.PerformanceEventPage
+	if err := json.NewDecoder(eventListResponse.Body).Decode(&eventPage); err != nil {
+		t.Fatalf("decode performance event page: %v", err)
+	}
+	eventListResponse.Body.Close()
+	if eventListResponse.StatusCode != http.StatusOK || eventPage.Total != 1 || len(eventPage.Items) != 1 {
+		t.Fatalf("performance event page = status %d body %+v", eventListResponse.StatusCode, eventPage)
+	}
+	eventItem := eventPage.Items[0]
+	if eventItem.Id != performanceEventID || eventItem.AlertInstanceId != alertInstanceID ||
+		eventItem.EventType != api.EventLockBlocking || eventItem.AlertStatus != api.FIRING ||
+		eventItem.Disposition != api.AlertDispositionNONE || eventItem.TriggerSnapshotResult != api.TriggerSnapshotSuccess {
+		t.Fatalf("derived performance event projection = %+v", eventItem)
+	}
+	for _, contextValue := range []string{"pg.session.blocked_count", "1"} {
+		if !strings.Contains(eventItem.CauseSummary, contextValue) {
+			t.Errorf("performance event cause %q does not contain %q", eventItem.CauseSummary, contextValue)
+		}
+	}
+
+	eventDetailURL := server.URL + "/api/v1/performance-events/" + performanceEventID.String()
+	eventDetail := readPerformanceEvent(t, client, eventDetailURL)
+	if eventDetail.Id != performanceEventID || eventDetail.SuggestedAction == "" {
+		t.Fatalf("performance event detail = %+v", eventDetail)
+	}
+	dispositionResponse := snapshotRequestJSON(t, client, http.MethodPut,
+		server.URL+"/api/v1/alert-instances/"+alertInstanceID.String()+"/disposition",
+		map[string]any{"disposition": "ACKED", "note": "investigating"})
+	dispositionResponse.Body.Close()
+	if dispositionResponse.StatusCode != http.StatusOK {
+		t.Fatalf("performance event alert disposition status = %d, want 200", dispositionResponse.StatusCode)
+	}
+	eventDetail = readPerformanceEvent(t, client, eventDetailURL)
+	if eventDetail.Disposition != api.AlertDispositionACKED {
+		t.Fatalf("performance event disposition = %s, want ACKED", eventDetail.Disposition)
+	}
+	var storedDisposition string
+	if err := pool.QueryRow(ctx, "SELECT disposition FROM alert_instance WHERE id = $1", alertInstanceID).Scan(&storedDisposition); err != nil {
+		t.Fatalf("read event-backed alert disposition: %v", err)
+	}
+	if storedDisposition != "ACKED" {
+		t.Fatalf("event-backed alert disposition = %s, want ACKED", storedDisposition)
+	}
+	ackedListResponse := snapshotRequestJSON(t, client, http.MethodGet, eventListURL+"&disposition=ACKED", nil)
+	if err := json.NewDecoder(ackedListResponse.Body).Decode(&eventPage); err != nil {
+		t.Fatalf("decode acknowledged performance event page: %v", err)
+	}
+	ackedListResponse.Body.Close()
+	if ackedListResponse.StatusCode != http.StatusOK || eventPage.Total != 1 {
+		t.Fatalf("acknowledged performance event page = status %d body %+v", ackedListResponse.StatusCode, eventPage)
+	}
 
 	currentClock.now = currentClock.now.Add(5 * time.Second)
 	insertSnapshotSample(t, ctx, pool, seriesID, currentClock.now)
@@ -238,6 +305,32 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	}
 	if snapshotCount != 1 {
 		t.Fatalf("trigger snapshot count after sustained firing = %d, want 1", snapshotCount)
+	}
+	var performanceEventCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM performance_event WHERE alert_instance_id = $1`, alertInstanceID).Scan(&performanceEventCount); err != nil {
+		t.Fatalf("count performance events: %v", err)
+	}
+	if performanceEventCount != 1 {
+		t.Fatalf("performance event count after sustained firing = %d, want 1", performanceEventCount)
+	}
+	currentClock.now = currentClock.now.Add(5 * time.Second)
+	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 0)", seriesID, currentClock.now); err != nil {
+		t.Fatalf("insert recovered blocked-session sample: %v", err)
+	}
+	if err := service.RunOnce(ctx); err != nil {
+		t.Fatalf("recover blocking alert: %v", err)
+	}
+	eventDetail = readPerformanceEvent(t, client, eventDetailURL)
+	if eventDetail.AlertStatus != api.RECOVERED || eventDetail.RecoveredAt == nil || eventDetail.DurationMs != 10_000 {
+		t.Fatalf("recovered performance event projection = %+v, want RECOVERED after 10000ms", eventDetail)
+	}
+	recoveredListResponse := snapshotRequestJSON(t, client, http.MethodGet, eventListURL+"&recovered=true", nil)
+	if err := json.NewDecoder(recoveredListResponse.Body).Decode(&eventPage); err != nil {
+		t.Fatalf("decode recovered performance event page: %v", err)
+	}
+	recoveredListResponse.Body.Close()
+	if recoveredListResponse.StatusCode != http.StatusOK || eventPage.Total != 1 {
+		t.Fatalf("recovered performance event page = status %d body %+v", recoveredListResponse.StatusCode, eventPage)
 	}
 
 	nonApplicableRuleID := uuid.New()
@@ -269,18 +362,19 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	if err := service.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate non-applicable alert: %v", err)
 	}
-	var nonApplicableSnapshotCount, nonApplicableEventReferences int
+	var nonApplicableSnapshotCount, nonApplicableEventReferences, nonApplicablePerformanceEvents int
 	if err := pool.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM alert_trigger_snapshot snapshot WHERE snapshot.alert_instance_id = alert.id),
 		(SELECT count(*) FROM alert_event event WHERE event.alert_instance_id = alert.id
-		 AND event.kind = 'FIRED' AND event.trigger_snapshot_id IS NOT NULL)
+		 AND event.kind = 'FIRED' AND event.trigger_snapshot_id IS NOT NULL),
+		(SELECT count(*) FROM performance_event event WHERE event.alert_instance_id = alert.id)
 		FROM alert_instance alert WHERE alert.rule_id = $1`, nonApplicableRuleID).
-		Scan(&nonApplicableSnapshotCount, &nonApplicableEventReferences); err != nil {
+		Scan(&nonApplicableSnapshotCount, &nonApplicableEventReferences, &nonApplicablePerformanceEvents); err != nil {
 		t.Fatalf("read non-applicable snapshot state: %v", err)
 	}
-	if nonApplicableSnapshotCount != 0 || nonApplicableEventReferences != 0 {
-		t.Fatalf("non-applicable snapshot state = rows %d event references %d, want 0/0",
-			nonApplicableSnapshotCount, nonApplicableEventReferences)
+	if nonApplicableSnapshotCount != 0 || nonApplicableEventReferences != 0 || nonApplicablePerformanceEvents != 0 {
+		t.Fatalf("non-applicable derived state = snapshots %d references %d events %d, want 0/0/0",
+			nonApplicableSnapshotCount, nonApplicableEventReferences, nonApplicablePerformanceEvents)
 	}
 
 	var forbiddenColumns int
@@ -375,6 +469,20 @@ func snapshotRequestJSON(t *testing.T, client *http.Client, method, address stri
 		t.Fatalf("send snapshot API request: %v", err)
 	}
 	return response
+}
+
+func readPerformanceEvent(t *testing.T, client *http.Client, address string) api.PerformanceEvent {
+	t.Helper()
+	response := snapshotRequestJSON(t, client, http.MethodGet, address, nil)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("performance event detail status = %d, want 200", response.StatusCode)
+	}
+	var event api.PerformanceEvent
+	if err := json.NewDecoder(response.Body).Decode(&event); err != nil {
+		t.Fatalf("decode performance event detail: %v", err)
+	}
+	return event
 }
 
 func openSnapshotSQL(t *testing.T, databaseName string) *sql.DB {

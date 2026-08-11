@@ -273,6 +273,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/performance-events": {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                recovered?: boolean;
+                disposition?: components["schemas"]["AlertDisposition"];
+                limit?: number;
+                offset?: number;
+                sort?: "derived_at" | "-derived_at" | "updated_at" | "-updated_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listPerformanceEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/performance-events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getPerformanceEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/report": {
         parameters: {
             query?: never;
@@ -633,6 +677,40 @@ export interface components {
             truncated: boolean;
             failure_reason?: string;
             sessions: components["schemas"]["AlertTriggerSnapshotSession"][];
+        };
+        /** @enum {string} */
+        PerformanceEventType: "LOCK_BLOCKING" | "LONG_TRANSACTION" | "IDLE_IN_TRANSACTION" | "ACTIVE_SESSIONS_HIGH" | "REPLICATION_LAG" | "TEMP_FILES_SURGE";
+        PerformanceEvent: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            instance_id: string;
+            /** Format: uuid */
+            alert_instance_id: string;
+            event_type: components["schemas"]["PerformanceEventType"];
+            alert_status: components["schemas"]["AlertStatus"];
+            severity: components["schemas"]["AlertSeverity"];
+            disposition: components["schemas"]["AlertDisposition"];
+            /** Format: date-time */
+            derived_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            recovered_at?: string;
+            /** Format: int64 */
+            duration_ms: number;
+            metric_id: string;
+            /** Format: double */
+            threshold: number;
+            /** Format: double */
+            trigger_value: number;
+            cause_summary: string;
+            suggested_action: string;
+            trigger_snapshot_result: components["schemas"]["AlertTriggerSnapshotResult"];
+        };
+        PerformanceEventPage: {
+            total: number;
+            items: components["schemas"]["PerformanceEvent"][];
         };
         InstanceCreateInput: {
             name: string;
@@ -1554,6 +1632,76 @@ export interface operations {
                 };
             };
             /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPerformanceEvents: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                recovered?: boolean;
+                disposition?: components["schemas"]["AlertDisposition"];
+                limit?: number;
+                offset?: number;
+                sort?: "derived_at" | "-derived_at" | "updated_at" | "-updated_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performance events derived from alert instances */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceEventPage"];
+                };
+            };
+            /** @description Invalid time range, pagination, or sort */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPerformanceEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performance event detail projected from its alert instance */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceEvent"];
+                };
+            };
+            /** @description Performance event not found */
             404: {
                 headers: {
                     [name: string]: unknown;

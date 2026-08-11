@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -143,6 +144,7 @@ func run(ctx context.Context) error {
 	evaluation := evaluator.New(platform, clock.Real{}, collector.WithTriggerSnapshotConnection)
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform, health)
+	go runAlertHistoryMaintenance(ctx, platform)
 	go func() {
 		timer := time.NewTimer(time.Second)
 		defer timer.Stop()
@@ -192,6 +194,26 @@ func run(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func runAlertHistoryMaintenance(ctx context.Context, platform *db.Pool) {
+	deleteExpiredAlertHistory := func(now time.Time) {
+		if _, err := alerting.DeleteRecoveredAlertHistory(ctx, platform, now); err != nil {
+			log.Printf("alert history retention failed: %v", err)
+		}
+	}
+	deleteExpiredAlertHistory(time.Now().UTC())
+
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-ticker.C:
+			deleteExpiredAlertHistory(now)
+		}
+	}
 }
 
 func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *platformhealth.Store) {

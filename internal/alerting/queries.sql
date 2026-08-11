@@ -291,6 +291,16 @@ INSERT INTO alert_trigger_snapshot_session (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
+-- name: CreatePerformanceEvent :exec
+INSERT INTO performance_event (alert_instance_id, event_type, derived_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (alert_instance_id) DO NOTHING;
+
+-- name: DeleteRecoveredAlertHistoryBefore :execrows
+DELETE FROM alert_instance
+WHERE recovered_at IS NOT NULL
+  AND recovered_at <= $1;
+
 -- name: GetAlertDispositionForRead :one
 SELECT * FROM alert_instance WHERE id = $1 FOR SHARE;
 

@@ -191,6 +191,9 @@ type ClientInterface interface {
 	// GetMetricSeries request
 	GetMetricSeries(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListPerformanceEvents request
+	ListPerformanceEvents(ctx context.Context, id openapi_types.UUID, params *ListPerformanceEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CreateSessionWithBody request with any body
 	CreateSessionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -203,6 +206,9 @@ type ClientInterface interface {
 	ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	ChangeOwnPassword(ctx context.Context, body ChangeOwnPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPerformanceEvent request
+	GetPerformanceEvent(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListUsers request
 	ListUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -670,6 +676,18 @@ func (c *Client) GetMetricSeries(ctx context.Context, id openapi_types.UUID, par
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListPerformanceEvents(ctx context.Context, id openapi_types.UUID, params *ListPerformanceEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListPerformanceEventsRequest(c.Server, id, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) CreateSessionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateSessionRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -720,6 +738,18 @@ func (c *Client) ChangeOwnPasswordWithBody(ctx context.Context, contentType stri
 
 func (c *Client) ChangeOwnPassword(ctx context.Context, body ChangeOwnPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewChangeOwnPasswordRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPerformanceEvent(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPerformanceEventRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1975,6 +2005,150 @@ func NewGetMetricSeriesRequest(server string, id openapi_types.UUID, params *Get
 	return req, nil
 }
 
+// NewListPerformanceEventsRequest generates requests for ListPerformanceEvents
+func NewListPerformanceEventsRequest(server string, id openapi_types.UUID, params *ListPerformanceEventsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/performance-events", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Recovered != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "recovered", runtime.ParamLocationQuery, *params.Recovered); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Disposition != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "disposition", runtime.ParamLocationQuery, *params.Disposition); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCreateSessionRequest calls the generic CreateSession builder with application/json body
 func NewCreateSessionRequest(server string, body CreateSessionJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2078,6 +2252,40 @@ func NewChangeOwnPasswordRequestWithBody(server string, contentType string, body
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetPerformanceEventRequest generates requests for GetPerformanceEvent
+func NewGetPerformanceEventRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/performance-events/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -2421,6 +2629,9 @@ type ClientWithResponsesInterface interface {
 	// GetMetricSeriesWithResponse request
 	GetMetricSeriesWithResponse(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetMetricSeriesResponse, error)
 
+	// ListPerformanceEventsWithResponse request
+	ListPerformanceEventsWithResponse(ctx context.Context, id openapi_types.UUID, params *ListPerformanceEventsParams, reqEditors ...RequestEditorFn) (*ListPerformanceEventsResponse, error)
+
 	// CreateSessionWithBodyWithResponse request with any body
 	CreateSessionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSessionResponse, error)
 
@@ -2433,6 +2644,9 @@ type ClientWithResponsesInterface interface {
 	ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
 
 	ChangeOwnPasswordWithResponse(ctx context.Context, body ChangeOwnPasswordJSONRequestBody, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
+
+	// GetPerformanceEventWithResponse request
+	GetPerformanceEventWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPerformanceEventResponse, error)
 
 	// ListUsersWithResponse request
 	ListUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListUsersResponse, error)
@@ -3070,6 +3284,29 @@ func (r GetMetricSeriesResponse) StatusCode() int {
 	return 0
 }
 
+type ListPerformanceEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PerformanceEventPage
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ListPerformanceEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListPerformanceEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type CreateSessionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3130,6 +3367,29 @@ func (r ChangeOwnPasswordResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ChangeOwnPasswordResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetPerformanceEventResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PerformanceEvent
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPerformanceEventResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPerformanceEventResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3577,6 +3837,15 @@ func (c *ClientWithResponses) GetMetricSeriesWithResponse(ctx context.Context, i
 	return ParseGetMetricSeriesResponse(rsp)
 }
 
+// ListPerformanceEventsWithResponse request returning *ListPerformanceEventsResponse
+func (c *ClientWithResponses) ListPerformanceEventsWithResponse(ctx context.Context, id openapi_types.UUID, params *ListPerformanceEventsParams, reqEditors ...RequestEditorFn) (*ListPerformanceEventsResponse, error) {
+	rsp, err := c.ListPerformanceEvents(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListPerformanceEventsResponse(rsp)
+}
+
 // CreateSessionWithBodyWithResponse request with arbitrary body returning *CreateSessionResponse
 func (c *ClientWithResponses) CreateSessionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSessionResponse, error) {
 	rsp, err := c.CreateSessionWithBody(ctx, contentType, body, reqEditors...)
@@ -3618,6 +3887,15 @@ func (c *ClientWithResponses) ChangeOwnPasswordWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseChangeOwnPasswordResponse(rsp)
+}
+
+// GetPerformanceEventWithResponse request returning *GetPerformanceEventResponse
+func (c *ClientWithResponses) GetPerformanceEventWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPerformanceEventResponse, error) {
+	rsp, err := c.GetPerformanceEvent(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPerformanceEventResponse(rsp)
 }
 
 // ListUsersWithResponse request returning *ListUsersResponse
@@ -4528,6 +4806,39 @@ func ParseGetMetricSeriesResponse(rsp *http.Response) (*GetMetricSeriesResponse,
 	return response, nil
 }
 
+// ParseListPerformanceEventsResponse parses an HTTP response from a ListPerformanceEventsWithResponse call
+func ParseListPerformanceEventsResponse(rsp *http.Response) (*ListPerformanceEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListPerformanceEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PerformanceEventPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseCreateSessionResponse parses an HTTP response from a CreateSessionWithResponse call
 func ParseCreateSessionResponse(rsp *http.Response) (*CreateSessionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4600,6 +4911,39 @@ func ParseChangeOwnPasswordResponse(rsp *http.Response) (*ChangeOwnPasswordRespo
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPerformanceEventResponse parses an HTTP response from a GetPerformanceEventWithResponse call
+func ParseGetPerformanceEventResponse(rsp *http.Response) (*GetPerformanceEventResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPerformanceEventResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PerformanceEvent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

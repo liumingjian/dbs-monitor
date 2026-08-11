@@ -272,6 +272,23 @@ func (q *Queries) CreateAlertRuleVersion(ctx context.Context, arg CreateAlertRul
 	return err
 }
 
+const createPerformanceEvent = `-- name: CreatePerformanceEvent :exec
+INSERT INTO performance_event (alert_instance_id, event_type, derived_at)
+VALUES ($1, $2, $3)
+ON CONFLICT (alert_instance_id) DO NOTHING
+`
+
+type CreatePerformanceEventParams struct {
+	AlertInstanceID pgtype.UUID
+	EventType       string
+	DerivedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) CreatePerformanceEvent(ctx context.Context, arg CreatePerformanceEventParams) error {
+	_, err := q.db.Exec(ctx, createPerformanceEvent, arg.AlertInstanceID, arg.EventType, arg.DerivedAt)
+	return err
+}
+
 const createTriggerSnapshot = `-- name: CreateTriggerSnapshot :one
 INSERT INTO alert_trigger_snapshot (
     alert_instance_id, captured_at, result,
@@ -355,6 +372,20 @@ DELETE FROM alert_rule_scope_instance WHERE rule_id = $1
 func (q *Queries) DeleteAlertRuleScopeInstances(ctx context.Context, ruleID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteAlertRuleScopeInstances, ruleID)
 	return err
+}
+
+const deleteRecoveredAlertHistoryBefore = `-- name: DeleteRecoveredAlertHistoryBefore :execrows
+DELETE FROM alert_instance
+WHERE recovered_at IS NOT NULL
+  AND recovered_at <= $1
+`
+
+func (q *Queries) DeleteRecoveredAlertHistoryBefore(ctx context.Context, recoveredAt pgtype.Timestamptz) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteRecoveredAlertHistoryBefore, recoveredAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getAlertDispositionForRead = `-- name: GetAlertDispositionForRead :one

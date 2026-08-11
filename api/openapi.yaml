@@ -9,6 +9,7 @@ tags:
   - name: metrics
   - name: alert-rules
   - name: alerts
+  - name: performance-events
   - name: auth
   - name: agent
   - name: collection
@@ -45,6 +46,10 @@ paths:
     $ref: paths/alert-instances.yaml#/~1api~1v1~1alert-instances~1{id}~1disposition
   /api/v1/alert-instances/{id}/trigger-snapshot:
     $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1trigger-snapshot
+  /api/v1/instances/{id}/performance-events:
+    $ref: paths/performance-events.yaml#/~1api~1v1~1instances~1{id}~1performance-events
+  /api/v1/performance-events/{id}:
+    $ref: paths/performance-events.yaml#/~1api~1v1~1performance-events~1{id}
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
   /api/v1/instances/{id}/agent/registration:
@@ -117,6 +122,12 @@ components:
       $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshotSession
     AlertTriggerSnapshot:
       $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshot
+    PerformanceEventType:
+      $ref: components/enums.yaml#/PerformanceEventType
+    PerformanceEvent:
+      $ref: components/schemas/performance-events.yaml#/PerformanceEvent
+    PerformanceEventPage:
+      $ref: components/schemas/performance-events.yaml#/PerformanceEventPage
     InstanceCreateInput:
       $ref: components/schemas/instances.yaml#/InstanceCreateInput
     InstanceMetadataInput:

@@ -186,6 +186,16 @@ const (
 	MarkNoData NoDataPolicy = "mark_no_data"
 )
 
+// Defines values for PerformanceEventType.
+const (
+	EventActiveSessionsHigh PerformanceEventType = "ACTIVE_SESSIONS_HIGH"
+	EventIdleInTransaction  PerformanceEventType = "IDLE_IN_TRANSACTION"
+	EventLockBlocking       PerformanceEventType = "LOCK_BLOCKING"
+	EventLongTransaction    PerformanceEventType = "LONG_TRANSACTION"
+	EventReplicationLag     PerformanceEventType = "REPLICATION_LAG"
+	EventTempFilesSurge     PerformanceEventType = "TEMP_FILES_SURGE"
+)
+
 // Defines values for PlatformHealthSource.
 const (
 	HealthSourceAgentIngress         PlatformHealthSource = "AGENT_INGRESS"
@@ -674,6 +684,36 @@ type PasswordIssued struct {
 	Password string `json:"password"`
 }
 
+// PerformanceEvent defines model for PerformanceEvent.
+type PerformanceEvent struct {
+	AlertInstanceId       openapi_types.UUID         `json:"alert_instance_id"`
+	AlertStatus           AlertStatus                `json:"alert_status"`
+	CauseSummary          string                     `json:"cause_summary"`
+	DerivedAt             time.Time                  `json:"derived_at"`
+	Disposition           AlertDisposition           `json:"disposition"`
+	DurationMs            int64                      `json:"duration_ms"`
+	EventType             PerformanceEventType       `json:"event_type"`
+	Id                    openapi_types.UUID         `json:"id"`
+	InstanceId            openapi_types.UUID         `json:"instance_id"`
+	MetricId              string                     `json:"metric_id"`
+	RecoveredAt           *time.Time                 `json:"recovered_at,omitempty"`
+	Severity              AlertSeverity              `json:"severity"`
+	SuggestedAction       string                     `json:"suggested_action"`
+	Threshold             float64                    `json:"threshold"`
+	TriggerSnapshotResult AlertTriggerSnapshotResult `json:"trigger_snapshot_result"`
+	TriggerValue          float64                    `json:"trigger_value"`
+	UpdatedAt             time.Time                  `json:"updated_at"`
+}
+
+// PerformanceEventPage defines model for PerformanceEventPage.
+type PerformanceEventPage struct {
+	Items []PerformanceEvent `json:"items"`
+	Total int                `json:"total"`
+}
+
+// PerformanceEventType defines model for PerformanceEventType.
+type PerformanceEventType string
+
 // PlatformHealthSnapshot defines model for PlatformHealthSnapshot.
 type PlatformHealthSnapshot struct {
 	AssembledAt time.Time                      `json:"assembled_at"`
@@ -766,6 +806,17 @@ type GetMetricSeriesParamsMetric string
 
 // GetMetricSeriesParamsStep defines parameters for GetMetricSeries.
 type GetMetricSeriesParamsStep string
+
+// ListPerformanceEventsParams defines parameters for ListPerformanceEvents.
+type ListPerformanceEventsParams struct {
+	From        time.Time         `form:"from" json:"from"`
+	To          time.Time         `form:"to" json:"to"`
+	Recovered   *bool             `form:"recovered,omitempty" json:"recovered,omitempty"`
+	Disposition *AlertDisposition `form:"disposition,omitempty" json:"disposition,omitempty"`
+	Limit       *int              `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset      *int              `form:"offset,omitempty" json:"offset,omitempty"`
+	Sort        *string           `form:"sort,omitempty" json:"sort,omitempty"`
+}
 
 // CreateSessionJSONBody defines parameters for CreateSession.
 type CreateSessionJSONBody struct {
@@ -902,6 +953,9 @@ type ServerInterface interface {
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params GetMetricSeriesParams)
 
+	// (GET /api/v1/instances/{id}/performance-events)
+	ListPerformanceEvents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListPerformanceEventsParams)
+
 	// (POST /api/v1/login)
 	CreateSession(w http.ResponseWriter, r *http.Request)
 
@@ -910,6 +964,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/performance-events/{id})
+	GetPerformanceEvent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/users)
 	ListUsers(w http.ResponseWriter, r *http.Request)
@@ -1673,6 +1730,104 @@ func (siw *ServerInterfaceWrapper) GetMetricSeries(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListPerformanceEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListPerformanceEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPerformanceEventsParams
+
+	// ------------- Required query parameter "from" -------------
+
+	if paramValue := r.URL.Query().Get("from"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "from", r.URL.Query(), &params.From)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	if paramValue := r.URL.Query().Get("to"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "to", r.URL.Query(), &params.To)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "recovered" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "recovered", r.URL.Query(), &params.Recovered)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recovered", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "disposition" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "disposition", r.URL.Query(), &params.Disposition)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "disposition", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPerformanceEvents(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateSession operation middleware
 func (siw *ServerInterfaceWrapper) CreateSession(w http.ResponseWriter, r *http.Request) {
 
@@ -1706,6 +1861,31 @@ func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ChangeOwnPassword(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPerformanceEvent operation middleware
+func (siw *ServerInterfaceWrapper) GetPerformanceEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPerformanceEvent(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1965,9 +2145,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/credentials", wrapper.UpdateInstanceCredential)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/long-query-samples", wrapper.ListLongQuerySamples)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/performance-events", wrapper.ListPerformanceEvents)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users", wrapper.CreateUser)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users/{id}/password", wrapper.ResetUserPassword)
@@ -2639,6 +2821,33 @@ func (response GetMetricSeries400JSONResponse) VisitGetMetricSeriesResponse(w ht
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListPerformanceEventsRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params ListPerformanceEventsParams
+}
+
+type ListPerformanceEventsResponseObject interface {
+	VisitListPerformanceEventsResponse(w http.ResponseWriter) error
+}
+
+type ListPerformanceEvents200JSONResponse PerformanceEventPage
+
+func (response ListPerformanceEvents200JSONResponse) VisitListPerformanceEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListPerformanceEvents400JSONResponse Error
+
+func (response ListPerformanceEvents400JSONResponse) VisitListPerformanceEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type CreateSessionRequestObject struct {
 	Body *CreateSessionJSONRequestBody
 }
@@ -2707,6 +2916,32 @@ type ChangeOwnPassword400JSONResponse Error
 func (response ChangeOwnPassword400JSONResponse) VisitChangeOwnPasswordResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPerformanceEventRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetPerformanceEventResponseObject interface {
+	VisitGetPerformanceEventResponse(w http.ResponseWriter) error
+}
+
+type GetPerformanceEvent200JSONResponse PerformanceEvent
+
+func (response GetPerformanceEvent200JSONResponse) VisitGetPerformanceEventResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPerformanceEvent404JSONResponse Error
+
+func (response GetPerformanceEvent404JSONResponse) VisitGetPerformanceEventResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -2953,6 +3188,9 @@ type StrictServerInterface interface {
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(ctx context.Context, request GetMetricSeriesRequestObject) (GetMetricSeriesResponseObject, error)
 
+	// (GET /api/v1/instances/{id}/performance-events)
+	ListPerformanceEvents(ctx context.Context, request ListPerformanceEventsRequestObject) (ListPerformanceEventsResponseObject, error)
+
 	// (POST /api/v1/login)
 	CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error)
 
@@ -2961,6 +3199,9 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
+
+	// (GET /api/v1/performance-events/{id})
+	GetPerformanceEvent(ctx context.Context, request GetPerformanceEventRequestObject) (GetPerformanceEventResponseObject, error)
 
 	// (GET /api/v1/users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -3770,6 +4011,33 @@ func (sh *strictHandler) GetMetricSeries(w http.ResponseWriter, r *http.Request,
 	}
 }
 
+// ListPerformanceEvents operation middleware
+func (sh *strictHandler) ListPerformanceEvents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListPerformanceEventsParams) {
+	var request ListPerformanceEventsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPerformanceEvents(ctx, request.(ListPerformanceEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPerformanceEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPerformanceEventsResponseObject); ok {
+		if err := validResponse.VisitListPerformanceEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // CreateSession operation middleware
 func (sh *strictHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	var request CreateSessionRequestObject
@@ -3849,6 +4117,32 @@ func (sh *strictHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ChangeOwnPasswordResponseObject); ok {
 		if err := validResponse.VisitChangeOwnPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPerformanceEvent operation middleware
+func (sh *strictHandler) GetPerformanceEvent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetPerformanceEventRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPerformanceEvent(ctx, request.(GetPerformanceEventRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPerformanceEvent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPerformanceEventResponseObject); ok {
+		if err := validResponse.VisitGetPerformanceEventResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

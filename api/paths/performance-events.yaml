@@ -1,0 +1,69 @@
+/api/v1/instances/{id}/performance-events:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    - name: from
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+    - name: to
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+    - name: recovered
+      in: query
+      schema: { type: boolean }
+    - name: disposition
+      in: query
+      schema: { $ref: ../components/enums.yaml#/AlertDisposition }
+    - name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    - name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    - name: sort
+      in: query
+      schema:
+        type: string
+        enum: [derived_at, -derived_at, updated_at, -updated_at]
+        default: -derived_at
+  get:
+    tags: [performance-events]
+    operationId: listPerformanceEvents
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Performance events derived from alert instances
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/performance-events.yaml#/PerformanceEventPage }
+      '400':
+        description: Invalid time range, pagination, or sort
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+
+/api/v1/performance-events/{id}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [performance-events]
+    operationId: getPerformanceEvent
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Performance event detail projected from its alert instance
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/performance-events.yaml#/PerformanceEvent }
+      '404':
+        description: Performance event not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

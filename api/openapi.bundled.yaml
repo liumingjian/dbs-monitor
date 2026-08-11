@@ -9,6 +9,7 @@ tags:
   - name: metrics
   - name: alert-rules
   - name: alerts
+  - name: performance-events
   - name: auth
   - name: agent
   - name: collection
@@ -650,6 +651,101 @@ paths:
                 $ref: '#/components/schemas/AlertTriggerSnapshot'
         '404':
           description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/performance-events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: recovered
+        in: query
+        schema:
+          type: boolean
+      - name: disposition
+        in: query
+        schema:
+          $ref: '#/components/schemas/AlertDisposition'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum:
+            - derived_at
+            - '-derived_at'
+            - updated_at
+            - '-updated_at'
+          default: '-derived_at'
+    get:
+      tags:
+        - performance-events
+      operationId: listPerformanceEvents
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Performance events derived from alert instances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceEventPage'
+        '400':
+          description: Invalid time range, pagination, or sort
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/performance-events/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - performance-events
+      operationId: getPerformanceEvent
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Performance event detail projected from its alert instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceEvent'
+        '404':
+          description: Performance event not found
           content:
             application/json:
               schema:
@@ -1441,6 +1537,99 @@ components:
           maxItems: 100
           items:
             $ref: '#/components/schemas/AlertTriggerSnapshotSession'
+    PerformanceEventType:
+      type: string
+      enum:
+        - LOCK_BLOCKING
+        - LONG_TRANSACTION
+        - IDLE_IN_TRANSACTION
+        - ACTIVE_SESSIONS_HIGH
+        - REPLICATION_LAG
+        - TEMP_FILES_SURGE
+      x-enum-varnames:
+        - EventLockBlocking
+        - EventLongTransaction
+        - EventIdleInTransaction
+        - EventActiveSessionsHigh
+        - EventReplicationLag
+        - EventTempFilesSurge
+    PerformanceEvent:
+      type: object
+      required:
+        - id
+        - instance_id
+        - alert_instance_id
+        - event_type
+        - alert_status
+        - severity
+        - disposition
+        - derived_at
+        - updated_at
+        - duration_ms
+        - metric_id
+        - threshold
+        - trigger_value
+        - cause_summary
+        - suggested_action
+        - trigger_snapshot_result
+      properties:
+        id:
+          type: string
+          format: uuid
+        instance_id:
+          type: string
+          format: uuid
+        alert_instance_id:
+          type: string
+          format: uuid
+        event_type:
+          $ref: '#/components/schemas/PerformanceEventType'
+        alert_status:
+          $ref: '#/components/schemas/AlertStatus'
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        derived_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        recovered_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        metric_id:
+          type: string
+        threshold:
+          type: number
+          format: double
+        trigger_value:
+          type: number
+          format: double
+        cause_summary:
+          type: string
+        suggested_action:
+          type: string
+        trigger_snapshot_result:
+          $ref: '#/components/schemas/AlertTriggerSnapshotResult'
+    PerformanceEventPage:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PerformanceEvent'
     InstanceCreateInput:
       type: object
       required:
