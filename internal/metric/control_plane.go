@@ -82,17 +82,7 @@ func ProjectControlPlaneMetric(metricID MetricID, facts ControlPlaneFacts, now t
 			Labels:     map[string]string{"source_type": "SERVER_DIRECT"},
 		}, true
 	case MetricAgentStatus:
-		state := AgentStatusOffline
-		switch {
-		case !facts.AgentExpected:
-			state = AgentStatusNotInstalled
-		case facts.AgentLastErrorCode == "PERMISSION_DENIED":
-			state = AgentStatusPermissionDenied
-		case facts.AgentLastErrorCode != "":
-			state = AgentStatusError
-		case !facts.AgentLastReportAt.IsZero() && now.Sub(facts.AgentLastReportAt) <= AgentOfflineAfter:
-			state = AgentStatusOnline
-		}
+		state := AgentStatusAt(facts, now)
 		return ControlPlaneProjection{
 			ObservedAt: now,
 			Value:      AgentStatusEncodings[state],
@@ -101,6 +91,21 @@ func ProjectControlPlaneMetric(metricID MetricID, facts ControlPlaneFacts, now t
 		}, true
 	default:
 		return ControlPlaneProjection{}, false
+	}
+}
+
+func AgentStatusAt(facts ControlPlaneFacts, now time.Time) string {
+	switch {
+	case !facts.AgentExpected:
+		return AgentStatusNotInstalled
+	case facts.AgentLastErrorCode == "PERMISSION_DENIED":
+		return AgentStatusPermissionDenied
+	case facts.AgentLastErrorCode != "":
+		return AgentStatusError
+	case !facts.AgentLastReportAt.IsZero() && now.Sub(facts.AgentLastReportAt) <= AgentOfflineAfter:
+		return AgentStatusOnline
+	default:
+		return AgentStatusOffline
 	}
 }
 

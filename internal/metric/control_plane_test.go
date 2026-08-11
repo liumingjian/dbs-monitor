@@ -9,7 +9,6 @@ import (
 func TestProjectControlPlaneMetric(t *testing.T) {
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
 	watermark := now.Add(-45 * time.Second)
-	recentReport := now.Add(-AgentOfflineAfter)
 
 	tests := []struct {
 		name     string
@@ -35,61 +34,13 @@ func TestProjectControlPlaneMetric(t *testing.T) {
 			facts:    ControlPlaneFacts{},
 		},
 		{
-			name:     "accepted heartbeat at the offline boundary is online",
+			name:     "agent status includes its stable encoding",
 			metricID: MetricAgentStatus,
-			facts:    ControlPlaneFacts{AgentExpected: true, AgentLastReportAt: recentReport},
+			facts:    ControlPlaneFacts{AgentExpected: true, AgentLastReportAt: now},
 			want: ControlPlaneProjection{
 				ObservedAt: now,
 				Value:      AgentStatusEncodings[AgentStatusOnline],
 				State:      AgentStatusOnline,
-				Labels:     map[string]string{"node": "agent"},
-			},
-			ok: true,
-		},
-		{
-			name:     "missing heartbeat past two periods is offline",
-			metricID: MetricAgentStatus,
-			facts:    ControlPlaneFacts{AgentExpected: true, AgentLastReportAt: recentReport.Add(-time.Nanosecond)},
-			want: ControlPlaneProjection{
-				ObservedAt: now,
-				Value:      AgentStatusEncodings[AgentStatusOffline],
-				State:      AgentStatusOffline,
-				Labels:     map[string]string{"node": "agent"},
-			},
-			ok: true,
-		},
-		{
-			name:     "recorded permission failure is a state",
-			metricID: MetricAgentStatus,
-			facts:    ControlPlaneFacts{AgentExpected: true, AgentLastErrorCode: "PERMISSION_DENIED"},
-			want: ControlPlaneProjection{
-				ObservedAt: now,
-				Value:      AgentStatusEncodings[AgentStatusPermissionDenied],
-				State:      AgentStatusPermissionDenied,
-				Labels:     map[string]string{"node": "agent"},
-			},
-			ok: true,
-		},
-		{
-			name:     "other recorded Agent failure is error",
-			metricID: MetricAgentStatus,
-			facts:    ControlPlaneFacts{AgentExpected: true, AgentLastErrorCode: "CLOCK_SKEW"},
-			want: ControlPlaneProjection{
-				ObservedAt: now,
-				Value:      AgentStatusEncodings[AgentStatusError],
-				State:      AgentStatusError,
-				Labels:     map[string]string{"node": "agent"},
-			},
-			ok: true,
-		},
-		{
-			name:     "unenrolled Agent is not installed",
-			metricID: MetricAgentStatus,
-			facts:    ControlPlaneFacts{},
-			want: ControlPlaneProjection{
-				ObservedAt: now,
-				Value:      AgentStatusEncodings[AgentStatusNotInstalled],
-				State:      AgentStatusNotInstalled,
 				Labels:     map[string]string{"node": "agent"},
 			},
 			ok: true,
@@ -102,6 +53,46 @@ func TestProjectControlPlaneMetric(t *testing.T) {
 			got, ok := ProjectControlPlaneMetric(test.metricID, test.facts, now)
 			if ok != test.ok || !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("projection = %+v, %t; want %+v, %t", got, ok, test.want, test.ok)
+			}
+		})
+	}
+}
+
+func TestAgentStatusAt(t *testing.T) {
+	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	offlineBoundary := now.Add(-AgentOfflineAfter)
+	tests := []struct {
+		name  string
+		facts ControlPlaneFacts
+		want  string
+	}{
+		{
+			name:  "accepted heartbeat at the offline boundary is online",
+			facts: ControlPlaneFacts{AgentExpected: true, AgentLastReportAt: offlineBoundary},
+			want:  AgentStatusOnline,
+		},
+		{
+			name:  "heartbeat past the offline boundary is offline",
+			facts: ControlPlaneFacts{AgentExpected: true, AgentLastReportAt: offlineBoundary.Add(-time.Nanosecond)},
+			want:  AgentStatusOffline,
+		},
+		{
+			name:  "permission failure takes precedence over a recent heartbeat",
+			facts: ControlPlaneFacts{AgentExpected: true, AgentLastReportAt: now, AgentLastErrorCode: "PERMISSION_DENIED"},
+			want:  AgentStatusPermissionDenied,
+		},
+		{
+			name:  "other recorded Agent failure is error",
+			facts: ControlPlaneFacts{AgentExpected: true, AgentLastErrorCode: "CLOCK_SKEW"},
+			want:  AgentStatusError,
+		},
+		{name: "unenrolled Agent is not installed", want: AgentStatusNotInstalled},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := AgentStatusAt(test.facts, now); got != test.want {
+				t.Fatalf("status = %q, want %q", got, test.want)
 			}
 		})
 	}

@@ -134,11 +134,11 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	probeIndex := capabilityIndex(t, metric.CapabilityExtensionPGStatStatements)
 	originalProbe := metric.Capabilities[probeIndex].Probe
 	metric.Capabilities[probeIndex].Probe = "SELECT missing_issue60_column FROM pg_extension"
+	defer func() { metric.Capabilities[probeIndex].Probe = originalProbe }()
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect failed capability probe: %v", err)
 	}
 	metric.Capabilities[probeIndex].Probe = originalProbe
-	defer func() { metric.Capabilities[probeIndex].Probe = originalProbe }()
 	assertUnavailability(t, client, currentSeriesURL("pg.connection.total"), "COLLECTION_FAILED")
 
 	currentClock.Advance(6 * time.Minute)
@@ -271,7 +271,7 @@ func assertMetricCurveOrClosedUnavailability(t *testing.T, client *http.Client, 
 			Series []struct {
 				Points [][]*float64 `json:"points"`
 			} `json:"series"`
-			Unavailability *string `json:"unavailability"`
+			Unavailability *api.Unavailability `json:"unavailability"`
 		} `json:"metrics"`
 	}
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
@@ -280,18 +280,28 @@ func assertMetricCurveOrClosedUnavailability(t *testing.T, client *http.Client, 
 	if len(body.Metrics) != 1 {
 		t.Fatalf("dictionary metric %s response count = %d, want 1", metricID, len(body.Metrics))
 	}
+	hasPoints := false
 	for _, series := range body.Metrics[0].Series {
-		if len(series.Points) > 0 && body.Metrics[0].Unavailability == nil {
-			return
+		if len(series.Points) > 0 {
+			hasPoints = true
+			break
 		}
 	}
-	closed := map[string]bool{
-		"NO_SAMPLES_YET": true, "NO_DATA_IN_RANGE": true, "STALE": true,
-		"COLLECTION_FAILED": true, "DB_UNREACHABLE": true, "AGENT_OFFLINE": true,
-		"PERMISSION_DENIED": true, "EXTENSION_MISSING": true, "FEATURE_DISABLED": true,
-		"NOT_APPLICABLE_ROLE": true, "COUNTER_RESET": true,
+	if hasPoints {
+		if body.Metrics[0].Unavailability != nil {
+			t.Fatalf("dictionary metric %s has both points and an unavailability: %+v", metricID, body.Metrics[0])
+		}
+		return
 	}
-	if body.Metrics[0].Unavailability == nil || !closed[*body.Metrics[0].Unavailability] {
+	if body.Metrics[0].Unavailability == nil {
+		t.Fatalf("dictionary metric %s has neither points nor an unavailability: %+v", metricID, body.Metrics[0])
+	}
+	switch *body.Metrics[0].Unavailability {
+	case api.NOSAMPLESYET, api.NODATAINRANGE, api.STALE, api.COLLECTIONFAILED, api.DBUNREACHABLE,
+		api.AGENTOFFLINE, api.PERMISSIONDENIED, api.EXTENSIONMISSING, api.FEATUREDISABLED,
+		api.NOTAPPLICABLEROLE, api.COUNTERRESET:
+		return
+	default:
 		t.Fatalf("dictionary metric %s has neither points nor a closed unavailability: %+v", metricID, body.Metrics[0])
 	}
 }
