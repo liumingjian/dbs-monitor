@@ -10,9 +10,11 @@ test('walking skeleton reaches a chart and keeps URL and query time ranges in sy
 
   await expect(page).toHaveURL(/\/instances$/)
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
-  await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '查看监控' }).click()
+  await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '监控' }).click()
 
-  const chart = page.getByRole('figure', { name: '总连接数趋势' })
+  await page.getByLabel('指标').click()
+  await page.getByText('CPU 使用率 (host.cpu.usage_percent)', { exact: true }).click()
+  const chart = page.getByRole('figure', { name: 'CPU 使用率趋势' })
   await expect(chart).toBeVisible()
   await chart.getByText('查看数据表').click()
   await expect(chart.locator('tbody tr').first()).toBeVisible()
@@ -40,4 +42,8 @@ test('walking skeleton reaches a chart and keeps URL and query time ranges in sy
   await expect(chart).toBeVisible()
   await chart.getByText('查看数据表').click()
   await expect(chart.locator('tbody tr').first()).toBeVisible()
+
+  await page.getByLabel('指标').click()
+  await page.getByText('内存使用率 (host.memory.usage_percent)', { exact: true }).click()
+  await expect(page.getByText('等待首个样本')).toBeVisible()
 })

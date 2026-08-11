@@ -30,6 +30,13 @@ func TestNonNumericMetricEncodingGolden(t *testing.T) {
 			"waiting":    7,
 			"restarting": 8,
 		}},
+		{"agent.status", map[string]float64{
+			"offline":           0,
+			"online":            1,
+			"not_installed":     2,
+			"permission_denied": 3,
+			"error":             4,
+		}},
 	}
 
 	if len(NonNumericMetricEncodings) != len(tests) {
