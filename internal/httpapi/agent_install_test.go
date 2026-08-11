@@ -14,14 +14,10 @@ import (
 )
 
 func TestAgentInstallerDistributionContract(t *testing.T) {
-	installer, err := agentInstaller.ReadFile("agent-install.sh")
-	if err != nil {
-		t.Fatalf("read embedded Agent installer: %v", err)
-	}
 	if output, err := exec.Command("sh", "-n", filepath.Join("agent-install.sh")).CombinedOutput(); err != nil {
 		t.Fatalf("Agent installer syntax: %v: %s", err, output)
 	}
-	contents := string(installer)
+	contents := string(agentInstaller)
 	for _, required := range []string{
 		"$(id -u)", "clock_delta", `-gt 5`, "sha256sum", "dbs-monitor-agent/$agent_arch",
 		"useradd --system", "chmod 0600", "AGENT_TOKEN_FILE", "systemctl enable --now",
@@ -65,7 +61,7 @@ func TestAgentInstallerDistributionContract(t *testing.T) {
 	client := server.Client()
 
 	for path, want := range map[string][]byte{
-		"/api/agent/install/install.sh":              installer,
+		"/api/agent/install/install.sh":              agentInstaller,
 		"/api/agent/install/ca.crt":                  certificatePEM,
 		"/api/agent/install/dbs-monitor-agent/amd64": binary,
 	} {

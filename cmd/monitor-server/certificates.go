@@ -16,10 +16,11 @@ import (
 )
 
 func ensureCertificates(directory, publicHost string) (string, string, error) {
+	caPath := filepath.Join(directory, "ca.crt")
 	certificatePath := filepath.Join(directory, "server.crt")
 	keyPath := filepath.Join(directory, "server.key")
 	if certificateMatchesHost(certificatePath, keyPath, publicHost) {
-		if err := ensureCertificateChain(certificatePath, filepath.Join(directory, "ca.crt")); err != nil {
+		if err := ensureCertificateChain(certificatePath, caPath); err != nil {
 			return "", "", err
 		}
 		return certificatePath, keyPath, nil
@@ -68,7 +69,7 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if err := writePEM(filepath.Join(directory, "ca.crt"), "CERTIFICATE", caDER, 0644); err != nil {
+	if err := writePEM(caPath, "CERTIFICATE", caDER, 0644); err != nil {
 		return "", "", err
 	}
 	if err := writeCertificateChain(certificatePath, serverDER, caDER); err != nil {
@@ -85,15 +86,15 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 }
 
 func ensureCertificateChain(certificatePath, caPath string) error {
-	contents, err := os.ReadFile(certificatePath)
+	certificatePEM, err := os.ReadFile(certificatePath)
 	if err != nil {
 		return err
 	}
-	_, remainder := pem.Decode(contents)
+	_, remainder := pem.Decode(certificatePEM)
 	if block, _ := pem.Decode(remainder); block != nil {
 		return nil
 	}
-	ca, err := os.ReadFile(caPath)
+	caPEM, err := os.ReadFile(caPath)
 	if err != nil {
 		return fmt.Errorf("read TLS CA for certificate chain: %w", err)
 	}
@@ -102,12 +103,12 @@ func ensureCertificateChain(certificatePath, caPath string) error {
 		return err
 	}
 	defer file.Close()
-	if len(contents) > 0 && contents[len(contents)-1] != '\n' {
+	if len(certificatePEM) > 0 && certificatePEM[len(certificatePEM)-1] != '\n' {
 		if _, err := file.Write([]byte("\n")); err != nil {
 			return err
 		}
 	}
-	_, err = file.Write(ca)
+	_, err = file.Write(caPEM)
 	return err
 }
 

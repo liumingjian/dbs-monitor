@@ -68,3 +68,35 @@ func TestEnsureCertificatesCreatesVerifiableSANAndPrivateKey(t *testing.T) {
 		t.Fatalf("CA certificate missing: %v", err)
 	}
 }
+
+func TestEnsureCertificatesRepairsMissingCAChain(t *testing.T) {
+	directory := t.TempDir()
+	certificatePath, _, err := ensureCertificates(directory, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("create certificates: %v", err)
+	}
+	certificatePEM, err := os.ReadFile(certificatePath)
+	if err != nil {
+		t.Fatalf("read certificate: %v", err)
+	}
+	leaf, _ := pem.Decode(certificatePEM)
+	if leaf == nil {
+		t.Fatal("server certificate is not PEM encoded")
+	}
+	if err := os.WriteFile(certificatePath, pem.EncodeToMemory(leaf), 0644); err != nil {
+		t.Fatalf("remove certificate chain: %v", err)
+	}
+
+	if _, _, err := ensureCertificates(directory, "127.0.0.1"); err != nil {
+		t.Fatalf("repair certificate chain: %v", err)
+	}
+	repairedPEM, err := os.ReadFile(certificatePath)
+	if err != nil {
+		t.Fatalf("read repaired certificate: %v", err)
+	}
+	_, chain := pem.Decode(repairedPEM)
+	ca, _ := pem.Decode(chain)
+	if ca == nil {
+		t.Fatal("repaired server certificate does not include the CA chain")
+	}
+}

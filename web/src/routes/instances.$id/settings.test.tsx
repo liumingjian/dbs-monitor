@@ -87,7 +87,7 @@ describe('Agent registration lifecycle', () => {
       <AgentRegistrationPanel
         registration={{ ...registration, state, agent_expected: state === 'EXPECTED_ONLINE' || state === 'REVOKED' }}
         canManage
-        pending={false}
+        actionPending={false}
         onRegister={() => undefined}
         onRotate={() => undefined}
         onRevoke={() => undefined}
@@ -98,6 +98,5 @@ describe('Agent registration lifecycle', () => {
     for (const action of actions) {
       expect(screen.getByRole('button', { name: new RegExp(action.split('').join('.*')) })).toBeTruthy()
     }
-    cleanup()
   })
 })

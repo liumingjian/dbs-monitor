@@ -302,7 +302,9 @@ func (handler *Handler) RegisterAgent(ctx context.Context, request api.RegisterA
 	}
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
 	row, err := instance.New(handler.platform).RegisterAgent(ctx, instance.RegisterAgentParams{
-		ID: databaseUUID(request.Id), AgentTokenHash: tokenHash, AgentTokenIssuedAt: now,
+		ID:                 databaseUUID(request.Id),
+		AgentTokenHash:     tokenHash,
+		AgentTokenIssuedAt: now,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.RegisterAgent409JSONResponse(errorBody(api.CONFLICT, "Agent is already registered or cannot be re-enabled")), nil
@@ -325,7 +327,8 @@ func (handler *Handler) RotateAgentToken(ctx context.Context, request api.Rotate
 		return nil, err
 	}
 	row, err := instance.New(handler.platform).RotateAgentToken(ctx, instance.RotateAgentTokenParams{
-		ID: databaseUUID(request.Id), AgentTokenHash: tokenHash,
+		ID:                 databaseUUID(request.Id),
+		AgentTokenHash:     tokenHash,
 		AgentTokenIssuedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
