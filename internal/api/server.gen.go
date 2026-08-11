@@ -174,6 +174,15 @@ const (
 	VALIDATIONFAILED             ErrorErrorCode = "VALIDATION_FAILED"
 )
 
+// Defines values for HealthStatus.
+const (
+	HealthCritical HealthStatus = "CRITICAL"
+	HealthHealthy  HealthStatus = "HEALTHY"
+	HealthPaused   HealthStatus = "PAUSED"
+	HealthUnknown  HealthStatus = "UNKNOWN"
+	HealthWarning  HealthStatus = "WARNING"
+)
+
 // Defines values for IgnoreReasonCode.
 const (
 	DUPLICATE        IgnoreReasonCode = "DUPLICATE"
@@ -181,6 +190,15 @@ const (
 	IMPACTACCEPTABLE IgnoreReasonCode = "IMPACT_ACCEPTABLE"
 	KNOWNISSUE       IgnoreReasonCode = "KNOWN_ISSUE"
 	OTHER            IgnoreReasonCode = "OTHER"
+)
+
+// Defines values for InstanceAgentStatus.
+const (
+	InstanceAgentError            InstanceAgentStatus = "error"
+	InstanceAgentNotInstalled     InstanceAgentStatus = "not_installed"
+	InstanceAgentOffline          InstanceAgentStatus = "offline"
+	InstanceAgentOnline           InstanceAgentStatus = "online"
+	InstanceAgentPermissionDenied InstanceAgentStatus = "permission_denied"
 )
 
 // Defines values for NoDataPolicy.
@@ -622,25 +640,57 @@ type Error struct {
 // ErrorErrorCode defines model for Error.Error.Code.
 type ErrorErrorCode string
 
+// HealthAlertCounts defines model for HealthAlertCounts.
+type HealthAlertCounts struct {
+	Critical int `json:"critical"`
+	Info     int `json:"info"`
+	Warning  int `json:"warning"`
+}
+
+// HealthAttribution defines model for HealthAttribution.
+type HealthAttribution struct {
+	CurrentValue *float64 `json:"current_value,omitempty"`
+	RuleName     string   `json:"rule_name"`
+}
+
+// HealthFlags defines model for HealthFlags.
+type HealthFlags struct {
+	ConfigurationMissing int  `json:"configuration_missing"`
+	Ignored              int  `json:"ignored"`
+	InMaintenance        bool `json:"in_maintenance"`
+	NoData               bool `json:"no_data"`
+	RecentlyRecovered    bool `json:"recently_recovered"`
+}
+
+// HealthStatus defines model for HealthStatus.
+type HealthStatus string
+
 // IgnoreReasonCode defines model for IgnoreReasonCode.
 type IgnoreReasonCode string
 
 // Instance defines model for Instance.
 type Instance struct {
 	// AgentMetricsEnabled Current collection setting for Agent-provided metrics.
-	AgentMetricsEnabled bool `json:"agent_metrics_enabled"`
+	AgentMetricsEnabled bool                `json:"agent_metrics_enabled"`
+	AgentStatus         InstanceAgentStatus `json:"agent_status"`
 
 	// AgentVersion Version reported by the Agent, when one has reported.
-	AgentVersion    *string               `json:"agent_version,omitempty"`
-	AlertStatus     AlertStatus           `json:"alert_status"`
-	CollectionPause CollectionPauseStatus `json:"collection_pause"`
-	Database        string                `json:"database"`
-	Host            string                `json:"host"`
-	Id              openapi_types.UUID    `json:"id"`
-	Name            string                `json:"name"`
-	Port            int                   `json:"port"`
-	Username        string                `json:"username"`
+	AgentVersion         *string               `json:"agent_version,omitempty"`
+	AlertStatus          AlertStatus           `json:"alert_status"`
+	CollectionPause      CollectionPauseStatus `json:"collection_pause"`
+	DataFreshnessSeconds *int                  `json:"data_freshness_seconds,omitempty"`
+	Database             string                `json:"database"`
+	Health               InstanceHealth        `json:"health"`
+	Host                 string                `json:"host"`
+	Id                   openapi_types.UUID    `json:"id"`
+	LastCollectedAt      *time.Time            `json:"last_collected_at,omitempty"`
+	Name                 string                `json:"name"`
+	Port                 int                   `json:"port"`
+	Username             string                `json:"username"`
 }
+
+// InstanceAgentStatus defines model for InstanceAgentStatus.
+type InstanceAgentStatus string
 
 // InstanceCreateInput defines model for InstanceCreateInput.
 type InstanceCreateInput struct {
@@ -666,6 +716,14 @@ type InstanceCredentialInput struct {
 // InstanceCredentialUpdated defines model for InstanceCredentialUpdated.
 type InstanceCredentialUpdated struct {
 	Username string `json:"username"`
+}
+
+// InstanceHealth defines model for InstanceHealth.
+type InstanceHealth struct {
+	Attribution *HealthAttribution `json:"attribution,omitempty"`
+	Counts      HealthAlertCounts  `json:"counts"`
+	Flags       HealthFlags        `json:"flags"`
+	Status      HealthStatus       `json:"status"`
 }
 
 // InstanceMetadataInput defines model for InstanceMetadataInput.

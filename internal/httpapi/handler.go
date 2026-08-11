@@ -191,9 +191,24 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 	if err != nil {
 		return nil, err
 	}
+	now := handler.clock.Now().UTC()
+	alertsByInstance, err := handler.loadInstanceHealthAlerts(ctx, now)
+	if err != nil {
+		return nil, err
+	}
 	response := make(api.ListInstances200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		status, err := alertStatus(ctx, handler.platform, row.ID)
+		projection, err := projectInstanceHealth(instanceHealthProjectionInput{
+			paused:                 row.CollectionPaused,
+			collectorLastSuccessAt: row.CollectorLastSuccessAt,
+			agentExpected:          row.AgentExpected,
+			agentLastReportAt:      row.AgentLastReportAt,
+			agentLastErrorCode:     row.AgentLastErrorCode,
+			capabilityObservedAt:   row.CapabilityObservedAt,
+			capabilityStates:       row.CapabilityStates,
+			alerts:                 alertsByInstance[uuid.UUID(row.ID.Bytes)],
+			now:                    now,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -206,8 +221,8 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 			row.Username,
 			row.AgentVersion,
 			row.AgentMetricsEnabled,
-			status,
 			toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+			projection,
 		))
 	}
 	return response, nil
@@ -257,8 +272,16 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 			row.Username,
 			row.AgentVersion,
 			true,
-			api.OK,
 			api.CollectionPauseStatus{Paused: false},
+			instanceHealthProjection{
+				health: api.InstanceHealth{
+					Status: api.HealthUnknown,
+					Counts: api.HealthAlertCounts{},
+					Flags:  api.HealthFlags{},
+				},
+				alertStatus: api.OK,
+				agentStatus: api.InstanceAgentNotInstalled,
+			},
 		),
 	}, nil
 }
@@ -268,7 +291,16 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	if err != nil {
 		return nil, err
 	}
-	status, err := alertStatus(ctx, handler.platform, row.ID)
+	projection, err := handler.loadInstanceHealthProjection(ctx, instanceHealthProjectionInput{
+		instanceID:             uuid.UUID(row.ID.Bytes),
+		paused:                 row.CollectionPaused,
+		collectorLastSuccessAt: row.CollectorLastSuccessAt,
+		agentExpected:          row.AgentExpected,
+		agentLastReportAt:      row.AgentLastReportAt,
+		agentLastErrorCode:     row.AgentLastErrorCode,
+		capabilityObservedAt:   row.CapabilityObservedAt,
+		capabilityStates:       row.CapabilityStates,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -281,8 +313,8 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 		row.Username,
 		row.AgentVersion,
 		row.AgentMetricsEnabled,
-		status,
 		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+		projection,
 	)), nil
 }
 
@@ -335,29 +367,28 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		}
 		return nil, err
 	}
-	status, err := alertStatus(ctx, handler.platform, updatedInstance.ID)
+	row, err := instance.New(handler.platform).GetInstance(ctx, updatedInstance.ID)
 	if err != nil {
 		return nil, err
 	}
-	pause, err := New(handler.platform).GetCollectionPause(ctx, updatedInstance.ID)
-	if err != nil {
-		return nil, err
-	}
-	agentMetricsEnabled, err := metric.New(handler.platform).GetCollectionPlan(ctx, updatedInstance.ID)
+	projection, err := handler.loadInstanceHealthProjection(ctx, instanceHealthProjectionInput{
+		instanceID:             uuid.UUID(row.ID.Bytes),
+		paused:                 row.CollectionPaused,
+		collectorLastSuccessAt: row.CollectorLastSuccessAt,
+		agentExpected:          row.AgentExpected,
+		agentLastReportAt:      row.AgentLastReportAt,
+		agentLastErrorCode:     row.AgentLastErrorCode,
+		capabilityObservedAt:   row.CapabilityObservedAt,
+		capabilityStates:       row.CapabilityStates,
+	})
 	if err != nil {
 		return nil, err
 	}
 	return api.UpdateInstance200JSONResponse(toAPIInstance(
-		updatedInstance.ID,
-		updatedInstance.Name,
-		updatedInstance.Host,
-		updatedInstance.Port,
-		updatedInstance.DatabaseName,
-		updatedInstance.Username,
-		updatedInstance.AgentVersion,
-		agentMetricsEnabled,
-		status,
-		toAPICollectionPauseStatus(pause.CollectionPaused, pause.CollectionPauseUpdatedBy, pause.CollectionPauseUpdatedAt, pause.CollectionPauseReason),
+		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion,
+		row.AgentMetricsEnabled,
+		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+		projection,
 	)), nil
 }
 
@@ -1165,44 +1196,6 @@ func SeedAdmin(ctx context.Context, platform *db.Pool, username, password string
 	return New(platform).CreateAdmin(ctx, CreateAdminParams{
 		ID: pgtype.UUID{Bytes: id, Valid: true}, Username: username, PasswordHash: hash,
 	})
-}
-
-func toAPIInstance(
-	id pgtype.UUID,
-	name, host string,
-	port int32,
-	database, username string,
-	agentVersion pgtype.Text,
-	agentMetricsEnabled bool,
-	status api.AlertStatus,
-	pause api.CollectionPauseStatus,
-) api.Instance {
-	result := api.Instance{
-		Id:                  id.Bytes,
-		Name:                name,
-		Host:                host,
-		Port:                int(port),
-		Database:            database,
-		Username:            username,
-		AgentMetricsEnabled: agentMetricsEnabled,
-		AlertStatus:         status,
-		CollectionPause:     pause,
-	}
-	if agentVersion.Valid {
-		result.AgentVersion = &agentVersion.String
-	}
-	return result
-}
-
-func alertStatus(ctx context.Context, platform *db.Pool, id pgtype.UUID) (api.AlertStatus, error) {
-	status, err := New(platform).GetInstanceAlertStatus(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return api.OK, nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return api.AlertStatus(status), nil
 }
 
 func metricUnit(metricID string) string {

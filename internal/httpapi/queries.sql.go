@@ -300,27 +300,6 @@ func (q *Queries) GetCurrentUser(ctx context.Context, id pgtype.UUID) (GetCurren
 	return i, err
 }
 
-const getInstanceAlertStatus = `-- name: GetInstanceAlertStatus :one
-SELECT status
-FROM alert_instance
-WHERE instance_id = $1
-ORDER BY CASE status
-    WHEN 'FIRING' THEN 5
-    WHEN 'NO_DATA' THEN 4
-    WHEN 'PENDING' THEN 3
-    WHEN 'RECOVERED' THEN 2
-    ELSE 1
-END DESC
-LIMIT 1
-`
-
-func (q *Queries) GetInstanceAlertStatus(ctx context.Context, instanceID pgtype.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getInstanceAlertStatus, instanceID)
-	var status string
-	err := row.Scan(&status)
-	return status, err
-}
-
 const getLatestQueryStatisticsSnapshot = `-- name: GetLatestQueryStatisticsSnapshot :one
 SELECT sampled_at
 FROM query_statistics_snapshot

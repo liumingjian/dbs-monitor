@@ -208,11 +208,22 @@ func (q *Queries) GetCollectState(ctx context.Context, instanceID pgtype.UUID) (
 const getInstance = `-- name: GetInstance :one
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
+       instance.agent_expected,
        config.agent_metrics_enabled,
        config.collection_paused, config.collection_pause_updated_by,
-       config.collection_pause_updated_at, config.collection_pause_reason
+       config.collection_pause_updated_at, config.collection_pause_reason,
+       server_state.last_success_at AS collector_last_success_at,
+       agent_state.last_report_at AS agent_last_report_at,
+       agent_state.last_error_code AS agent_last_error_code,
+       capability.observed_at AS capability_observed_at,
+       capability.states AS capability_states
 FROM instance
 JOIN instance_collection_config config ON config.instance_id = instance.id
+LEFT JOIN instance_collect_state server_state
+    ON server_state.instance_id = instance.id AND server_state.source = 'SERVER_DIRECT'
+LEFT JOIN instance_collect_state agent_state
+    ON agent_state.instance_id = instance.id AND agent_state.source = 'AGENT'
+LEFT JOIN instance_capability_snapshot capability ON capability.instance_id = instance.id
 WHERE instance.id = $1
 `
 
@@ -225,11 +236,17 @@ type GetInstanceRow struct {
 	Username                 string
 	AgentVersion             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
+	AgentExpected            bool
 	AgentMetricsEnabled      bool
 	CollectionPaused         bool
 	CollectionPauseUpdatedBy pgtype.UUID
 	CollectionPauseUpdatedAt pgtype.Timestamptz
 	CollectionPauseReason    pgtype.Text
+	CollectorLastSuccessAt   pgtype.Timestamptz
+	AgentLastReportAt        pgtype.Timestamptz
+	AgentLastErrorCode       pgtype.Text
+	CapabilityObservedAt     pgtype.Timestamptz
+	CapabilityStates         []byte
 }
 
 func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceRow, error) {
@@ -244,11 +261,17 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 		&i.Username,
 		&i.AgentVersion,
 		&i.CreatedAt,
+		&i.AgentExpected,
 		&i.AgentMetricsEnabled,
 		&i.CollectionPaused,
 		&i.CollectionPauseUpdatedBy,
 		&i.CollectionPauseUpdatedAt,
 		&i.CollectionPauseReason,
+		&i.CollectorLastSuccessAt,
+		&i.AgentLastReportAt,
+		&i.AgentLastErrorCode,
+		&i.CapabilityObservedAt,
+		&i.CapabilityStates,
 	)
 	return i, err
 }
@@ -367,11 +390,22 @@ func (q *Queries) ListCredentialsForKeyRotation(ctx context.Context) ([]ListCred
 const listInstances = `-- name: ListInstances :many
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
+       instance.agent_expected,
        config.agent_metrics_enabled,
        config.collection_paused, config.collection_pause_updated_by,
-       config.collection_pause_updated_at, config.collection_pause_reason
+       config.collection_pause_updated_at, config.collection_pause_reason,
+       server_state.last_success_at AS collector_last_success_at,
+       agent_state.last_report_at AS agent_last_report_at,
+       agent_state.last_error_code AS agent_last_error_code,
+       capability.observed_at AS capability_observed_at,
+       capability.states AS capability_states
 FROM instance
 JOIN instance_collection_config config ON config.instance_id = instance.id
+LEFT JOIN instance_collect_state server_state
+    ON server_state.instance_id = instance.id AND server_state.source = 'SERVER_DIRECT'
+LEFT JOIN instance_collect_state agent_state
+    ON agent_state.instance_id = instance.id AND agent_state.source = 'AGENT'
+LEFT JOIN instance_capability_snapshot capability ON capability.instance_id = instance.id
 ORDER BY name, id
 `
 
@@ -384,11 +418,17 @@ type ListInstancesRow struct {
 	Username                 string
 	AgentVersion             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
+	AgentExpected            bool
 	AgentMetricsEnabled      bool
 	CollectionPaused         bool
 	CollectionPauseUpdatedBy pgtype.UUID
 	CollectionPauseUpdatedAt pgtype.Timestamptz
 	CollectionPauseReason    pgtype.Text
+	CollectorLastSuccessAt   pgtype.Timestamptz
+	AgentLastReportAt        pgtype.Timestamptz
+	AgentLastErrorCode       pgtype.Text
+	CapabilityObservedAt     pgtype.Timestamptz
+	CapabilityStates         []byte
 }
 
 func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error) {
@@ -409,11 +449,17 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 			&i.Username,
 			&i.AgentVersion,
 			&i.CreatedAt,
+			&i.AgentExpected,
 			&i.AgentMetricsEnabled,
 			&i.CollectionPaused,
 			&i.CollectionPauseUpdatedBy,
 			&i.CollectionPauseUpdatedAt,
 			&i.CollectionPauseReason,
+			&i.CollectorLastSuccessAt,
+			&i.AgentLastReportAt,
+			&i.AgentLastErrorCode,
+			&i.CapabilityObservedAt,
+			&i.CapabilityStates,
 		); err != nil {
 			return nil, err
 		}

@@ -698,6 +698,10 @@ export interface components {
         /** @enum {string} */
         AlertStatus: "OK" | "PENDING" | "FIRING" | "NO_DATA" | "RECOVERED";
         /** @enum {string} */
+        HealthStatus: "CRITICAL" | "WARNING" | "UNKNOWN" | "HEALTHY" | "PAUSED";
+        /** @enum {string} */
+        InstanceAgentStatus: "offline" | "online" | "not_installed" | "permission_denied" | "error";
+        /** @enum {string} */
         CapabilityStatus: "PRESENT" | "MISSING" | "NOT_APPLICABLE" | "UNKNOWN";
         /** @enum {string} */
         AlertAggregation: "latest" | "avg" | "max" | "min" | "sum" | "count";
@@ -958,7 +962,35 @@ export interface components {
             /** @description Current collection setting for Agent-provided metrics. */
             agent_metrics_enabled: boolean;
             alert_status: components["schemas"]["AlertStatus"];
+            health: components["schemas"]["InstanceHealth"];
+            agent_status: components["schemas"]["InstanceAgentStatus"];
+            /** Format: date-time */
+            last_collected_at?: string;
+            data_freshness_seconds?: number;
             collection_pause: components["schemas"]["CollectionPauseStatus"];
+        };
+        InstanceHealth: {
+            status: components["schemas"]["HealthStatus"];
+            attribution?: components["schemas"]["HealthAttribution"];
+            counts: components["schemas"]["HealthAlertCounts"];
+            flags: components["schemas"]["HealthFlags"];
+        };
+        HealthAttribution: {
+            rule_name: string;
+            /** Format: double */
+            current_value?: number;
+        };
+        HealthAlertCounts: {
+            critical: number;
+            warning: number;
+            info: number;
+        };
+        HealthFlags: {
+            no_data: boolean;
+            in_maintenance: boolean;
+            recently_recovered: boolean;
+            ignored: number;
+            configuration_missing: number;
         };
         InstanceCreated: {
             instance: components["schemas"]["Instance"];

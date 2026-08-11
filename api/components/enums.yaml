@@ -17,6 +17,14 @@ Unavailability:
 AlertStatus:
   type: string
   enum: [OK, PENDING, FIRING, NO_DATA, RECOVERED]
+HealthStatus:
+  type: string
+  enum: [CRITICAL, WARNING, UNKNOWN, HEALTHY, PAUSED]
+  x-enum-varnames: [HealthCritical, HealthWarning, HealthUnknown, HealthHealthy, HealthPaused]
+InstanceAgentStatus:
+  type: string
+  enum: [offline, online, not_installed, permission_denied, error]
+  x-enum-varnames: [InstanceAgentOffline, InstanceAgentOnline, InstanceAgentNotInstalled, InstanceAgentPermissionDenied, InstanceAgentError]
 CapabilityStatus:
   type: string
   enum: [PRESENT, MISSING, NOT_APPLICABLE, UNKNOWN]

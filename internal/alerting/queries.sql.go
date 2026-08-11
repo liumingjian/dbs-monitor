@@ -979,6 +979,56 @@ func (q *Queries) ListEvaluationTargets(ctx context.Context, evaluatedAt pgtype.
 	return items, nil
 }
 
+const listInstanceHealthAlerts = `-- name: ListInstanceHealthAlerts :many
+SELECT alert.instance_id, alert.status, alert.severity, alert.current_value,
+       COALESCE(alert.first_triggered_at, alert.updated_at) AS first_triggered_at,
+       alert.recovered_at, alert.disposition, rule.name AS rule_name
+FROM alert_instance alert
+JOIN alert_rule rule ON rule.id = alert.rule_id
+WHERE alert.status <> 'RECOVERED' OR alert.recovered_at >= $1
+ORDER BY alert.instance_id, first_triggered_at, alert.id
+`
+
+type ListInstanceHealthAlertsRow struct {
+	InstanceID       pgtype.UUID
+	Status           string
+	Severity         string
+	CurrentValue     pgtype.Float8
+	FirstTriggeredAt pgtype.Timestamptz
+	RecoveredAt      pgtype.Timestamptz
+	Disposition      string
+	RuleName         string
+}
+
+func (q *Queries) ListInstanceHealthAlerts(ctx context.Context, recoveredAt pgtype.Timestamptz) ([]ListInstanceHealthAlertsRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceHealthAlerts, recoveredAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceHealthAlertsRow
+	for rows.Next() {
+		var i ListInstanceHealthAlertsRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.Status,
+			&i.Severity,
+			&i.CurrentValue,
+			&i.FirstTriggeredAt,
+			&i.RecoveredAt,
+			&i.Disposition,
+			&i.RuleName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markAlertRuleEvaluated = `-- name: MarkAlertRuleEvaluated :exec
 INSERT INTO alert_rule_evaluation_state (
     rule_id, instance_id, metric_dimension_key, last_evaluated_at

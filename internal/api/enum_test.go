@@ -28,6 +28,13 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		{"AlertStatus", mapKeys(map[api.AlertStatus]string{
 			api.OK: "", api.PENDING: "", api.FIRING: "", api.NODATA: "", api.RECOVERED: "",
 		})},
+		{"HealthStatus", mapKeys(map[api.HealthStatus]string{
+			api.HealthCritical: "", api.HealthWarning: "", api.HealthUnknown: "", api.HealthHealthy: "", api.HealthPaused: "",
+		})},
+		{"InstanceAgentStatus", mapKeys(map[api.InstanceAgentStatus]string{
+			api.InstanceAgentOffline: "", api.InstanceAgentOnline: "", api.InstanceAgentNotInstalled: "",
+			api.InstanceAgentPermissionDenied: "", api.InstanceAgentError: "",
+		})},
 		{"CapabilityStatus", mapKeys(map[api.CapabilityStatus]string{
 			api.PRESENT: "", api.MISSING: "", api.NOTAPPLICABLE: "", api.UNKNOWN: "",
 		})},
