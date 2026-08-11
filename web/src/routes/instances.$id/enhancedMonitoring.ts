@@ -3,9 +3,10 @@ import type { MetricChartSeries } from '../../domain/MetricChart'
 import type { Unavailability } from '../../domain/UnavailabilityBlock'
 import { metricOptions, type MetricID } from './metricOptions'
 import { findStandardMonitoringChart } from './standardMonitoring'
+import type { ChartColumns, EnhancedWindowMinutes } from './timeRange'
 
 export type EnhancedAggregation = 'average' | 'maximum' | 'minimum'
-export type EnhancedColumns = 1 | 2 | 3
+export type EnhancedColumns = ChartColumns
 export type EnhancedPoint = [number, number | null]
 export type EnhancedPreferences = {
   metrics: MetricID[]
@@ -22,8 +23,10 @@ export const enhancedMonitoringDefaults = {
   columns: 2,
 } as const
 
-export const enhancedMonitoringMetricIDs: MetricID[] = metricOptions
+export const enhancedMonitoringMetricOptions = metricOptions
   .filter((option) => option.enhancedCandidate)
+
+export const enhancedMonitoringMetricIDs: MetricID[] = enhancedMonitoringMetricOptions
   .map((option) => option.id)
 
 export const enhancedWindowOptions = [
@@ -31,7 +34,7 @@ export const enhancedWindowOptions = [
   { minutes: 60, label: '1 小时' },
   { minutes: 180, label: '3 小时' },
   { minutes: 360, label: '6 小时' },
-] as const
+] as const satisfies readonly { minutes: EnhancedWindowMinutes; label: string }[]
 
 export const enhancedMonitoringGroups = [
   {
@@ -51,7 +54,7 @@ export const enhancedMonitoringGroups = [
   },
 ] as const
 
-export function enhancedDisplayBucketSeconds(windowMinutes: 30 | 60 | 180 | 360): number {
+export function enhancedDisplayBucketSeconds(windowMinutes: EnhancedWindowMinutes): number {
   switch (windowMinutes) {
     case 30: return 5
     case 60: return 10
@@ -81,10 +84,10 @@ export function aggregateEnhancedPoints(
     const timestamp = point[0]
     if (typeof timestamp !== 'number') continue
     const value = point[1] ?? null
-    const key = Math.floor(timestamp / bucketSeconds)
-    const bucket = buckets.get(key) ?? { timestamp, values: [] }
+    const bucketIndex = Math.floor(timestamp / bucketSeconds)
+    const bucket = buckets.get(bucketIndex) ?? { timestamp, values: [] }
     if (value !== null) bucket.values.push(value)
-    buckets.set(key, bucket)
+    buckets.set(bucketIndex, bucket)
   }
 
   return [...buckets.values()].map((bucket) => [
@@ -123,7 +126,9 @@ export function buildEnhancedChartView(
 }
 
 function enhancedSeriesName(metricID: MetricID, labels: Record<string, string>): string {
-  const dimensions = Object.entries(labels).map(([key, value]) => `${key}=${value}`).join(', ')
+  const dimensions = Object.entries(labels)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(', ')
   const label = metricOptions.find((option) => option.id === metricID)?.label ?? metricID
   return dimensions ? `${label} · ${dimensions}` : label
 }

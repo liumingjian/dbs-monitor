@@ -1,7 +1,7 @@
 import { DatabaseOutlined, InfoCircleOutlined, ProfileOutlined, SettingOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Card, Descriptions, Empty, Modal, Segmented, Select, Space, Spin, Switch, Tabs, Typography } from 'antd'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
@@ -17,6 +17,7 @@ import {
   enhancedMonitoringDefaults,
   enhancedMonitoringGroups,
   enhancedMonitoringMetricIDs,
+  enhancedMonitoringMetricOptions,
   enhancedUnavailabilityDetail,
   enhancedWindowOptions,
   parseEnhancedPreferences,
@@ -24,7 +25,7 @@ import {
   type EnhancedColumns,
   type EnhancedPreferences,
 } from './enhancedMonitoring'
-import { metricOption, metricOptions, type MetricID } from './metricOptions'
+import { metricOption, type MetricID } from './metricOptions'
 import {
   findStandardMonitoringChart,
   standardMonitoringGroups,
@@ -37,6 +38,7 @@ import {
   enhancedWindowMinutes,
   parseTimeRange,
   type ChartColumns,
+  type EnhancedWindowMinutes,
   type MetricStep,
   type MonitoringSearch,
   type MonitoringView,
@@ -235,7 +237,7 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
     void navigate({ search: view === 'enhanced' ? defaultEnhancedTimeRange() : defaultTimeRange() })
   }
 
-  function changeWindow(minutes: 30 | 60 | 180 | 360) {
+  function changeWindow(minutes: EnhancedWindowMinutes) {
     const to = new Date()
     updateSearch({
       from: new Date(to.getTime() - minutes * 60_000).toISOString(),
@@ -249,71 +251,16 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
     setPreferences((current) => ({ ...current, ...update }))
   }
 
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
-    <WorkbenchNavigation
-      id={id}
-      instanceName={instance.data?.name ?? '实例工作台'}
-      monitoring="enhanced"
-      onMonitoringChange={changeMonitoring}
-    />
-
-    <Alert
-      type="info"
-      showIcon
-      title="5 秒增强采集常态运行"
-      description="增强监控的 5 秒采集为常态运行，磁盘与查询开销与是否打开本页无关；打开本页不会给数据库增加任何额外查询压力。"
-    />
-
-    <section id="monitoring-controls" className="monitoring-controls enhanced-monitoring-controls" aria-label="增强监控控制">
-      <Space wrap>
-        <label htmlFor="enhanced-metrics">指标管理</label>
-        <Select<MetricID[], { value: MetricID; label: string }>
-          id="enhanced-metrics"
-          aria-label="指标管理"
-          mode="multiple"
-          value={preferences.metrics}
-          options={metricOptions.filter((option) => option.enhancedCandidate).map((option) => ({ value: option.id, label: option.label }))}
-          onChange={(metrics) => updatePreferences({ metrics })}
-          maxTagCount="responsive"
-          style={{ minWidth: 280 }}
-        />
-        <span>时间窗口</span>
-        <Segmented<30 | 60 | 180 | 360>
-          aria-label="增强监控时间窗口"
-          value={windowMinutes}
-          options={enhancedWindowOptions.map((option) => ({ label: option.label, value: option.minutes }))}
-          onChange={changeWindow}
-        />
-      </Space>
-      <Space wrap>
-        <span>聚合方式</span>
-        <Segmented<EnhancedAggregation>
-          aria-label="聚合方式"
-          value={preferences.aggregation}
-          options={[
-            { label: '平均', value: 'average' },
-            { label: '最大', value: 'maximum' },
-            { label: '最小', value: 'minimum' },
-          ]}
-          onChange={(aggregation) => updatePreferences({ aggregation })}
-        />
-        <span>布局</span>
-        <Segmented<EnhancedColumns>
-          aria-label="图表布局"
-          value={preferences.columns}
-          options={[{ label: '1 列', value: 1 }, { label: '2 列', value: 2 }, { label: '3 列', value: 3 }]}
-          onChange={(columns) => updatePreferences({ columns })}
-        />
-        {metrics.dataUpdatedAt > 0 && <Freshness
-          dataUpdatedAt={metrics.dataUpdatedAt}
-          collectionInterval={enhancedMonitoringPollingOptions.refetchInterval}
-        />}
-      </Space>
-    </section>
-
-    {preferences.metrics.length === 0 ? <Empty description="未选择指标" /> : metrics.isPending ? <Spin size="large" /> : enhancedMonitoringGroups.map((group) => {
+  let monitoringContent: ReactNode
+  if (preferences.metrics.length === 0) {
+    monitoringContent = <Empty description="未选择指标" />
+  } else if (metrics.isPending) {
+    monitoringContent = <Spin size="large" />
+  } else {
+    monitoringContent = enhancedMonitoringGroups.map((group) => {
       const selectedMetrics = group.metrics.filter((metric) => preferences.metrics.includes(metric))
       if (selectedMetrics.length === 0) return null
+
       return <section key={group.key} aria-labelledby={`enhanced-${group.key}-heading`}>
         <Typography.Title id={`enhanced-${group.key}-heading`} level={3}>{group.title}</Typography.Title>
         <div className="metric-grid" data-columns={preferences.columns}>
@@ -353,7 +300,72 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
           })}
         </div>
       </section>
-    })}
+    })
+  }
+
+  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <WorkbenchNavigation
+      id={id}
+      instanceName={instance.data?.name ?? '实例工作台'}
+      monitoring="enhanced"
+      onMonitoringChange={changeMonitoring}
+    />
+
+    <Alert
+      type="info"
+      showIcon
+      title="5 秒增强采集常态运行"
+      description="增强监控的 5 秒采集为常态运行，磁盘与查询开销与是否打开本页无关；打开本页不会给数据库增加任何额外查询压力。"
+    />
+
+    <section id="monitoring-controls" className="monitoring-controls enhanced-monitoring-controls" aria-label="增强监控控制">
+      <Space wrap>
+        <label htmlFor="enhanced-metrics">指标管理</label>
+        <Select<MetricID[], { value: MetricID; label: string }>
+          id="enhanced-metrics"
+          aria-label="指标管理"
+          mode="multiple"
+          value={preferences.metrics}
+          options={enhancedMonitoringMetricOptions.map((option) => ({ value: option.id, label: option.label }))}
+          onChange={(metrics) => updatePreferences({ metrics })}
+          maxTagCount="responsive"
+          style={{ minWidth: 280 }}
+        />
+        <span>时间窗口</span>
+        <Segmented<EnhancedWindowMinutes>
+          aria-label="增强监控时间窗口"
+          value={windowMinutes}
+          options={enhancedWindowOptions.map((option) => ({ label: option.label, value: option.minutes }))}
+          onChange={changeWindow}
+        />
+      </Space>
+      <Space wrap>
+        <span>聚合方式</span>
+        <Segmented<EnhancedAggregation>
+          aria-label="聚合方式"
+          value={preferences.aggregation}
+          options={[
+            { label: '平均', value: 'average' },
+            { label: '最大', value: 'maximum' },
+            { label: '最小', value: 'minimum' },
+          ]}
+          onChange={(aggregation) => updatePreferences({ aggregation })}
+        />
+        <span>布局</span>
+        <Segmented<EnhancedColumns>
+          aria-label="图表布局"
+          value={preferences.columns}
+          options={[{ label: '1 列', value: 1 }, { label: '2 列', value: 2 }, { label: '3 列', value: 3 }]}
+          onChange={(columns) => updatePreferences({ columns })}
+        />
+        {metrics.dataUpdatedAt > 0 && <Freshness
+          dataUpdatedAt={metrics.dataUpdatedAt}
+          collectionInterval={enhancedMonitoringPollingOptions.refetchInterval}
+        />}
+      </Space>
+    </section>
+
+    {monitoringContent}
 
     <EnhancedMetricDetails
       metric={selectedMetric}

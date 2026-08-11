@@ -50,7 +50,13 @@ export function MetricChart({
   connectionGroup,
   loading = false,
 }: MetricChartProps) {
-  if (unavailability) return <UnavailabilityBlock code={unavailability} href={unavailabilityHref} detail={unavailabilityDetail} />
+  if (unavailability) {
+    return <UnavailabilityBlock
+      code={unavailability}
+      href={unavailabilityHref}
+      detail={unavailabilityDetail}
+    />
+  }
   return <ChartCanvas label={label} series={series} step={step} loading={loading} connectionGroup={connectionGroup} />
 }
 

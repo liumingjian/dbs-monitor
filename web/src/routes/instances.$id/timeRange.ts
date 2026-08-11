@@ -5,6 +5,7 @@ export type InvalidTimeRange = { error: string }
 export type MetricStep = 'auto' | '15s' | '1m' | '5m' | 'raw'
 export type ChartColumns = 1 | 2 | 3
 export type MonitoringView = 'standard' | 'enhanced'
+export type EnhancedWindowMinutes = 30 | 60 | 180 | 360
 
 export type MonitoringSearch = {
   from: string
@@ -63,14 +64,14 @@ export function serializeTimeRange(value: MonitoringSearch): Record<string, stri
 
 export function defaultEnhancedTimeRange(now = new Date()): MonitoringSearch {
   return {
-    from: new Date(now.getTime() - 30 * 60 * 1000).toISOString(),
+    from: new Date(now.getTime() - 30 * 60_000).toISOString(),
     to: now.toISOString(),
     monitoring: 'enhanced',
     step: 'raw',
   }
 }
 
-export function enhancedWindowMinutes(from: Date, to: Date): 30 | 60 | 180 | 360 | undefined {
+export function enhancedWindowMinutes(from: Date, to: Date): EnhancedWindowMinutes | undefined {
   const minutes = (to.getTime() - from.getTime()) / 60_000
   return minutes === 30 || minutes === 60 || minutes === 180 || minutes === 360 ? minutes : undefined
 }
