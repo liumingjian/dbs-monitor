@@ -26,6 +26,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
@@ -46,15 +47,15 @@ type authenticatedAgentKey struct{}
 type authenticatedUserKey struct{}
 
 type Handler struct {
-	platform                 *db.Pool
-	clock                    clock.Clock
-	keyring                  *instance.CredentialKeyring
-	dialer                   monitorpg.Dialer
-	serverVersion            string
-	caFingerprint            string
-	agentDistribution        *AgentDistribution
-	health                   *platformhealth.Store
-	syncNotificationSnapshot func(context.Context) error
+	platform                  *db.Pool
+	clock                     clock.Clock
+	keyring                   *instance.CredentialKeyring
+	dialer                    monitorpg.Dialer
+	serverVersion             string
+	caFingerprint             string
+	agentDistribution         *AgentDistribution
+	health                    *platformhealth.Store
+	notificationSnapshotStore *notify.ChannelSnapshotStore
 }
 
 func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {

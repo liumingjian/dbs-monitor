@@ -18,17 +18,15 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
 
-func (handler *Handler) SetNotificationSnapshot(store *notify.ChannelSnapshotStore) {
-	handler.syncNotificationSnapshot = func(ctx context.Context) error {
-		return store.Sync(ctx, handler.platform)
-	}
+func (handler *Handler) SetNotificationSnapshotStore(store *notify.ChannelSnapshotStore) {
+	handler.notificationSnapshotStore = store
 }
 
 func (handler *Handler) refreshNotificationSnapshot(ctx context.Context) error {
-	if handler.syncNotificationSnapshot == nil {
+	if handler.notificationSnapshotStore == nil {
 		return nil
 	}
-	if err := handler.syncNotificationSnapshot(ctx); err != nil {
+	if err := handler.notificationSnapshotStore.Sync(ctx, handler.platform); err != nil {
 		return fmt.Errorf("refresh notification channel snapshot: %w", err)
 	}
 	return nil

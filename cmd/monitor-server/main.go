@@ -97,15 +97,15 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	notificationSnapshot := notify.NewChannelSnapshotStore(notificationSnapshotPath(credentialDirectory))
-	if err := notificationSnapshot.Sync(ctx, platform); err != nil {
+	notificationSnapshotStore := notify.NewChannelSnapshotStore(notificationSnapshotPath(credentialDirectory))
+	if err := notificationSnapshotStore.Sync(ctx, platform); err != nil {
 		return fmt.Errorf("initialize notification channel snapshot: %w", err)
 	}
 	health.SetFailureObserver(func(failure platformhealth.FailureFact) {
 		go func() {
 			deliveryContext, cancel := context.WithTimeout(ctx, notificationDeliveryTimeout)
 			defer cancel()
-			if err := sendPlatformUnavailableNotification(deliveryContext, notificationSnapshot, keyring, failure); err != nil {
+			if err := sendPlatformUnavailableNotification(deliveryContext, notificationSnapshotStore, keyring, failure); err != nil {
 				log.Printf("send platform unavailable notification: %v", err)
 			}
 		}()
@@ -197,15 +197,15 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	apiService := httpapi.NewHandlerWithPlatformHealthAndAgentDistribution(
+	apiHandler := httpapi.NewHandlerWithPlatformHealthAndAgentDistribution(
 		platform, clock.Real{}, keyring, monitorpg.DirectDialer{}, version, health, distribution,
 	)
-	apiService.SetNotificationSnapshot(notificationSnapshot)
-	apiHandler := apiService.Routes()
+	apiHandler.SetNotificationSnapshotStore(notificationSnapshotStore)
+	apiRoutes := apiHandler.Routes()
 	fileServer := http.FileServer(http.FS(static))
 	applicationHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if len(request.URL.Path) >= 5 && request.URL.Path[:5] == "/api/" {
-			apiHandler.ServeHTTP(writer, request)
+			apiRoutes.ServeHTTP(writer, request)
 			return
 		}
 		if _, err := fs.Stat(static, strings.TrimPrefix(request.URL.Path, "/")); err != nil {

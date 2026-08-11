@@ -77,3 +77,33 @@ func TestSendPlatformUnavailableNotificationFromSnapshot(t *testing.T) {
 		t.Fatalf("direct platform notification payload = %+v", payload)
 	}
 }
+
+func TestSendPlatformUnavailableNotificationReportsAllSnapshotErrors(t *testing.T) {
+	t.Parallel()
+
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
+	if err != nil {
+		t.Fatalf("create direct notification keyring: %v", err)
+	}
+	store := notify.NewChannelSnapshotStore(notificationSnapshotPath(credentialDirectory))
+	if err := store.Write(notify.ChannelSnapshot{
+		FormatVersion: notify.ChannelSnapshotFormatVersion,
+		SMTP: &notify.SnapshotSMTPChannel{
+			Enabled:        true,
+			AuthCiphertext: []byte("encrypted-authentication-value"),
+		},
+		Webhooks: []notify.SnapshotWebhookTarget{{
+			ID:      "invalid-target-id",
+			Enabled: true,
+		}},
+	}); err != nil {
+		t.Fatalf("write invalid direct notification snapshot: %v", err)
+	}
+
+	err = sendPlatformUnavailableNotification(context.Background(), store, keyring, platformhealth.FailureFact{})
+	want := "SMTP snapshot authentication key version is missing\nWebhook snapshot target ID is invalid"
+	if err == nil || err.Error() != want {
+		t.Fatalf("direct notification error = %v, want %q", err, want)
+	}
+}

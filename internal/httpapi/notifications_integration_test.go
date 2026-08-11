@@ -68,7 +68,7 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	snapshotPath := filepath.Join(t.TempDir(), "notification-channels.snapshot")
 	snapshotStore := notify.NewChannelSnapshotStore(snapshotPath)
 	handler := httpapi.NewHandler(platform, clock.Real{}, keyring)
-	handler.SetNotificationSnapshot(snapshotStore)
+	handler.SetNotificationSnapshotStore(snapshotStore)
 	server := httptest.NewTLSServer(handler.Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)

@@ -29,11 +29,11 @@ func notificationSnapshotPath(credentialDirectory string) string {
 
 func sendPlatformUnavailableNotification(
 	ctx context.Context,
-	store *notify.ChannelSnapshotStore,
+	snapshotStore *notify.ChannelSnapshotStore,
 	keyring *instance.CredentialKeyring,
 	failure platformhealth.FailureFact,
 ) error {
-	snapshot, err := store.Load()
+	snapshot, err := snapshotStore.Load()
 	if err != nil {
 		return err
 	}
@@ -45,59 +45,79 @@ func sendPlatformUnavailableNotification(
 	}
 	var deliveryErrors []error
 	if channel := snapshot.SMTP; channel != nil && channel.Enabled {
-		config := notify.SMTPConfig{
-			Host: channel.Host, Port: int(channel.Port), From: channel.From,
-			TLSMode: notify.TLSMode(channel.TLSMode), AuthType: notify.AuthType(channel.AuthType),
-		}
-		if channel.Username != nil {
-			config.Username = *channel.Username
-		}
-		smtpReady := true
-		if len(channel.AuthCiphertext) > 0 {
-			if channel.AuthKeyVersion == nil {
-				deliveryErrors = append(deliveryErrors, errors.New("SMTP snapshot authentication key version is missing"))
-				smtpReady = false
-			} else {
-				password, decryptErr := keyring.DecryptSMTPPassword(channel.AuthCiphertext, *channel.AuthKeyVersion)
-				if decryptErr != nil {
-					deliveryErrors = append(deliveryErrors, fmt.Errorf("decrypt SMTP snapshot authentication value: %w", decryptErr))
-					smtpReady = false
-				} else {
-					config.Password = password
-				}
-			}
-		}
-		if smtpReady {
-			message.To = channel.Recipient
-			if sendErr := notify.NewSMTPChannel(config).Send(ctx, message); sendErr != nil {
-				deliveryErrors = append(deliveryErrors, fmt.Errorf("send platform failure through SMTP: %w", sendErr))
-			}
+		if err := sendPlatformUnavailableSMTP(ctx, channel, keyring, message); err != nil {
+			deliveryErrors = append(deliveryErrors, err)
 		}
 	}
 	for _, target := range snapshot.Webhooks {
 		if !target.Enabled {
 			continue
 		}
-		targetID, parseErr := uuid.Parse(target.ID)
-		if parseErr != nil {
-			deliveryErrors = append(deliveryErrors, errors.New("Webhook snapshot target ID is invalid"))
-			continue
-		}
-		signingValue, valueErr := keyring.DecryptWebhookSigningValue(targetID, target.SigningValueCiphertext, target.SigningKeyVersion)
-		signatureHeader, headerErr := keyring.DecryptWebhookSignatureHeader(targetID, target.SignatureHeaderCiphertext, target.SigningKeyVersion)
-		if valueErr != nil || headerErr != nil {
-			deliveryErrors = append(deliveryErrors, fmt.Errorf("decrypt Webhook snapshot signing configuration: %w", errors.Join(valueErr, headerErr)))
-			continue
-		}
-		channel := notify.NewWebhookChannel(notify.WebhookConfig{
-			URL: target.URL, SigningValue: signingValue, SignatureHeader: signatureHeader,
-			Timeout: notificationDeliveryTimeout,
-		})
-		if sendErr := channel.Send(ctx, message); sendErr != nil {
-			deliveryErrors = append(deliveryErrors, fmt.Errorf("send platform failure through Webhook: %w", sendErr))
+		if err := sendPlatformUnavailableWebhook(ctx, target, keyring, message); err != nil {
+			deliveryErrors = append(deliveryErrors, err)
 		}
 	}
 	return errors.Join(deliveryErrors...)
+}
+
+func sendPlatformUnavailableSMTP(
+	ctx context.Context,
+	channel *notify.SnapshotSMTPChannel,
+	keyring *instance.CredentialKeyring,
+	message notify.Message,
+) error {
+	config := notify.SMTPConfig{
+		Host:     channel.Host,
+		Port:     int(channel.Port),
+		From:     channel.From,
+		TLSMode:  notify.TLSMode(channel.TLSMode),
+		AuthType: notify.AuthType(channel.AuthType),
+	}
+	if channel.Username != nil {
+		config.Username = *channel.Username
+	}
+	if len(channel.AuthCiphertext) > 0 {
+		if channel.AuthKeyVersion == nil {
+			return errors.New("SMTP snapshot authentication key version is missing")
+		}
+		password, err := keyring.DecryptSMTPPassword(channel.AuthCiphertext, *channel.AuthKeyVersion)
+		if err != nil {
+			return fmt.Errorf("decrypt SMTP snapshot authentication value: %w", err)
+		}
+		config.Password = password
+	}
+	message.To = channel.Recipient
+	if err := notify.NewSMTPChannel(config).Send(ctx, message); err != nil {
+		return fmt.Errorf("send platform failure through SMTP: %w", err)
+	}
+	return nil
+}
+
+func sendPlatformUnavailableWebhook(
+	ctx context.Context,
+	target notify.SnapshotWebhookTarget,
+	keyring *instance.CredentialKeyring,
+	message notify.Message,
+) error {
+	targetID, err := uuid.Parse(target.ID)
+	if err != nil {
+		return errors.New("Webhook snapshot target ID is invalid")
+	}
+	signingValue, valueErr := keyring.DecryptWebhookSigningValue(targetID, target.SigningValueCiphertext, target.SigningKeyVersion)
+	signatureHeader, headerErr := keyring.DecryptWebhookSignatureHeader(targetID, target.SignatureHeaderCiphertext, target.SigningKeyVersion)
+	if valueErr != nil || headerErr != nil {
+		return fmt.Errorf("decrypt Webhook snapshot signing configuration: %w", errors.Join(valueErr, headerErr))
+	}
+	channel := notify.NewWebhookChannel(notify.WebhookConfig{
+		URL:             target.URL,
+		SigningValue:    signingValue,
+		SignatureHeader: signatureHeader,
+		Timeout:         notificationDeliveryTimeout,
+	})
+	if err := channel.Send(ctx, message); err != nil {
+		return fmt.Errorf("send platform failure through Webhook: %w", err)
+	}
+	return nil
 }
 
 func runNotificationDelivery(ctx context.Context, platform *db.Pool, keyring *instance.CredentialKeyring) {
