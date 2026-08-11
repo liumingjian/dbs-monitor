@@ -54,7 +54,7 @@ function StandardMonitoringRoutePage() {
 
 function StandardMonitoringPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const navigate = standardMonitoringRoute.useNavigate()
-  const instance = $api.useQuery(
+  const instanceQuery = $api.useQuery(
     'get',
     '/api/v1/instances/{id}',
     { params: { path: { id } } },
@@ -64,7 +64,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
   const step = search.step ?? 'auto'
   const columns = search.columns ?? 2
   const connected = search.connect ?? true
-  const metrics = $api.useQuery('get', '/api/v1/instances/{id}/metrics/series', {
+  const metricsQuery = $api.useQuery('get', '/api/v1/instances/{id}/metrics/series', {
     params: {
       path: { id },
       query: { metric: standardMonitoringMetricIDs, from: search.from, to: search.to, step },
@@ -77,7 +77,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
   }
 
   return <Space direction="vertical" size="large" style={{ width: '100%' }}>
-    <WorkbenchHeader id={id} instanceName={instance.data?.name} activeKey="monitoring" search={search} />
+    <WorkbenchHeader id={id} instanceName={instanceQuery.data?.name} activeKey="monitoring" search={search} />
     <Tabs activeKey="standard" items={[
       { key: 'standard', label: '标准监控' },
       { key: 'enhanced', label: '增强监控', disabled: true },
@@ -114,19 +114,19 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
         />
         <Switch aria-label="光标联动" checked={connected} onChange={(value) => updateSearch({ connect: value })} />
         <span>光标联动</span>
-        {metrics.dataUpdatedAt > 0 && <Freshness
-          dataUpdatedAt={metrics.dataUpdatedAt}
+        {metricsQuery.dataUpdatedAt > 0 && <Freshness
+          dataUpdatedAt={metricsQuery.dataUpdatedAt}
           collectionInterval={standardMonitoringPollingOptions.refetchInterval}
         />}
       </Space>
     </section>
 
-    {metrics.isPending ? <Spin size="large" /> : standardMonitoringGroups.map((group) => (
+    {metricsQuery.isPending ? <Spin size="large" /> : standardMonitoringGroups.map((group) => (
       <section key={group.key} aria-labelledby={`${group.key}-heading`}>
         <Typography.Title id={`${group.key}-heading`} level={3}>{group.title}</Typography.Title>
         <div className="metric-grid" data-columns={columns}>
           {group.charts.map((chart) => {
-            const view = buildChartView(chart, metrics.data?.metrics)
+            const view = buildChartView(chart, metricsQuery.data?.metrics)
             const primaryMetric = chart.metrics[0]
             return (
               <Card
@@ -151,11 +151,11 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
                 <MetricChart
                   label={chart.title}
                   series={view.series}
-                  step={metrics.data?.step ?? step}
+                  step={metricsQuery.data?.step ?? step}
                   unavailability={view.unavailability}
                   unavailabilityHref={unavailabilityHref(id, primaryMetric, view.unavailability)}
                   connectionGroup={connected ? `standard-monitoring-${id}` : undefined}
-                  loading={metrics.isFetching}
+                  loading={metricsQuery.isFetching}
                 />
               </Card>
             )
@@ -166,7 +166,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
 
     <MetricDetails
       chart={selectedChart}
-      metrics={metrics.data?.metrics}
+      metrics={metricsQuery.data?.metrics}
       onClose={() => updateSearch({ metric: undefined })}
     />
   </Space>

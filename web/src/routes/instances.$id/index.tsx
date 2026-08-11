@@ -19,6 +19,11 @@ import { Freshness } from '../../domain/Freshness'
 import { HealthStatus } from '../../domain/HealthStatus'
 import { SuppressionTags } from '../../domain/SuppressionTags'
 import { unavailabilityCopy } from '../../domain/UnavailabilityBlock'
+import {
+  attributionLabel,
+  dataFreshnessLabel,
+  lastCollectedAtLabel,
+} from '../instanceProjection'
 import { rootRoute } from '../root'
 import { metricOption, type MetricID } from './metricOptions'
 import {
@@ -27,11 +32,12 @@ import {
   overviewMetricGroups,
   overviewMetricIDs,
   performanceEventsEmptyState,
+  type LatestMetricFacts,
+  type OverviewModule,
 } from './overview'
 import { defaultTimeRange, parseTimeRange, type MonitoringSearch } from './timeRange'
 import { WorkbenchHeader } from './workbench'
 
-type Instance = components['schemas']['Instance']
 type ResponseMetric = components['schemas']['MetricSeriesResponse']['metrics'][number]
 type PerformanceEvent = components['schemas']['PerformanceEvent']
 
@@ -175,7 +181,7 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
 }
 
 function OverviewCard({ module, title, icon, loading = false, children }: {
-  module: string
+  module: OverviewModule
   title: string
   icon: ReactNode
   loading?: boolean
@@ -200,17 +206,18 @@ function MetricFacts({ id, search, metricIDs, metrics }: {
   return <Descriptions size="small" column={1} items={metricIDs.map((metricID) => {
     const metric = metrics?.find((item) => item.metric === metricID)
     const snapshot = latestMetricFacts(metric)
+    const destinations = overviewDestinations(id, { ...search, metric: metricID })
     return {
       key: metricID,
-      label: <a href={overviewDestinations(id, { ...search, metric: metricID }).monitoring}>{metricOption(metricID).label}</a>,
-      children: <MetricFactValue metricID={metricID} snapshot={snapshot} collectionHref={overviewDestinations(id, { ...search, metric: metricID }).collection} />,
+      label: <a href={destinations.monitoring}>{metricOption(metricID).label}</a>,
+      children: <MetricFactValue metricID={metricID} snapshot={snapshot} collectionHref={destinations.collection} />,
     }
   })} />
 }
 
 function MetricFactValue({ metricID, snapshot, collectionHref }: {
   metricID: MetricID
-  snapshot: ReturnType<typeof latestMetricFacts>
+  snapshot: LatestMetricFacts
   collectionHref: string
 }) {
   if (snapshot.unavailability) {
@@ -245,43 +252,39 @@ function PerformanceEvents({ events }: { events: PerformanceEvent[] | undefined 
   </List.Item>} />
 }
 
-function attributionLabel(instance: Instance): string {
-  const attribution = instance.health.attribution
-  if (!attribution) return '无未恢复告警'
-  return attribution.current_value === undefined ? attribution.rule_name : `${attribution.rule_name} (${attribution.current_value})`
-}
-
-function lastCollectedAtLabel(collectedAt: string | undefined): string {
-  return collectedAt ? new Date(collectedAt).toLocaleString() : '尚无成功采集'
-}
-
-function dataFreshnessLabel(seconds: number | undefined): string {
-  if (seconds === undefined) return '未知'
-  if (seconds < 60) return `${seconds} 秒前`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`
-  return `${Math.floor(seconds / 3600)} 小时前`
-}
-
 function agentStatusLabel(status: components['schemas']['InstanceAgentStatus']): string {
   switch (status) {
-    case 'online': return '在线'
-    case 'offline': return '离线'
-    case 'not_installed': return '未安装'
-    case 'permission_denied': return '权限不足'
-    case 'error': return '异常'
-    default: return assertNever(status)
+    case 'online':
+      return '在线'
+    case 'offline':
+      return '离线'
+    case 'not_installed':
+      return '未安装'
+    case 'permission_denied':
+      return '权限不足'
+    case 'error':
+      return '异常'
+    default:
+      return assertNever(status)
   }
 }
 
 function eventTypeLabel(eventType: components['schemas']['PerformanceEventType']): string {
   switch (eventType) {
-    case 'LOCK_BLOCKING': return '锁等待与阻塞'
-    case 'LONG_TRANSACTION': return '长事务'
-    case 'IDLE_IN_TRANSACTION': return '事务空闲'
-    case 'ACTIVE_SESSIONS_HIGH': return '活跃会话过高'
-    case 'REPLICATION_LAG': return '复制延迟'
-    case 'TEMP_FILES_SURGE': return '临时文件突增'
-    default: return assertNever(eventType)
+    case 'LOCK_BLOCKING':
+      return '锁等待与阻塞'
+    case 'LONG_TRANSACTION':
+      return '长事务'
+    case 'IDLE_IN_TRANSACTION':
+      return '事务空闲'
+    case 'ACTIVE_SESSIONS_HIGH':
+      return '活跃会话过高'
+    case 'REPLICATION_LAG':
+      return '复制延迟'
+    case 'TEMP_FILES_SURGE':
+      return '临时文件突增'
+    default:
+      return assertNever(eventType)
   }
 }
 

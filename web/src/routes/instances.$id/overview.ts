@@ -16,6 +16,8 @@ export const OVERVIEW_MODULES = [
   'troubleshooting',
 ] as const
 
+export type OverviewModule = typeof OVERVIEW_MODULES[number]
+
 export const overviewMetricGroups = {
   availability: ['pg.availability.reachable', 'pg.probe.latency_ms'],
   resources: [
@@ -61,15 +63,24 @@ export function latestMetricFacts(metric: ResponseMetric | undefined): LatestMet
     return { unavailability, unit: metric?.unit ?? '', facts: [] }
   }
 
-  const facts = metric.series.flatMap((series) => {
-    const latest = series.points.reduce<(number | null)[] | undefined>((current, point) => {
-      if (typeof point[0] !== 'number') return current
-      if (!current || typeof current[0] !== 'number' || point[0] > current[0]) return point
-      return current
-    }, undefined)
-    if (!latest || typeof latest[0] !== 'number') return []
-    return [{ labels: series.labels, value: typeof latest[1] === 'number' ? latest[1] : null, sampledAt: latest[0] }]
-  })
+  const facts: LatestMetricFact[] = []
+  for (const series of metric.series) {
+    let latestPoint: (number | null)[] | undefined
+    for (const point of series.points) {
+      const sampledAt = point[0]
+      if (typeof sampledAt !== 'number') continue
+      if (!latestPoint || typeof latestPoint[0] !== 'number' || sampledAt > latestPoint[0]) {
+        latestPoint = point
+      }
+    }
+    if (!latestPoint || typeof latestPoint[0] !== 'number') continue
+
+    facts.push({
+      labels: series.labels,
+      value: typeof latestPoint[1] === 'number' ? latestPoint[1] : null,
+      sampledAt: latestPoint[0],
+    })
+  }
 
   return {
     unavailability: facts.length === 0 ? 'NO_SAMPLES_YET' : null,

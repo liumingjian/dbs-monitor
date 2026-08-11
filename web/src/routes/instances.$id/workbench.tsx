@@ -3,12 +3,14 @@ import { Link } from '@tanstack/react-router'
 import { Button, Space, Tabs, Typography } from 'antd'
 import type { MonitoringSearch } from './timeRange'
 
-export function WorkbenchHeader({ id, instanceName, activeKey, search }: {
+type WorkbenchHeaderProps = {
   id: string
   instanceName: string | undefined
   activeKey: 'overview' | 'monitoring'
   search: MonitoringSearch
-}) {
+}
+
+export function WorkbenchHeader({ id, instanceName, activeKey, search }: WorkbenchHeaderProps) {
   return <>
     <Link to="/instances">← 返回实例列表</Link>
     <Space className="workbench-heading" wrap>
