@@ -17,8 +17,15 @@ import (
 var files embed.FS
 
 const (
-	credentialSchemaVersion         = 6
-	plaintextPasswordRemovalVersion = 7
+	credentialSchemaVersion               = 6
+	plaintextPasswordRemovalVersion       = 7
+	migrationAdvisoryLockID         int64 = 0x4442534d // "DBSM", scoped further by the platform database OID.
+	migrationAdvisoryLockSQL              = `SELECT pg_advisory_lock(
+		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
+	)`
+	migrationAdvisoryUnlockSQL = `SELECT pg_advisory_unlock(
+		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
+	)`
 )
 
 func Open(connectionString string) (*sql.DB, error) {
@@ -29,7 +36,28 @@ func Open(connectionString string) (*sql.DB, error) {
 	return database, nil
 }
 
-func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (int, error) {
+func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (applied int, returnedErr error) {
+	lockConnection, err := database.Conn(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("reserve migration lock connection: %w", err)
+	}
+	if _, err := lockConnection.ExecContext(ctx, migrationAdvisoryLockSQL, migrationAdvisoryLockID); err != nil {
+		lockConnection.Close()
+		return 0, fmt.Errorf("acquire migration advisory lock: %w", err)
+	}
+	defer func() {
+		var unlocked bool
+		unlockErr := lockConnection.QueryRowContext(context.Background(), migrationAdvisoryUnlockSQL, migrationAdvisoryLockID).Scan(&unlocked)
+		closeErr := lockConnection.Close()
+		if returnedErr == nil && unlockErr != nil {
+			returnedErr = fmt.Errorf("release migration advisory lock: %w", unlockErr)
+		} else if returnedErr == nil && !unlocked {
+			returnedErr = fmt.Errorf("release migration advisory lock: lock was not held")
+		} else if returnedErr == nil && closeErr != nil {
+			returnedErr = fmt.Errorf("close migration lock connection: %w", closeErr)
+		}
+	}()
+
 	root, err := fs.Sub(files, ".")
 	if err != nil {
 		return 0, fmt.Errorf("migration filesystem: %w", err)
@@ -42,7 +70,7 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (int,
 	if err != nil {
 		return 0, fmt.Errorf("read migration version: %w", err)
 	}
-	applied := 0
+	applied = 0
 	if current < credentialSchemaVersion {
 		results, err := provider.UpTo(ctx, credentialSchemaVersion)
 		if err != nil {

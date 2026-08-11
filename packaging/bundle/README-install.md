@@ -27,7 +27,19 @@ systemctl status dbs-monitor-postgres dbs-monitor-server
 ss -ltnp
 ```
 
-Restart `dbs-monitor-server` and confirm its new journal entries do not print another initial password. Agent platform distribution, upgrades, rollback, high availability, and runtime disk-watermark behavior are intentionally outside T11 and deferred to R3. The T11 archive is a walking-skeleton package, not the complete production upgrade package.
+Restart `dbs-monitor-server` and confirm its new journal entries do not print another initial password. This Linux archive remains a legacy engineering reference rather than a supported v1 release asset.
+
+## Upgrade
+
+Extract the new same-major PostgreSQL archive on the installed host and run its upgrade entry point as root:
+
+```sh
+sudo ./upgrade.sh
+```
+
+The command stops the platform server while PostgreSQL remains available, creates an unconditional custom-format backup under `/opt/dbs-monitor/backups/`, stages the replacement payload, restarts PostgreSQL with the new same-major binaries, and starts the server. Server startup holds the platform-database migration lock until goose finishes. A migration or readiness failure exits nonzero, leaves the platform unavailable, and identifies the retained backup and previous payload paths. PostgreSQL major-version changes are rejected and require a separate migration procedure.
+
+The automatic dump contains platform schema and control-plane data but excludes data from `metric_sample` and all of its partitions. The credential keyring is not part of the dump and remains a separate required recovery artifact.
 
 ## Master key rotation
 

@@ -80,7 +80,7 @@ func run(ctx context.Context) error {
 	}
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		migrationDB.Close()
-		return err
+		return fmt.Errorf("platform database migration failed; refusing to start: %w", err)
 	}
 	migrationDB.Close()
 	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
