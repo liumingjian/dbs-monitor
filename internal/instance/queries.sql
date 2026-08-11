@@ -119,6 +119,24 @@ JOIN instance_collection_config config ON config.instance_id = instance.id
 WHERE NOT config.collection_paused
 ORDER BY id;
 
+-- name: CountCredentialsNotUsingKeyVersion :one
+SELECT count(*) FROM instance WHERE password_key_version <> $1;
+
+-- name: ListCredentialsForKeyRotation :many
+SELECT id, password_ciphertext, password_key_version
+FROM instance
+ORDER BY id
+FOR UPDATE;
+
+-- name: UpdateCredentialKeyVersion :exec
+UPDATE instance
+SET password_ciphertext = $2,
+    password_key_version = $3
+WHERE id = $1;
+
+-- name: CountCredentialKeyReferences :one
+SELECT count(*) FROM instance WHERE password_key_version = $1;
+
 -- name: SetCollectSuccess :exec
 INSERT INTO instance_collect_state (instance_id, source, last_success_at)
 VALUES ($1, 'SERVER_DIRECT', $2)

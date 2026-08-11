@@ -31,20 +31,37 @@ import (
 	webassets "github.com/liumingjian/dbs-monitor/web"
 )
 
+const (
+	defaultDatabaseURL         = "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable"
+	defaultCredentialDirectory = "/opt/dbs-monitor/etc/credentials"
+	rotateMasterKeyCommand     = "rotate-master-key"
+)
+
 var version = "1.0.0"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := run(ctx); err != nil {
+	if err := runCommand(ctx, os.Args[1:]); err != nil {
 		log.Printf("monitor-server: %v", err)
 		os.Exit(1)
 	}
 }
 
+func runCommand(ctx context.Context, arguments []string) error {
+	switch {
+	case len(arguments) == 0:
+		return run(ctx)
+	case len(arguments) == 1 && arguments[0] == rotateMasterKeyCommand:
+		return runMasterKeyRotationCommand(ctx)
+	default:
+		return fmt.Errorf("usage: dbs-monitor-server [%s]", rotateMasterKeyCommand)
+	}
+}
+
 func run(ctx context.Context) error {
-	connectionString := env("DATABASE_URL", "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable")
-	credentialDirectory := env("CREDENTIALS_DIR", "/opt/dbs-monitor/etc/credentials")
+	connectionString := env("DATABASE_URL", defaultDatabaseURL)
+	credentialDirectory := env("CREDENTIALS_DIR", defaultCredentialDirectory)
 	pool, err := pgxpool.New(ctx, connectionString)
 	if err != nil {
 		return fmt.Errorf("open platform database: %w", err)
