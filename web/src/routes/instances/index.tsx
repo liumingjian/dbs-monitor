@@ -318,7 +318,7 @@ const instanceColumns: TableColumnsType<Instance> = [
     render: (_, instance) => (
       <Space wrap>
         <Link to="/instances/$id" params={{ id: instance.id }} search={defaultTimeRange()}>
-          <DashboardOutlined /> 监控
+          <DashboardOutlined /> 总览
         </Link>
         <Link to="/instances/$id/settings" params={{ id: instance.id }}>
           <SettingOutlined /> 接入设置

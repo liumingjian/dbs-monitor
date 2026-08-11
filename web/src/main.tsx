@@ -5,6 +5,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { instanceRoute } from './routes/instances.$id'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
+import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
 import { instanceSettingsRoute } from './routes/instances.$id/settings'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
@@ -16,6 +17,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   instancesRoute,
   instanceRoute,
+  standardMonitoringRoute,
   collectionManagementRoute,
   instanceSettingsRoute,
   usersRoute,

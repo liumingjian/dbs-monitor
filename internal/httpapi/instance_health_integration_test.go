@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -158,6 +159,18 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		t.Fatalf("instance %s missing from projection", id)
 		return instanceProjectionResponse{}
 	}
+	detail := func(id uuid.UUID) instanceProjectionResponse {
+		response := getResponse(t, client, server.URL+"/api/v1/instances/"+id.String())
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("get instance status = %d", response.StatusCode)
+		}
+		var instance instanceProjectionResponse
+		if err := json.NewDecoder(response.Body).Decode(&instance); err != nil {
+			t.Fatalf("decode instance: %v", err)
+		}
+		return instance
+	}
 
 	initial := find(list(), targetID)
 	if initial.Health.Status != "CRITICAL" || initial.Health.Attribution == nil || initial.Health.Attribution.RuleName != "critical later" ||
@@ -166,6 +179,9 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		initial.Health.Flags.ConfigurationMissing != 1 || initial.AgentStatus != "not_installed" || initial.LastCollectedAt == nil ||
 		initial.DataFreshnessSeconds == nil || *initial.DataFreshnessSeconds < 60 {
 		t.Fatalf("initial target projection = %+v", initial)
+	}
+	if got := detail(targetID); !reflect.DeepEqual(got.Health, initial.Health) {
+		t.Fatalf("detail health projection = %+v, want list projection %+v", got.Health, initial.Health)
 	}
 	if other := find(list(), otherID); other.Health.Status != "UNKNOWN" {
 		t.Fatalf("uncollected instance projection = %+v, want UNKNOWN", other)
