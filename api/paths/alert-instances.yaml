@@ -1,0 +1,51 @@
+/api/v1/alert-instances/{id}/disposition:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [alerts]
+    operationId: getAlertDisposition
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Current disposition and complete disposition history
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-instances.yaml#/AlertDispositionDetail }
+      '404':
+        description: Alert instance not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+  put:
+    tags: [alerts]
+    operationId: updateAlertDisposition
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/alert-instances.yaml#/AlertDispositionInput }
+    responses:
+      '200':
+        description: Updated disposition and complete disposition history
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-instances.yaml#/AlertDispositionDetail }
+      '400':
+        description: Invalid disposition
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: Alert instance not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '409':
+        description: Recovered alert instances cannot be disposed
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

@@ -47,6 +47,13 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		{"AlertRuleScope", mapKeys(map[api.AlertRuleScope]string{
 			api.ALL: "", api.INSTANCES: "",
 		})},
+		{"AlertDisposition", mapKeys(map[api.AlertDisposition]string{
+			api.AlertDispositionNONE: "", api.AlertDispositionACKED: "", api.AlertDispositionIGNORED: "",
+		})},
+		{"IgnoreReasonCode", mapKeys(map[api.IgnoreReasonCode]string{
+			api.KNOWNISSUE: "", api.FALSEPOSITIVE: "", api.DUPLICATE: "",
+			api.IMPACTACCEPTABLE: "", api.OTHER: "",
+		})},
 	}
 
 	for _, tt := range tests {

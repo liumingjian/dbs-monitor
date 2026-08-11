@@ -37,6 +37,60 @@ func (q *Queries) AlertRuleTargetInstanceExists(ctx context.Context, id pgtype.U
 	return exists, err
 }
 
+const createAlertDispositionEvent = `-- name: CreateAlertDispositionEvent :exec
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, actor_id, acted_at,
+    from_disposition, to_disposition, disposition_note,
+    ignore_reason_code, ignore_reason_detail
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+`
+
+type CreateAlertDispositionEventParams struct {
+	AlertInstanceID    pgtype.UUID
+	RuleID             pgtype.UUID
+	RuleVersion        int32
+	Kind               string
+	FromState          string
+	ToState            string
+	CurrentValue       pgtype.Float8
+	Unavailability     pgtype.Text
+	RuleSnapshot       []byte
+	EvaluatedAt        pgtype.Timestamptz
+	ActorID            pgtype.UUID
+	ActedAt            pgtype.Timestamptz
+	FromDisposition    pgtype.Text
+	ToDisposition      pgtype.Text
+	DispositionNote    pgtype.Text
+	IgnoreReasonCode   pgtype.Text
+	IgnoreReasonDetail pgtype.Text
+}
+
+func (q *Queries) CreateAlertDispositionEvent(ctx context.Context, arg CreateAlertDispositionEventParams) error {
+	_, err := q.db.Exec(ctx, createAlertDispositionEvent,
+		arg.AlertInstanceID,
+		arg.RuleID,
+		arg.RuleVersion,
+		arg.Kind,
+		arg.FromState,
+		arg.ToState,
+		arg.CurrentValue,
+		arg.Unavailability,
+		arg.RuleSnapshot,
+		arg.EvaluatedAt,
+		arg.ActorID,
+		arg.ActedAt,
+		arg.FromDisposition,
+		arg.ToDisposition,
+		arg.DispositionNote,
+		arg.IgnoreReasonCode,
+		arg.IgnoreReasonDetail,
+	)
+	return err
+}
+
 const createAlertEvent = `-- name: CreateAlertEvent :exec
 INSERT INTO alert_event (
     alert_instance_id, rule_id, rule_version, kind,
@@ -183,6 +237,82 @@ DELETE FROM alert_rule_scope_instance WHERE rule_id = $1
 func (q *Queries) DeleteAlertRuleScopeInstances(ctx context.Context, ruleID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteAlertRuleScopeInstances, ruleID)
 	return err
+}
+
+const getAlertDispositionForRead = `-- name: GetAlertDispositionForRead :one
+SELECT instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail FROM alert_instance WHERE id = $1 FOR SHARE
+`
+
+func (q *Queries) GetAlertDispositionForRead(ctx context.Context, id pgtype.UUID) (AlertInstance, error) {
+	row := q.db.QueryRow(ctx, getAlertDispositionForRead, id)
+	var i AlertInstance
+	err := row.Scan(
+		&i.InstanceID,
+		&i.MetricID,
+		&i.Status,
+		&i.BreachCount,
+		&i.RecoveryCount,
+		&i.NoDataCount,
+		&i.StateBeforeNoData,
+		&i.Unavailability,
+		&i.UpdatedAt,
+		&i.ID,
+		&i.RuleID,
+		&i.RuleVersion,
+		&i.Severity,
+		&i.CurrentValue,
+		&i.RuleSnapshot,
+		&i.MetricDimensionKey,
+		&i.FirstTriggeredAt,
+		&i.FirstRuleVersion,
+		&i.FirstRuleSnapshot,
+		&i.RecoveredAt,
+		&i.Disposition,
+		&i.DispositionBy,
+		&i.DispositionAt,
+		&i.DispositionNote,
+		&i.IgnoreReasonCode,
+		&i.IgnoreReasonDetail,
+	)
+	return i, err
+}
+
+const getAlertDispositionForUpdate = `-- name: GetAlertDispositionForUpdate :one
+SELECT instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail FROM alert_instance WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetAlertDispositionForUpdate(ctx context.Context, id pgtype.UUID) (AlertInstance, error) {
+	row := q.db.QueryRow(ctx, getAlertDispositionForUpdate, id)
+	var i AlertInstance
+	err := row.Scan(
+		&i.InstanceID,
+		&i.MetricID,
+		&i.Status,
+		&i.BreachCount,
+		&i.RecoveryCount,
+		&i.NoDataCount,
+		&i.StateBeforeNoData,
+		&i.Unavailability,
+		&i.UpdatedAt,
+		&i.ID,
+		&i.RuleID,
+		&i.RuleVersion,
+		&i.Severity,
+		&i.CurrentValue,
+		&i.RuleSnapshot,
+		&i.MetricDimensionKey,
+		&i.FirstTriggeredAt,
+		&i.FirstRuleVersion,
+		&i.FirstRuleSnapshot,
+		&i.RecoveredAt,
+		&i.Disposition,
+		&i.DispositionBy,
+		&i.DispositionAt,
+		&i.DispositionNote,
+		&i.IgnoreReasonCode,
+		&i.IgnoreReasonDetail,
+	)
+	return i, err
 }
 
 const getAlertRule = `-- name: GetAlertRule :one
@@ -355,6 +485,53 @@ func (q *Queries) GetEvaluationTarget(ctx context.Context, arg GetEvaluationTarg
 		&i.AgentMetricsEnabled,
 	)
 	return i, err
+}
+
+const listAlertDispositionEvents = `-- name: ListAlertDispositionEvents :many
+SELECT id, alert_instance_id, rule_id, rule_version, kind, from_state, to_state, current_value, unavailability, rule_snapshot, evaluated_at, actor_id, acted_at, from_disposition, to_disposition, disposition_note, ignore_reason_code, ignore_reason_detail
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind IN ('ACKED', 'IGNORED')
+ORDER BY acted_at, id
+`
+
+func (q *Queries) ListAlertDispositionEvents(ctx context.Context, alertInstanceID pgtype.UUID) ([]AlertEvent, error) {
+	rows, err := q.db.Query(ctx, listAlertDispositionEvents, alertInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AlertEvent
+	for rows.Next() {
+		var i AlertEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.AlertInstanceID,
+			&i.RuleID,
+			&i.RuleVersion,
+			&i.Kind,
+			&i.FromState,
+			&i.ToState,
+			&i.CurrentValue,
+			&i.Unavailability,
+			&i.RuleSnapshot,
+			&i.EvaluatedAt,
+			&i.ActorID,
+			&i.ActedAt,
+			&i.FromDisposition,
+			&i.ToDisposition,
+			&i.DispositionNote,
+			&i.IgnoreReasonCode,
+			&i.IgnoreReasonDetail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAlertRuleScopeInstances = `-- name: ListAlertRuleScopeInstances :many
@@ -781,6 +958,70 @@ func (q *Queries) SetAlertRuleEnabled(ctx context.Context, arg SetAlertRuleEnabl
 		&i.EvaluationIntervalSeconds,
 		&i.EnabledUpdatedBy,
 		&i.EnabledUpdatedAt,
+	)
+	return i, err
+}
+
+const updateAlertDisposition = `-- name: UpdateAlertDisposition :one
+UPDATE alert_instance
+SET disposition = $2,
+    disposition_by = $3,
+    disposition_at = $4,
+    disposition_note = $5,
+    ignore_reason_code = $6,
+    ignore_reason_detail = $7
+WHERE id = $1
+RETURNING instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail
+`
+
+type UpdateAlertDispositionParams struct {
+	ID                 pgtype.UUID
+	Disposition        string
+	DispositionBy      pgtype.UUID
+	DispositionAt      pgtype.Timestamptz
+	DispositionNote    pgtype.Text
+	IgnoreReasonCode   pgtype.Text
+	IgnoreReasonDetail pgtype.Text
+}
+
+func (q *Queries) UpdateAlertDisposition(ctx context.Context, arg UpdateAlertDispositionParams) (AlertInstance, error) {
+	row := q.db.QueryRow(ctx, updateAlertDisposition,
+		arg.ID,
+		arg.Disposition,
+		arg.DispositionBy,
+		arg.DispositionAt,
+		arg.DispositionNote,
+		arg.IgnoreReasonCode,
+		arg.IgnoreReasonDetail,
+	)
+	var i AlertInstance
+	err := row.Scan(
+		&i.InstanceID,
+		&i.MetricID,
+		&i.Status,
+		&i.BreachCount,
+		&i.RecoveryCount,
+		&i.NoDataCount,
+		&i.StateBeforeNoData,
+		&i.Unavailability,
+		&i.UpdatedAt,
+		&i.ID,
+		&i.RuleID,
+		&i.RuleVersion,
+		&i.Severity,
+		&i.CurrentValue,
+		&i.RuleSnapshot,
+		&i.MetricDimensionKey,
+		&i.FirstTriggeredAt,
+		&i.FirstRuleVersion,
+		&i.FirstRuleSnapshot,
+		&i.RecoveredAt,
+		&i.Disposition,
+		&i.DispositionBy,
+		&i.DispositionAt,
+		&i.DispositionNote,
+		&i.IgnoreReasonCode,
+		&i.IgnoreReasonDetail,
 	)
 	return i, err
 }

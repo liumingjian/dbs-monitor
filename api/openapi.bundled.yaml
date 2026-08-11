@@ -8,6 +8,7 @@ tags:
   - name: instances
   - name: metrics
   - name: alert-rules
+  - name: alerts
   - name: auth
   - name: agent
   - name: collection
@@ -465,6 +466,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}/disposition:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: getAlertDisposition
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current disposition and complete disposition history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDispositionDetail'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - alerts
+      operationId: updateAlertDisposition
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertDispositionInput'
+      responses:
+        '200':
+          description: Updated disposition and complete disposition history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDispositionDetail'
+        '400':
+          description: Invalid disposition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Recovered alert instances cannot be disposed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/agent/v1/report:
     post:
       tags:
@@ -759,6 +822,20 @@ components:
       enum:
         - ALL
         - INSTANCES
+    AlertDisposition:
+      type: string
+      enum:
+        - NONE
+        - ACKED
+        - IGNORED
+    IgnoreReasonCode:
+      type: string
+      enum:
+        - KNOWN_ISSUE
+        - FALSE_POSITIVE
+        - DUPLICATE
+        - IMPACT_ACCEPTABLE
+        - OTHER
     AlertRuleInput:
       type: object
       required:
@@ -908,6 +985,97 @@ components:
       properties:
         enabled:
           type: boolean
+    AlertDispositionInput:
+      type: object
+      required:
+        - disposition
+      properties:
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+    AlertDispositionDetail:
+      type: object
+      required:
+        - alert_instance_id
+        - disposition
+        - stops_repeat_notifications
+        - excluded_from_health_rollup
+        - history
+      properties:
+        alert_instance_id:
+          type: string
+          format: uuid
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        disposition_by:
+          type: string
+          format: uuid
+        disposition_at:
+          type: string
+          format: date-time
+        note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+        stops_repeat_notifications:
+          type: boolean
+        excluded_from_health_rollup:
+          type: boolean
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertDispositionEvent'
+    AlertDispositionEvent:
+      type: object
+      required:
+        - kind
+        - from_disposition
+        - to_disposition
+        - actor_id
+        - rule_version
+        - rule_snapshot
+        - evaluated_at
+        - acted_at
+      properties:
+        kind:
+          type: string
+          enum:
+            - ACKED
+            - IGNORED
+        from_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        to_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        actor_id:
+          type: string
+          format: uuid
+        note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+        rule_version:
+          type: integer
+        current_value:
+          type: number
+          format: double
+        rule_snapshot:
+          type: object
+          additionalProperties: true
+        evaluated_at:
+          type: string
+          format: date-time
+        acted_at:
+          type: string
+          format: date-time
     InstanceCreateInput:
       type: object
       required:

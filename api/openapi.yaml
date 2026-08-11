@@ -8,6 +8,7 @@ tags:
   - name: instances
   - name: metrics
   - name: alert-rules
+  - name: alerts
   - name: auth
   - name: agent
   - name: collection
@@ -35,6 +36,8 @@ paths:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}
   /api/v1/alert-rules/{id}/enabled:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1enabled
+  /api/v1/alert-instances/{id}/disposition:
+    $ref: paths/alert-instances.yaml#/~1api~1v1~1alert-instances~1{id}~1disposition
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
   /api/v1/me:
@@ -71,12 +74,22 @@ components:
       $ref: components/enums.yaml#/NoDataPolicy
     AlertRuleScope:
       $ref: components/enums.yaml#/AlertRuleScope
+    AlertDisposition:
+      $ref: components/enums.yaml#/AlertDisposition
+    IgnoreReasonCode:
+      $ref: components/enums.yaml#/IgnoreReasonCode
     AlertRuleInput:
       $ref: components/schemas/alert-rules.yaml#/AlertRuleInput
     AlertRule:
       $ref: components/schemas/alert-rules.yaml#/AlertRule
     AlertRuleEnabledInput:
       $ref: components/schemas/alert-rules.yaml#/AlertRuleEnabledInput
+    AlertDispositionInput:
+      $ref: components/schemas/alert-instances.yaml#/AlertDispositionInput
+    AlertDispositionDetail:
+      $ref: components/schemas/alert-instances.yaml#/AlertDispositionDetail
+    AlertDispositionEvent:
+      $ref: components/schemas/alert-instances.yaml#/AlertDispositionEvent
     InstanceCreateInput:
       $ref: components/schemas/instances.yaml#/InstanceCreateInput
     InstanceMetadataInput:

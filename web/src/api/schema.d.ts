@@ -195,6 +195,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alert-instances/{id}/disposition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAlertDisposition"];
+        put: operations["updateAlertDisposition"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/report": {
         parameters: {
             query?: never;
@@ -333,6 +351,10 @@ export interface components {
         NoDataPolicy: "ignore" | "mark_no_data";
         /** @enum {string} */
         AlertRuleScope: "ALL" | "INSTANCES";
+        /** @enum {string} */
+        AlertDisposition: "NONE" | "ACKED" | "IGNORED";
+        /** @enum {string} */
+        IgnoreReasonCode: "KNOWN_ISSUE" | "FALSE_POSITIVE" | "DUPLICATE" | "IMPACT_ACCEPTABLE" | "OTHER";
         AlertRuleInput: {
             name: string;
             metric_id: string;
@@ -386,6 +408,48 @@ export interface components {
         };
         AlertRuleEnabledInput: {
             enabled: boolean;
+        };
+        AlertDispositionInput: {
+            disposition: components["schemas"]["AlertDisposition"];
+            note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+        };
+        AlertDispositionDetail: {
+            /** Format: uuid */
+            alert_instance_id: string;
+            disposition: components["schemas"]["AlertDisposition"];
+            /** Format: uuid */
+            disposition_by?: string;
+            /** Format: date-time */
+            disposition_at?: string;
+            note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+            stops_repeat_notifications: boolean;
+            excluded_from_health_rollup: boolean;
+            history: components["schemas"]["AlertDispositionEvent"][];
+        };
+        AlertDispositionEvent: {
+            /** @enum {string} */
+            kind: "ACKED" | "IGNORED";
+            from_disposition: components["schemas"]["AlertDisposition"];
+            to_disposition: components["schemas"]["AlertDisposition"];
+            /** Format: uuid */
+            actor_id: string;
+            note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+            rule_version: number;
+            /** Format: double */
+            current_value?: number;
+            rule_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            evaluated_at: string;
+            /** Format: date-time */
+            acted_at: string;
         };
         InstanceCreateInput: {
             name: string;
@@ -1002,6 +1066,90 @@ export interface operations {
             };
             /** @description Alert rule not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertDisposition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current disposition and complete disposition history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDispositionDetail"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAlertDisposition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertDispositionInput"];
+            };
+        };
+        responses: {
+            /** @description Updated disposition and complete disposition history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDispositionDetail"];
+                };
+            };
+            /** @description Invalid disposition */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Recovered alert instances cannot be disposed */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

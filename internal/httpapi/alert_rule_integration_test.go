@@ -137,6 +137,91 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("first_triggered_at = %s, want %s", firstTriggeredAt, currentClock.now)
 	}
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 2, 0, 0, 1)
+	dispositionURL := server.URL + "/api/v1/alert-instances/" + firstAlertID.String() + "/disposition"
+	for _, invalidDisposition := range []map[string]any{
+		{"disposition": "IGNORED"},
+		{"disposition": "IGNORED", "ignore_reason_code": "OTHER", "ignore_reason_detail": "  "},
+	} {
+		response := requestJSON(t, client, http.MethodPut, dispositionURL, invalidDisposition, "")
+		response.Body.Close()
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("invalid disposition status = %d, want 400", response.StatusCode)
+		}
+	}
+	for _, action := range []struct {
+		input                        map[string]any
+		wantDisposition              string
+		wantStopsRepeat              bool
+		wantExcludedFromHealthRollup bool
+	}{
+		{map[string]any{"disposition": "ACKED", "note": "Investigating"}, "ACKED", true, false},
+		{map[string]any{"disposition": "IGNORED", "ignore_reason_code": "OTHER", "ignore_reason_detail": "Expected maintenance load"}, "IGNORED", false, true},
+		{map[string]any{"disposition": "ACKED"}, "ACKED", true, false},
+	} {
+		response := requestJSON(t, client, http.MethodPut, dispositionURL, action.input, "")
+		if response.StatusCode != http.StatusOK {
+			response.Body.Close()
+			t.Fatalf("update disposition status = %d, want 200", response.StatusCode)
+		}
+		var summary struct {
+			Disposition              string `json:"disposition"`
+			StopsRepeatNotifications bool   `json:"stops_repeat_notifications"`
+			ExcludedFromHealthRollup bool   `json:"excluded_from_health_rollup"`
+		}
+		decodeErr := json.NewDecoder(response.Body).Decode(&summary)
+		response.Body.Close()
+		if decodeErr != nil || summary.Disposition != action.wantDisposition ||
+			summary.StopsRepeatNotifications != action.wantStopsRepeat ||
+			summary.ExcludedFromHealthRollup != action.wantExcludedFromHealthRollup {
+			t.Fatalf("updated disposition summary = %+v, error = %v", summary, decodeErr)
+		}
+	}
+	dispositionResponse := requestJSON(t, client, http.MethodGet, dispositionURL, nil, "")
+	defer dispositionResponse.Body.Close()
+	var dispositionDetail struct {
+		Disposition              string     `json:"disposition"`
+		DispositionBy            *uuid.UUID `json:"disposition_by"`
+		DispositionAt            *time.Time `json:"disposition_at"`
+		StopsRepeatNotifications bool       `json:"stops_repeat_notifications"`
+		ExcludedFromHealthRollup bool       `json:"excluded_from_health_rollup"`
+		History                  []struct {
+			Kind               string          `json:"kind"`
+			FromDisposition    string          `json:"from_disposition"`
+			ToDisposition      string          `json:"to_disposition"`
+			ActorID            uuid.UUID       `json:"actor_id"`
+			Note               *string         `json:"note"`
+			IgnoreReasonCode   *string         `json:"ignore_reason_code"`
+			IgnoreReasonDetail *string         `json:"ignore_reason_detail"`
+			RuleVersion        int             `json:"rule_version"`
+			CurrentValue       *float64        `json:"current_value"`
+			RuleSnapshot       json.RawMessage `json:"rule_snapshot"`
+			EvaluatedAt        time.Time       `json:"evaluated_at"`
+			ActedAt            time.Time       `json:"acted_at"`
+		} `json:"history"`
+	}
+	if dispositionResponse.StatusCode != http.StatusOK || json.NewDecoder(dispositionResponse.Body).Decode(&dispositionDetail) != nil {
+		t.Fatalf("read disposition response status = %d", dispositionResponse.StatusCode)
+	}
+	if dispositionDetail.Disposition != "ACKED" || dispositionDetail.DispositionBy == nil || dispositionDetail.DispositionAt == nil ||
+		!dispositionDetail.StopsRepeatNotifications || dispositionDetail.ExcludedFromHealthRollup {
+		t.Fatalf("current disposition = %+v", dispositionDetail)
+	}
+	wantKinds := []string{"ACKED", "IGNORED", "ACKED"}
+	wantFrom := []string{"NONE", "ACKED", "IGNORED"}
+	for index, event := range dispositionDetail.History {
+		if index >= len(wantKinds) || event.Kind != wantKinds[index] || event.FromDisposition != wantFrom[index] ||
+			event.ToDisposition != wantKinds[index] || event.ActorID != *dispositionDetail.DispositionBy ||
+			event.RuleVersion != 1 || event.CurrentValue == nil || *event.CurrentValue != 12 ||
+			!json.Valid(event.RuleSnapshot) || !event.EvaluatedAt.Equal(firstTriggeredAt) || !event.ActedAt.Equal(currentClock.now) {
+			t.Fatalf("disposition event %d = %+v", index, event)
+		}
+	}
+	if len(dispositionDetail.History) != len(wantKinds) || dispositionDetail.History[0].Note == nil ||
+		*dispositionDetail.History[0].Note != "Investigating" || dispositionDetail.History[1].IgnoreReasonCode == nil ||
+		*dispositionDetail.History[1].IgnoreReasonCode != "OTHER" || dispositionDetail.History[1].IgnoreReasonDetail == nil ||
+		*dispositionDetail.History[1].IgnoreReasonDetail != "Expected maintenance load" {
+		t.Fatalf("disposition history = %+v", dispositionDetail.History)
+	}
 
 	currentClock.Advance(30 * time.Second)
 	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 4)
@@ -265,6 +350,17 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	}
 	if totalLifecycles != 2 || unresolvedLifecycles != 1 {
 		t.Fatalf("alert lifecycles = total %d unresolved %d, want 2/1", totalLifecycles, unresolvedLifecycles)
+	}
+	var recoveredDisposition, unresolvedDisposition string
+	if err := pool.QueryRow(ctx, `SELECT disposition FROM alert_instance WHERE id = $1`, firstAlertID).Scan(&recoveredDisposition); err != nil {
+		t.Fatalf("read recovered disposition: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT disposition FROM alert_instance
+		WHERE rule_id = $1 AND instance_id = $2 AND status <> 'RECOVERED'`, createdRule.ID, targetID).Scan(&unresolvedDisposition); err != nil {
+		t.Fatalf("read new lifecycle disposition: %v", err)
+	}
+	if recoveredDisposition != "ACKED" || unresolvedDisposition != "NONE" {
+		t.Fatalf("lifecycle dispositions = recovered %s unresolved %s, want ACKED/NONE", recoveredDisposition, unresolvedDisposition)
 	}
 	var outOfScopeAlerts int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM alert_instance WHERE rule_id = $1 AND instance_id = $2`, createdRule.ID, otherID).Scan(&outOfScopeAlerts); err != nil {

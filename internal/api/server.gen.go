@@ -43,6 +43,19 @@ const (
 	Sum    AlertAggregation = "sum"
 )
 
+// Defines values for AlertDisposition.
+const (
+	AlertDispositionACKED   AlertDisposition = "ACKED"
+	AlertDispositionIGNORED AlertDisposition = "IGNORED"
+	AlertDispositionNONE    AlertDisposition = "NONE"
+)
+
+// Defines values for AlertDispositionEventKind.
+const (
+	AlertDispositionEventKindACKED   AlertDispositionEventKind = "ACKED"
+	AlertDispositionEventKindIGNORED AlertDispositionEventKind = "IGNORED"
+)
+
 // Defines values for AlertOperator.
 const (
 	Equal            AlertOperator = "="
@@ -136,6 +149,15 @@ const (
 	ONBOARDINGVERSIONUNSUPPORTED ErrorErrorCode = "VERSION_UNSUPPORTED"
 	UNAUTHENTICATED              ErrorErrorCode = "UNAUTHENTICATED"
 	VALIDATIONFAILED             ErrorErrorCode = "VALIDATION_FAILED"
+)
+
+// Defines values for IgnoreReasonCode.
+const (
+	DUPLICATE        IgnoreReasonCode = "DUPLICATE"
+	FALSEPOSITIVE    IgnoreReasonCode = "FALSE_POSITIVE"
+	IMPACTACCEPTABLE IgnoreReasonCode = "IMPACT_ACCEPTABLE"
+	KNOWNISSUE       IgnoreReasonCode = "KNOWN_ISSUE"
+	OTHER            IgnoreReasonCode = "OTHER"
 )
 
 // Defines values for NoDataPolicy.
@@ -241,6 +263,50 @@ type AgentSample struct {
 
 // AlertAggregation defines model for AlertAggregation.
 type AlertAggregation string
+
+// AlertDisposition defines model for AlertDisposition.
+type AlertDisposition string
+
+// AlertDispositionDetail defines model for AlertDispositionDetail.
+type AlertDispositionDetail struct {
+	AlertInstanceId          openapi_types.UUID      `json:"alert_instance_id"`
+	Disposition              AlertDisposition        `json:"disposition"`
+	DispositionAt            *time.Time              `json:"disposition_at,omitempty"`
+	DispositionBy            *openapi_types.UUID     `json:"disposition_by,omitempty"`
+	ExcludedFromHealthRollup bool                    `json:"excluded_from_health_rollup"`
+	History                  []AlertDispositionEvent `json:"history"`
+	IgnoreReasonCode         *IgnoreReasonCode       `json:"ignore_reason_code,omitempty"`
+	IgnoreReasonDetail       *string                 `json:"ignore_reason_detail,omitempty"`
+	Note                     *string                 `json:"note,omitempty"`
+	StopsRepeatNotifications bool                    `json:"stops_repeat_notifications"`
+}
+
+// AlertDispositionEvent defines model for AlertDispositionEvent.
+type AlertDispositionEvent struct {
+	ActedAt            time.Time                 `json:"acted_at"`
+	ActorId            openapi_types.UUID        `json:"actor_id"`
+	CurrentValue       *float64                  `json:"current_value,omitempty"`
+	EvaluatedAt        time.Time                 `json:"evaluated_at"`
+	FromDisposition    AlertDisposition          `json:"from_disposition"`
+	IgnoreReasonCode   *IgnoreReasonCode         `json:"ignore_reason_code,omitempty"`
+	IgnoreReasonDetail *string                   `json:"ignore_reason_detail,omitempty"`
+	Kind               AlertDispositionEventKind `json:"kind"`
+	Note               *string                   `json:"note,omitempty"`
+	RuleSnapshot       map[string]interface{}    `json:"rule_snapshot"`
+	RuleVersion        int                       `json:"rule_version"`
+	ToDisposition      AlertDisposition          `json:"to_disposition"`
+}
+
+// AlertDispositionEventKind defines model for AlertDispositionEvent.Kind.
+type AlertDispositionEventKind string
+
+// AlertDispositionInput defines model for AlertDispositionInput.
+type AlertDispositionInput struct {
+	Disposition        AlertDisposition  `json:"disposition"`
+	IgnoreReasonCode   *IgnoreReasonCode `json:"ignore_reason_code,omitempty"`
+	IgnoreReasonDetail *string           `json:"ignore_reason_detail,omitempty"`
+	Note               *string           `json:"note,omitempty"`
+}
 
 // AlertOperator defines model for AlertOperator.
 type AlertOperator string
@@ -369,6 +435,9 @@ type Error struct {
 
 // ErrorErrorCode defines model for Error.Error.Code.
 type ErrorErrorCode string
+
+// IgnoreReasonCode defines model for IgnoreReasonCode.
+type IgnoreReasonCode string
 
 // Instance defines model for Instance.
 type Instance struct {
@@ -509,6 +578,9 @@ type CreateSessionJSONBody struct {
 // ReportAgentMetricsJSONRequestBody defines body for ReportAgentMetrics for application/json ContentType.
 type ReportAgentMetricsJSONRequestBody = AgentReport
 
+// UpdateAlertDispositionJSONRequestBody defines body for UpdateAlertDisposition for application/json ContentType.
+type UpdateAlertDispositionJSONRequestBody = AlertDispositionInput
+
 // CreateAlertRuleJSONRequestBody defines body for CreateAlertRule for application/json ContentType.
 type CreateAlertRuleJSONRequestBody = AlertRuleInput
 
@@ -550,6 +622,12 @@ type ServerInterface interface {
 
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/alert-instances/{id}/disposition)
+	GetAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/alert-instances/{id}/disposition)
+	UpdateAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/alert-rules)
 	ListAlertRules(w http.ResponseWriter, r *http.Request)
@@ -638,6 +716,56 @@ func (siw *ServerInterfaceWrapper) ReportAgentMetrics(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReportAgentMetrics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertDisposition operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertDisposition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertDisposition(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAlertDisposition operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAlertDisposition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAlertDisposition(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1284,6 +1412,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/api/agent/v1/report", wrapper.ReportAgentMetrics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.GetAlertDisposition)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.UpdateAlertDisposition)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules", wrapper.ListAlertRules)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
@@ -1340,6 +1470,77 @@ type ReportAgentMetrics401JSONResponse Error
 func (response ReportAgentMetrics401JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDispositionRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertDispositionResponseObject interface {
+	VisitGetAlertDispositionResponse(w http.ResponseWriter) error
+}
+
+type GetAlertDisposition200JSONResponse AlertDispositionDetail
+
+func (response GetAlertDisposition200JSONResponse) VisitGetAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDisposition404JSONResponse Error
+
+func (response GetAlertDisposition404JSONResponse) VisitGetAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDispositionRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateAlertDispositionJSONRequestBody
+}
+
+type UpdateAlertDispositionResponseObject interface {
+	VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error
+}
+
+type UpdateAlertDisposition200JSONResponse AlertDispositionDetail
+
+func (response UpdateAlertDisposition200JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDisposition400JSONResponse Error
+
+func (response UpdateAlertDisposition400JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDisposition404JSONResponse Error
+
+func (response UpdateAlertDisposition404JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDisposition409JSONResponse Error
+
+func (response UpdateAlertDisposition409JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1912,6 +2113,12 @@ type StrictServerInterface interface {
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(ctx context.Context, request ReportAgentMetricsRequestObject) (ReportAgentMetricsResponseObject, error)
 
+	// (GET /api/v1/alert-instances/{id}/disposition)
+	GetAlertDisposition(ctx context.Context, request GetAlertDispositionRequestObject) (GetAlertDispositionResponseObject, error)
+
+	// (PUT /api/v1/alert-instances/{id}/disposition)
+	UpdateAlertDisposition(ctx context.Context, request UpdateAlertDispositionRequestObject) (UpdateAlertDispositionResponseObject, error)
+
 	// (GET /api/v1/alert-rules)
 	ListAlertRules(ctx context.Context, request ListAlertRulesRequestObject) (ListAlertRulesResponseObject, error)
 
@@ -2032,6 +2239,65 @@ func (sh *strictHandler) ReportAgentMetrics(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReportAgentMetricsResponseObject); ok {
 		if err := validResponse.VisitReportAgentMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertDisposition operation middleware
+func (sh *strictHandler) GetAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertDispositionRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertDisposition(ctx, request.(GetAlertDispositionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertDisposition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertDispositionResponseObject); ok {
+		if err := validResponse.VisitGetAlertDispositionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAlertDisposition operation middleware
+func (sh *strictHandler) UpdateAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateAlertDispositionRequestObject
+
+	request.Id = id
+
+	var body UpdateAlertDispositionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAlertDisposition(ctx, request.(UpdateAlertDispositionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAlertDisposition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAlertDispositionResponseObject); ok {
+		if err := validResponse.VisitUpdateAlertDispositionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
