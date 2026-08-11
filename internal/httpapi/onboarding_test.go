@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	pgxconn "github.com/jackc/pgx/v5/pgconn"
@@ -31,19 +32,30 @@ func TestTargetVersionSupported(t *testing.T) {
 
 func TestClassifyTargetConnectionError(t *testing.T) {
 	tests := []struct {
-		name string
-		err  error
-		want api.ErrorErrorCode
+		name        string
+		err         error
+		wantCode    api.ErrorErrorCode
+		wantMessage string
 	}{
-		{name: "authentication", err: &pgxconn.PgError{Code: "28P01"}, want: api.AUTHFAILED},
-		{name: "network", err: errors.New("connection refused"), want: api.NETWORKUNREACHABLE},
+		{
+			name:        "authentication",
+			err:         fmt.Errorf("connect: %w", &pgxconn.PgError{Code: "28P01"}),
+			wantCode:    api.AUTHFAILED,
+			wantMessage: "目标 PostgreSQL 认证失败",
+		},
+		{
+			name:        "network",
+			err:         errors.New("connection refused"),
+			wantCode:    api.NETWORKUNREACHABLE,
+			wantMessage: "无法连接目标 PostgreSQL",
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			failure := classifyTargetConnectionError(test.err)
-			if failure.code != test.want {
-				t.Fatalf("classification = %#v, want %s", failure, test.want)
+			if failure.code != test.wantCode || failure.message != test.wantMessage {
+				t.Fatalf("classification = %#v, want code %s and message %q", failure, test.wantCode, test.wantMessage)
 			}
 		})
 	}

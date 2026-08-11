@@ -13,7 +13,7 @@ import (
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
-const minimumTargetVersionNum = 130000
+const minimumTargetServerVersionNum = 130000
 
 type targetConnectionInput struct {
 	host     string
@@ -33,7 +33,7 @@ func (validationError *targetValidationError) Error() string {
 }
 
 func targetVersionSupported(serverVersionNum int) bool {
-	return serverVersionNum >= minimumTargetVersionNum
+	return serverVersionNum >= minimumTargetServerVersionNum
 }
 
 func validateTargetConnection(ctx context.Context, dialer monitorpg.Dialer, input targetConnectionInput) error {
@@ -72,4 +72,12 @@ func classifyTargetConnectionError(err error) *targetValidationError {
 		return &targetValidationError{code: api.AUTHFAILED, message: "目标 PostgreSQL 认证失败"}
 	}
 	return &targetValidationError{code: api.NETWORKUNREACHABLE, message: "无法连接目标 PostgreSQL"}
+}
+
+func targetValidationResponseBody(err error) (api.Error, bool) {
+	var validationError *targetValidationError
+	if !errors.As(err, &validationError) {
+		return api.Error{}, false
+	}
+	return errorBody(validationError.code, validationError.message), true
 }

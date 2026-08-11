@@ -118,9 +118,8 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		username: request.Body.Username,
 		password: request.Body.Password,
 	}); err != nil {
-		var validationError *targetValidationError
-		if errors.As(err, &validationError) {
-			return api.CreateInstance400JSONResponse(errorBody(validationError.code, validationError.message)), nil
+		if responseBody, ok := targetValidationResponseBody(err); ok {
+			return api.CreateInstance400JSONResponse(responseBody), nil
 		}
 		return nil, err
 	}
@@ -171,10 +170,10 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		if err != nil {
 			return err
 		}
-		connectionChanged := storedInstance.Host != request.Body.Host ||
+		connectionTargetChanged := storedInstance.Host != request.Body.Host ||
 			storedInstance.Port != int32(request.Body.Port) ||
 			storedInstance.DatabaseName != request.Body.Database
-		if connectionChanged {
+		if connectionTargetChanged {
 			password, err := handler.keyring.DecryptPassword(
 				request.Id,
 				storedInstance.PasswordCiphertext,
@@ -203,9 +202,8 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		return err
 	})
 	if err != nil {
-		var validationError *targetValidationError
-		if errors.As(err, &validationError) {
-			return api.UpdateInstance400JSONResponse(errorBody(validationError.code, validationError.message)), nil
+		if responseBody, ok := targetValidationResponseBody(err); ok {
+			return api.UpdateInstance400JSONResponse(responseBody), nil
 		}
 		return nil, err
 	}
@@ -259,9 +257,8 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		return err
 	})
 	if err != nil {
-		var validationError *targetValidationError
-		if errors.As(err, &validationError) {
-			return api.UpdateInstanceCredential400JSONResponse(errorBody(validationError.code, validationError.message)), nil
+		if responseBody, ok := targetValidationResponseBody(err); ok {
+			return api.UpdateInstanceCredential400JSONResponse(responseBody), nil
 		}
 		return nil, err
 	}
