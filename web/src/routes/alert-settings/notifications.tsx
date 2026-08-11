@@ -30,6 +30,14 @@ type ChannelFailureSummary = components['schemas']['ChannelFailureSummary']
 type ChannelFailureRecord = components['schemas']['ChannelFailureRecord']
 type TestNotificationInput = { target: string }
 type Feedback = { type: 'success' | 'error'; text: string }
+type WebhookTargetsTableProps = {
+  targets: WebhookTarget[]
+  failures: ChannelFailureSummary[]
+  canManage: boolean
+  onEdit: (target: WebhookTarget) => void
+  onDelete: (target: WebhookTarget) => void
+  onTest: (target: WebhookTarget) => void
+}
 
 export const notificationSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -38,29 +46,29 @@ export const notificationSettingsRoute = createRoute({
 })
 
 function NotificationSettingsPage() {
-  const channelQuery = $api.useQuery('get', '/api/v1/notification-channels/smtp')
+  const smtpQuery = $api.useQuery('get', '/api/v1/notification-channels/smtp')
   const webhookQuery = $api.useQuery('get', '/api/v1/notification-channels/webhooks')
   const failureQuery = $api.useQuery('get', '/api/v1/notification-channels/failures')
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
-  const updateMutation = $api.useMutation('put', '/api/v1/notification-channels/smtp')
-  const testMutation = $api.useMutation('post', '/api/v1/notification-channels/smtp/test')
+  const updateSMTPMutation = $api.useMutation('put', '/api/v1/notification-channels/smtp')
+  const testSMTPMutation = $api.useMutation('post', '/api/v1/notification-channels/smtp/test')
   const createWebhookMutation = $api.useMutation('post', '/api/v1/notification-channels/webhooks')
   const updateWebhookMutation = $api.useMutation('put', '/api/v1/notification-channels/webhooks/{id}')
   const deleteWebhookMutation = $api.useMutation('delete', '/api/v1/notification-channels/webhooks/{id}')
   const testWebhookMutation = $api.useMutation('post', '/api/v1/notification-channels/webhooks/{id}/test')
-  const [form] = Form.useForm<SMTPChannelInput>()
-  const [testForm] = Form.useForm<TestNotificationInput>()
+  const [smtpForm] = Form.useForm<SMTPChannelInput>()
+  const [smtpTestForm] = Form.useForm<TestNotificationInput>()
   const [webhookForm] = Form.useForm<WebhookTargetInput>()
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const [webhookOpen, setWebhookOpen] = useState(false)
   const [editingWebhook, setEditingWebhook] = useState<WebhookTarget | null>(null)
-  const authType = Form.useWatch('auth_type', form)
+  const authType = Form.useWatch('auth_type', smtpForm)
   const canManage = currentUserQuery.data?.role === 'ALERT_ADMIN' || currentUserQuery.data?.role === 'PLATFORM_ADMIN'
 
   useEffect(() => {
-    const channel = channelQuery.data
+    const channel = smtpQuery.data
     if (!channel?.configured) return
-    form.setFieldsValue({
+    smtpForm.setFieldsValue({
       enabled: channel.enabled,
       host: channel.host,
       port: channel.port,
@@ -70,31 +78,31 @@ function NotificationSettingsPage() {
       username: channel.username,
       tls_mode: channel.tls_mode,
     })
-    testForm.setFieldValue('target', channel.recipient)
-  }, [channelQuery.data, form, testForm])
+    smtpTestForm.setFieldValue('target', channel.recipient)
+  }, [smtpForm, smtpQuery.data, smtpTestForm])
 
   function showFeedback(type: Feedback['type'], text: string) {
     setFeedback({ type, text })
   }
 
-  function saveChannel(values: SMTPChannelInput) {
+  function saveSMTPChannel(values: SMTPChannelInput) {
     setFeedback(null)
-    updateMutation.mutate(
+    updateSMTPMutation.mutate(
       { body: values },
       {
         onSuccess: () => {
           showFeedback('success', 'SMTP 配置已保存')
-          form.setFieldValue('password', undefined)
-          void channelQuery.refetch()
+          smtpForm.setFieldValue('password', undefined)
+          void smtpQuery.refetch()
         },
         onError: (error) => showFeedback('error', apiErrorMessage(error, '保存 SMTP 配置失败')),
       },
     )
   }
 
-  function sendTestNotification(values: TestNotificationInput) {
+  function sendSMTPTestNotification(values: TestNotificationInput) {
     setFeedback(null)
-    testMutation.mutate(
+    testSMTPMutation.mutate(
       { body: values },
       {
         onSuccess: () => showFeedback('success', 'SMTP 测试通知已进入发送队列'),
@@ -180,10 +188,10 @@ function NotificationSettingsPage() {
       <section className="settings-section">
         <Typography.Title level={4}>SMTP</Typography.Title>
         <Form<SMTPChannelInput>
-          form={form}
+          form={smtpForm}
           layout="vertical"
           disabled={!canManage}
-          onFinish={saveChannel}
+          onFinish={saveSMTPChannel}
           initialValues={{ enabled: false, port: 587, auth_type: 'PLAIN', tls_mode: 'STARTTLS' }}
           style={{ maxWidth: 720 }}
         >
@@ -232,27 +240,27 @@ function NotificationSettingsPage() {
               </Form.Item>
               <Form.Item label="认证信息">
                 <Space orientation="vertical" style={{ width: '100%' }}>
-                  <Typography.Text>{channelQuery.data?.auth_configured ? '已设置  ********' : '未设置'}</Typography.Text>
+                  <Typography.Text>{smtpQuery.data?.auth_configured ? '已设置  ********' : '未设置'}</Typography.Text>
                   <Form.Item name="password" noStyle>
                     <Input.Password
                       autoComplete="new-password"
-                      placeholder={channelQuery.data?.auth_configured ? '留空保持不变' : '请输入认证信息'}
+                      placeholder={smtpQuery.data?.auth_configured ? '留空保持不变' : '请输入认证信息'}
                     />
                   </Form.Item>
                 </Space>
               </Form.Item>
             </>
           )}
-          <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={updateMutation.isPending}>
+          <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={updateSMTPMutation.isPending}>
             保存
           </Button>
         </Form>
         <Typography.Title level={5}>测试发送</Typography.Title>
-        <Form form={testForm} layout="inline" disabled={!canManage} onFinish={sendTestNotification}>
+        <Form form={smtpTestForm} layout="inline" disabled={!canManage} onFinish={sendSMTPTestNotification}>
           <Form.Item name="target" label="收件人" rules={[{ required: true, type: 'email' }]}>
             <Input style={{ width: 320 }} />
           </Form.Item>
-          <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={testMutation.isPending}>
+          <Button type="primary" htmlType="submit" icon={<SendOutlined />} loading={testSMTPMutation.isPending}>
             发送测试
           </Button>
         </Form>
@@ -331,14 +339,7 @@ export function WebhookTargetsTable({
   onEdit,
   onDelete,
   onTest,
-}: {
-  targets: WebhookTarget[]
-  failures: ChannelFailureSummary[]
-  canManage: boolean
-  onEdit: (target: WebhookTarget) => void
-  onDelete: (target: WebhookTarget) => void
-  onTest: (target: WebhookTarget) => void
-}) {
+}: WebhookTargetsTableProps) {
   return (
     <Table<WebhookTarget>
       rowKey="id"

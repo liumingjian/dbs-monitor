@@ -41,23 +41,22 @@ func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instanc
 		return
 	}
 	if err == nil && config.Enabled {
-		var password string
+		smtpConfig := notify.SMTPConfig{
+			Host:     config.Host,
+			Port:     int(config.Port),
+			From:     config.FromAddress,
+			TLSMode:  notify.TLSMode(config.TlsMode),
+			AuthType: notify.AuthType(config.AuthType),
+		}
+		var decryptErr error
 		if config.AuthCiphertext != nil {
-			password, err = keyring.DecryptSMTPPassword(config.AuthCiphertext, config.AuthKeyVersion.Int32)
-			if err != nil {
-				log.Printf("decrypt SMTP authentication value: %v", err)
-			} else {
-				channels[notify.SMTPChannelKey] = notify.NewSMTPChannel(notify.SMTPConfig{
-					Host: config.Host, Port: int(config.Port), From: config.FromAddress,
-					Username: config.Username.String, Password: password,
-					TLSMode: notify.TLSMode(config.TlsMode), AuthType: notify.AuthType(config.AuthType),
-				})
-			}
+			smtpConfig.Username = config.Username.String
+			smtpConfig.Password, decryptErr = keyring.DecryptSMTPPassword(config.AuthCiphertext, config.AuthKeyVersion.Int32)
+		}
+		if decryptErr != nil {
+			log.Printf("decrypt SMTP authentication value: %v", decryptErr)
 		} else {
-			channels[notify.SMTPChannelKey] = notify.NewSMTPChannel(notify.SMTPConfig{
-				Host: config.Host, Port: int(config.Port), From: config.FromAddress,
-				TLSMode: notify.TLSMode(config.TlsMode), AuthType: notify.AuthType(config.AuthType),
-			})
+			channels[notify.SMTPChannelKey] = notify.NewSMTPChannel(smtpConfig)
 		}
 	}
 	webhooks, err := queries.ListWebhookTargets(ctx)
@@ -74,8 +73,10 @@ func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instanc
 			continue
 		}
 		channels[notify.WebhookChannelKey(target.ID)] = notify.NewWebhookChannel(notify.WebhookConfig{
-			URL: target.Url, SigningValue: signingValue, SignatureHeader: signatureHeader,
-			Timeout: notificationDeliveryTimeout,
+			URL:             target.Url,
+			SigningValue:    signingValue,
+			SignatureHeader: signatureHeader,
+			Timeout:         notificationDeliveryTimeout,
 		})
 	}
 	dispatcher := notify.NewDispatcher(platform)

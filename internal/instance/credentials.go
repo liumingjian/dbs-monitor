@@ -27,6 +27,8 @@ const (
 	credentialKeyFilenamePrefix           = "master-key-v"
 	credentialKeyFilenamePattern          = credentialKeyFilenamePrefix + "*"
 	smtpCredentialAAD                     = "smtp-channel:singleton:auth"
+	webhookSigningValuePurpose            = "signing-value"
+	webhookSignatureHeaderPurpose         = "signature-header"
 )
 
 type CredentialFaultCode string
@@ -137,11 +139,11 @@ func (keyring *CredentialKeyring) EncryptSMTPPassword(password string) ([]byte, 
 }
 
 func (keyring *CredentialKeyring) EncryptWebhookSigningValue(targetID uuid.UUID, value string) ([]byte, int32, error) {
-	return keyring.encrypt([]byte(value), webhookCredentialAAD(targetID, "signing-value"), "Webhook signing value")
+	return keyring.encrypt([]byte(value), webhookCredentialAAD(targetID, webhookSigningValuePurpose), "Webhook signing value")
 }
 
 func (keyring *CredentialKeyring) EncryptWebhookSignatureHeader(targetID uuid.UUID, header string) ([]byte, int32, error) {
-	return keyring.encrypt([]byte(header), webhookCredentialAAD(targetID, "signature-header"), "Webhook signature header")
+	return keyring.encrypt([]byte(header), webhookCredentialAAD(targetID, webhookSignatureHeaderPurpose), "Webhook signature header")
 }
 
 func (keyring *CredentialKeyring) encrypt(plaintext, aad []byte, description string) ([]byte, int32, error) {
@@ -169,11 +171,11 @@ func (keyring *CredentialKeyring) DecryptSMTPPassword(envelope []byte, keyVersio
 }
 
 func (keyring *CredentialKeyring) DecryptWebhookSigningValue(targetID uuid.UUID, envelope []byte, keyVersion int32) (string, error) {
-	return keyring.decrypt(envelope, keyVersion, webhookCredentialAAD(targetID, "signing-value"))
+	return keyring.decrypt(envelope, keyVersion, webhookCredentialAAD(targetID, webhookSigningValuePurpose))
 }
 
 func (keyring *CredentialKeyring) DecryptWebhookSignatureHeader(targetID uuid.UUID, envelope []byte, keyVersion int32) (string, error) {
-	return keyring.decrypt(envelope, keyVersion, webhookCredentialAAD(targetID, "signature-header"))
+	return keyring.decrypt(envelope, keyVersion, webhookCredentialAAD(targetID, webhookSignatureHeaderPurpose))
 }
 
 func (keyring *CredentialKeyring) decrypt(envelope []byte, keyVersion int32, aad []byte) (string, error) {

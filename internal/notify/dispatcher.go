@@ -22,10 +22,10 @@ func NewDispatcher(database DBTX) *Dispatcher {
 }
 
 func WebhookChannelKey(targetID pgtype.UUID) string {
-	return "WEBHOOK:" + fmt.Sprintf("%x", targetID.Bytes)
+	return fmt.Sprintf("WEBHOOK:%x", targetID.Bytes)
 }
 
-func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, channels map[string]Channel) (bool, error) {
+func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, channelsByKey map[string]Channel) (bool, error) {
 	delivery, err := dispatcher.queries.ClaimDueNotification(ctx, pgtype.Timestamptz{Time: now.UTC(), Valid: true})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -39,7 +39,7 @@ func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, ch
 		if delivery.Channel == "WEBHOOK" {
 			key = WebhookChannelKey(delivery.ChannelTargetID)
 		}
-		channel, ok := channels[key]
+		channel, ok := channelsByKey[key]
 		if !ok {
 			deliveryErr = fmt.Errorf("notification channel %s is unavailable", delivery.Channel)
 		} else {

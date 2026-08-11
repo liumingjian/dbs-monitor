@@ -201,24 +201,29 @@ func (handler *Handler) CreateWebhookTarget(ctx context.Context, request api.Cre
 	if request.Body == nil || request.Body.SigningValue == nil || request.Body.SignatureHeader == nil {
 		return api.CreateWebhookTarget400JSONResponse(errorBody(api.VALIDATIONFAILED, "Webhook target and signing configuration are required")), nil
 	}
-	name, targetURL, signingValue, signatureHeader, ok := validWebhookInput(*request.Body)
+	values, ok := validWebhookInput(*request.Body)
 	if !ok {
 		return api.CreateWebhookTarget400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid name, HTTP(S) URL, and signing configuration are required")), nil
 	}
 	targetID := uuid.New()
-	valueCiphertext, version, err := handler.keyring.EncryptWebhookSigningValue(targetID, signingValue)
+	signingValueCiphertext, signingKeyVersion, err := handler.keyring.EncryptWebhookSigningValue(targetID, values.signingValue)
 	if err != nil {
 		return nil, err
 	}
-	headerCiphertext, _, err := handler.keyring.EncryptWebhookSignatureHeader(targetID, signatureHeader)
+	signatureHeaderCiphertext, _, err := handler.keyring.EncryptWebhookSignatureHeader(targetID, values.signatureHeader)
 	if err != nil {
 		return nil, err
 	}
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
 	row, err := notify.New(handler.platform).CreateWebhookTarget(ctx, notify.CreateWebhookTargetParams{
-		ID: pgtype.UUID{Bytes: targetID, Valid: true}, Name: name, Enabled: request.Body.Enabled, Url: targetURL,
-		SigningValueCiphertext: valueCiphertext, SignatureHeaderCiphertext: headerCiphertext,
-		SigningKeyVersion: version, CreatedAt: now,
+		ID:                        pgtype.UUID{Bytes: targetID, Valid: true},
+		Name:                      values.name,
+		Enabled:                   request.Body.Enabled,
+		Url:                       values.targetURL,
+		SigningValueCiphertext:    signingValueCiphertext,
+		SignatureHeaderCiphertext: signatureHeaderCiphertext,
+		SigningKeyVersion:         signingKeyVersion,
+		CreatedAt:                 now,
 	})
 	if err != nil {
 		return nil, err
@@ -230,7 +235,7 @@ func (handler *Handler) UpdateWebhookTarget(ctx context.Context, request api.Upd
 	if request.Body == nil {
 		return api.UpdateWebhookTarget400JSONResponse(errorBody(api.VALIDATIONFAILED, "Webhook target is required")), nil
 	}
-	name, targetURL, signingValue, signatureHeader, ok := validWebhookInput(*request.Body)
+	values, ok := validWebhookInput(*request.Body)
 	if !ok {
 		return api.UpdateWebhookTarget400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid name, HTTP(S) URL, and signing configuration are required")), nil
 	}
@@ -243,36 +248,40 @@ func (handler *Handler) UpdateWebhookTarget(ctx context.Context, request api.Upd
 	if err != nil {
 		return nil, err
 	}
-	valueCiphertext := existing.SigningValueCiphertext
-	headerCiphertext := existing.SignatureHeaderCiphertext
-	version := existing.SigningKeyVersion
+	signingValueCiphertext := existing.SigningValueCiphertext
+	signatureHeaderCiphertext := existing.SignatureHeaderCiphertext
+	signingKeyVersion := existing.SigningKeyVersion
 	if request.Body.SigningValue != nil || request.Body.SignatureHeader != nil {
 		if request.Body.SigningValue == nil {
-			signingValue, err = handler.keyring.DecryptWebhookSigningValue(targetID, valueCiphertext, version)
+			values.signingValue, err = handler.keyring.DecryptWebhookSigningValue(targetID, signingValueCiphertext, signingKeyVersion)
 			if err != nil {
 				return nil, err
 			}
 		}
 		if request.Body.SignatureHeader == nil {
-			signatureHeader, err = handler.keyring.DecryptWebhookSignatureHeader(targetID, headerCiphertext, version)
+			values.signatureHeader, err = handler.keyring.DecryptWebhookSignatureHeader(targetID, signatureHeaderCiphertext, signingKeyVersion)
 			if err != nil {
 				return nil, err
 			}
 		}
-		valueCiphertext, version, err = handler.keyring.EncryptWebhookSigningValue(targetID, signingValue)
+		signingValueCiphertext, signingKeyVersion, err = handler.keyring.EncryptWebhookSigningValue(targetID, values.signingValue)
 		if err != nil {
 			return nil, err
 		}
-		headerCiphertext, _, err = handler.keyring.EncryptWebhookSignatureHeader(targetID, signatureHeader)
+		signatureHeaderCiphertext, _, err = handler.keyring.EncryptWebhookSignatureHeader(targetID, values.signatureHeader)
 		if err != nil {
 			return nil, err
 		}
 	}
 	row, err := queries.UpdateWebhookTarget(ctx, notify.UpdateWebhookTargetParams{
-		ID: existing.ID, Name: name, Enabled: request.Body.Enabled, Url: targetURL,
-		SigningValueCiphertext: valueCiphertext, SignatureHeaderCiphertext: headerCiphertext,
-		SigningKeyVersion: version,
-		UpdatedAt:         pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+		ID:                        existing.ID,
+		Name:                      values.name,
+		Enabled:                   request.Body.Enabled,
+		Url:                       values.targetURL,
+		SigningValueCiphertext:    signingValueCiphertext,
+		SignatureHeaderCiphertext: signatureHeaderCiphertext,
+		SigningKeyVersion:         signingKeyVersion,
+		UpdatedAt:                 pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 	})
 	if err != nil {
 		return nil, err
@@ -325,59 +334,80 @@ func (handler *Handler) GetChannelFailures(ctx context.Context, _ api.GetChannel
 	}
 	byTarget := make(map[string][]api.ChannelFailureRecord)
 	for _, row := range records {
-		key := row.Channel
-		if row.ChannelTargetID.Valid {
-			key = notify.WebhookChannelKey(row.ChannelTargetID)
-		}
+		key := channelFailureKey(row.Channel, row.ChannelTargetID)
 		byTarget[key] = append(byTarget[key], api.ChannelFailureRecord{
-			FailedAt: row.FailedAt.Time, Target: row.Target,
-			Reason: row.FailureReason.String, RetryCount: int(row.RetryCount),
+			FailedAt:   row.FailedAt.Time,
+			Target:     row.Target,
+			Reason:     row.FailureReason.String,
+			RetryCount: int(row.RetryCount),
 		})
 	}
 	channels := make([]api.ChannelFailureSummary, 0, len(summaries))
 	for _, row := range summaries {
-		key := row.Channel
 		var targetID *openapi_types.UUID
 		if row.ChannelTargetID.Valid {
-			key = notify.WebhookChannelKey(row.ChannelTargetID)
 			value := openapi_types.UUID(row.ChannelTargetID.Bytes)
 			targetID = &value
 		}
 		channels = append(channels, api.ChannelFailureSummary{
-			Channel: api.ChannelFailureSummaryChannel(row.Channel), TargetId: targetID, Target: row.Target,
-			RecentFailureCount: int(row.RecentFailureCount), LastFailureReason: row.LastFailureReason,
-			LastFailedAt: row.LastFailedAt.Time, RecentFailures: byTarget[key],
+			Channel:            api.ChannelFailureSummaryChannel(row.Channel),
+			TargetId:           targetID,
+			Target:             row.Target,
+			RecentFailureCount: int(row.RecentFailureCount),
+			LastFailureReason:  row.LastFailureReason,
+			LastFailedAt:       row.LastFailedAt.Time,
+			RecentFailures:     byTarget[channelFailureKey(row.Channel, row.ChannelTargetID)],
 		})
 	}
 	return api.GetChannelFailures200JSONResponse{HasFailures: len(channels) > 0, Channels: channels}, nil
 }
 
-func validWebhookInput(input api.WebhookTargetInput) (name, targetURL, signingValue, signatureHeader string, ok bool) {
-	name = strings.TrimSpace(input.Name)
-	targetURL = strings.TrimSpace(input.Url)
-	parsed, err := url.Parse(targetURL)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || name == "" {
-		return "", "", "", "", false
+type webhookTargetValues struct {
+	name            string
+	targetURL       string
+	signingValue    string
+	signatureHeader string
+}
+
+func validWebhookInput(input api.WebhookTargetInput) (webhookTargetValues, bool) {
+	values := webhookTargetValues{
+		name:      strings.TrimSpace(input.Name),
+		targetURL: strings.TrimSpace(input.Url),
+	}
+	parsed, err := url.Parse(values.targetURL)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || values.name == "" {
+		return webhookTargetValues{}, false
 	}
 	if input.SigningValue != nil {
-		signingValue = strings.TrimSpace(*input.SigningValue)
-		if signingValue == "" {
-			return "", "", "", "", false
+		values.signingValue = strings.TrimSpace(*input.SigningValue)
+		if values.signingValue == "" {
+			return webhookTargetValues{}, false
 		}
 	}
 	if input.SignatureHeader != nil {
-		signatureHeader = strings.TrimSpace(*input.SignatureHeader)
-		if textproto.CanonicalMIMEHeaderKey(signatureHeader) == "" {
-			return "", "", "", "", false
+		values.signatureHeader = strings.TrimSpace(*input.SignatureHeader)
+		if textproto.CanonicalMIMEHeaderKey(values.signatureHeader) == "" {
+			return webhookTargetValues{}, false
 		}
 	}
-	return name, targetURL, signingValue, signatureHeader, true
+	return values, true
+}
+
+func channelFailureKey(channel string, targetID pgtype.UUID) string {
+	if targetID.Valid {
+		return notify.WebhookChannelKey(targetID)
+	}
+	return channel
 }
 
 func toAPIWebhookTarget(row notify.WebhookTarget) api.WebhookTarget {
 	return api.WebhookTarget{
-		Id: uuid.UUID(row.ID.Bytes), Name: row.Name, Enabled: row.Enabled, Url: row.Url,
+		Id:                uuid.UUID(row.ID.Bytes),
+		Name:              row.Name,
+		Enabled:           row.Enabled,
+		Url:               row.Url,
 		SigningConfigured: len(row.SigningValueCiphertext) > 0 && len(row.SignatureHeaderCiphertext) > 0,
-		CreatedAt:         row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+		CreatedAt:         row.CreatedAt.Time,
+		UpdatedAt:         row.UpdatedAt.Time,
 	}
 }

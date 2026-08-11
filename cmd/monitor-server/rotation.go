@@ -94,17 +94,19 @@ func reencryptWebhookTargets(ctx context.Context, tx pgx.Tx, keyring *instance.C
 		if err != nil {
 			return 0, err
 		}
-		valueCiphertext, version, err := keyring.EncryptWebhookSigningValue(targetID, signingValue)
+		signingValueCiphertext, signingKeyVersion, err := keyring.EncryptWebhookSigningValue(targetID, signingValue)
 		if err != nil {
 			return 0, err
 		}
-		headerCiphertext, _, err := keyring.EncryptWebhookSignatureHeader(targetID, signatureHeader)
+		signatureHeaderCiphertext, _, err := keyring.EncryptWebhookSignatureHeader(targetID, signatureHeader)
 		if err != nil {
 			return 0, err
 		}
 		if err := queries.UpdateWebhookTargetSigningKey(ctx, notify.UpdateWebhookTargetSigningKeyParams{
-			ID: target.ID, SigningValueCiphertext: valueCiphertext,
-			SignatureHeaderCiphertext: headerCiphertext, SigningKeyVersion: version,
+			ID:                        target.ID,
+			SigningValueCiphertext:    signingValueCiphertext,
+			SignatureHeaderCiphertext: signatureHeaderCiphertext,
+			SigningKeyVersion:         signingKeyVersion,
 		}); err != nil {
 			return 0, fmt.Errorf("update Webhook signing key version: %w", err)
 		}
