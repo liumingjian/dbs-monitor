@@ -68,7 +68,7 @@ Apple 签名证书和公证凭据只注入 tag workflow 的签名 job，不进�
 
 - 现有 Ubuntu `check` 与拆出 Linux 交叉编译后的平台无关 `check-full` 继续作为开发反馈与精确提交门；它们通过不代表 Linux 支持。
 - 当前 `make check-full` 中显式的 `GOOS=linux` 双架构交叉编译要从 v1 必需路径拆出；Linux 打包目标和未来四组合原生构建只允许放在手动触发的 legacy workflow，且不加入 branch protection、`needs` 链、Environment 或 v1 Release 资产。
-- v1 不启用 [#92](https://github.com/liumingjian/dbs-monitor/issues/92) 规划的 Linux 四组合发布 workflow，也不删除已有脚本、验证记录和历史产物。其具体重命名、禁用标记与后续重启入口由 [#102](https://github.com/liumingjian/dbs-monitor/issues/102) 落地。
+- v1 不启用 [#92](https://github.com/liumingjian/dbs-monitor/issues/92) 规划的 Linux 四组合发布 workflow，也不删除已有脚本、验证记录和历史产物。其重命名、禁用标记与后续重启入口已由 [#102 处置记录](21-v1-linux-release-disposition.md) 落地。
 - legacy Linux job 失败可以形成后续版本欠账，但不得阻止 macOS v1 tag、审批或发布。
 
 这选择的是“拆出并保留、但不作为发布门”，不是让半完成的 Linux 发布 job 与 macOS job 共用一条条件分支。后者会让旧矩阵的 runner 或资产失败继续隐式阻塞 v1。

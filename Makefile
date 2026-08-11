@@ -14,7 +14,7 @@ REDOCLY := npx --yes @redocly/cli@2.20.3
 OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
 SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
 
-.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix package-binaries-linux-amd64 package-binaries-linux-arm64 package-linux-amd64 package-linux-arm64
+.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix legacy-package-binaries-linux-amd64 legacy-package-binaries-linux-arm64 legacy-package-linux-amd64 legacy-package-linux-arm64
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml
@@ -49,8 +49,6 @@ check:
 check-full: check
 	$(MAKE) build
 	sh scripts/check-e2e.sh
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
 
 check-pg-matrix:
 	docker compose --profile matrix up -d --wait monitored-pg13 monitored-pg14 monitored-pg15 monitored-pg16 monitored-pg17
@@ -65,7 +63,7 @@ check-snapshot-matrix:
 	docker compose --profile matrix up -d --wait
 	SNAPSHOT_MATRIX_PORTS="55433 55434 55435 55436 55437" go test ./internal/evaluator -run TestTriggerSnapshotQueryPGMatrix -count=1
 
-package-binaries-linux-amd64:
+legacy-package-binaries-linux-amd64:
 	cd web && npm ci && npm run build
 	mkdir -p dist/bin/linux-amd64
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed_web -trimpath -o dist/bin/linux-amd64/dbs-monitor-server ./cmd/monitor-server
@@ -73,7 +71,7 @@ package-binaries-linux-amd64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent-linux-amd64 ./cmd/monitor-agent
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent-linux-arm64 ./cmd/monitor-agent
 
-package-binaries-linux-arm64:
+legacy-package-binaries-linux-arm64:
 	cd web && npm ci && npm run build
 	mkdir -p dist/bin/linux-arm64
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags embed_web -trimpath -o dist/bin/linux-arm64/dbs-monitor-server ./cmd/monitor-server
@@ -81,8 +79,8 @@ package-binaries-linux-arm64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent-linux-amd64 ./cmd/monitor-agent
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent-linux-arm64 ./cmd/monitor-agent
 
-package-linux-amd64:
+legacy-package-linux-amd64:
 	TARGET_ARCH=amd64 sh scripts/package-linux.sh
 
-package-linux-arm64:
+legacy-package-linux-arm64:
 	TARGET_ARCH=arm64 sh scripts/package-linux.sh
