@@ -82,8 +82,12 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	}
 	agentToken := "pause-agent-token"
 	agentTokenHash := sha256.Sum256([]byte(agentToken))
-	if _, err := pool.Exec(ctx, "UPDATE instance SET agent_token_hash = $2 WHERE id = $1", instanceID, agentTokenHash[:]); err != nil {
-		t.Fatalf("set agent token: %v", err)
+	if _, err := instance.New(pool).RegisterAgent(ctx, instance.RegisterAgentParams{
+		ID:                 pgtype.UUID{Bytes: instanceID, Valid: true},
+		AgentTokenHash:     agentTokenHash[:],
+		AgentTokenIssuedAt: pgtype.Timestamptz{Time: currentClock.now, Valid: true},
+	}); err != nil {
+		t.Fatalf("register agent: %v", err)
 	}
 
 	server := httptest.NewTLSServer(httpapi.NewHandler(platform, currentClock, keyring).Routes())
