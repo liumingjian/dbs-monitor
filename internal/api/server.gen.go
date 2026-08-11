@@ -75,6 +75,13 @@ const (
 	RECOVERED AlertStatus = "RECOVERED"
 )
 
+// Defines values for AlertTriggerSnapshotResult.
+const (
+	TriggerSnapshotFailed        AlertTriggerSnapshotResult = "FAILED"
+	TriggerSnapshotNotApplicable AlertTriggerSnapshotResult = "NOT_APPLICABLE"
+	TriggerSnapshotSuccess       AlertTriggerSnapshotResult = "SUCCESS"
+)
+
 // Defines values for CapabilitySnapshotEntryCapabilityId.
 const (
 	ExtPgStatStatements CapabilitySnapshotEntryCapabilityId = "ext.pg_stat_statements"
@@ -304,6 +311,36 @@ type AlertSeverity string
 
 // AlertStatus defines model for AlertStatus.
 type AlertStatus string
+
+// AlertTriggerSnapshot defines model for AlertTriggerSnapshot.
+type AlertTriggerSnapshot struct {
+	CapturedAt         *time.Time                    `json:"captured_at,omitempty"`
+	FailureReason      *string                       `json:"failure_reason,omitempty"`
+	MetricId           string                        `json:"metric_id"`
+	OriginalMatchCount int                           `json:"original_match_count"`
+	Result             AlertTriggerSnapshotResult    `json:"result"`
+	Sessions           []AlertTriggerSnapshotSession `json:"sessions"`
+	Truncated          bool                          `json:"truncated"`
+}
+
+// AlertTriggerSnapshotResult defines model for AlertTriggerSnapshotResult.
+type AlertTriggerSnapshotResult string
+
+// AlertTriggerSnapshotSession defines model for AlertTriggerSnapshotSession.
+type AlertTriggerSnapshotSession struct {
+	BlockingPids          []int32    `json:"blocking_pids"`
+	ClientAddress         *string    `json:"client_address,omitempty"`
+	DatabaseName          *string    `json:"database_name,omitempty"`
+	Pid                   int32      `json:"pid"`
+	QueryDurationMs       *int64     `json:"query_duration_ms,omitempty"`
+	QueryStartedAt        *time.Time `json:"query_started_at,omitempty"`
+	State                 *string    `json:"state,omitempty"`
+	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
+	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	WaitEvent             *string    `json:"wait_event,omitempty"`
+	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
 
 // CapabilitySnapshotEntry defines model for CapabilitySnapshotEntry.
 type CapabilitySnapshotEntry struct {
@@ -551,6 +588,9 @@ type ServerInterface interface {
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(w http.ResponseWriter, r *http.Request)
 
+	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
+	GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /api/v1/alert-rules)
 	ListAlertRules(w http.ResponseWriter, r *http.Request)
 
@@ -638,6 +678,31 @@ func (siw *ServerInterfaceWrapper) ReportAgentMetrics(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReportAgentMetrics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertTriggerSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertTriggerSnapshot(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1284,6 +1349,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/api/agent/v1/report", wrapper.ReportAgentMetrics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/trigger-snapshot", wrapper.GetAlertTriggerSnapshot)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules", wrapper.ListAlertRules)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
@@ -1340,6 +1406,32 @@ type ReportAgentMetrics401JSONResponse Error
 func (response ReportAgentMetrics401JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertTriggerSnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertTriggerSnapshotResponseObject interface {
+	VisitGetAlertTriggerSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetAlertTriggerSnapshot200JSONResponse AlertTriggerSnapshot
+
+func (response GetAlertTriggerSnapshot200JSONResponse) VisitGetAlertTriggerSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertTriggerSnapshot404JSONResponse Error
+
+func (response GetAlertTriggerSnapshot404JSONResponse) VisitGetAlertTriggerSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1912,6 +2004,9 @@ type StrictServerInterface interface {
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(ctx context.Context, request ReportAgentMetricsRequestObject) (ReportAgentMetricsResponseObject, error)
 
+	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
+	GetAlertTriggerSnapshot(ctx context.Context, request GetAlertTriggerSnapshotRequestObject) (GetAlertTriggerSnapshotResponseObject, error)
+
 	// (GET /api/v1/alert-rules)
 	ListAlertRules(ctx context.Context, request ListAlertRulesRequestObject) (ListAlertRulesResponseObject, error)
 
@@ -2032,6 +2127,32 @@ func (sh *strictHandler) ReportAgentMetrics(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReportAgentMetricsResponseObject); ok {
 		if err := validResponse.VisitReportAgentMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertTriggerSnapshot operation middleware
+func (sh *strictHandler) GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertTriggerSnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertTriggerSnapshot(ctx, request.(GetAlertTriggerSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertTriggerSnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertTriggerSnapshotResponseObject); ok {
+		if err := validResponse.VisitGetAlertTriggerSnapshotResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

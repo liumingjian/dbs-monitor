@@ -126,6 +126,7 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		"instance_capability_snapshot",
 		"alert_rule", "alert_rule_version", "alert_rule_scope_instance",
 		"alert_rule_evaluation_state", "alert_event",
+		"alert_trigger_snapshot", "alert_trigger_snapshot_session",
 	} {
 		var exists bool
 		if err := database.QueryRowContext(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {

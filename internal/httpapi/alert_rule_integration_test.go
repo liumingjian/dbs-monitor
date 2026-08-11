@@ -17,11 +17,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
+	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
@@ -115,7 +117,8 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 
 	seriesID := createAlertTestSeries(t, ctx, pool, targetID, currentClock.now)
 	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
-	eval := evaluator.New(platform, currentClock)
+	snapshotConnections := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
+	eval := evaluator.New(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "PENDING", 1, 0, 0, 1)
 
@@ -137,6 +140,50 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("first_triggered_at = %s, want %s", firstTriggeredAt, currentClock.now)
 	}
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 2, 0, 0, 1)
+	var failedSnapshotID uuid.UUID
+	var failedSnapshotReason string
+	if err := pool.QueryRow(ctx, `SELECT snapshot.id, snapshot.failure_reason
+		FROM alert_trigger_snapshot snapshot
+		WHERE snapshot.alert_instance_id = $1 AND snapshot.result = 'FAILED'`, firstAlertID).
+		Scan(&failedSnapshotID, &failedSnapshotReason); err != nil {
+		t.Fatalf("read failed trigger snapshot: %v", err)
+	}
+	if failedSnapshotID == uuid.Nil || failedSnapshotReason == "" {
+		t.Fatalf("failed trigger snapshot = %s reason %q, want persisted reason", failedSnapshotID, failedSnapshotReason)
+	}
+	var firedSnapshotID uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT trigger_snapshot_id FROM alert_event
+		WHERE alert_instance_id = $1 AND kind = 'FIRED'`, firstAlertID).Scan(&firedSnapshotID); err != nil {
+		t.Fatalf("read fired event trigger snapshot: %v", err)
+	}
+	if firedSnapshotID != failedSnapshotID {
+		t.Fatalf("FIRED snapshot = %s, want %s", firedSnapshotID, failedSnapshotID)
+	}
+	assertTriggerSnapshotAPIResult(t, client, server.URL, firstAlertID, "FAILED")
+	var nonApplicableAlertID uuid.UUID
+	if err := pool.QueryRow(ctx, `SELECT id FROM alert_instance
+		WHERE instance_id = $1 AND metric_id = 'pg.connection.total' ORDER BY updated_at DESC LIMIT 1`, targetID).
+		Scan(&nonApplicableAlertID); err != nil {
+		t.Fatalf("read non-applicable alert: %v", err)
+	}
+	assertTriggerSnapshotAPIResult(t, client, server.URL, nonApplicableAlertID, "NOT_APPLICABLE")
+	var nonApplicableSnapshotCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM alert_trigger_snapshot WHERE alert_instance_id = $1`, nonApplicableAlertID).
+		Scan(&nonApplicableSnapshotCount); err != nil {
+		t.Fatalf("count non-applicable snapshots: %v", err)
+	}
+	if nonApplicableSnapshotCount != 0 {
+		t.Fatalf("non-applicable snapshot count = %d, want 0", nonApplicableSnapshotCount)
+	}
+	var nonApplicableEventReferences int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM alert_event
+		WHERE alert_instance_id = $1 AND kind = 'FIRED' AND trigger_snapshot_id IS NOT NULL`, nonApplicableAlertID).
+		Scan(&nonApplicableEventReferences); err != nil {
+		t.Fatalf("count non-applicable event snapshot references: %v", err)
+	}
+	if nonApplicableEventReferences != 0 {
+		t.Fatalf("non-applicable FIRED snapshot references = %d, want 0", nonApplicableEventReferences)
+	}
 
 	currentClock.Advance(30 * time.Second)
 	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 4)
@@ -194,6 +241,13 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertIdentity(t, ctx, pool, createdRule.ID, targetID, firstAlertID, firstTriggeredAt)
+	var triggerSnapshotCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM alert_trigger_snapshot WHERE alert_instance_id = $1`, firstAlertID).Scan(&triggerSnapshotCount); err != nil {
+		t.Fatalf("count trigger snapshots: %v", err)
+	}
+	if triggerSnapshotCount != 1 {
+		t.Fatalf("trigger snapshots after sustained firing = %d, want 1", triggerSnapshotCount)
+	}
 
 	// Two due evaluations without a window sample enter NO_DATA without closing the firing lifecycle.
 	currentClock.Advance(90 * time.Second)
@@ -322,6 +376,26 @@ func insertAlertTestSample(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	t.Helper()
 	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, at, value); err != nil {
 		t.Fatalf("insert alert test sample: %v", err)
+	}
+}
+
+func assertTriggerSnapshotAPIResult(t *testing.T, client *http.Client, serverURL string, alertInstanceID uuid.UUID, want string) {
+	t.Helper()
+	response := requestJSON(t, client, http.MethodGet, serverURL+"/api/v1/alert-instances/"+alertInstanceID.String()+"/trigger-snapshot", nil, "")
+	defer response.Body.Close()
+	var body struct {
+		Result        string `json:"result"`
+		FailureReason string `json:"failure_reason"`
+		Sessions      []any  `json:"sessions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode trigger snapshot response: %v", err)
+	}
+	if response.StatusCode != http.StatusOK || body.Result != want || body.Sessions == nil {
+		t.Fatalf("trigger snapshot response = status %d body %+v, want 200 result %s", response.StatusCode, body, want)
+	}
+	if want == "FAILED" && body.FailureReason == "" {
+		t.Fatal("failed trigger snapshot response has no reason")
 	}
 }
 

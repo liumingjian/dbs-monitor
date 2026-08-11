@@ -93,7 +93,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("collection scheduler config: %w", err)
 	}
-	evaluation := evaluator.New(platform, clock.Real{})
+	evaluation := evaluator.New(platform, clock.Real{}, collector.WithTriggerSnapshotConnection)
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform)
 	go func() {

@@ -9,17 +9,18 @@ import (
 )
 
 type AlertEvent struct {
-	ID              int64
-	AlertInstanceID pgtype.UUID
-	RuleID          pgtype.UUID
-	RuleVersion     int32
-	Kind            string
-	FromState       string
-	ToState         string
-	CurrentValue    pgtype.Float8
-	Unavailability  pgtype.Text
-	RuleSnapshot    []byte
-	EvaluatedAt     pgtype.Timestamptz
+	ID                int64
+	AlertInstanceID   pgtype.UUID
+	RuleID            pgtype.UUID
+	RuleVersion       int32
+	Kind              string
+	FromState         string
+	ToState           string
+	CurrentValue      pgtype.Float8
+	Unavailability    pgtype.Text
+	RuleSnapshot      []byte
+	EvaluatedAt       pgtype.Timestamptz
+	TriggerSnapshotID pgtype.UUID
 }
 
 type AlertInstance struct {
@@ -86,6 +87,32 @@ type AlertRuleVersion struct {
 	Version   int32
 	Snapshot  []byte
 	CreatedAt pgtype.Timestamptz
+}
+
+type AlertTriggerSnapshot struct {
+	ID                 pgtype.UUID
+	AlertInstanceID    pgtype.UUID
+	CapturedAt         pgtype.Timestamptz
+	Result             string
+	OriginalMatchCount int32
+	Truncated          bool
+	FailureReason      pgtype.Text
+}
+
+type AlertTriggerSnapshotSession struct {
+	SnapshotID            pgtype.UUID
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
 }
 
 type AppUser struct {

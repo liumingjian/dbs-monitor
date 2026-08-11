@@ -86,6 +86,25 @@ ORDER BY CASE status
 END DESC
 LIMIT 1;
 
+-- name: GetAlertInstanceMetricID :one
+SELECT metric_id
+FROM alert_instance
+WHERE id = $1;
+
+-- name: GetAlertTriggerSnapshot :one
+SELECT id, captured_at, result, original_match_count, truncated, failure_reason
+FROM alert_trigger_snapshot
+WHERE alert_instance_id = $1;
+
+-- name: ListAlertTriggerSnapshotSessions :many
+SELECT pid, username, database_name, client_address, state,
+       query_started_at, transaction_started_at,
+       query_duration_ms, transaction_duration_ms,
+       wait_event_type, wait_event, blocking_pids
+FROM alert_trigger_snapshot_session
+WHERE snapshot_id = $1
+ORDER BY pid;
+
 -- name: ListPersistedCollectionTaskStates :many
 SELECT task.task_id, task.last_due_at, task.last_started_at, task.last_finished_at, task.last_success_at,
        task.last_result, task.consecutive_failures,

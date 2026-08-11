@@ -8,6 +8,7 @@ tags:
   - name: instances
   - name: metrics
   - name: alert-rules
+  - name: alerts
   - name: auth
   - name: agent
   - name: collection
@@ -35,6 +36,8 @@ paths:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}
   /api/v1/alert-rules/{id}/enabled:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1enabled
+  /api/v1/alert-instances/{id}/trigger-snapshot:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1trigger-snapshot
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
   /api/v1/me:
@@ -77,6 +80,12 @@ components:
       $ref: components/schemas/alert-rules.yaml#/AlertRule
     AlertRuleEnabledInput:
       $ref: components/schemas/alert-rules.yaml#/AlertRuleEnabledInput
+    AlertTriggerSnapshotResult:
+      $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshotResult
+    AlertTriggerSnapshotSession:
+      $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshotSession
+    AlertTriggerSnapshot:
+      $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshot
     InstanceCreateInput:
       $ref: components/schemas/instances.yaml#/InstanceCreateInput
     InstanceMetadataInput:

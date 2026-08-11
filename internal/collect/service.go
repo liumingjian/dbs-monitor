@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	pgxconn "github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -84,6 +85,7 @@ type Service struct {
 
 	queryConnectionMu       sync.Mutex
 	queryConnections        map[string]cachedConnection
+	queryConnectionUseLocks map[string]*sync.Mutex
 	queryConnectionRebuilds int64
 }
 
@@ -100,12 +102,13 @@ func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock cloc
 		return nil, err
 	}
 	return &Service{
-		platform:         platform,
-		dialer:           dialer,
-		clock:            currentClock,
-		config:           config,
-		keyring:          keyring,
-		queryConnections: map[string]cachedConnection{},
+		platform:                platform,
+		dialer:                  dialer,
+		clock:                   currentClock,
+		config:                  config,
+		keyring:                 keyring,
+		queryConnections:        map[string]cachedConnection{},
+		queryConnectionUseLocks: map[string]*sync.Mutex{},
 	}, nil
 }
 
@@ -202,7 +205,10 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	timeout := taskTimeout(run.interval)
 	taskCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	conn, err := service.queryConnection(taskCtx, run.target)
+	conn, release, err := service.acquireQueryConnection(taskCtx, run.target)
+	if release != nil {
+		defer release()
+	}
 	dialFailure := err != nil
 	if err == nil {
 		var configured string
@@ -240,7 +246,10 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 	outcome := executionOutcome{run: run, result: resultFailed}
 	taskCtx, cancel := context.WithTimeout(ctx, capabilitySnapshotTimeout)
 	defer cancel()
-	conn, err := service.queryConnection(taskCtx, run.target)
+	conn, release, err := service.acquireQueryConnection(taskCtx, run.target)
+	if release != nil {
+		defer release()
+	}
 	if err == nil {
 		var configured string
 		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', '10s', false)").Scan(&configured)
@@ -350,6 +359,50 @@ func (service *Service) queryConnection(ctx context.Context, target instance.Lis
 	return conn, nil
 }
 
+func (service *Service) acquireQueryConnection(ctx context.Context, target instance.ListCollectionTargetsRow) (*monitorpg.TargetConn, func(), error) {
+	key := uuid.UUID(target.ID.Bytes).String()
+	service.queryConnectionMu.Lock()
+	useLock := service.queryConnectionUseLocks[key]
+	if useLock == nil {
+		useLock = &sync.Mutex{}
+		service.queryConnectionUseLocks[key] = useLock
+	}
+	service.queryConnectionMu.Unlock()
+
+	useLock.Lock()
+	conn, err := service.queryConnection(ctx, target)
+	if err != nil {
+		useLock.Unlock()
+		return nil, nil, err
+	}
+	return conn, useLock.Unlock, nil
+}
+
+func (service *Service) WithTriggerSnapshotConnection(
+	ctx context.Context,
+	target alerting.GetEvaluationTargetRow,
+	use func(*monitorpg.TargetConn) error,
+) error {
+	collectionTarget := instance.ListCollectionTargetsRow{
+		ID: target.InstanceID, Host: target.Host, Port: target.Port,
+		DatabaseName: target.DatabaseName, Username: target.Username,
+		PasswordCiphertext: target.PasswordCiphertext, PasswordKeyVersion: target.PasswordKeyVersion,
+		CredentialVersion: target.CredentialVersion,
+	}
+	conn, release, err := service.acquireQueryConnection(ctx, collectionTarget)
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err := use(conn); err != nil {
+		if isConnectionFailure(err) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			service.invalidateQueryConnection(target.InstanceID)
+		}
+		return err
+	}
+	return nil
+}
+
 func (service *Service) invalidateQueryConnection(targetID pgtype.UUID) {
 	key := uuid.UUID(targetID.Bytes).String()
 	service.queryConnectionMu.Lock()
@@ -387,6 +440,10 @@ func (service *Service) closeQueryConnections() {
 	for _, cached := range connections {
 		closeConnection(cached.conn)
 	}
+}
+
+func (service *Service) Close() {
+	service.closeQueryConnections()
 }
 
 func closeConnection(conn *monitorpg.TargetConn) {
@@ -489,7 +546,7 @@ func targetConnectionConfig(target instance.ListCollectionTargetsRow, password s
 }
 
 func (service *Service) Run(ctx context.Context, interval time.Duration) {
-	defer service.closeQueryConnections()
+	defer service.Close()
 	scheduler := newCentralScheduler(service)
 	if err := scheduler.refresh(ctx, service.clock.Now().UTC()); err != nil {
 		log.Printf("collection scheduler refresh failed: %v", err)

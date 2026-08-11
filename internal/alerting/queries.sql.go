@@ -41,22 +41,23 @@ const createAlertEvent = `-- name: CreateAlertEvent :exec
 INSERT INTO alert_event (
     alert_instance_id, rule_id, rule_version, kind,
     from_state, to_state, current_value, unavailability,
-    rule_snapshot, evaluated_at
+    rule_snapshot, evaluated_at, trigger_snapshot_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 `
 
 type CreateAlertEventParams struct {
-	AlertInstanceID pgtype.UUID
-	RuleID          pgtype.UUID
-	RuleVersion     int32
-	Kind            string
-	FromState       string
-	ToState         string
-	CurrentValue    pgtype.Float8
-	Unavailability  pgtype.Text
-	RuleSnapshot    []byte
-	EvaluatedAt     pgtype.Timestamptz
+	AlertInstanceID   pgtype.UUID
+	RuleID            pgtype.UUID
+	RuleVersion       int32
+	Kind              string
+	FromState         string
+	ToState           string
+	CurrentValue      pgtype.Float8
+	Unavailability    pgtype.Text
+	RuleSnapshot      []byte
+	EvaluatedAt       pgtype.Timestamptz
+	TriggerSnapshotID pgtype.UUID
 }
 
 func (q *Queries) CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) error {
@@ -71,6 +72,7 @@ func (q *Queries) CreateAlertEvent(ctx context.Context, arg CreateAlertEventPara
 		arg.Unavailability,
 		arg.RuleSnapshot,
 		arg.EvaluatedAt,
+		arg.TriggerSnapshotID,
 	)
 	return err
 }
@@ -176,6 +178,82 @@ func (q *Queries) CreateAlertRuleVersion(ctx context.Context, arg CreateAlertRul
 	return err
 }
 
+const createTriggerSnapshot = `-- name: CreateTriggerSnapshot :one
+INSERT INTO alert_trigger_snapshot (
+    alert_instance_id, captured_at, result,
+    original_match_count, truncated, failure_reason
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+`
+
+type CreateTriggerSnapshotParams struct {
+	AlertInstanceID    pgtype.UUID
+	CapturedAt         pgtype.Timestamptz
+	Result             string
+	OriginalMatchCount int32
+	Truncated          bool
+	FailureReason      pgtype.Text
+}
+
+func (q *Queries) CreateTriggerSnapshot(ctx context.Context, arg CreateTriggerSnapshotParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, createTriggerSnapshot,
+		arg.AlertInstanceID,
+		arg.CapturedAt,
+		arg.Result,
+		arg.OriginalMatchCount,
+		arg.Truncated,
+		arg.FailureReason,
+	)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createTriggerSnapshotSession = `-- name: CreateTriggerSnapshotSession :exec
+INSERT INTO alert_trigger_snapshot_session (
+    snapshot_id, pid, username, database_name, client_address, state,
+    query_started_at, transaction_started_at, query_duration_ms,
+    transaction_duration_ms, wait_event_type, wait_event, blocking_pids
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+`
+
+type CreateTriggerSnapshotSessionParams struct {
+	SnapshotID            pgtype.UUID
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+func (q *Queries) CreateTriggerSnapshotSession(ctx context.Context, arg CreateTriggerSnapshotSessionParams) error {
+	_, err := q.db.Exec(ctx, createTriggerSnapshotSession,
+		arg.SnapshotID,
+		arg.Pid,
+		arg.Username,
+		arg.DatabaseName,
+		arg.ClientAddress,
+		arg.State,
+		arg.QueryStartedAt,
+		arg.TransactionStartedAt,
+		arg.QueryDurationMs,
+		arg.TransactionDurationMs,
+		arg.WaitEventType,
+		arg.WaitEvent,
+		arg.BlockingPids,
+	)
+	return err
+}
+
 const deleteAlertRuleScopeInstances = `-- name: DeleteAlertRuleScopeInstances :exec
 DELETE FROM alert_rule_scope_instance WHERE rule_id = $1
 `
@@ -255,6 +333,13 @@ SELECT rule.id AS rule_id,
        rule.version,
        version.snapshot AS rule_snapshot,
        instance.id AS instance_id,
+       instance.host,
+       instance.port,
+       instance.database_name,
+       instance.username,
+       instance.password_ciphertext,
+       instance.password_key_version,
+       instance.credential_version,
        collect_state.last_error_code,
        alert.id AS alert_instance_id,
        COALESCE(alert.status, 'OK') AS status,
@@ -314,6 +399,13 @@ type GetEvaluationTargetRow struct {
 	Version                  int32
 	RuleSnapshot             []byte
 	InstanceID               pgtype.UUID
+	Host                     string
+	Port                     int32
+	DatabaseName             string
+	Username                 string
+	PasswordCiphertext       []byte
+	PasswordKeyVersion       int32
+	CredentialVersion        int64
 	LastErrorCode            pgtype.Text
 	AlertInstanceID          pgtype.UUID
 	Status                   string
@@ -344,6 +436,13 @@ func (q *Queries) GetEvaluationTarget(ctx context.Context, arg GetEvaluationTarg
 		&i.Version,
 		&i.RuleSnapshot,
 		&i.InstanceID,
+		&i.Host,
+		&i.Port,
+		&i.DatabaseName,
+		&i.Username,
+		&i.PasswordCiphertext,
+		&i.PasswordKeyVersion,
+		&i.CredentialVersion,
 		&i.LastErrorCode,
 		&i.AlertInstanceID,
 		&i.Status,
