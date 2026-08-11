@@ -4,6 +4,18 @@ SELECT * FROM alert_rule ORDER BY created_at, id;
 -- name: GetAlertRule :one
 SELECT * FROM alert_rule WHERE id = $1;
 
+-- name: ListAlertRuleTemplates :many
+SELECT * FROM alert_rule_template ORDER BY identifier;
+
+-- name: GetAlertRuleTemplate :one
+SELECT * FROM alert_rule_template WHERE identifier = $1;
+
+-- name: GetDefaultNotificationPolicy :one
+SELECT * FROM notification_policy WHERE is_default;
+
+-- name: GetNotificationPolicy :one
+SELECT * FROM notification_policy WHERE id = $1;
+
 -- name: ListAlertRuleScopeInstances :many
 SELECT instance_id
 FROM alert_rule_scope_instance
@@ -19,9 +31,10 @@ INSERT INTO alert_rule (
     recovery_operator, recovery_threshold, window_seconds,
     consecutive_count, recovery_consecutive_count, severity,
     no_data_policy, scope, evaluation_interval_seconds,
-    enabled, version, created_at, updated_at
+    enabled, version, created_at, updated_at, notification_policy_id,
+    source_template_id, source_template_version
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $19, $20)
 RETURNING *;
 
 -- name: UpdateAlertRule :one
@@ -40,8 +53,9 @@ SET name = $2,
     no_data_policy = $13,
     scope = $14,
     evaluation_interval_seconds = $15,
+    notification_policy_id = $16,
     version = version + 1,
-    updated_at = $16
+    updated_at = $17
 WHERE id = $1
 RETURNING *;
 
@@ -52,6 +66,12 @@ SET enabled = $2,
     enabled_updated_at = $4
 WHERE id = $1
 RETURNING *;
+
+-- name: DeleteAlertRule :one
+DELETE FROM alert_rule
+WHERE id = $1
+  AND builtin_identifier IS NULL
+RETURNING id;
 
 -- name: DeleteAlertRuleScopeInstances :exec
 DELETE FROM alert_rule_scope_instance WHERE rule_id = $1;

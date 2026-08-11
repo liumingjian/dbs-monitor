@@ -177,10 +177,11 @@ INSERT INTO alert_rule (
     recovery_operator, recovery_threshold, window_seconds,
     consecutive_count, recovery_consecutive_count, severity,
     no_data_policy, scope, evaluation_interval_seconds,
-    enabled, version, created_at, updated_at
+    enabled, version, created_at, updated_at, notification_policy_id,
+    source_template_id, source_template_version
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17)
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $19, $20)
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version
 `
 
 type CreateAlertRuleParams struct {
@@ -201,6 +202,9 @@ type CreateAlertRuleParams struct {
 	EvaluationIntervalSeconds int32
 	Enabled                   bool
 	CreatedAt                 pgtype.Timestamptz
+	NotificationPolicyID      pgtype.UUID
+	SourceTemplateID          pgtype.Text
+	SourceTemplateVersion     pgtype.Int4
 }
 
 func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams) (AlertRule, error) {
@@ -222,6 +226,9 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		arg.EvaluationIntervalSeconds,
 		arg.Enabled,
 		arg.CreatedAt,
+		arg.NotificationPolicyID,
+		arg.SourceTemplateID,
+		arg.SourceTemplateVersion,
 	)
 	var i AlertRule
 	err := row.Scan(
@@ -246,6 +253,10 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		&i.EvaluationIntervalSeconds,
 		&i.EnabledUpdatedBy,
 		&i.EnabledUpdatedAt,
+		&i.BuiltinIdentifier,
+		&i.NotificationPolicyID,
+		&i.SourceTemplateID,
+		&i.SourceTemplateVersion,
 	)
 	return i, err
 }
@@ -365,6 +376,19 @@ func (q *Queries) CreateTriggerSnapshotSession(ctx context.Context, arg CreateTr
 	return err
 }
 
+const deleteAlertRule = `-- name: DeleteAlertRule :one
+DELETE FROM alert_rule
+WHERE id = $1
+  AND builtin_identifier IS NULL
+RETURNING id
+`
+
+func (q *Queries) DeleteAlertRule(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteAlertRule, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const deleteAlertRuleScopeInstances = `-- name: DeleteAlertRuleScopeInstances :exec
 DELETE FROM alert_rule_scope_instance WHERE rule_id = $1
 `
@@ -465,7 +489,7 @@ func (q *Queries) GetAlertDispositionForUpdate(ctx context.Context, id pgtype.UU
 }
 
 const getAlertRule = `-- name: GetAlertRule :one
-SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at FROM alert_rule WHERE id = $1
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version FROM alert_rule WHERE id = $1
 `
 
 func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, error) {
@@ -493,6 +517,37 @@ func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, 
 		&i.EvaluationIntervalSeconds,
 		&i.EnabledUpdatedBy,
 		&i.EnabledUpdatedAt,
+		&i.BuiltinIdentifier,
+		&i.NotificationPolicyID,
+		&i.SourceTemplateID,
+		&i.SourceTemplateVersion,
+	)
+	return i, err
+}
+
+const getAlertRuleTemplate = `-- name: GetAlertRuleTemplate :one
+SELECT identifier, version, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds FROM alert_rule_template WHERE identifier = $1
+`
+
+func (q *Queries) GetAlertRuleTemplate(ctx context.Context, identifier string) (AlertRuleTemplate, error) {
+	row := q.db.QueryRow(ctx, getAlertRuleTemplate, identifier)
+	var i AlertRuleTemplate
+	err := row.Scan(
+		&i.Identifier,
+		&i.Version,
+		&i.Name,
+		&i.MetricID,
+		&i.Aggregation,
+		&i.Operator,
+		&i.Threshold,
+		&i.RecoveryOperator,
+		&i.RecoveryThreshold,
+		&i.WindowSeconds,
+		&i.ConsecutiveCount,
+		&i.RecoveryConsecutiveCount,
+		&i.Severity,
+		&i.NoDataPolicy,
+		&i.EvaluationIntervalSeconds,
 	)
 	return i, err
 }
@@ -516,6 +571,24 @@ func (q *Queries) GetAlertStatus(ctx context.Context, instanceID pgtype.UUID) (s
 	var status string
 	err := row.Scan(&status)
 	return status, err
+}
+
+const getDefaultNotificationPolicy = `-- name: GetDefaultNotificationPolicy :one
+SELECT id, identifier, name, is_default, created_at, updated_at FROM notification_policy WHERE is_default
+`
+
+func (q *Queries) GetDefaultNotificationPolicy(ctx context.Context) (NotificationPolicy, error) {
+	row := q.db.QueryRow(ctx, getDefaultNotificationPolicy)
+	var i NotificationPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.Identifier,
+		&i.Name,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getEvaluationTarget = `-- name: GetEvaluationTarget :one
@@ -660,6 +733,24 @@ func (q *Queries) GetEvaluationTarget(ctx context.Context, arg GetEvaluationTarg
 	return i, err
 }
 
+const getNotificationPolicy = `-- name: GetNotificationPolicy :one
+SELECT id, identifier, name, is_default, created_at, updated_at FROM notification_policy WHERE id = $1
+`
+
+func (q *Queries) GetNotificationPolicy(ctx context.Context, id pgtype.UUID) (NotificationPolicy, error) {
+	row := q.db.QueryRow(ctx, getNotificationPolicy, id)
+	var i NotificationPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.Identifier,
+		&i.Name,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listAlertDispositionEvents = `-- name: ListAlertDispositionEvents :many
 SELECT id, alert_instance_id, rule_id, rule_version, kind, from_state, to_state, current_value, unavailability, rule_snapshot, evaluated_at, actor_id, acted_at, from_disposition, to_disposition, disposition_note, ignore_reason_code, ignore_reason_detail, trigger_snapshot_id
 FROM alert_event
@@ -735,8 +826,48 @@ func (q *Queries) ListAlertRuleScopeInstances(ctx context.Context, ruleID pgtype
 	return items, nil
 }
 
+const listAlertRuleTemplates = `-- name: ListAlertRuleTemplates :many
+SELECT identifier, version, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds FROM alert_rule_template ORDER BY identifier
+`
+
+func (q *Queries) ListAlertRuleTemplates(ctx context.Context) ([]AlertRuleTemplate, error) {
+	rows, err := q.db.Query(ctx, listAlertRuleTemplates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AlertRuleTemplate
+	for rows.Next() {
+		var i AlertRuleTemplate
+		if err := rows.Scan(
+			&i.Identifier,
+			&i.Version,
+			&i.Name,
+			&i.MetricID,
+			&i.Aggregation,
+			&i.Operator,
+			&i.Threshold,
+			&i.RecoveryOperator,
+			&i.RecoveryThreshold,
+			&i.WindowSeconds,
+			&i.ConsecutiveCount,
+			&i.RecoveryConsecutiveCount,
+			&i.Severity,
+			&i.NoDataPolicy,
+			&i.EvaluationIntervalSeconds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAlertRules = `-- name: ListAlertRules :many
-SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at FROM alert_rule ORDER BY created_at, id
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version FROM alert_rule ORDER BY created_at, id
 `
 
 func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
@@ -770,6 +901,10 @@ func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 			&i.EvaluationIntervalSeconds,
 			&i.EnabledUpdatedBy,
 			&i.EnabledUpdatedAt,
+			&i.BuiltinIdentifier,
+			&i.NotificationPolicyID,
+			&i.SourceTemplateID,
+			&i.SourceTemplateVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -1095,7 +1230,7 @@ SET enabled = $2,
     enabled_updated_by = $3,
     enabled_updated_at = $4
 WHERE id = $1
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version
 `
 
 type SetAlertRuleEnabledParams struct {
@@ -1135,6 +1270,10 @@ func (q *Queries) SetAlertRuleEnabled(ctx context.Context, arg SetAlertRuleEnabl
 		&i.EvaluationIntervalSeconds,
 		&i.EnabledUpdatedBy,
 		&i.EnabledUpdatedAt,
+		&i.BuiltinIdentifier,
+		&i.NotificationPolicyID,
+		&i.SourceTemplateID,
+		&i.SourceTemplateVersion,
 	)
 	return i, err
 }
@@ -1219,10 +1358,11 @@ SET name = $2,
     no_data_policy = $13,
     scope = $14,
     evaluation_interval_seconds = $15,
+    notification_policy_id = $16,
     version = version + 1,
-    updated_at = $16
+    updated_at = $17
 WHERE id = $1
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version
 `
 
 type UpdateAlertRuleParams struct {
@@ -1241,6 +1381,7 @@ type UpdateAlertRuleParams struct {
 	NoDataPolicy              string
 	Scope                     string
 	EvaluationIntervalSeconds int32
+	NotificationPolicyID      pgtype.UUID
 	UpdatedAt                 pgtype.Timestamptz
 }
 
@@ -1261,6 +1402,7 @@ func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams
 		arg.NoDataPolicy,
 		arg.Scope,
 		arg.EvaluationIntervalSeconds,
+		arg.NotificationPolicyID,
 		arg.UpdatedAt,
 	)
 	var i AlertRule
@@ -1286,6 +1428,10 @@ func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams
 		&i.EvaluationIntervalSeconds,
 		&i.EnabledUpdatedBy,
 		&i.EnabledUpdatedAt,
+		&i.BuiltinIdentifier,
+		&i.NotificationPolicyID,
+		&i.SourceTemplateID,
+		&i.SourceTemplateVersion,
 	)
 	return i, err
 }

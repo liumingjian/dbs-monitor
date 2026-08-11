@@ -44,6 +44,12 @@ paths:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}
   /api/v1/alert-rules/{id}/enabled:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1enabled
+  /api/v1/alert-rules/{id}/copies:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1copies
+  /api/v1/alert-rule-templates:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rule-templates
+  /api/v1/alert-rule-templates/{id}/alert-rules:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rule-templates~1{id}~1alert-rules
   /api/v1/alert-instances/{id}/disposition:
     $ref: paths/alert-instances.yaml#/~1api~1v1~1alert-instances~1{id}~1disposition
   /api/v1/alert-instances/{id}/trigger-snapshot:
@@ -124,6 +130,12 @@ components:
       $ref: components/schemas/alert-rules.yaml#/AlertRule
     AlertRuleEnabledInput:
       $ref: components/schemas/alert-rules.yaml#/AlertRuleEnabledInput
+    AlertRuleTemplate:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleTemplate
+    AlertRuleTemplateInstantiationInput:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleTemplateInstantiationInput
+    AlertRuleCopyInput:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleCopyInput
     AlertDispositionInput:
       $ref: components/schemas/alert-instances.yaml#/AlertDispositionInput
     AlertDispositionDetail:

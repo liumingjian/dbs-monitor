@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -255,6 +256,161 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		VALUES ('00000000-0000-0000-0000-000000000001', 'pg.probe', 0, 'UNKNOWN')`)
 	if !errors.As(err, &pgError) || pgError.Code != "23514" {
 		t.Fatalf("unknown task result error = %v, want check violation", err)
+	}
+}
+
+func TestAlertingSeedsAreIdempotentAndTemplatesAreReplaced(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	admin := openDatabase(t, env("PGDATABASE", "dbs_monitor"))
+	defer admin.Close()
+	databaseName := fmt.Sprintf("dbs_monitor_alerting_seed_%d", os.Getpid())
+	identifier := pgx.Identifier{databaseName}.Sanitize()
+	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
+	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
+		t.Fatalf("create test database: %v", err)
+	}
+	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
+
+	database := openDatabase(t, databaseName)
+	defer database.Close()
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	if _, err := migrations.Up(ctx, database, credentialDirectory); err != nil {
+		t.Fatalf("migrate test database: %v", err)
+	}
+
+	type ruleSeed struct {
+		identifier, metricID, aggregation, operator, recoveryOperator, severity string
+		threshold, recoveryThreshold                                            float64
+		windowSeconds, consecutiveCount, evaluationIntervalSeconds              int
+	}
+	wantRules := []ruleSeed{
+		{"agent_offline", "agent.status", "latest", "=", "=", "critical", 0, 1, 30, 3, 30},
+		{"data_stale", "collector.last_success_time", "latest", ">", "<", "warning", 600, 450, 60, 2, 60},
+		{"database_unreachable", "pg.availability.reachable", "latest", "=", "=", "critical", 0, 1, 30, 3, 30},
+	}
+	ruleRows, err := database.QueryContext(ctx, `SELECT builtin_identifier, metric_id, aggregation, operator,
+		threshold, recovery_operator, recovery_threshold, severity, window_seconds,
+		consecutive_count, evaluation_interval_seconds
+		FROM alert_rule WHERE builtin_identifier IS NOT NULL ORDER BY builtin_identifier`)
+	if err != nil {
+		t.Fatalf("list built-in alert rules: %v", err)
+	}
+	defer ruleRows.Close()
+	var gotRules []ruleSeed
+	for ruleRows.Next() {
+		var got ruleSeed
+		if err := ruleRows.Scan(&got.identifier, &got.metricID, &got.aggregation, &got.operator,
+			&got.threshold, &got.recoveryOperator, &got.recoveryThreshold, &got.severity,
+			&got.windowSeconds, &got.consecutiveCount, &got.evaluationIntervalSeconds); err != nil {
+			t.Fatalf("scan built-in alert rule: %v", err)
+		}
+		gotRules = append(gotRules, got)
+	}
+	if !reflect.DeepEqual(gotRules, wantRules) {
+		t.Fatalf("built-in alert rules = %+v, want %+v", gotRules, wantRules)
+	}
+
+	var policyIdentifier, policyName string
+	var defaultPolicyCount int
+	if err := database.QueryRowContext(ctx, `SELECT min(identifier), min(name), count(*)
+		FROM notification_policy WHERE is_default`).Scan(&policyIdentifier, &policyName, &defaultPolicyCount); err != nil {
+		t.Fatalf("read default notification policy: %v", err)
+	}
+	if policyIdentifier != "default" || policyName != "默认策略" || defaultPolicyCount != 1 {
+		t.Fatalf("default notification policy = %q/%q count %d", policyIdentifier, policyName, defaultPolicyCount)
+	}
+	if _, err := database.ExecContext(ctx, `DELETE FROM notification_policy WHERE is_default`); err == nil {
+		t.Fatal("deleting the default notification policy succeeded")
+	}
+	if _, err := database.ExecContext(ctx, `INSERT INTO notification_policy (id, identifier, name, is_default)
+		VALUES ('00000000-0000-0000-0000-000000063099', 'other-default', 'other', true)`); err == nil {
+		t.Fatal("creating a second default notification policy succeeded")
+	}
+
+	type templateSeed struct {
+		identifier, metricID, aggregation, operator, recoveryOperator, severity string
+		threshold, recoveryThreshold                                            float64
+		consecutiveCount, evaluationIntervalSeconds                             int
+	}
+	wantTemplates := []templateSeed{
+		{"active_connections_high", "pg.connection.active", "max", ">=", "<=", "warning", 100, 80, 3, 30},
+		{"blocked_sessions", "pg.session.blocked_count", "latest", ">", "=", "critical", 0, 0, 3, 30},
+		{"connections_high", "pg.connection.total", "max", ">=", "<=", "warning", 500, 400, 3, 30},
+		{"cpu_high", "host.cpu.usage_percent", "avg", ">=", "<=", "warning", 80, 70, 5, 60},
+		{"disk_usage_high", "host.disk.usage_percent", "latest", ">=", "<=", "critical", 90, 85, 3, 60},
+		{"idle_in_transaction_high", "pg.connection.idle_in_transaction", "latest", ">=", "<=", "warning", 10, 5, 3, 30},
+		{"lock_waiting", "pg.lock.waiting_count", "latest", ">", "=", "warning", 0, 0, 3, 30},
+		{"long_queries_high", "pg.query.long_running_count", "latest", ">=", "<=", "warning", 5, 2, 3, 30},
+		{"long_transaction", "pg.transaction.max_duration_sec", "max", ">=", "<=", "warning", 300, 60, 2, 30},
+		{"memory_high", "host.memory.usage_percent", "avg", ">=", "<=", "warning", 85, 75, 5, 60},
+		{"prepared_xacts", "pg.prepared_xacts.count", "latest", ">", "=", "info", 0, 0, 3, 60},
+		{"probe_latency_high", "pg.probe.latency_ms", "avg", ">=", "<=", "warning", 500, 300, 3, 30},
+		{"replication_slot_backlog", "pg.replication_slot.retained_wal_bytes", "latest", ">=", "<=", "warning", 1073741824, 536870912, 3, 60},
+		{"replication_wal_lag", "pg.replication.wal_lag_bytes", "avg", ">=", "<=", "warning", 104857600, 52428800, 3, 60},
+		{"temp_bytes_high", "pg.temp.bytes_per_sec", "avg", ">=", "<=", "warning", 10485760, 5242880, 5, 60},
+	}
+	templateRows, err := database.QueryContext(ctx, `SELECT identifier, metric_id, aggregation, operator,
+		threshold, recovery_operator, recovery_threshold, severity, consecutive_count,
+		evaluation_interval_seconds
+		FROM alert_rule_template ORDER BY identifier`)
+	if err != nil {
+		t.Fatalf("list alert rule templates: %v", err)
+	}
+	defer templateRows.Close()
+	var gotTemplates []templateSeed
+	for templateRows.Next() {
+		var got templateSeed
+		if err := templateRows.Scan(&got.identifier, &got.metricID, &got.aggregation, &got.operator,
+			&got.threshold, &got.recoveryOperator, &got.recoveryThreshold, &got.severity,
+			&got.consecutiveCount, &got.evaluationIntervalSeconds); err != nil {
+			t.Fatalf("scan alert rule template: %v", err)
+		}
+		gotTemplates = append(gotTemplates, got)
+	}
+	if !reflect.DeepEqual(gotTemplates, wantTemplates) {
+		t.Fatalf("alert rule templates = %+v, want %+v", gotTemplates, wantTemplates)
+	}
+
+	if _, err := database.ExecContext(ctx, `UPDATE alert_rule SET name = 'user name', threshold = 9
+		WHERE builtin_identifier = 'database_unreachable'`); err != nil {
+		t.Fatalf("customize built-in alert rule: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `UPDATE alert_rule_template SET threshold = -1
+		WHERE identifier = 'cpu_high'`); err != nil {
+		t.Fatalf("modify read-only template fixture: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `INSERT INTO alert_rule_template
+		(identifier, version, name, metric_id, aggregation, operator, threshold,
+		recovery_operator, recovery_threshold, window_seconds, consecutive_count,
+		recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds)
+		SELECT 'obsolete', version, name, metric_id, aggregation, operator, threshold,
+		recovery_operator, recovery_threshold, window_seconds, consecutive_count,
+		recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds
+		FROM alert_rule_template LIMIT 1`); err != nil {
+		t.Fatalf("insert obsolete template fixture: %v", err)
+	}
+	if applied, err := migrations.Up(ctx, database, credentialDirectory); err != nil || applied != 0 {
+		t.Fatalf("repeat migration = applied %d, error %v", applied, err)
+	}
+	var customizedName string
+	var customizedThreshold float64
+	if err := database.QueryRowContext(ctx, `SELECT name, threshold FROM alert_rule
+		WHERE builtin_identifier = 'database_unreachable'`).Scan(&customizedName, &customizedThreshold); err != nil {
+		t.Fatalf("read customized built-in rule: %v", err)
+	}
+	if customizedName != "user name" || customizedThreshold != 9 {
+		t.Fatalf("customized built-in rule was overwritten: %q threshold %v", customizedName, customizedThreshold)
+	}
+	var templateCount int
+	var cpuThreshold float64
+	if err := database.QueryRowContext(ctx, `SELECT count(*), min(threshold) FILTER (WHERE identifier = 'cpu_high')
+		FROM alert_rule_template`).Scan(&templateCount, &cpuThreshold); err != nil {
+		t.Fatalf("read replaced templates: %v", err)
+	}
+	if templateCount != 15 || cpuThreshold != 80 {
+		t.Fatalf("replaced templates = count %d cpu threshold %v, want 15/80", templateCount, cpuThreshold)
 	}
 }
 

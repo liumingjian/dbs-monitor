@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
@@ -82,5 +83,34 @@ func TestStructurallyNotApplicable(t *testing.T) {
 				t.Fatalf("structurallyNotApplicable() = %t, want %t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestControlPlaneRuleValue(t *testing.T) {
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		metricID   metric.MetricID
+		projection metric.ControlPlaneProjection
+		want       float64
+	}{
+		{name: "agent status keeps encoded value", metricID: metric.MetricAgentStatus, projection: metric.ControlPlaneProjection{Value: 0}, want: 0},
+		{name: "collector watermark becomes age", metricID: metric.MetricCollectorLastSuccessTime, projection: metric.ControlPlaneProjection{Value: float64(now.Add(-601 * time.Second).Unix())}, want: 601},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := controlPlaneRuleValue(test.metricID, test.projection, now); got != test.want {
+				t.Fatalf("controlPlaneRuleValue() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectionFailureDoesNotHideReachability(t *testing.T) {
+	if collectionFailureBlocksSamples(metric.MetricAvailabilityReachable, pgtype.Text{String: "DB_UNREACHABLE", Valid: true}) {
+		t.Fatal("DB_UNREACHABLE must not hide the reachability sample")
+	}
+	if !collectionFailureBlocksSamples(metric.MetricConnectionTotal, pgtype.Text{String: "DB_UNREACHABLE", Valid: true}) {
+		t.Fatal("DB_UNREACHABLE must still block ordinary PostgreSQL metric samples")
 	}
 }

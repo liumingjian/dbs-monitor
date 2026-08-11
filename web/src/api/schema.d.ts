@@ -231,7 +231,7 @@ export interface paths {
         get?: never;
         put: operations["updateAlertRule"];
         post?: never;
-        delete?: never;
+        delete: operations["deleteAlertRule"];
         options?: never;
         head?: never;
         patch?: never;
@@ -249,6 +249,58 @@ export interface paths {
         get?: never;
         put: operations["updateAlertRuleEnabled"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rules/{id}/copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["copyAlertRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rule-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAlertRuleTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rule-templates/{id}/alert-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createAlertRuleFromTemplate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -684,6 +736,8 @@ export interface components {
             instance_ids: string[];
             evaluation_interval_seconds: number;
             enabled: boolean;
+            /** Format: uuid */
+            notification_policy_id?: string;
         };
         AlertRule: {
             /** Format: uuid */
@@ -706,6 +760,13 @@ export interface components {
             instance_ids: string[];
             evaluation_interval_seconds: number;
             enabled: boolean;
+            is_builtin: boolean;
+            builtin_identifier?: string;
+            /** Format: uuid */
+            notification_policy_id?: string;
+            effective_notification_policy_name: string;
+            source_template_id?: string;
+            source_template_version?: number;
             /** Format: uuid */
             enabled_updated_by?: string;
             /** Format: date-time */
@@ -718,6 +779,43 @@ export interface components {
         };
         AlertRuleEnabledInput: {
             enabled: boolean;
+        };
+        AlertRuleTemplate: {
+            id: string;
+            version: number;
+            name: string;
+            metric_id: string;
+            aggregation: components["schemas"]["AlertAggregation"];
+            operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            threshold: number;
+            recovery_operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            recovery_threshold: number;
+            window_seconds: number;
+            consecutive_count: number;
+            recovery_consecutive_count: number;
+            severity: components["schemas"]["AlertSeverity"];
+            no_data_policy: components["schemas"]["NoDataPolicy"];
+            evaluation_interval_seconds: number;
+        };
+        AlertRuleTemplateInstantiationInput: {
+            name?: string;
+            /** Format: double */
+            threshold?: number;
+            /** Format: double */
+            recovery_threshold?: number;
+            consecutive_count?: number;
+            recovery_consecutive_count?: number;
+            severity?: components["schemas"]["AlertSeverity"];
+            scope?: components["schemas"]["AlertRuleScope"];
+            instance_ids?: string[];
+            /** Format: uuid */
+            notification_policy_id?: string;
+            enabled?: boolean;
+        };
+        AlertRuleCopyInput: {
+            name?: string;
         };
         AlertDispositionInput: {
             disposition: components["schemas"]["AlertDisposition"];
@@ -1087,7 +1185,7 @@ export interface components {
         Error: {
             error: {
                 /** @enum {string} */
-                code: "VALIDATION_FAILED" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INTERNAL" | "NETWORK_UNREACHABLE" | "AUTH_FAILED" | "VERSION_UNSUPPORTED";
+                code: "VALIDATION_FAILED" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INTERNAL" | "NETWORK_UNREACHABLE" | "AUTH_FAILED" | "VERSION_UNSUPPORTED" | "BUILTIN_RULE_DELETE_FORBIDDEN" | "BUILTIN_RULE_DISABLE_FORBIDDEN" | "BUILTIN_RULE_SEVERITY_TOO_LOW";
                 message: string;
                 field_errors?: {
                     field: string;
@@ -1648,6 +1746,44 @@ export interface operations {
             };
         };
     };
+    deleteAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Built-in alert rules cannot be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     updateAlertRuleEnabled: {
         parameters: {
             query?: never;
@@ -1682,6 +1818,114 @@ export interface operations {
                 };
             };
             /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    copyAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleCopyInput"];
+            };
+        };
+        responses: {
+            /** @description Copied alert rule */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid copied rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertRuleTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only built-in alert rule templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRuleTemplate"][];
+                };
+            };
+        };
+    };
+    createAlertRuleFromTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleTemplateInstantiationInput"];
+            };
+        };
+        responses: {
+            /** @description Created from template defaults */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid template overrides */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule template not found */
             404: {
                 headers: {
                     [name: string]: unknown;

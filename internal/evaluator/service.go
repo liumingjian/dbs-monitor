@@ -70,7 +70,7 @@ func (service *Service) evaluateInstance(ctx context.Context, targets []alerting
 		}
 		queries := alerting.New(tx)
 		for _, target := range targets {
-			if err := service.evaluateRule(ctx, queries, target, now); err != nil {
+			if err := service.evaluateRule(ctx, tx, queries, target, now); err != nil {
 				return err
 			}
 		}
@@ -80,6 +80,7 @@ func (service *Service) evaluateInstance(ctx context.Context, targets []alerting
 
 func (service *Service) evaluateRule(
 	ctx context.Context,
+	database metric.DBTX,
 	queries *alerting.Queries,
 	scheduledTarget alerting.ListEvaluationTargetsRow,
 	now time.Time,
@@ -111,7 +112,7 @@ func (service *Service) evaluateRule(
 		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
 
-	metricResult, err := evaluateMetric(ctx, queries, evaluationTarget, scheduledTarget.MetricDimensionKey, now)
+	metricResult, err := evaluateMetric(ctx, database, queries, evaluationTarget, scheduledTarget.MetricDimensionKey, now)
 	if err != nil {
 		return err
 	}
@@ -286,6 +287,7 @@ func snapshotFromEvaluationTarget(target alerting.GetEvaluationTargetRow) alerti
 
 func evaluateMetric(
 	ctx context.Context,
+	database metric.DBTX,
 	queries *alerting.Queries,
 	target alerting.GetEvaluationTargetRow,
 	metricDimensionKey string,
@@ -295,7 +297,29 @@ func evaluateMetric(
 		outcome:        alerting.Missing,
 		unavailability: pgtype.Text{String: "NO_SAMPLES_YET", Valid: true},
 	}
-	if strings.HasPrefix(target.MetricID, "pg.") && target.LastErrorCode.Valid {
+	metricID := metric.MetricID(target.MetricID)
+	if metric.ProducerFor(metricID) == metric.ProducerControlPlane {
+		facts, err := metric.ReadControlPlaneFacts(ctx, database, target.InstanceID)
+		if err != nil {
+			return metricEvaluation{}, fmt.Errorf("read control-plane metric facts: %w", err)
+		}
+		projection, ok := metric.ProjectControlPlaneMetric(metricID, facts, now)
+		if !ok {
+			return result, nil
+		}
+		value := controlPlaneRuleValue(metricID, projection, now)
+		result.currentValue = pgtype.Float8{Float64: value, Valid: true}
+		result.unavailability = pgtype.Text{}
+		result.outcome = alerting.Evaluate(
+			value,
+			target.Operator,
+			target.Threshold,
+			target.RecoveryOperator,
+			target.RecoveryThreshold,
+		)
+		return result, nil
+	}
+	if collectionFailureBlocksSamples(metricID, target.LastErrorCode) {
 		result.unavailability = target.LastErrorCode
 		return result, nil
 	}
@@ -334,6 +358,19 @@ func evaluateMetric(
 		target.RecoveryThreshold,
 	)
 	return result, nil
+}
+
+func controlPlaneRuleValue(metricID metric.MetricID, projection metric.ControlPlaneProjection, now time.Time) float64 {
+	if metricID == metric.MetricCollectorLastSuccessTime {
+		return now.Sub(time.Unix(int64(projection.Value), 0)).Seconds()
+	}
+	return projection.Value
+}
+
+func collectionFailureBlocksSamples(metricID metric.MetricID, lastErrorCode pgtype.Text) bool {
+	return strings.HasPrefix(metricID.String(), "pg.") &&
+		metricID != metric.MetricAvailabilityReachable &&
+		lastErrorCode.Valid
 }
 
 func structurallyNotApplicable(metricID metric.MetricID, lastErrorCode pgtype.Text, agentMetricsEnabled, agentExpected bool) bool {

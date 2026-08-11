@@ -106,6 +106,14 @@ type ClientInterface interface {
 	// GetAlertTriggerSnapshot request
 	GetAlertTriggerSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListAlertRuleTemplates request
+	ListAlertRuleTemplates(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateAlertRuleFromTemplateWithBody request with any body
+	CreateAlertRuleFromTemplateWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateAlertRuleFromTemplate(ctx context.Context, id string, body CreateAlertRuleFromTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListAlertRules request
 	ListAlertRules(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -114,10 +122,18 @@ type ClientInterface interface {
 
 	CreateAlertRule(ctx context.Context, body CreateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteAlertRule request
+	DeleteAlertRule(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UpdateAlertRuleWithBody request with any body
 	UpdateAlertRuleWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	UpdateAlertRule(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CopyAlertRuleWithBody request with any body
+	CopyAlertRuleWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CopyAlertRule(ctx context.Context, id openapi_types.UUID, body CopyAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// UpdateAlertRuleEnabledWithBody request with any body
 	UpdateAlertRuleEnabledWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -325,6 +341,42 @@ func (c *Client) GetAlertTriggerSnapshot(ctx context.Context, id openapi_types.U
 	return c.Client.Do(req)
 }
 
+func (c *Client) ListAlertRuleTemplates(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertRuleTemplatesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateAlertRuleFromTemplateWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAlertRuleFromTemplateRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateAlertRuleFromTemplate(ctx context.Context, id string, body CreateAlertRuleFromTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAlertRuleFromTemplateRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListAlertRules(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListAlertRulesRequest(c.Server)
 	if err != nil {
@@ -361,6 +413,18 @@ func (c *Client) CreateAlertRule(ctx context.Context, body CreateAlertRuleJSONRe
 	return c.Client.Do(req)
 }
 
+func (c *Client) DeleteAlertRule(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteAlertRuleRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) UpdateAlertRuleWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateAlertRuleRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
@@ -375,6 +439,30 @@ func (c *Client) UpdateAlertRuleWithBody(ctx context.Context, id openapi_types.U
 
 func (c *Client) UpdateAlertRule(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateAlertRuleRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CopyAlertRuleWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCopyAlertRuleRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CopyAlertRule(ctx context.Context, id openapi_types.UUID, body CopyAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCopyAlertRuleRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1116,6 +1204,80 @@ func NewGetAlertTriggerSnapshotRequest(server string, id openapi_types.UUID) (*h
 	return req, nil
 }
 
+// NewListAlertRuleTemplatesRequest generates requests for ListAlertRuleTemplates
+func NewListAlertRuleTemplatesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-rule-templates")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateAlertRuleFromTemplateRequest calls the generic CreateAlertRuleFromTemplate builder with application/json body
+func NewCreateAlertRuleFromTemplateRequest(server string, id string, body CreateAlertRuleFromTemplateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateAlertRuleFromTemplateRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCreateAlertRuleFromTemplateRequestWithBody generates requests for CreateAlertRuleFromTemplate with any type of body
+func NewCreateAlertRuleFromTemplateRequestWithBody(server string, id string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-rule-templates/%s/alert-rules", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListAlertRulesRequest generates requests for ListAlertRules
 func NewListAlertRulesRequest(server string) (*http.Request, error) {
 	var err error
@@ -1183,6 +1345,40 @@ func NewCreateAlertRuleRequestWithBody(server string, contentType string, body i
 	return req, nil
 }
 
+// NewDeleteAlertRuleRequest generates requests for DeleteAlertRule
+func NewDeleteAlertRuleRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-rules/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewUpdateAlertRuleRequest calls the generic UpdateAlertRule builder with application/json body
 func NewUpdateAlertRuleRequest(server string, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1221,6 +1417,53 @@ func NewUpdateAlertRuleRequestWithBody(server string, id openapi_types.UUID, con
 	}
 
 	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCopyAlertRuleRequest calls the generic CopyAlertRule builder with application/json body
+func NewCopyAlertRuleRequest(server string, id openapi_types.UUID, body CopyAlertRuleJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCopyAlertRuleRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewCopyAlertRuleRequestWithBody generates requests for CopyAlertRule with any type of body
+func NewCopyAlertRuleRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-rules/%s/copies", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2845,6 +3088,14 @@ type ClientWithResponsesInterface interface {
 	// GetAlertTriggerSnapshotWithResponse request
 	GetAlertTriggerSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertTriggerSnapshotResponse, error)
 
+	// ListAlertRuleTemplatesWithResponse request
+	ListAlertRuleTemplatesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error)
+
+	// CreateAlertRuleFromTemplateWithBodyWithResponse request with any body
+	CreateAlertRuleFromTemplateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlertRuleFromTemplateResponse, error)
+
+	CreateAlertRuleFromTemplateWithResponse(ctx context.Context, id string, body CreateAlertRuleFromTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlertRuleFromTemplateResponse, error)
+
 	// ListAlertRulesWithResponse request
 	ListAlertRulesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRulesResponse, error)
 
@@ -2853,10 +3104,18 @@ type ClientWithResponsesInterface interface {
 
 	CreateAlertRuleWithResponse(ctx context.Context, body CreateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlertRuleResponse, error)
 
+	// DeleteAlertRuleWithResponse request
+	DeleteAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAlertRuleResponse, error)
+
 	// UpdateAlertRuleWithBodyWithResponse request with any body
 	UpdateAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error)
 
 	UpdateAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error)
+
+	// CopyAlertRuleWithBodyWithResponse request with any body
+	CopyAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CopyAlertRuleResponse, error)
+
+	CopyAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, body CopyAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*CopyAlertRuleResponse, error)
 
 	// UpdateAlertRuleEnabledWithBodyWithResponse request with any body
 	UpdateAlertRuleEnabledWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error)
@@ -3086,6 +3345,52 @@ func (r GetAlertTriggerSnapshotResponse) StatusCode() int {
 	return 0
 }
 
+type ListAlertRuleTemplatesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]AlertRuleTemplate
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertRuleTemplatesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertRuleTemplatesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateAlertRuleFromTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *AlertRule
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateAlertRuleFromTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateAlertRuleFromTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListAlertRulesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3131,6 +3436,29 @@ func (r CreateAlertRuleResponse) StatusCode() int {
 	return 0
 }
 
+type DeleteAlertRuleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *Error
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteAlertRuleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteAlertRuleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type UpdateAlertRuleResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3149,6 +3477,30 @@ func (r UpdateAlertRuleResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateAlertRuleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CopyAlertRuleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *AlertRule
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CopyAlertRuleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CopyAlertRuleResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4042,6 +4394,32 @@ func (c *ClientWithResponses) GetAlertTriggerSnapshotWithResponse(ctx context.Co
 	return ParseGetAlertTriggerSnapshotResponse(rsp)
 }
 
+// ListAlertRuleTemplatesWithResponse request returning *ListAlertRuleTemplatesResponse
+func (c *ClientWithResponses) ListAlertRuleTemplatesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error) {
+	rsp, err := c.ListAlertRuleTemplates(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertRuleTemplatesResponse(rsp)
+}
+
+// CreateAlertRuleFromTemplateWithBodyWithResponse request with arbitrary body returning *CreateAlertRuleFromTemplateResponse
+func (c *ClientWithResponses) CreateAlertRuleFromTemplateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlertRuleFromTemplateResponse, error) {
+	rsp, err := c.CreateAlertRuleFromTemplateWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAlertRuleFromTemplateResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateAlertRuleFromTemplateWithResponse(ctx context.Context, id string, body CreateAlertRuleFromTemplateJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlertRuleFromTemplateResponse, error) {
+	rsp, err := c.CreateAlertRuleFromTemplate(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAlertRuleFromTemplateResponse(rsp)
+}
+
 // ListAlertRulesWithResponse request returning *ListAlertRulesResponse
 func (c *ClientWithResponses) ListAlertRulesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRulesResponse, error) {
 	rsp, err := c.ListAlertRules(ctx, reqEditors...)
@@ -4068,6 +4446,15 @@ func (c *ClientWithResponses) CreateAlertRuleWithResponse(ctx context.Context, b
 	return ParseCreateAlertRuleResponse(rsp)
 }
 
+// DeleteAlertRuleWithResponse request returning *DeleteAlertRuleResponse
+func (c *ClientWithResponses) DeleteAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAlertRuleResponse, error) {
+	rsp, err := c.DeleteAlertRule(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteAlertRuleResponse(rsp)
+}
+
 // UpdateAlertRuleWithBodyWithResponse request with arbitrary body returning *UpdateAlertRuleResponse
 func (c *ClientWithResponses) UpdateAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error) {
 	rsp, err := c.UpdateAlertRuleWithBody(ctx, id, contentType, body, reqEditors...)
@@ -4083,6 +4470,23 @@ func (c *ClientWithResponses) UpdateAlertRuleWithResponse(ctx context.Context, i
 		return nil, err
 	}
 	return ParseUpdateAlertRuleResponse(rsp)
+}
+
+// CopyAlertRuleWithBodyWithResponse request with arbitrary body returning *CopyAlertRuleResponse
+func (c *ClientWithResponses) CopyAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CopyAlertRuleResponse, error) {
+	rsp, err := c.CopyAlertRuleWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCopyAlertRuleResponse(rsp)
+}
+
+func (c *ClientWithResponses) CopyAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, body CopyAlertRuleJSONRequestBody, reqEditors ...RequestEditorFn) (*CopyAlertRuleResponse, error) {
+	rsp, err := c.CopyAlertRule(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCopyAlertRuleResponse(rsp)
 }
 
 // UpdateAlertRuleEnabledWithBodyWithResponse request with arbitrary body returning *UpdateAlertRuleEnabledResponse
@@ -4652,6 +5056,72 @@ func ParseGetAlertTriggerSnapshotResponse(rsp *http.Response) (*GetAlertTriggerS
 	return response, nil
 }
 
+// ParseListAlertRuleTemplatesResponse parses an HTTP response from a ListAlertRuleTemplatesWithResponse call
+func ParseListAlertRuleTemplatesResponse(rsp *http.Response) (*ListAlertRuleTemplatesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertRuleTemplatesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []AlertRuleTemplate
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateAlertRuleFromTemplateResponse parses an HTTP response from a CreateAlertRuleFromTemplateWithResponse call
+func ParseCreateAlertRuleFromTemplateResponse(rsp *http.Response) (*CreateAlertRuleFromTemplateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateAlertRuleFromTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AlertRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListAlertRulesResponse parses an HTTP response from a ListAlertRulesWithResponse call
 func ParseListAlertRulesResponse(rsp *http.Response) (*ListAlertRulesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4711,6 +5181,39 @@ func ParseCreateAlertRuleResponse(rsp *http.Response) (*CreateAlertRuleResponse,
 	return response, nil
 }
 
+// ParseDeleteAlertRuleResponse parses an HTTP response from a DeleteAlertRuleWithResponse call
+func ParseDeleteAlertRuleResponse(rsp *http.Response) (*DeleteAlertRuleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteAlertRuleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseUpdateAlertRuleResponse parses an HTTP response from a UpdateAlertRuleWithResponse call
 func ParseUpdateAlertRuleResponse(rsp *http.Response) (*UpdateAlertRuleResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -4731,6 +5234,46 @@ func ParseUpdateAlertRuleResponse(rsp *http.Response) (*UpdateAlertRuleResponse,
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCopyAlertRuleResponse parses an HTTP response from a CopyAlertRuleWithResponse call
+func ParseCopyAlertRuleResponse(rsp *http.Response) (*CopyAlertRuleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CopyAlertRuleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AlertRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Error

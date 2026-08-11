@@ -549,6 +549,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - alert-rules
+      operationId: deleteAlertRule
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Built-in alert rules cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/alert-rules/{id}/enabled:
     parameters:
       - name: id
@@ -583,6 +603,97 @@ paths:
                 $ref: '#/components/schemas/Error'
         '404':
           description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-rules/{id}/copies:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - alert-rules
+      operationId: copyAlertRule
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleCopyInput'
+      responses:
+        '201':
+          description: Copied alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid copied rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-rule-templates:
+    get:
+      tags:
+        - alert-rules
+      operationId: listAlertRuleTemplates
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Read-only built-in alert rule templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertRuleTemplate'
+  /api/v1/alert-rule-templates/{id}/alert-rules:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+    post:
+      tags:
+        - alert-rules
+      operationId: createAlertRuleFromTemplate
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleTemplateInstantiationInput'
+      responses:
+        '201':
+          description: Created from template defaults
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid template overrides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule template not found
           content:
             application/json:
               schema:
@@ -1381,6 +1492,9 @@ components:
           minimum: 5
         enabled:
           type: boolean
+        notification_policy_id:
+          type: string
+          format: uuid
     AlertRule:
       type: object
       required:
@@ -1401,6 +1515,8 @@ components:
         - instance_ids
         - evaluation_interval_seconds
         - enabled
+        - is_builtin
+        - effective_notification_policy_name
         - version
         - created_at
         - updated_at
@@ -1445,6 +1561,19 @@ components:
           type: integer
         enabled:
           type: boolean
+        is_builtin:
+          type: boolean
+        builtin_identifier:
+          type: string
+        notification_policy_id:
+          type: string
+          format: uuid
+        effective_notification_policy_name:
+          type: string
+        source_template_id:
+          type: string
+        source_template_version:
+          type: integer
         enabled_updated_by:
           type: string
           format: uuid
@@ -1466,6 +1595,96 @@ components:
       properties:
         enabled:
           type: boolean
+    AlertRuleTemplate:
+      type: object
+      required:
+        - id
+        - version
+        - name
+        - metric_id
+        - aggregation
+        - operator
+        - threshold
+        - recovery_operator
+        - recovery_threshold
+        - window_seconds
+        - consecutive_count
+        - recovery_consecutive_count
+        - severity
+        - no_data_policy
+        - evaluation_interval_seconds
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        name:
+          type: string
+        metric_id:
+          type: string
+        aggregation:
+          $ref: '#/components/schemas/AlertAggregation'
+        operator:
+          $ref: '#/components/schemas/AlertOperator'
+        threshold:
+          type: number
+          format: double
+        recovery_operator:
+          $ref: '#/components/schemas/AlertOperator'
+        recovery_threshold:
+          type: number
+          format: double
+        window_seconds:
+          type: integer
+        consecutive_count:
+          type: integer
+        recovery_consecutive_count:
+          type: integer
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        no_data_policy:
+          $ref: '#/components/schemas/NoDataPolicy'
+        evaluation_interval_seconds:
+          type: integer
+    AlertRuleTemplateInstantiationInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        threshold:
+          type: number
+          format: double
+        recovery_threshold:
+          type: number
+          format: double
+        consecutive_count:
+          type: integer
+          minimum: 1
+        recovery_consecutive_count:
+          type: integer
+          minimum: 1
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        scope:
+          $ref: '#/components/schemas/AlertRuleScope'
+        instance_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        notification_policy_id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+    AlertRuleCopyInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
     AlertDispositionInput:
       type: object
       required:
@@ -2396,6 +2615,9 @@ components:
                 - NETWORK_UNREACHABLE
                 - AUTH_FAILED
                 - VERSION_UNSUPPORTED
+                - BUILTIN_RULE_DELETE_FORBIDDEN
+                - BUILTIN_RULE_DISABLE_FORBIDDEN
+                - BUILTIN_RULE_SEVERITY_TOO_LOW
               x-enum-varnames:
                 - VALIDATIONFAILED
                 - UNAUTHENTICATED
@@ -2406,6 +2628,9 @@ components:
                 - NETWORKUNREACHABLE
                 - AUTHFAILED
                 - ONBOARDINGVERSIONUNSUPPORTED
+                - BUILTINRULEDELETEFORBIDDEN
+                - BUILTINRULEDISABLEFORBIDDEN
+                - BUILTINRULESEVERITYTOOLOW
             message:
               type: string
             field_errors:

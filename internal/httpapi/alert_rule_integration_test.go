@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -58,7 +59,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}
-	currentClock := &fixedClock{now: time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)}
+	currentClock := &fixedClock{now: time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)}
 
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
@@ -76,8 +77,118 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("login status = %d, want 204", login.StatusCode)
 	}
 
+	templatesResponse := getResponse(t, client, server.URL+"/api/v1/alert-rule-templates")
+	defer templatesResponse.Body.Close()
+	var templates []api.AlertRuleTemplate
+	if templatesResponse.StatusCode != http.StatusOK || json.NewDecoder(templatesResponse.Body).Decode(&templates) != nil {
+		t.Fatalf("list templates status = %d", templatesResponse.StatusCode)
+	}
+	if len(templates) != 15 {
+		t.Fatalf("alert rule templates = %d, want 15", len(templates))
+	}
+	var cpuTemplate api.AlertRuleTemplate
+	for _, template := range templates {
+		if template.Id == "cpu_high" {
+			cpuTemplate = template
+		}
+	}
+	if cpuTemplate.MetricId != "host.cpu.usage_percent" || cpuTemplate.Aggregation != api.Avg ||
+		cpuTemplate.Threshold != 80 || cpuTemplate.RecoveryThreshold != 70 || cpuTemplate.ConsecutiveCount != 5 ||
+		cpuTemplate.EvaluationIntervalSeconds != 60 || cpuTemplate.Severity != api.Warning {
+		t.Fatalf("CPU template = %+v", cpuTemplate)
+	}
+
+	fromTemplateResponse := requestJSON(t, client, http.MethodPost,
+		server.URL+"/api/v1/alert-rule-templates/cpu_high/alert-rules",
+		map[string]any{"name": "Custom CPU", "threshold": 90, "severity": "critical"}, "")
+	defer fromTemplateResponse.Body.Close()
+	var fromTemplate api.AlertRule
+	if fromTemplateResponse.StatusCode != http.StatusCreated || json.NewDecoder(fromTemplateResponse.Body).Decode(&fromTemplate) != nil {
+		t.Fatalf("create from template status = %d", fromTemplateResponse.StatusCode)
+	}
+	if fromTemplate.Name != "Custom CPU" || fromTemplate.Threshold != 90 || fromTemplate.RecoveryThreshold != 70 ||
+		fromTemplate.SourceTemplateId == nil || *fromTemplate.SourceTemplateId != "cpu_high" ||
+		fromTemplate.SourceTemplateVersion == nil || *fromTemplate.SourceTemplateVersion != 1 ||
+		fromTemplate.IsBuiltin || fromTemplate.EffectiveNotificationPolicyName != "默认策略（继承）" {
+		t.Fatalf("rule created from template = %+v", fromTemplate)
+	}
+
+	copyResponse := requestJSON(t, client, http.MethodPost,
+		server.URL+"/api/v1/alert-rules/"+fromTemplate.Id.String()+"/copies",
+		map[string]any{"name": "Copied CPU"}, "")
+	defer copyResponse.Body.Close()
+	var copied api.AlertRule
+	if copyResponse.StatusCode != http.StatusCreated || json.NewDecoder(copyResponse.Body).Decode(&copied) != nil {
+		t.Fatalf("copy alert rule status = %d", copyResponse.StatusCode)
+	}
+	if copied.Id == fromTemplate.Id || copied.Name != "Copied CPU" || copied.Threshold != fromTemplate.Threshold ||
+		copied.SourceTemplateId != nil || copied.SourceTemplateVersion != nil {
+		t.Fatalf("copied alert rule = %+v", copied)
+	}
+	for _, ruleID := range []uuid.UUID{copied.Id, fromTemplate.Id} {
+		deleted := requestJSON(t, client, http.MethodDelete, server.URL+"/api/v1/alert-rules/"+ruleID.String(), nil, "")
+		deleted.Body.Close()
+		if deleted.StatusCode != http.StatusNoContent {
+			t.Fatalf("delete copied/template rule status = %d, want 204", deleted.StatusCode)
+		}
+	}
+
+	rulesResponse := getResponse(t, client, server.URL+"/api/v1/alert-rules")
+	defer rulesResponse.Body.Close()
+	var rules []api.AlertRule
+	if rulesResponse.StatusCode != http.StatusOK || json.NewDecoder(rulesResponse.Body).Decode(&rules) != nil {
+		t.Fatalf("list alert rules status = %d", rulesResponse.StatusCode)
+	}
+	var databaseRule api.AlertRule
+	builtinCount := 0
+	for _, rule := range rules {
+		if !rule.IsBuiltin {
+			continue
+		}
+		builtinCount++
+		if rule.BuiltinIdentifier != nil && *rule.BuiltinIdentifier == "database_unreachable" {
+			databaseRule = rule
+		}
+	}
+	if builtinCount != 3 || databaseRule.Id == uuid.Nil || !databaseRule.Enabled || databaseRule.Scope != api.ALL ||
+		databaseRule.Severity != api.Critical || databaseRule.EffectiveNotificationPolicyName != "默认策略（继承）" {
+		t.Fatalf("seeded built-in rules = count %d database rule %+v", builtinCount, databaseRule)
+	}
+
+	disabledBuiltin := requestJSON(t, client, http.MethodPut,
+		server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String()+"/enabled", map[string]any{"enabled": false}, "")
+	assertRuleErrorCode(t, disabledBuiltin, http.StatusBadRequest, "BUILTIN_RULE_DISABLE_FORBIDDEN")
+	deletedBuiltin := requestJSON(t, client, http.MethodDelete,
+		server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String(), nil, "")
+	assertRuleErrorCode(t, deletedBuiltin, http.StatusConflict, "BUILTIN_RULE_DELETE_FORBIDDEN")
+	infoInput := map[string]any{
+		"name": databaseRule.Name, "metric_id": databaseRule.MetricId,
+		"aggregation": databaseRule.Aggregation, "operator": databaseRule.Operator, "threshold": databaseRule.Threshold,
+		"recovery_operator": databaseRule.RecoveryOperator, "recovery_threshold": databaseRule.RecoveryThreshold,
+		"window_seconds": databaseRule.WindowSeconds, "consecutive_count": databaseRule.ConsecutiveCount,
+		"recovery_consecutive_count": databaseRule.RecoveryConsecutiveCount, "severity": "info",
+		"no_data_policy": databaseRule.NoDataPolicy, "scope": databaseRule.Scope,
+		"instance_ids": databaseRule.InstanceIds, "evaluation_interval_seconds": databaseRule.EvaluationIntervalSeconds,
+		"enabled": databaseRule.Enabled,
+	}
+	infoBuiltin := requestJSON(t, client, http.MethodPut,
+		server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String(), infoInput, "")
+	assertRuleErrorCode(t, infoBuiltin, http.StatusBadRequest, "BUILTIN_RULE_SEVERITY_TOO_LOW")
+
 	targetID := createAlertTestInstance(t, ctx, pool, keyring, "target")
 	otherID := createAlertTestInstance(t, ctx, pool, keyring, "out-of-scope")
+	reachabilitySeriesID := createAlertTestSeriesForMetric(t, ctx, pool, targetID, currentClock.now, "pg.availability.reachable")
+	snapshotConnections := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
+	seededEvaluator := evaluator.New(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection)
+	for step := range 3 {
+		insertAlertTestSample(t, ctx, pool, reachabilitySeriesID, currentClock.now, 0)
+		runAlertEvaluation(t, ctx, seededEvaluator)
+		if step < 2 {
+			currentClock.Advance(30 * time.Second)
+		}
+	}
+	assertAlertState(t, ctx, pool, databaseRule.Id, targetID, "FIRING", 3, 0, 0, 1)
+
 	invalidInput := alertRuleInput(targetID)
 	delete(invalidInput, "recovery_threshold")
 	invalid := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/alert-rules", invalidInput, "")
@@ -117,7 +228,6 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 
 	seriesID := createAlertTestSeries(t, ctx, pool, targetID, currentClock.now)
 	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
-	snapshotConnections := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
 	eval := evaluator.New(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "PENDING", 1, 0, 0, 1)
@@ -581,9 +691,13 @@ func createAlertTestInstance(t *testing.T, ctx context.Context, pool *pgxpool.Po
 }
 
 func createAlertTestSeries(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, now time.Time) int64 {
+	return createAlertTestSeriesForMetric(t, ctx, pool, instanceID, now, "pg.connection.active")
+}
+
+func createAlertTestSeriesForMetric(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, now time.Time, metricID string) int64 {
 	t.Helper()
 	seriesID, err := metric.New(pool).UpsertSeries(ctx, metric.UpsertSeriesParams{
-		InstanceID: pgtype.UUID{Bytes: instanceID, Valid: true}, MetricID: "pg.connection.active",
+		InstanceID: pgtype.UUID{Bytes: instanceID, Valid: true}, MetricID: metricID,
 		Labels: []byte(`{}`), LabelsKey: "{}", LastSeen: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
@@ -626,6 +740,22 @@ func runAlertEvaluation(t *testing.T, ctx context.Context, service *evaluator.Se
 	t.Helper()
 	if err := service.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate alert rules: %v", err)
+	}
+}
+
+func assertRuleErrorCode(t *testing.T, response *http.Response, wantStatus int, wantCode string) {
+	t.Helper()
+	defer response.Body.Close()
+	var body struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode alert rule error: %v", err)
+	}
+	if response.StatusCode != wantStatus || body.Error.Code != wantCode {
+		t.Fatalf("alert rule error = status %d code %q, want %d/%q", response.StatusCode, body.Error.Code, wantStatus, wantCode)
 	}
 }
 
