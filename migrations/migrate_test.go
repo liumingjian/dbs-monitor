@@ -71,6 +71,52 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		t.Fatal("second migration run replaced the master key")
 	}
 
+	lockConnection, err := database.Conn(ctx)
+	if err != nil {
+		t.Fatalf("reserve migration lock connection: %v", err)
+	}
+	defer lockConnection.Close()
+	const (
+		migrationLockID  int64 = 0x4442534d
+		migrationLockSQL       = `SELECT pg_advisory_lock(
+			((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
+		)`
+		migrationUnlockSQL = `SELECT pg_advisory_unlock(
+			((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
+		)`
+	)
+	if _, err := lockConnection.ExecContext(ctx, migrationLockSQL, migrationLockID); err != nil {
+		t.Fatalf("hold migration advisory lock: %v", err)
+	}
+	type migrationResult struct {
+		applied int
+		err     error
+	}
+	result := make(chan migrationResult, 1)
+	go func() {
+		applied, err := migrations.Up(ctx, database, keyringDirectory)
+		result <- migrationResult{applied: applied, err: err}
+	}()
+	select {
+	case completed := <-result:
+		t.Fatalf("concurrent migration completed while advisory lock was held: %+v", completed)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if _, err := lockConnection.ExecContext(ctx, migrationUnlockSQL, migrationLockID); err != nil {
+		t.Fatalf("release migration advisory lock: %v", err)
+	}
+	select {
+	case completed := <-result:
+		if completed.err != nil {
+			t.Fatalf("migration after advisory lock release: %v", completed.err)
+		}
+		if completed.applied != 0 {
+			t.Fatalf("migration after advisory lock release applied %d migrations, want 0", completed.applied)
+		}
+	case <-ctx.Done():
+		t.Fatalf("migration did not continue after advisory lock release: %v", ctx.Err())
+	}
+
 	var provider string
 	if err := database.QueryRowContext(ctx, "SELECT datlocprovider FROM pg_database WHERE datname = current_database()").Scan(&provider); err != nil {
 		t.Fatalf("query locale provider: %v", err)

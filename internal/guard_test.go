@@ -3,6 +3,7 @@ package internal_test
 import (
 	"bufio"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -73,6 +74,50 @@ func TestInstalledDatabaseAndCredentialKeyringStaySeparate(t *testing.T) {
 		if !strings.Contains(contents, required) {
 			t.Errorf("installer no longer enforces separate database and credential-keyring artifacts: missing %q", required)
 		}
+	}
+}
+
+func TestLegacyUpgradeBacksUpControlPlaneBeforeReplacingFiles(t *testing.T) {
+	root := filepath.Join(internalRoot(t), "..")
+	upgradePath := filepath.Join(root, "packaging", "bundle", "upgrade.sh")
+	contents, err := os.ReadFile(upgradePath)
+	if err != nil {
+		t.Fatalf("read upgrade script: %v", err)
+	}
+	if output, err := exec.Command("sh", "-n", upgradePath).CombinedOutput(); err != nil {
+		t.Fatalf("upgrade script syntax: %v\n%s", err, output)
+	}
+	script := string(contents)
+	for _, required := range []string{
+		"systemctl stop dbs-monitor-server.service",
+		"--format=custom",
+		"--exclude-table-data=public.metric_sample*",
+		`/pg_restore" --list`,
+		"systemctl stop dbs-monitor-postgres.service",
+		"systemctl start dbs-monitor-postgres.service",
+		"systemctl start dbs-monitor-server.service",
+		"PostgreSQL major-version upgrades require a separate migration",
+	} {
+		if !strings.Contains(script, required) {
+			t.Errorf("upgrade script is missing %q", required)
+		}
+	}
+	stopServerIndex := strings.Index(script, "systemctl stop dbs-monitor-server.service")
+	backupIndex := strings.Index(script, "--format=custom")
+	stopPostgresIndex := strings.Index(script, "systemctl stop dbs-monitor-postgres.service")
+	startPostgresIndex := strings.Index(script, "systemctl start dbs-monitor-postgres.service")
+	startServerIndex := strings.Index(script, "systemctl start dbs-monitor-server.service")
+	if stopServerIndex >= backupIndex || backupIndex >= stopPostgresIndex ||
+		stopPostgresIndex >= startPostgresIndex || startPostgresIndex >= startServerIndex {
+		t.Error("upgrade order must be stop server, back up, replace/restart PostgreSQL, then start server")
+	}
+
+	packagerContents, err := os.ReadFile(filepath.Join(root, "scripts", "package-linux.sh"))
+	if err != nil {
+		t.Fatalf("read Linux packager: %v", err)
+	}
+	if !strings.Contains(string(packagerContents), "packaging/bundle/upgrade.sh") {
+		t.Error("legacy Linux archive does not include upgrade.sh")
 	}
 }
 

@@ -79,9 +79,9 @@ else
 fi
 cp -a "$work/stage$install_prefix" "$work/bundle/pgsql"
 cp -a packaging/systemd "$work/bundle/systemd"
-cp packaging/bundle/install.sh packaging/bundle/README-install.md "$work/bundle/"
+cp packaging/bundle/install.sh packaging/bundle/upgrade.sh packaging/bundle/README-install.md "$work/bundle/"
 printf '%s\n' "$arch" >"$work/bundle/ARCH"
-chmod 0755 "$work/bundle/install.sh" "$work/bundle/bin/"*
+chmod 0755 "$work/bundle/install.sh" "$work/bundle/upgrade.sh" "$work/bundle/bin/"*
 
 archive_name="dbs-monitor-$version-linux-$arch.tar.gz"
 archive="$output/$archive_name"
