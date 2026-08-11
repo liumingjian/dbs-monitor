@@ -10,6 +10,9 @@ import { instanceRoute } from './routes/instances.$id'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
 import { instanceSettingsRoute } from './routes/instances.$id/settings'
+import { longQuerySamplesRoute } from './routes/instances.$id/longQuerySamples'
+import { queryStatisticsRoute } from './routes/instances.$id/queryStatisticsPage'
+import { sessionsRoute } from './routes/instances.$id/sessions'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { rootRoute } from './routes/root'
@@ -26,6 +29,9 @@ const routeTree = rootRoute.addChildren([
   instanceAlertDetailRoute,
   collectionManagementRoute,
   instanceSettingsRoute,
+  sessionsRoute,
+  longQuerySamplesRoute,
+  queryStatisticsRoute,
   usersRoute,
 ])
 const router = createRouter({ routeTree, defaultPreload: 'intent' })

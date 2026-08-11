@@ -240,6 +240,9 @@ type ClientInterface interface {
 	// GetQueryStatisticsSnapshot request
 	GetQueryStatisticsSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetSessionSnapshot request
+	GetSessionSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CreateSessionWithBody request with any body
 	CreateSessionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -916,6 +919,18 @@ func (c *Client) ListPerformanceEvents(ctx context.Context, id openapi_types.UUI
 
 func (c *Client) GetQueryStatisticsSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetQueryStatisticsSnapshotRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSessionSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSessionSnapshotRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -2950,6 +2965,40 @@ func NewGetQueryStatisticsSnapshotRequest(server string, id openapi_types.UUID) 
 	return req, nil
 }
 
+// NewGetSessionSnapshotRequest generates requests for GetSessionSnapshot
+func NewGetSessionSnapshotRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/sessions", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCreateSessionRequest calls the generic CreateSession builder with application/json body
 func NewCreateSessionRequest(server string, body CreateSessionJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3478,6 +3527,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetQueryStatisticsSnapshotWithResponse request
 	GetQueryStatisticsSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetQueryStatisticsSnapshotResponse, error)
+
+	// GetSessionSnapshotWithResponse request
+	GetSessionSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSessionSnapshotResponse, error)
 
 	// CreateSessionWithBodyWithResponse request with any body
 	CreateSessionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateSessionResponse, error)
@@ -4470,6 +4522,28 @@ func (r GetQueryStatisticsSnapshotResponse) StatusCode() int {
 	return 0
 }
 
+type GetSessionSnapshotResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SessionSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSessionSnapshotResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSessionSnapshotResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type CreateSessionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5149,6 +5223,15 @@ func (c *ClientWithResponses) GetQueryStatisticsSnapshotWithResponse(ctx context
 		return nil, err
 	}
 	return ParseGetQueryStatisticsSnapshotResponse(rsp)
+}
+
+// GetSessionSnapshotWithResponse request returning *GetSessionSnapshotResponse
+func (c *ClientWithResponses) GetSessionSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSessionSnapshotResponse, error) {
+	rsp, err := c.GetSessionSnapshot(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSessionSnapshotResponse(rsp)
 }
 
 // CreateSessionWithBodyWithResponse request with arbitrary body returning *CreateSessionResponse
@@ -6554,6 +6637,32 @@ func ParseGetQueryStatisticsSnapshotResponse(rsp *http.Response) (*GetQueryStati
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest QueryStatisticsSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSessionSnapshotResponse parses an HTTP response from a GetSessionSnapshotWithResponse call
+func ParseGetSessionSnapshotResponse(rsp *http.Response) (*GetSessionSnapshotResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSessionSnapshotResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SessionSnapshot
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

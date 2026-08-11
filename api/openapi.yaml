@@ -38,6 +38,8 @@ paths:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1long-query-samples
   /api/v1/instances/{id}/query-stats:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1query-stats
+  /api/v1/instances/{id}/sessions:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1sessions
   /api/v1/alert-rules:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules
   /api/v1/alert-rules/{id}:

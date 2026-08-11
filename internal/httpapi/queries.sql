@@ -238,9 +238,15 @@ LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 -- name: GetLatestQueryStatisticsSnapshot :one
 SELECT sampled_at
 FROM query_statistics_snapshot
-WHERE instance_id = $1
+WHERE instance_id = sqlc.arg(instance_id)
+  AND sampled_at >= sqlc.arg(lower_bound)
 ORDER BY sampled_at DESC
 LIMIT 1;
+
+-- name: HasQueryStatisticsSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM query_statistics_snapshot WHERE instance_id = $1
+);
 
 -- name: ListQueryStatisticsSnapshotEntries :many
 SELECT queryid, database_oid, user_oid, calls, total_exec_time_ms
@@ -248,6 +254,27 @@ FROM query_statistics_snapshot_entry
 WHERE instance_id = sqlc.arg(instance_id)
   AND sampled_at = sqlc.arg(sampled_at)
 ORDER BY total_exec_time_ms DESC, queryid, database_oid, user_oid;
+
+-- name: GetRecentSessionSnapshot :one
+SELECT sampled_at, original_count, truncated
+FROM instance_session_snapshot
+WHERE instance_id = sqlc.arg(instance_id)
+  AND sampled_at >= sqlc.arg(lower_bound)
+LIMIT 1;
+
+-- name: HasSessionSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM instance_session_snapshot WHERE instance_id = $1
+);
+
+-- name: ListSessionSnapshotEntries :many
+SELECT pid, username, database_name, client_address, state,
+       query_started_at, transaction_started_at, query_duration_ms,
+       transaction_duration_ms, wait_event_type, wait_event, blocking_pids
+FROM instance_session_snapshot_entry
+WHERE instance_id = sqlc.arg(instance_id)
+ORDER BY pid
+LIMIT sqlc.arg(row_limit);
 
 -- name: GetPerformanceEvent :one
 SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,

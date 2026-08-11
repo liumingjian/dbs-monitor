@@ -162,3 +162,19 @@
         content:
           application/json:
             schema: { $ref: ../components/schemas/collection.yaml#/QueryStatisticsSnapshot }
+/api/v1/instances/{id}/sessions:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: getSessionSnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Latest successful pg_stat_activity session snapshot with a server-enforced hard cap
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/SessionSnapshot }

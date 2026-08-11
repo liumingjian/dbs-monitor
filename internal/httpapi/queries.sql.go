@@ -404,12 +404,18 @@ const getLatestQueryStatisticsSnapshot = `-- name: GetLatestQueryStatisticsSnaps
 SELECT sampled_at
 FROM query_statistics_snapshot
 WHERE instance_id = $1
+  AND sampled_at >= $2
 ORDER BY sampled_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetLatestQueryStatisticsSnapshot(ctx context.Context, instanceID pgtype.UUID) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, getLatestQueryStatisticsSnapshot, instanceID)
+type GetLatestQueryStatisticsSnapshotParams struct {
+	InstanceID pgtype.UUID
+	LowerBound pgtype.Timestamptz
+}
+
+func (q *Queries) GetLatestQueryStatisticsSnapshot(ctx context.Context, arg GetLatestQueryStatisticsSnapshotParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLatestQueryStatisticsSnapshot, arg.InstanceID, arg.LowerBound)
 	var sampled_at pgtype.Timestamptz
 	err := row.Scan(&sampled_at)
 	return sampled_at, err
@@ -471,6 +477,32 @@ func (q *Queries) GetPerformanceEvent(ctx context.Context, id pgtype.UUID) (GetP
 		&i.Threshold,
 		&i.TriggerSnapshotResult,
 	)
+	return i, err
+}
+
+const getRecentSessionSnapshot = `-- name: GetRecentSessionSnapshot :one
+SELECT sampled_at, original_count, truncated
+FROM instance_session_snapshot
+WHERE instance_id = $1
+  AND sampled_at >= $2
+LIMIT 1
+`
+
+type GetRecentSessionSnapshotParams struct {
+	InstanceID pgtype.UUID
+	LowerBound pgtype.Timestamptz
+}
+
+type GetRecentSessionSnapshotRow struct {
+	SampledAt     pgtype.Timestamptz
+	OriginalCount int32
+	Truncated     bool
+}
+
+func (q *Queries) GetRecentSessionSnapshot(ctx context.Context, arg GetRecentSessionSnapshotParams) (GetRecentSessionSnapshotRow, error) {
+	row := q.db.QueryRow(ctx, getRecentSessionSnapshot, arg.InstanceID, arg.LowerBound)
+	var i GetRecentSessionSnapshotRow
+	err := row.Scan(&i.SampledAt, &i.OriginalCount, &i.Truncated)
 	return i, err
 }
 
@@ -691,6 +723,30 @@ func (q *Queries) ListAlertRuleVersionHistory(ctx context.Context, alertInstance
 		return nil, err
 	}
 	return items, nil
+const hasQueryStatisticsSnapshot = `-- name: HasQueryStatisticsSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM query_statistics_snapshot WHERE instance_id = $1
+)
+`
+
+func (q *Queries) HasQueryStatisticsSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasQueryStatisticsSnapshot, instanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasSessionSnapshot = `-- name: HasSessionSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM instance_session_snapshot WHERE instance_id = $1
+)
+`
+
+func (q *Queries) HasSessionSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSessionSnapshot, instanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const listAlertTriggerSnapshotSessions = `-- name: ListAlertTriggerSnapshotSessions :many
@@ -1042,6 +1098,69 @@ func (q *Queries) ListQueryStatisticsSnapshotEntries(ctx context.Context, arg Li
 			&i.UserOid,
 			&i.Calls,
 			&i.TotalExecTimeMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionSnapshotEntries = `-- name: ListSessionSnapshotEntries :many
+SELECT pid, username, database_name, client_address, state,
+       query_started_at, transaction_started_at, query_duration_ms,
+       transaction_duration_ms, wait_event_type, wait_event, blocking_pids
+FROM instance_session_snapshot_entry
+WHERE instance_id = $1
+ORDER BY pid
+LIMIT $2
+`
+
+type ListSessionSnapshotEntriesParams struct {
+	InstanceID pgtype.UUID
+	RowLimit   int32
+}
+
+type ListSessionSnapshotEntriesRow struct {
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+func (q *Queries) ListSessionSnapshotEntries(ctx context.Context, arg ListSessionSnapshotEntriesParams) ([]ListSessionSnapshotEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listSessionSnapshotEntries, arg.InstanceID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionSnapshotEntriesRow
+	for rows.Next() {
+		var i ListSessionSnapshotEntriesRow
+		if err := rows.Scan(
+			&i.Pid,
+			&i.Username,
+			&i.DatabaseName,
+			&i.ClientAddress,
+			&i.State,
+			&i.QueryStartedAt,
+			&i.TransactionStartedAt,
+			&i.QueryDurationMs,
+			&i.TransactionDurationMs,
+			&i.WaitEventType,
+			&i.WaitEvent,
+			&i.BlockingPids,
 		); err != nil {
 			return nil, err
 		}

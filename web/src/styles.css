@@ -11,6 +11,7 @@ figcaption { color: #52514e; font-size: 13px; }
 .workbench-heading { width: 100%; justify-content: space-between; }
 .monitoring-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; padding: 12px 0 18px; border-bottom: 1px solid #e1e0d9; }
 .enhanced-monitoring-controls .ant-select { flex: 1; }
+.snapshot-meta { width: 100%; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e1e0d9; }
 .metric-grid { display: grid; gap: 16px; }
 .metric-grid[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
 .metric-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -950,6 +950,31 @@ type QueryStatisticsSnapshot struct {
 // Role defines model for Role.
 type Role string
 
+// SessionSnapshot defines model for SessionSnapshot.
+type SessionSnapshot struct {
+	Items          []SessionSnapshotEntry `json:"items"`
+	OriginalCount  *int                   `json:"original_count,omitempty"`
+	SampledAt      *time.Time             `json:"sampled_at,omitempty"`
+	Truncated      bool                   `json:"truncated"`
+	Unavailability *Unavailability        `json:"unavailability,omitempty"`
+}
+
+// SessionSnapshotEntry defines model for SessionSnapshotEntry.
+type SessionSnapshotEntry struct {
+	BlockingPids          []int32    `json:"blocking_pids"`
+	ClientAddress         *string    `json:"client_address,omitempty"`
+	DatabaseName          *string    `json:"database_name,omitempty"`
+	Pid                   int32      `json:"pid"`
+	QueryDurationMs       *int64     `json:"query_duration_ms,omitempty"`
+	QueryStartedAt        *time.Time `json:"query_started_at,omitempty"`
+	State                 *string    `json:"state,omitempty"`
+	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
+	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	WaitEvent             *string    `json:"wait_event,omitempty"`
+	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
+
 // Unavailability defines model for Unavailability.
 type Unavailability string
 
@@ -1219,6 +1244,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/instances/{id}/query-stats)
 	GetQueryStatisticsSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/sessions)
+	GetSessionSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (POST /api/v1/login)
 	CreateSession(w http.ResponseWriter, r *http.Request)
@@ -2409,6 +2437,31 @@ func (siw *ServerInterfaceWrapper) GetQueryStatisticsSnapshot(w http.ResponseWri
 	handler.ServeHTTP(w, r)
 }
 
+// GetSessionSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetSessionSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSessionSnapshot(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateSession operation middleware
 func (siw *ServerInterfaceWrapper) CreateSession(w http.ResponseWriter, r *http.Request) {
 
@@ -2741,6 +2794,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/performance-events", wrapper.ListPerformanceEvents)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/query-stats", wrapper.GetQueryStatisticsSnapshot)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/sessions", wrapper.GetSessionSnapshot)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
@@ -3756,6 +3810,23 @@ func (response GetQueryStatisticsSnapshot200JSONResponse) VisitGetQueryStatistic
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetSessionSnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetSessionSnapshotResponseObject interface {
+	VisitGetSessionSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetSessionSnapshot200JSONResponse SessionSnapshot
+
+func (response GetSessionSnapshot200JSONResponse) VisitGetSessionSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type CreateSessionRequestObject struct {
 	Body *CreateSessionJSONRequestBody
 }
@@ -4140,6 +4211,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/instances/{id}/query-stats)
 	GetQueryStatisticsSnapshot(ctx context.Context, request GetQueryStatisticsSnapshotRequestObject) (GetQueryStatisticsSnapshotResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/sessions)
+	GetSessionSnapshot(ctx context.Context, request GetSessionSnapshotRequestObject) (GetSessionSnapshotResponseObject, error)
 
 	// (POST /api/v1/login)
 	CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error)
@@ -5345,6 +5419,32 @@ func (sh *strictHandler) GetQueryStatisticsSnapshot(w http.ResponseWriter, r *ht
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetQueryStatisticsSnapshotResponseObject); ok {
 		if err := validResponse.VisitGetQueryStatisticsSnapshotResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSessionSnapshot operation middleware
+func (sh *strictHandler) GetSessionSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetSessionSnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSessionSnapshot(ctx, request.(GetSessionSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSessionSnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSessionSnapshotResponseObject); ok {
+		if err := validResponse.VisitGetSessionSnapshotResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

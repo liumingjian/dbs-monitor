@@ -26,6 +26,7 @@ import {
   type EnhancedPreferences,
 } from './enhancedMonitoring'
 import { metricOption, type MetricID } from './metricOptions'
+import { longQuerySamplesPageHref } from './sessionLayout'
 import {
   findStandardMonitoringChart,
   standardMonitoringGroups,
@@ -409,13 +410,12 @@ function unavailabilityHref(id: string, metric: MetricID, code: Unavailability |
 }
 
 function longQuerySamplesHref(id: string, search: MonitoringSearch): string {
-  const params = new URLSearchParams({
+  return longQuerySamplesPageHref(id, {
     from: search.from,
     to: search.to,
     metric: 'pg.query.long_running_count',
     sampled_at: search.to,
   })
-  return `/instances/${encodeURIComponent(id)}/sessions/long-query-samples?${params.toString()}`
 }
 
 function MetricDetails({ chart, metrics, onClose }: {

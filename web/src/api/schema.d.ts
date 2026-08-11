@@ -203,6 +203,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getSessionSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alert-rules": {
         parameters: {
             query?: never;
@@ -1324,6 +1342,33 @@ export interface components {
         };
         /** @enum {string} */
         CollectionTaskResult: "SUCCESS" | "FAILED" | "TIMED_OUT" | "SKIPPED_BACKPRESSURE" | "BACKOFF";
+        SessionSnapshotEntry: {
+            /** Format: int32 */
+            pid: number;
+            username?: string;
+            database_name?: string;
+            client_address?: string;
+            state?: string;
+            /** Format: date-time */
+            query_started_at?: string;
+            /** Format: date-time */
+            transaction_started_at?: string;
+            /** Format: int64 */
+            query_duration_ms?: number;
+            /** Format: int64 */
+            transaction_duration_ms?: number;
+            wait_event_type?: string;
+            wait_event?: string;
+            blocking_pids: number[];
+        };
+        SessionSnapshot: {
+            /** Format: date-time */
+            sampled_at?: string;
+            original_count?: number;
+            truncated: boolean;
+            unavailability?: components["schemas"]["Unavailability"];
+            items: components["schemas"]["SessionSnapshotEntry"][];
+        };
         AlertRuleVersionRecord: {
             version: number;
             snapshot: {
@@ -1782,6 +1827,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueryStatisticsSnapshot"];
+                };
+            };
+        };
+    };
+    getSessionSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest successful pg_stat_activity session snapshot with a server-enforced hard cap */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSnapshot"];
                 };
             };
         };
