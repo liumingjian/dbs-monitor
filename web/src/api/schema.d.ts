@@ -141,6 +141,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alert-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateAlertRule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rules/{id}/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateAlertRuleEnabled"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/report": {
         parameters: {
             query?: never;
@@ -277,6 +313,8 @@ export interface components {
         AlertSeverity: "critical" | "warning" | "info";
         /** @enum {string} */
         NoDataPolicy: "ignore" | "mark_no_data";
+        /** @enum {string} */
+        AlertRuleScope: "ALL" | "INSTANCES";
         AlertRuleInput: {
             name: string;
             metric_id: string;
@@ -289,9 +327,12 @@ export interface components {
             recovery_threshold: number;
             window_seconds: number;
             consecutive_count: number;
-            recovery_consecutive_count: number;
+            recovery_consecutive_count?: number;
             severity: components["schemas"]["AlertSeverity"];
             no_data_policy: components["schemas"]["NoDataPolicy"];
+            scope: components["schemas"]["AlertRuleScope"];
+            instance_ids: string[];
+            evaluation_interval_seconds: number;
             enabled: boolean;
         };
         AlertRule: {
@@ -311,12 +352,22 @@ export interface components {
             recovery_consecutive_count: number;
             severity: components["schemas"]["AlertSeverity"];
             no_data_policy: components["schemas"]["NoDataPolicy"];
+            scope: components["schemas"]["AlertRuleScope"];
+            instance_ids: string[];
+            evaluation_interval_seconds: number;
             enabled: boolean;
+            /** Format: uuid */
+            enabled_updated_by?: string;
+            /** Format: date-time */
+            enabled_updated_at?: string;
             version: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        AlertRuleEnabledInput: {
+            enabled: boolean;
         };
         InstanceInput: {
             name: string;
@@ -781,6 +832,94 @@ export interface operations {
             };
             /** @description Invalid alert rule */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Updated alert rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid alert rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAlertRuleEnabled: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleEnabledInput"];
+            };
+        };
+        responses: {
+            /** @description Updated alert rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid enablement request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

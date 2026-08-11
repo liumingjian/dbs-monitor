@@ -25,7 +25,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
-func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
+func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -56,8 +56,7 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}
-	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
-	currentClock := fixedClock{now: now}
+	currentClock := &fixedClock{now: time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)}
 
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
@@ -75,52 +74,239 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 		t.Fatalf("login status = %d, want 204", login.StatusCode)
 	}
 
-	instanceID := uuid.New()
-	pgInstanceID := pgtype.UUID{Bytes: instanceID, Valid: true}
-	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "unused")
-	if err != nil {
-		t.Fatalf("encrypt instance credential: %v", err)
+	targetID := createAlertTestInstance(t, ctx, pool, keyring, "target")
+	otherID := createAlertTestInstance(t, ctx, pool, keyring, "out-of-scope")
+	invalidInput := alertRuleInput(targetID)
+	delete(invalidInput, "recovery_threshold")
+	invalid := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/alert-rules", invalidInput, "")
+	defer invalid.Body.Close()
+	var invalidBody struct {
+		Error struct {
+			Code        string `json:"code"`
+			FieldErrors []struct {
+				Field string `json:"field"`
+			} `json:"field_errors"`
+		} `json:"error"`
 	}
-	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
-		ID: pgInstanceID, Name: "target", Host: "localhost", Port: 5432,
-		DatabaseName: "postgres", Username: "postgres", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
-	}); err != nil {
-		t.Fatalf("create instance: %v", err)
+	if invalid.StatusCode != http.StatusBadRequest || json.NewDecoder(invalid.Body).Decode(&invalidBody) != nil ||
+		invalidBody.Error.Code != "VALIDATION_FAILED" || len(invalidBody.Error.FieldErrors) != 1 ||
+		invalidBody.Error.FieldErrors[0].Field != "recovery_threshold" {
+		t.Fatalf("missing recovery threshold response = status %d body %+v", invalid.StatusCode, invalidBody)
 	}
 
-	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/alert-rules", map[string]any{
-		"name":                       "High active connections",
-		"metric_id":                  "pg.connection.active",
-		"aggregation":                "latest",
-		"operator":                   ">=",
-		"threshold":                  10,
-		"recovery_operator":          "<",
-		"recovery_threshold":         5,
-		"window_seconds":             60,
-		"consecutive_count":          2,
-		"recovery_consecutive_count": 2,
-		"severity":                   "warning",
-		"no_data_policy":             "mark_no_data",
-		"enabled":                    true,
-	}, "")
+	ruleInput := alertRuleInput(targetID)
+	delete(ruleInput, "recovery_consecutive_count")
+	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/alert-rules", ruleInput, "")
 	defer created.Body.Close()
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create rule status = %d, want 201", created.StatusCode)
 	}
 	var createdRule struct {
-		ID      uuid.UUID `json:"id"`
-		Version int       `json:"version"`
+		ID                       uuid.UUID `json:"id"`
+		Version                  int       `json:"version"`
+		RecoveryConsecutiveCount int       `json:"recovery_consecutive_count"`
 	}
 	if err := json.NewDecoder(created.Body).Decode(&createdRule); err != nil {
 		t.Fatalf("decode created rule: %v", err)
 	}
-	if createdRule.ID == uuid.Nil || createdRule.Version != 1 {
+	if createdRule.ID == uuid.Nil || createdRule.Version != 1 || createdRule.RecoveryConsecutiveCount != 2 {
 		t.Fatalf("created rule = %+v, want id and version 1", createdRule)
 	}
 
-	queries := metric.New(pool)
-	seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
-		InstanceID: pgInstanceID, MetricID: "pg.connection.active",
+	seriesID := createAlertTestSeries(t, ctx, pool, targetID, currentClock.now)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	eval := evaluator.New(platform, currentClock)
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "PENDING", 1, 0, 0, 1)
+
+	// A second scheduler pass at the same instant is not another rule evaluation.
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "PENDING", 1, 0, 0, 1)
+
+	currentClock.Advance(30 * time.Second)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	runAlertEvaluation(t, ctx, eval)
+	var firstAlertID uuid.UUID
+	var firstTriggeredAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT id, first_triggered_at
+		FROM alert_instance WHERE rule_id = $1 AND instance_id = $2 AND status = 'FIRING'`,
+		createdRule.ID, targetID).Scan(&firstAlertID, &firstTriggeredAt); err != nil {
+		t.Fatalf("read firing alert: %v", err)
+	}
+	if !firstTriggeredAt.Equal(currentClock.now) {
+		t.Fatalf("first_triggered_at = %s, want %s", firstTriggeredAt, currentClock.now)
+	}
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 2, 0, 0, 1)
+
+	currentClock.Advance(30 * time.Second)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 4)
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
+
+	ruleInput["name"] = "High active connections v2"
+	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/alert-rules/"+createdRule.ID.String(), ruleInput, "")
+	defer updated.Body.Close()
+	if updated.StatusCode != http.StatusOK {
+		t.Fatalf("update rule status = %d, want 200", updated.StatusCode)
+	}
+	var updatedRule struct {
+		Version int `json:"version"`
+	}
+	if err := json.NewDecoder(updated.Body).Decode(&updatedRule); err != nil || updatedRule.Version != 2 {
+		t.Fatalf("updated rule = %+v, error = %v", updatedRule, err)
+	}
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
+
+	disabled := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/alert-rules/"+createdRule.ID.String()+"/enabled", map[string]any{"enabled": false}, "")
+	defer disabled.Body.Close()
+	if disabled.StatusCode != http.StatusOK {
+		t.Fatalf("disable rule status = %d, want 200", disabled.StatusCode)
+	}
+	var disabledRule struct {
+		Enabled          bool       `json:"enabled"`
+		Version          int        `json:"version"`
+		EnabledUpdatedBy *uuid.UUID `json:"enabled_updated_by"`
+		EnabledUpdatedAt *time.Time `json:"enabled_updated_at"`
+	}
+	if err := json.NewDecoder(disabled.Body).Decode(&disabledRule); err != nil {
+		t.Fatalf("decode disabled rule: %v", err)
+	}
+	if disabledRule.Enabled || disabledRule.Version != 2 || disabledRule.EnabledUpdatedBy == nil || disabledRule.EnabledUpdatedAt == nil {
+		t.Fatalf("disabled rule audit = %+v", disabledRule)
+	}
+
+	currentClock.Advance(30 * time.Second)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
+
+	enabled := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/alert-rules/"+createdRule.ID.String()+"/enabled", map[string]any{"enabled": true}, "")
+	enabled.Body.Close()
+	if enabled.StatusCode != http.StatusOK {
+		t.Fatalf("enable rule status = %d, want 200", enabled.StatusCode)
+	}
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 0, 0, 2)
+	assertAlertIdentity(t, ctx, pool, createdRule.ID, targetID, firstAlertID, firstTriggeredAt)
+
+	// Sustained anomalies update the unresolved lifecycle instead of inserting duplicates.
+	currentClock.Advance(30 * time.Second)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertIdentity(t, ctx, pool, createdRule.ID, targetID, firstAlertID, firstTriggeredAt)
+
+	// Two due evaluations without a window sample enter NO_DATA without closing the firing lifecycle.
+	currentClock.Advance(90 * time.Second)
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 0, 1, 2)
+	currentClock.Advance(30 * time.Second)
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "NO_DATA", 0, 0, 2, 2)
+	assertAlertIdentity(t, ctx, pool, createdRule.ID, targetID, firstAlertID, firstTriggeredAt)
+
+	currentClock.Advance(30 * time.Second)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	runAlertEvaluation(t, ctx, eval)
+	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 0, 0, 2)
+
+	for recoveryStep := range 2 {
+		currentClock.Advance(30 * time.Second)
+		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 4)
+		runAlertEvaluation(t, ctx, eval)
+		var status string
+		var recoveryCount int
+		var stepRecoveredAt *time.Time
+		if err := pool.QueryRow(ctx, `SELECT status, recovery_count, recovered_at FROM alert_instance WHERE id = $1`, firstAlertID).
+			Scan(&status, &recoveryCount, &stepRecoveredAt); err != nil {
+			t.Fatalf("read recovery step %d: %v", recoveryStep+1, err)
+		}
+		wantStatus := "FIRING"
+		if recoveryStep == 1 {
+			wantStatus = "RECOVERED"
+		}
+		if status != wantStatus || recoveryCount != recoveryStep+1 || (recoveryStep == 1 && stepRecoveredAt == nil) {
+			t.Fatalf("recovery step %d = status %s count %d recovered_at %v, want %s count %d",
+				recoveryStep+1, status, recoveryCount, stepRecoveredAt, wantStatus, recoveryStep+1)
+		}
+	}
+	var firstRuleVersion, finalRuleVersion int
+	var firstSnapshot, finalSnapshot []byte
+	var recoveredAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT first_rule_version, first_rule_snapshot, rule_version, rule_snapshot, recovered_at
+		FROM alert_instance WHERE id = $1`, firstAlertID).
+		Scan(&firstRuleVersion, &firstSnapshot, &finalRuleVersion, &finalSnapshot, &recoveredAt); err != nil {
+		t.Fatalf("read recovered lifecycle snapshots: %v", err)
+	}
+	if firstRuleVersion != 1 || finalRuleVersion != 2 || !json.Valid(firstSnapshot) || !json.Valid(finalSnapshot) || !recoveredAt.Equal(currentClock.now) {
+		t.Fatalf("lifecycle snapshots = first %d/%s final %d/%s recovered %s", firstRuleVersion, firstSnapshot, finalRuleVersion, finalSnapshot, recoveredAt)
+	}
+	var recoveredEventVersion int
+	var recoveredEventSnapshot []byte
+	if err := pool.QueryRow(ctx, `SELECT rule_version, rule_snapshot FROM alert_event
+		WHERE alert_instance_id = $1 AND kind = 'RECOVERED'`, firstAlertID).
+		Scan(&recoveredEventVersion, &recoveredEventSnapshot); err != nil {
+		t.Fatalf("read recovered event snapshot: %v", err)
+	}
+	if recoveredEventVersion != 2 || !json.Valid(recoveredEventSnapshot) {
+		t.Fatalf("recovered event snapshot = version %d snapshot %s", recoveredEventVersion, recoveredEventSnapshot)
+	}
+
+	// A breach after recovery creates a new lifecycle; the old one remains immutable history.
+	for range 2 {
+		currentClock.Advance(30 * time.Second)
+		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+		runAlertEvaluation(t, ctx, eval)
+	}
+	var totalLifecycles, unresolvedLifecycles int
+	if err := pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE status <> 'RECOVERED')
+		FROM alert_instance WHERE rule_id = $1 AND instance_id = $2`, createdRule.ID, targetID).
+		Scan(&totalLifecycles, &unresolvedLifecycles); err != nil {
+		t.Fatalf("count alert lifecycles: %v", err)
+	}
+	if totalLifecycles != 2 || unresolvedLifecycles != 1 {
+		t.Fatalf("alert lifecycles = total %d unresolved %d, want 2/1", totalLifecycles, unresolvedLifecycles)
+	}
+	var outOfScopeAlerts int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM alert_instance WHERE rule_id = $1 AND instance_id = $2`, createdRule.ID, otherID).Scan(&outOfScopeAlerts); err != nil {
+		t.Fatalf("count out-of-scope alerts: %v", err)
+	}
+	if outOfScopeAlerts != 0 {
+		t.Fatalf("out-of-scope alert rows = %d, want 0", outOfScopeAlerts)
+	}
+}
+
+func alertRuleInput(instanceID uuid.UUID) map[string]any {
+	return map[string]any{
+		"name": "High active connections", "metric_id": "pg.connection.active",
+		"aggregation": "latest", "operator": ">=", "threshold": 10,
+		"recovery_operator": "<", "recovery_threshold": 5,
+		"window_seconds": 60, "consecutive_count": 2, "recovery_consecutive_count": 2,
+		"severity": "warning", "no_data_policy": "mark_no_data",
+		"scope": "INSTANCES", "instance_ids": []uuid.UUID{instanceID},
+		"evaluation_interval_seconds": 30, "enabled": true,
+	}
+}
+
+func createAlertTestInstance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, keyring *instance.CredentialKeyring, name string) uuid.UUID {
+	t.Helper()
+	instanceID := uuid.New()
+	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "unused")
+	if err != nil {
+		t.Fatalf("encrypt instance credential: %v", err)
+	}
+	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
+		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: name, Host: "localhost", Port: 5432,
+		DatabaseName: "postgres", Username: "postgres", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+	}); err != nil {
+		t.Fatalf("create instance %q: %v", name, err)
+	}
+	return instanceID
+}
+
+func createAlertTestSeries(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, now time.Time) int64 {
+	t.Helper()
+	seriesID, err := metric.New(pool).UpsertSeries(ctx, metric.UpsertSeriesParams{
+		InstanceID: pgtype.UUID{Bytes: instanceID, Valid: true}, MetricID: "pg.connection.active",
 		Labels: []byte(`{}`), LabelsKey: "{}", LastSeen: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
@@ -129,44 +315,50 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	if err := metric.EnsurePartitions(ctx, pool, now); err != nil {
 		t.Fatalf("ensure metric partitions: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 12)", seriesID, now); err != nil {
-		t.Fatalf("insert breaching sample: %v", err)
-	}
+	return seriesID
+}
 
-	eval := evaluator.New(platform, currentClock)
-	for range 2 {
-		if err := eval.RunOnce(ctx); err != nil {
-			t.Fatalf("evaluate rule: %v", err)
-		}
+func insertAlertTestSample(t *testing.T, ctx context.Context, pool *pgxpool.Pool, seriesID int64, at time.Time, value float64) {
+	t.Helper()
+	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, at, value); err != nil {
+		t.Fatalf("insert alert test sample: %v", err)
 	}
+}
 
-	var status, eventKind string
-	var ruleVersion int
-	var snapshot []byte
-	err = pool.QueryRow(ctx, `SELECT instance.status, event.kind, event.rule_version, event.rule_snapshot
-		FROM alert_instance instance
-		JOIN alert_event event ON event.alert_instance_id = instance.id
-		WHERE instance.rule_id = $1 AND instance.instance_id = $2 AND event.kind = 'FIRED'`,
-		createdRule.ID, instanceID).Scan(&status, &eventKind, &ruleVersion, &snapshot)
-	if err != nil {
-		t.Fatalf("read firing state and event: %v", err)
+func runAlertEvaluation(t *testing.T, ctx context.Context, service *evaluator.Service) {
+	t.Helper()
+	if err := service.RunOnce(ctx); err != nil {
+		t.Fatalf("evaluate alert rules: %v", err)
 	}
-	if status != "FIRING" || eventKind != "FIRED" || ruleVersion != 1 || !json.Valid(snapshot) {
-		t.Fatalf("state/event = %s/%s version=%d snapshot=%s", status, eventKind, ruleVersion, snapshot)
+}
+
+func assertAlertState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ruleID, instanceID uuid.UUID, status string, breach, recovery, noData, version int) {
+	t.Helper()
+	var gotStatus string
+	var gotBreach, gotRecovery, gotNoData, gotVersion int
+	if err := pool.QueryRow(ctx, `SELECT status, breach_count, recovery_count, no_data_count, rule_version
+		FROM alert_instance WHERE rule_id = $1 AND instance_id = $2 AND status <> 'RECOVERED'`, ruleID, instanceID).
+		Scan(&gotStatus, &gotBreach, &gotRecovery, &gotNoData, &gotVersion); err != nil {
+		t.Fatalf("read alert state: %v", err)
 	}
-	var ruleSnapshot struct {
-		MetricID          string  `json:"metric_id"`
-		Threshold         float64 `json:"threshold"`
-		RecoveryThreshold float64 `json:"recovery_threshold"`
-		Severity          string  `json:"severity"`
-		Version           int     `json:"version"`
+	if gotStatus != status || gotBreach != breach || gotRecovery != recovery || gotNoData != noData || gotVersion != version {
+		t.Fatalf("alert state = %s counts %d/%d/%d version %d, want %s %d/%d/%d version %d",
+			gotStatus, gotBreach, gotRecovery, gotNoData, gotVersion, status, breach, recovery, noData, version)
 	}
-	if err := json.Unmarshal(snapshot, &ruleSnapshot); err != nil {
-		t.Fatalf("decode rule snapshot: %v", err)
+}
+
+func assertAlertIdentity(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ruleID, instanceID, wantID uuid.UUID, wantFirstTriggeredAt time.Time) {
+	t.Helper()
+	var gotID uuid.UUID
+	var gotFirstTriggeredAt time.Time
+	var unresolved int
+	if err := pool.QueryRow(ctx, `SELECT min(id::text)::uuid, min(first_triggered_at), count(*)
+		FROM alert_instance WHERE rule_id = $1 AND instance_id = $2 AND status <> 'RECOVERED'`, ruleID, instanceID).
+		Scan(&gotID, &gotFirstTriggeredAt, &unresolved); err != nil {
+		t.Fatalf("read alert identity: %v", err)
 	}
-	if ruleSnapshot.MetricID != "pg.connection.active" || ruleSnapshot.Threshold != 10 ||
-		ruleSnapshot.RecoveryThreshold != 5 || ruleSnapshot.Severity != "warning" || ruleSnapshot.Version != 1 {
-		t.Fatalf("rule snapshot = %+v", ruleSnapshot)
+	if unresolved != 1 || gotID != wantID || !gotFirstTriggeredAt.Equal(wantFirstTriggeredAt) {
+		t.Fatalf("alert identity = %s at %s count %d, want %s at %s count 1", gotID, gotFirstTriggeredAt, unresolved, wantID, wantFirstTriggeredAt)
 	}
 }
 
@@ -174,10 +366,12 @@ type fixedClock struct {
 	now time.Time
 }
 
-func (clock fixedClock) Now() time.Time { return clock.now }
+func (clock *fixedClock) Now() time.Time { return clock.now }
 
-func (clock fixedClock) Ticker(time.Duration) (<-chan time.Time, func()) {
+func (clock *fixedClock) Ticker(time.Duration) (<-chan time.Time, func()) {
 	return make(chan time.Time), func() {}
 }
 
-var _ clock.Clock = fixedClock{}
+func (clock *fixedClock) Advance(duration time.Duration) { clock.now = clock.now.Add(duration) }
+
+var _ clock.Clock = (*fixedClock)(nil)

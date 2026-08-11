@@ -31,3 +31,65 @@
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/alert-rules/{id}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  put:
+    tags: [alert-rules]
+    operationId: updateAlertRule
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRuleInput }
+    responses:
+      '200':
+        description: Updated alert rule
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRule }
+      '400':
+        description: Invalid alert rule
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: Alert rule not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/alert-rules/{id}/enabled:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  put:
+    tags: [alert-rules]
+    operationId: updateAlertRuleEnabled
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRuleEnabledInput }
+    responses:
+      '200':
+        description: Updated alert rule
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRule }
+      '400':
+        description: Invalid enablement request
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: Alert rule not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

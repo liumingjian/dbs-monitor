@@ -39,26 +39,46 @@ type AlertInstance struct {
 	CurrentValue       pgtype.Float8
 	RuleSnapshot       []byte
 	MetricDimensionKey string
+	FirstTriggeredAt   pgtype.Timestamptz
+	FirstRuleVersion   pgtype.Int4
+	FirstRuleSnapshot  []byte
+	RecoveredAt        pgtype.Timestamptz
 }
 
 type AlertRule struct {
-	ID                       pgtype.UUID
-	Name                     string
-	MetricID                 string
-	Aggregation              string
-	Operator                 string
-	Threshold                float64
-	RecoveryOperator         string
-	RecoveryThreshold        float64
-	WindowSeconds            int32
-	ConsecutiveCount         int32
-	RecoveryConsecutiveCount int32
-	Severity                 string
-	NoDataPolicy             string
-	Enabled                  bool
-	Version                  int32
-	CreatedAt                pgtype.Timestamptz
-	UpdatedAt                pgtype.Timestamptz
+	ID                        pgtype.UUID
+	Name                      string
+	MetricID                  string
+	Aggregation               string
+	Operator                  string
+	Threshold                 float64
+	RecoveryOperator          string
+	RecoveryThreshold         float64
+	WindowSeconds             int32
+	ConsecutiveCount          int32
+	RecoveryConsecutiveCount  int32
+	Severity                  string
+	NoDataPolicy              string
+	Enabled                   bool
+	Version                   int32
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	Scope                     string
+	EvaluationIntervalSeconds int32
+	EnabledUpdatedBy          pgtype.UUID
+	EnabledUpdatedAt          pgtype.Timestamptz
+}
+
+type AlertRuleEvaluationState struct {
+	RuleID             pgtype.UUID
+	InstanceID         pgtype.UUID
+	MetricDimensionKey string
+	LastEvaluatedAt    pgtype.Timestamptz
+}
+
+type AlertRuleScopeInstance struct {
+	RuleID     pgtype.UUID
+	InstanceID pgtype.UUID
 }
 
 type AlertRuleVersion struct {

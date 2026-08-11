@@ -17,6 +17,7 @@ const (
 	Recovering
 	Stable
 	Missing
+	MissingIgnored
 )
 
 type Snapshot struct {
@@ -29,7 +30,15 @@ type Snapshot struct {
 
 func Step(current Snapshot, evaluation Evaluation, triggerCount, recoveryCount int) Snapshot {
 	switch evaluation {
+	case MissingIgnored:
+		current.BreachCount = 0
+		current.RecoveryCount = 0
+		current.NoDataCount = 0
+		return current
 	case Missing:
+		if current.State == RECOVERED {
+			return current
+		}
 		current.BreachCount = 0
 		current.RecoveryCount = 0
 		current.NoDataCount++
@@ -41,35 +50,29 @@ func Step(current Snapshot, evaluation Evaluation, triggerCount, recoveryCount i
 	case Breaching, Recovering, Stable:
 		current.NoDataCount = 0
 		if current.State == NO_DATA {
-			before := current.StateBeforeNoData
+			current.State = current.StateBeforeNoData
 			current.StateBeforeNoData = ""
-			if evaluation == Recovering && before != FIRING {
-				current.State = RECOVERED
-				return current
-			}
-			current.State = before
+			return current
 		}
 	}
 	if evaluation == Stable {
 		current.BreachCount = 0
 		current.RecoveryCount = 0
+		if current.State == PENDING {
+			current.State = OK
+		}
 		return current
 	}
 
 	if evaluation == Breaching {
 		current.RecoveryCount = 0
 		switch current.State {
-		case OK:
+		case OK, PENDING, RECOVERED:
 			current.BreachCount++
 			if current.BreachCount >= triggerCount {
 				current.State = FIRING
 			} else {
 				current.State = PENDING
-			}
-		case PENDING:
-			current.BreachCount++
-			if current.BreachCount >= triggerCount {
-				current.State = FIRING
 			}
 		}
 		return current
