@@ -8,7 +8,7 @@ import type { components } from '../../api/schema'
 import { AlertStatus } from '../../domain/AlertStatus'
 import { MetricChart, metricUnavailability, type MetricChartSeries } from '../../domain/MetricChart'
 import { AlertSuppressionTags } from '../../domain/SuppressionTags'
-import { UnavailabilityBlock } from '../../domain/UnavailabilityBlock'
+import { UnavailabilityBlock, unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { alertMonitoringSearch } from '../alerts/search'
 import { metricOptions } from './metricOptions'
@@ -128,7 +128,15 @@ function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; 
     <section className="alert-detail-section" aria-labelledby="no-data-heading">
       <Typography.Title id="no-data-heading" level={3}>No Data 原因</Typography.Title>
       {detail.unavailability
-        ? <UnavailabilityBlock code={detail.unavailability} href={`/instances/${encodeURIComponent(detail.instance_id)}/collection?metric=${encodeURIComponent(detail.metric_id)}`} />
+        ? <UnavailabilityBlock
+            code={detail.unavailability}
+            href={alertUnavailabilityHref(
+              detail.instance_id,
+              detail.metric_id,
+              detail.unavailability,
+              monitoringSearch ? alertMonitoringHref(detail.instance_id, monitoringSearch) : '#trigger-metric-heading',
+            )}
+          />
         : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无 No Data 原因" />}
     </section>
 
@@ -182,15 +190,41 @@ function AlertMetricChart({ detail, metricID, monitoringSearch }: {
   const series: MetricChartSeries[] = response?.unavailability === null
     ? response.series.map((item) => ({ name: detail.metric_id, unit: response.unit, points: item.points }))
     : []
+  const unavailability = detail.unavailability ?? metricUnavailability(response)
 
   return <MetricChart
     label={detail.rule_name}
     series={series}
     step={metrics.data?.step ?? 'auto'}
-    unavailability={detail.unavailability ?? metricUnavailability(response)}
-    unavailabilityHref={`/instances/${encodeURIComponent(detail.instance_id)}/collection?metric=${encodeURIComponent(detail.metric_id)}`}
+    unavailability={unavailability}
+    unavailabilityHref={unavailability
+      ? alertUnavailabilityHref(
+          detail.instance_id,
+          detail.metric_id,
+          unavailability,
+          alertMonitoringHref(detail.instance_id, monitoringSearch),
+        )
+      : '#trigger-metric-heading'}
     loading={metrics.isFetching}
   />
+}
+
+function alertUnavailabilityHref(
+  instanceID: string,
+  metricID: string,
+  code: components['schemas']['Unavailability'],
+  current: string,
+): string {
+  return unavailabilityHref(code, {
+    current,
+    collection: `/instances/${encodeURIComponent(instanceID)}/collection?metric=${encodeURIComponent(metricID)}`,
+  })
+}
+
+function alertMonitoringHref(instanceID: string, search: ReturnType<typeof alertMonitoringSearch>): string {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(search)) params.set(key, String(value))
+  return `/instances/${encodeURIComponent(instanceID)}/monitoring?${params.toString()}`
 }
 
 const ruleVersionColumns: TableColumnsType<RuleVersionRecord> = [

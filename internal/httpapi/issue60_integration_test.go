@@ -124,10 +124,19 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		return seriesURL(metricID, currentClock.now.Add(-time.Minute), currentClock.now.Add(time.Minute))
 	}
 	queryStatsURL := fmt.Sprintf("%s/api/v1/instances/%s/query-stats", server.URL, instanceID)
+	producedUnavailability := make(map[api.Unavailability]struct{})
+	assertProducedMetric := func(address string, want api.Unavailability) {
+		assertUnavailability(t, client, address, string(want))
+		producedUnavailability[want] = struct{}{}
+	}
+	assertProducedQueryStatistics := func(want api.Unavailability) {
+		assertQueryStatisticsUnavailability(t, client, queryStatsURL, want)
+		producedUnavailability[want] = struct{}{}
+	}
 
-	assertUnavailability(t, client, currentSeriesURL("pg.probe.latency_ms"), "NO_SAMPLES_YET")
-	assertUnavailability(t, client, currentSeriesURL("host.cpu.usage_percent"), "NOT_APPLICABLE_ROLE")
-	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.FEATUREDISABLED)
+	assertProducedMetric(currentSeriesURL("pg.probe.latency_ms"), api.NOSAMPLESYET)
+	assertProducedMetric(currentSeriesURL("host.cpu.usage_percent"), api.NOTAPPLICABLEROLE)
+	assertProducedQueryStatistics(api.FEATUREDISABLED)
 
 	collector := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
 	collector.SetPlatformHealth(health)
@@ -139,13 +148,13 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		t.Fatalf("collect failed capability probe: %v", err)
 	}
 	metric.Capabilities[probeIndex].Probe = originalProbe
-	assertUnavailability(t, client, currentSeriesURL("pg.connection.total"), "COLLECTION_FAILED")
+	assertProducedMetric(currentSeriesURL("pg.connection.total"), api.COLLECTIONFAILED)
 
 	currentClock.Advance(6 * time.Minute)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect missing-role target: %v", err)
 	}
-	assertUnavailability(t, client, currentSeriesURL("pg.connection.total"), "PERMISSION_DENIED")
+	assertProducedMetric(currentSeriesURL("pg.connection.total"), api.PERMISSIONDENIED)
 
 	if _, err := admin.ExecContext(ctx, "GRANT pg_monitor TO "+roleIdentifier); err != nil {
 		t.Fatalf("grant pg_monitor for issue 60 target: %v", err)
@@ -157,9 +166,9 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	assertMetricSeriesHasPoints(t, client, currentSeriesURL("pg.availability.reachable"))
 	assertMetricSeriesHasPoints(t, client, currentSeriesURL("collector.last_success_time"))
 	assertUnavailability(t, client, currentSeriesURL("pg.replication.wal_lag_bytes"), "NOT_APPLICABLE_ROLE")
-	assertUnavailability(t, client, seriesURL(
+	assertProducedMetric(seriesURL(
 		"pg.connection.total", currentClock.now.Add(-time.Hour), currentClock.now.Add(-30*time.Minute),
-	), "NO_DATA_IN_RANGE")
+	), api.NODATAINRANGE)
 
 	registration := requestJSON(t, client, http.MethodPost,
 		fmt.Sprintf("%s/api/v1/instances/%s/agent/registration", server.URL, instanceID), nil, "")
@@ -191,16 +200,16 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect issue 60 counter reset: %v", err)
 	}
-	assertUnavailability(t, client, seriesURL(
+	assertProducedMetric(seriesURL(
 		"pg.tps", currentClock.now.Add(-time.Second), currentClock.now.Add(time.Second),
-	), "COUNTER_RESET")
+	), api.COUNTERRESET)
 
 	currentClock.Advance(20 * time.Second)
-	assertUnavailability(t, client, seriesURL(
+	assertProducedMetric(seriesURL(
 		"pg.connection.active", currentClock.now.Add(-time.Second), currentClock.now.Add(time.Second),
-	), "STALE")
+	), api.STALE)
 	currentClock.Advance(metric.AgentOfflineAfter)
-	assertUnavailability(t, client, currentSeriesURL("host.cpu.usage_percent"), "AGENT_OFFLINE")
+	assertProducedMetric(currentSeriesURL("host.cpu.usage_percent"), api.AGENTOFFLINE)
 	assertMetricPointValue(t, client, currentSeriesURL("agent.status"), metric.AgentStatusEncodings[metric.AgentStatusOffline])
 
 	if _, err := pool.Exec(ctx, "UPDATE instance SET port = 1 WHERE id = $1", createdBody.Instance.Id); err != nil {
@@ -210,7 +219,7 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect issue 60 unreachable target: %v", err)
 	}
-	assertUnavailability(t, client, currentSeriesURL("pg.connection.total"), "DB_UNREACHABLE")
+	assertProducedMetric(currentSeriesURL("pg.connection.total"), api.DBUNREACHABLE)
 	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", createdBody.Instance.Id, envInt("PGPORT", 55432)); err != nil {
 		t.Fatalf("restore issue 60 target port: %v", err)
 	}
@@ -227,7 +236,29 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect issue 60 missing-extension target: %v", err)
 	}
-	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.EXTENSIONMISSING)
+	assertProducedQueryStatistics(api.EXTENSIONMISSING)
+
+	wantProduced := []api.Unavailability{
+		api.NOSAMPLESYET,
+		api.NODATAINRANGE,
+		api.STALE,
+		api.COLLECTIONFAILED,
+		api.DBUNREACHABLE,
+		api.AGENTOFFLINE,
+		api.PERMISSIONDENIED,
+		api.EXTENSIONMISSING,
+		api.FEATUREDISABLED,
+		api.NOTAPPLICABLEROLE,
+		api.COUNTERRESET,
+	}
+	if len(producedUnavailability) != len(wantProduced) {
+		t.Fatalf("real unavailability producer count = %d, want %d: %v", len(producedUnavailability), len(wantProduced), producedUnavailability)
+	}
+	for _, want := range wantProduced {
+		if _, ok := producedUnavailability[want]; !ok {
+			t.Errorf("real unavailability producer %s was not observed", want)
+		}
+	}
 }
 
 func capabilityIndex(t *testing.T, capabilityID metric.CapabilityID) int {
