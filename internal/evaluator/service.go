@@ -47,7 +47,7 @@ func (service *Service) evaluateInstance(ctx context.Context, targets []alerting
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := alerting.New(tx)
 		for _, target := range targets {
-			if err := service.evaluateRule(ctx, queries, target.RuleID, target.InstanceID, target.MetricDimensionKey, now); err != nil {
+			if err := service.evaluateRule(ctx, queries, target, now); err != nil {
 				return err
 			}
 		}
@@ -55,9 +55,11 @@ func (service *Service) evaluateInstance(ctx context.Context, targets []alerting
 	})
 }
 
-func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Queries, ruleID, instanceID pgtype.UUID, metricDimensionKey string, now time.Time) error {
+func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Queries, scheduledTarget alerting.ListEvaluationTargetsRow, now time.Time) error {
 	target, err := queries.GetEvaluationTarget(ctx, alerting.GetEvaluationTargetParams{
-		RuleID: ruleID, InstanceID: instanceID, MetricDimensionKey: metricDimensionKey,
+		RuleID:             scheduledTarget.RuleID,
+		InstanceID:         scheduledTarget.InstanceID,
+		MetricDimensionKey: scheduledTarget.MetricDimensionKey,
 	})
 	if err != nil {
 		return fmt.Errorf("read evaluation target: %w", err)
@@ -75,14 +77,14 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 	}
 	previousState := current.State
 	evaluatedAt := pgtype.Timestamptz{Time: now, Valid: true}
-	markEvaluated := func() error {
-		return queries.MarkAlertRuleEvaluated(ctx, alerting.MarkAlertRuleEvaluatedParams{
-			RuleID: target.RuleID, InstanceID: target.InstanceID,
-			MetricDimensionKey: metricDimensionKey, LastEvaluatedAt: evaluatedAt,
-		})
+	evaluationCheckpoint := alerting.MarkAlertRuleEvaluatedParams{
+		RuleID:             target.RuleID,
+		InstanceID:         target.InstanceID,
+		MetricDimensionKey: scheduledTarget.MetricDimensionKey,
+		LastEvaluatedAt:    evaluatedAt,
 	}
 	if structurallyNotApplicable(target.MetricID, target.LastErrorCode, target.AgentMetricsEnabled) {
-		return markEvaluated()
+		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
 
 	evaluation := alerting.Missing
@@ -95,7 +97,7 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 		samples, err := queries.SamplesInRuleWindow(ctx, alerting.SamplesInRuleWindowParams{
 			InstanceID:         target.InstanceID,
 			MetricID:           target.MetricID,
-			MetricDimensionKey: metricDimensionKey,
+			MetricDimensionKey: scheduledTarget.MetricDimensionKey,
 			WindowStart:        pgtype.Timestamptz{Time: now.Add(-window), Valid: true},
 			WindowEnd:          pgtype.Timestamptz{Time: now, Valid: true},
 		})
@@ -125,17 +127,22 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 		if target.AlertInstanceID.Valid && current.State != alerting.RECOVERED {
 			next := alerting.Step(current, alerting.MissingIgnored, int(target.ConsecutiveCount), int(target.RecoveryConsecutiveCount))
 			if err := queries.ResetIgnoredMissingAlert(ctx, alerting.ResetIgnoredMissingAlertParams{
-				ID: target.AlertInstanceID, RuleVersion: target.Version, Severity: target.Severity,
-				RuleSnapshot: target.RuleSnapshot, BreachCount: int32(next.BreachCount),
-				RecoveryCount: int32(next.RecoveryCount), NoDataCount: int32(next.NoDataCount), UpdatedAt: evaluatedAt,
+				ID:            target.AlertInstanceID,
+				RuleVersion:   target.Version,
+				Severity:      target.Severity,
+				RuleSnapshot:  target.RuleSnapshot,
+				BreachCount:   int32(next.BreachCount),
+				RecoveryCount: int32(next.RecoveryCount),
+				NoDataCount:   int32(next.NoDataCount),
+				UpdatedAt:     evaluatedAt,
 			}); err != nil {
 				return fmt.Errorf("reset alert counters for ignored missing data: %w", err)
 			}
 		}
-		return markEvaluated()
+		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
 	if current.State == alerting.RECOVERED && evaluation != alerting.Breaching {
-		return markEvaluated()
+		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
 
 	next := alerting.Step(current, evaluation, int(target.ConsecutiveCount), int(target.RecoveryConsecutiveCount))
@@ -161,17 +168,23 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 	var alertInstanceID pgtype.UUID
 	if next.State == alerting.RECOVERED {
 		alertInstanceID, err = queries.RecoverAlertSnapshot(ctx, alerting.RecoverAlertSnapshotParams{
-			ID: target.AlertInstanceID, MetricID: target.MetricID, RuleVersion: target.Version,
-			Severity: target.Severity, CurrentValue: currentValue, RuleSnapshot: target.RuleSnapshot,
-			BreachCount: int32(next.BreachCount), RecoveryCount: int32(next.RecoveryCount),
-			NoDataCount: int32(next.NoDataCount), UpdatedAt: recoveredAt,
+			ID:            target.AlertInstanceID,
+			MetricID:      target.MetricID,
+			RuleVersion:   target.Version,
+			Severity:      target.Severity,
+			CurrentValue:  currentValue,
+			RuleSnapshot:  target.RuleSnapshot,
+			BreachCount:   int32(next.BreachCount),
+			RecoveryCount: int32(next.RecoveryCount),
+			NoDataCount:   int32(next.NoDataCount),
+			UpdatedAt:     recoveredAt,
 		})
 	} else {
 		alertInstanceID, err = queries.SaveAlertSnapshot(ctx, alerting.SaveAlertSnapshotParams{
 			RuleID:             target.RuleID,
 			InstanceID:         target.InstanceID,
 			MetricID:           target.MetricID,
-			MetricDimensionKey: metricDimensionKey,
+			MetricDimensionKey: scheduledTarget.MetricDimensionKey,
 			Status:             string(next.State),
 			RuleVersion:        target.Version,
 			Severity:           target.Severity,
@@ -211,14 +224,14 @@ func (service *Service) evaluateRule(ctx context.Context, queries *alerting.Quer
 			return fmt.Errorf("save alert event: %w", err)
 		}
 	}
-	if err := markEvaluated(); err != nil {
+	if err := queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint); err != nil {
 		return fmt.Errorf("mark alert rule evaluated: %w", err)
 	}
 	return nil
 }
 
-func structurallyNotApplicable(metricID string, unavailable pgtype.Text, agentMetricsEnabled bool) bool {
-	if unavailable.Valid && unavailable.String == "NOT_APPLICABLE_ROLE" {
+func structurallyNotApplicable(metricID string, lastErrorCode pgtype.Text, agentMetricsEnabled bool) bool {
+	if lastErrorCode.Valid && lastErrorCode.String == "NOT_APPLICABLE_ROLE" {
 		return true
 	}
 	if agentMetricsEnabled {
@@ -227,8 +240,9 @@ func structurallyNotApplicable(metricID string, unavailable pgtype.Text, agentMe
 	if metricID == metric.MetricAgentStatus.String() {
 		return true
 	}
+	requestedMetricID := metric.MetricID(metricID)
 	for _, definition := range metric.Metrics {
-		if definition.ID.String() == metricID {
+		if definition.ID == requestedMetricID {
 			return definition.Producer == metric.ProducerAgent
 		}
 	}

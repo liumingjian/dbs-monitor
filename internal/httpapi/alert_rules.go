@@ -49,6 +49,7 @@ func (handler *Handler) CreateAlertRule(ctx context.Context, request api.CreateA
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
 	ruleID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
+	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	var createdRule alerting.AlertRule
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := alerting.New(tx)
@@ -75,24 +76,12 @@ func (handler *Handler) CreateAlertRule(ctx context.Context, request api.CreateA
 			return err
 		}
 		createdRule = rule
-		if err := replaceAlertRuleScope(ctx, queries, rule.ID, input.InstanceIds); err != nil {
-			return err
-		}
-		snapshot, err := json.Marshal(toAPIAlertRule(rule, uuidList(input.InstanceIds)))
-		if err != nil {
-			return err
-		}
-		return queries.CreateAlertRuleVersion(ctx, alerting.CreateAlertRuleVersionParams{
-			RuleID:    rule.ID,
-			Version:   rule.Version,
-			Snapshot:  snapshot,
-			CreatedAt: now,
-		})
+		return saveAlertRuleVersion(ctx, queries, rule, scopedInstanceIDs, now)
 	})
 	if err != nil {
 		return nil, err
 	}
-	return api.CreateAlertRule201JSONResponse(toAPIAlertRule(createdRule, uuidList(input.InstanceIds))), nil
+	return api.CreateAlertRule201JSONResponse(toAPIAlertRule(createdRule, scopedInstanceIDs)), nil
 }
 
 func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateAlertRuleRequestObject) (api.UpdateAlertRuleResponseObject, error) {
@@ -121,31 +110,32 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	var updated alerting.AlertRule
 	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := alerting.New(tx)
 		updated, err = queries.UpdateAlertRule(ctx, alerting.UpdateAlertRuleParams{
-			ID: pgtype.UUID{Bytes: request.Id, Valid: true}, Name: strings.TrimSpace(input.Name), MetricID: input.MetricId,
-			Aggregation: string(input.Aggregation), Operator: string(input.Operator), Threshold: input.Threshold,
-			RecoveryOperator: string(input.RecoveryOperator), RecoveryThreshold: *input.RecoveryThreshold,
-			WindowSeconds: int32(input.WindowSeconds), ConsecutiveCount: int32(input.ConsecutiveCount),
-			RecoveryConsecutiveCount: int32(recoveryConsecutiveCount(input)), Severity: string(input.Severity),
-			NoDataPolicy: string(input.NoDataPolicy), Scope: string(input.Scope),
-			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds), UpdatedAt: now,
+			ID:                        pgtype.UUID{Bytes: request.Id, Valid: true},
+			Name:                      strings.TrimSpace(input.Name),
+			MetricID:                  input.MetricId,
+			Aggregation:               string(input.Aggregation),
+			Operator:                  string(input.Operator),
+			Threshold:                 input.Threshold,
+			RecoveryOperator:          string(input.RecoveryOperator),
+			RecoveryThreshold:         *input.RecoveryThreshold,
+			WindowSeconds:             int32(input.WindowSeconds),
+			ConsecutiveCount:          int32(input.ConsecutiveCount),
+			RecoveryConsecutiveCount:  int32(recoveryConsecutiveCount(input)),
+			Severity:                  string(input.Severity),
+			NoDataPolicy:              string(input.NoDataPolicy),
+			Scope:                     string(input.Scope),
+			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
+			UpdatedAt:                 now,
 		})
 		if err != nil {
 			return err
 		}
-		if err := replaceAlertRuleScope(ctx, queries, updated.ID, input.InstanceIds); err != nil {
-			return err
-		}
-		snapshot, err := json.Marshal(toAPIAlertRule(updated, uuidList(input.InstanceIds)))
-		if err != nil {
-			return err
-		}
-		return queries.CreateAlertRuleVersion(ctx, alerting.CreateAlertRuleVersionParams{
-			RuleID: updated.ID, Version: updated.Version, Snapshot: snapshot, CreatedAt: now,
-		})
+		return saveAlertRuleVersion(ctx, queries, updated, scopedInstanceIDs, now)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.UpdateAlertRule404JSONResponse(errorBody(api.NOTFOUND, "alert rule not found")), nil
@@ -153,7 +143,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 	if err != nil {
 		return nil, err
 	}
-	return api.UpdateAlertRule200JSONResponse(toAPIAlertRule(updated, uuidList(input.InstanceIds))), nil
+	return api.UpdateAlertRule200JSONResponse(toAPIAlertRule(updated, scopedInstanceIDs)), nil
 }
 
 func (handler *Handler) UpdateAlertRuleEnabled(ctx context.Context, request api.UpdateAlertRuleEnabledRequestObject) (api.UpdateAlertRuleEnabledResponseObject, error) {
@@ -163,8 +153,10 @@ func (handler *Handler) UpdateAlertRuleEnabled(ctx context.Context, request api.
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
 	queries := alerting.New(handler.platform)
 	rule, err := queries.SetAlertRuleEnabled(ctx, alerting.SetAlertRuleEnabledParams{
-		ID: pgtype.UUID{Bytes: request.Id, Valid: true}, Enabled: request.Body.Enabled,
-		EnabledUpdatedBy: databaseUserID(authenticatedUserID(ctx)), EnabledUpdatedAt: now,
+		ID:               pgtype.UUID{Bytes: request.Id, Valid: true},
+		Enabled:          request.Body.Enabled,
+		EnabledUpdatedBy: databaseUserID(authenticatedUserID(ctx)),
+		EnabledUpdatedAt: now,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.UpdateAlertRuleEnabled404JSONResponse(errorBody(api.NOTFOUND, "alert rule not found")), nil
@@ -300,13 +292,29 @@ func (handler *Handler) validateAlertRuleInstances(ctx context.Context, rule api
 	return nil, nil
 }
 
-func replaceAlertRuleScope(ctx context.Context, queries *alerting.Queries, ruleID pgtype.UUID, instanceIDs []uuid.UUID) error {
+func saveAlertRuleVersion(ctx context.Context, queries *alerting.Queries, rule alerting.AlertRule, instanceIDs []pgtype.UUID, createdAt pgtype.Timestamptz) error {
+	if err := replaceAlertRuleScope(ctx, queries, rule.ID, instanceIDs); err != nil {
+		return err
+	}
+	snapshot, err := json.Marshal(toAPIAlertRule(rule, instanceIDs))
+	if err != nil {
+		return err
+	}
+	return queries.CreateAlertRuleVersion(ctx, alerting.CreateAlertRuleVersionParams{
+		RuleID:    rule.ID,
+		Version:   rule.Version,
+		Snapshot:  snapshot,
+		CreatedAt: createdAt,
+	})
+}
+
+func replaceAlertRuleScope(ctx context.Context, queries *alerting.Queries, ruleID pgtype.UUID, instanceIDs []pgtype.UUID) error {
 	if err := queries.DeleteAlertRuleScopeInstances(ctx, ruleID); err != nil {
 		return err
 	}
 	for _, instanceID := range instanceIDs {
 		if err := queries.AddAlertRuleScopeInstance(ctx, alerting.AddAlertRuleScopeInstanceParams{
-			RuleID: ruleID, InstanceID: pgtype.UUID{Bytes: instanceID, Valid: true},
+			RuleID: ruleID, InstanceID: instanceID,
 		}); err != nil {
 			return err
 		}
@@ -314,7 +322,7 @@ func replaceAlertRuleScope(ctx context.Context, queries *alerting.Queries, ruleI
 	return nil
 }
 
-func uuidList(instanceIDs []uuid.UUID) []pgtype.UUID {
+func toDatabaseUUIDs(instanceIDs []uuid.UUID) []pgtype.UUID {
 	result := make([]pgtype.UUID, 0, len(instanceIDs))
 	for _, instanceID := range instanceIDs {
 		result = append(result, pgtype.UUID{Bytes: instanceID, Valid: true})
@@ -368,17 +376,17 @@ func invalidAlertRule(fieldErrors []fieldError) api.CreateAlertRule400JSONRespon
 
 func alertRuleValidationError(fieldErrors []fieldError) api.Error {
 	body := errorBody(api.VALIDATIONFAILED, "alert rule validation failed")
-	errors := make([]struct {
+	responseErrors := make([]struct {
 		Field   string `json:"field"`
 		Message string `json:"message"`
 	}, 0, len(fieldErrors))
 	for _, item := range fieldErrors {
-		errors = append(errors, struct {
+		responseErrors = append(responseErrors, struct {
 			Field   string `json:"field"`
 			Message string `json:"message"`
 		}{Field: item.field, Message: item.message})
 	}
-	body.Error.FieldErrors = &errors
+	body.Error.FieldErrors = &responseErrors
 	return body
 }
 

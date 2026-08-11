@@ -273,7 +273,13 @@ LEFT JOIN instance_collection_config collection_config
 LEFT JOIN instance_collect_state collect_state
   ON collect_state.instance_id = instance.id AND collect_state.source = 'SERVER_DIRECT'
 LEFT JOIN LATERAL (
-    SELECT candidate.instance_id, candidate.metric_id, candidate.status, candidate.breach_count, candidate.recovery_count, candidate.no_data_count, candidate.state_before_no_data, candidate.unavailability, candidate.updated_at, candidate.id, candidate.rule_id, candidate.rule_version, candidate.severity, candidate.current_value, candidate.rule_snapshot, candidate.metric_dimension_key, candidate.first_triggered_at, candidate.first_rule_version, candidate.first_rule_snapshot, candidate.recovered_at
+    SELECT candidate.id,
+           candidate.status,
+           candidate.rule_version,
+           candidate.breach_count,
+           candidate.recovery_count,
+           candidate.no_data_count,
+           candidate.state_before_no_data
     FROM alert_instance candidate
     WHERE candidate.rule_id = rule.id
       AND candidate.instance_id = instance.id
@@ -427,7 +433,7 @@ func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 const listEvaluationTargets = `-- name: ListEvaluationTargets :many
 SELECT rule.id AS rule_id,
        instance.id AS instance_id,
-       COALESCE(dimension.metric_dimension_key, '{}') AS metric_dimension_key
+       COALESCE(metric_dimension.metric_dimension_key, '{}') AS metric_dimension_key
 FROM alert_rule rule
 CROSS JOIN instance
 LEFT JOIN LATERAL (
@@ -441,11 +447,11 @@ LEFT JOIN LATERAL (
     WHERE alert.rule_id = rule.id
       AND alert.instance_id = instance.id
       AND alert.status <> 'RECOVERED'
-) dimension ON true
+) metric_dimension ON true
 LEFT JOIN alert_rule_evaluation_state evaluation_state
   ON evaluation_state.rule_id = rule.id
  AND evaluation_state.instance_id = instance.id
- AND evaluation_state.metric_dimension_key = COALESCE(dimension.metric_dimension_key, '{}')
+ AND evaluation_state.metric_dimension_key = COALESCE(metric_dimension.metric_dimension_key, '{}')
 WHERE rule.enabled
   AND (rule.scope = 'ALL' OR EXISTS (
       SELECT 1
@@ -455,7 +461,7 @@ WHERE rule.enabled
   ))
   AND (evaluation_state.last_evaluated_at IS NULL
        OR evaluation_state.last_evaluated_at <= $1::timestamptz - rule.evaluation_interval_seconds * interval '1 second')
-ORDER BY instance.id, rule.id, 3
+ORDER BY instance.id, rule.id, COALESCE(metric_dimension.metric_dimension_key, '{}')
 `
 
 type ListEvaluationTargetsRow struct {
