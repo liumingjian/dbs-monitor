@@ -915,6 +915,7 @@ var RequiredRoles = map[string]string{
 	"GetPlatformHealth": "PLATFORM_ADMIN",
 	"ListAlertRules":    "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"UpdateAlertRule": "ALERT_ADMIN", "UpdateAlertRuleEnabled": "ALERT_ADMIN",
+	"GetAlertDisposition": "READONLY", "UpdateAlertDisposition": "ALERT_ADMIN",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
 	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",

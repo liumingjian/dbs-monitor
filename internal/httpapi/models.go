@@ -9,18 +9,24 @@ import (
 )
 
 type AlertEvent struct {
-	ID              int64
-	AlertInstanceID pgtype.UUID
-	RuleID          pgtype.UUID
-	RuleVersion     int32
-	Kind            string
-	FromState       string
-	ToState         string
-	CurrentValue    pgtype.Float8
-	Unavailability  pgtype.Text
-	RuleSnapshot    []byte
-	EvaluatedAt     pgtype.Timestamptz
-	ActorID         pgtype.UUID
+	ID                 int64
+	AlertInstanceID    pgtype.UUID
+	RuleID             pgtype.UUID
+	RuleVersion        int32
+	Kind               string
+	FromState          string
+	ToState            string
+	CurrentValue       pgtype.Float8
+	Unavailability     pgtype.Text
+	RuleSnapshot       []byte
+	EvaluatedAt        pgtype.Timestamptz
+	ActorID            pgtype.UUID
+	ActedAt            pgtype.Timestamptz
+	FromDisposition    pgtype.Text
+	ToDisposition      pgtype.Text
+	DispositionNote    pgtype.Text
+	IgnoreReasonCode   pgtype.Text
+	IgnoreReasonDetail pgtype.Text
 }
 
 type AlertInstance struct {
@@ -44,6 +50,12 @@ type AlertInstance struct {
 	FirstRuleVersion   pgtype.Int4
 	FirstRuleSnapshot  []byte
 	RecoveredAt        pgtype.Timestamptz
+	Disposition        string
+	DispositionBy      pgtype.UUID
+	DispositionAt      pgtype.Timestamptz
+	DispositionNote    pgtype.Text
+	IgnoreReasonCode   pgtype.Text
+	IgnoreReasonDetail pgtype.Text
 }
 
 type AlertRule struct {

@@ -95,6 +95,14 @@ type ClientInterface interface {
 
 	ReportAgentMetrics(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAlertDisposition request
+	GetAlertDisposition(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAlertDispositionWithBody request with any body
+	UpdateAlertDispositionWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateAlertDisposition(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListAlertRules request
 	ListAlertRules(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -226,6 +234,42 @@ func (c *Client) ReportAgentMetricsWithBody(ctx context.Context, contentType str
 
 func (c *Client) ReportAgentMetrics(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReportAgentMetricsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAlertDisposition(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertDispositionRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateAlertDispositionWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertDispositionRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateAlertDisposition(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertDispositionRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -783,6 +827,87 @@ func NewReportAgentMetricsRequestWithBody(server string, contentType string, bod
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetAlertDispositionRequest generates requests for GetAlertDisposition
+func NewGetAlertDispositionRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-instances/%s/disposition", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateAlertDispositionRequest calls the generic UpdateAlertDisposition builder with application/json body
+func NewUpdateAlertDispositionRequest(server string, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateAlertDispositionRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateAlertDispositionRequestWithBody generates requests for UpdateAlertDisposition with any type of body
+func NewUpdateAlertDispositionRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-instances/%s/disposition", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -2024,6 +2149,14 @@ type ClientWithResponsesInterface interface {
 
 	ReportAgentMetricsWithResponse(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*ReportAgentMetricsResponse, error)
 
+	// GetAlertDispositionWithResponse request
+	GetAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDispositionResponse, error)
+
+	// UpdateAlertDispositionWithBodyWithResponse request with any body
+	UpdateAlertDispositionWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertDispositionResponse, error)
+
+	UpdateAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertDispositionResponse, error)
+
 	// ListAlertRulesWithResponse request
 	ListAlertRulesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRulesResponse, error)
 
@@ -2158,6 +2291,54 @@ func (r ReportAgentMetricsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ReportAgentMetricsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAlertDispositionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertDispositionDetail
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertDispositionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertDispositionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateAlertDispositionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertDispositionDetail
+	JSON400      *Error
+	JSON404      *Error
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateAlertDispositionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateAlertDispositionResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2862,6 +3043,32 @@ func (c *ClientWithResponses) ReportAgentMetricsWithResponse(ctx context.Context
 	return ParseReportAgentMetricsResponse(rsp)
 }
 
+// GetAlertDispositionWithResponse request returning *GetAlertDispositionResponse
+func (c *ClientWithResponses) GetAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDispositionResponse, error) {
+	rsp, err := c.GetAlertDisposition(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertDispositionResponse(rsp)
+}
+
+// UpdateAlertDispositionWithBodyWithResponse request with arbitrary body returning *UpdateAlertDispositionResponse
+func (c *ClientWithResponses) UpdateAlertDispositionWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertDispositionResponse, error) {
+	rsp, err := c.UpdateAlertDispositionWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertDispositionResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertDispositionResponse, error) {
+	rsp, err := c.UpdateAlertDisposition(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertDispositionResponse(rsp)
+}
+
 // ListAlertRulesWithResponse request returning *ListAlertRulesResponse
 func (c *ClientWithResponses) ListAlertRulesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRulesResponse, error) {
 	rsp, err := c.ListAlertRules(ctx, reqEditors...)
@@ -3263,6 +3470,86 @@ func ParseReportAgentMetricsResponse(rsp *http.Response) (*ReportAgentMetricsRes
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertDispositionResponse parses an HTTP response from a GetAlertDispositionWithResponse call
+func ParseGetAlertDispositionResponse(rsp *http.Response) (*GetAlertDispositionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertDispositionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertDispositionDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateAlertDispositionResponse parses an HTTP response from a UpdateAlertDispositionWithResponse call
+func ParseUpdateAlertDispositionResponse(rsp *http.Response) (*UpdateAlertDispositionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateAlertDispositionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertDispositionDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

@@ -70,3 +70,9 @@ PlatformHealthSource:
     - HealthSourceAgentIngress
     - HealthSourceDisk
     - HealthSourceCredentialKeyring
+AlertDisposition:
+  type: string
+  enum: [NONE, ACKED, IGNORED]
+IgnoreReasonCode:
+  type: string
+  enum: [KNOWN_ISSUE, FALSE_POSITIVE, DUPLICATE, IMPACT_ACCEPTABLE, OTHER]

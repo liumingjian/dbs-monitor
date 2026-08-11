@@ -240,6 +240,40 @@ INSERT INTO alert_event (
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
 
+-- name: GetAlertDispositionForRead :one
+SELECT * FROM alert_instance WHERE id = $1 FOR SHARE;
+
+-- name: GetAlertDispositionForUpdate :one
+SELECT * FROM alert_instance WHERE id = $1 FOR UPDATE;
+
+-- name: UpdateAlertDisposition :one
+UPDATE alert_instance
+SET disposition = $2,
+    disposition_by = $3,
+    disposition_at = $4,
+    disposition_note = $5,
+    ignore_reason_code = $6,
+    ignore_reason_detail = $7
+WHERE id = $1
+RETURNING *;
+
+-- name: CreateAlertDispositionEvent :exec
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, actor_id, acted_at,
+    from_disposition, to_disposition, disposition_note,
+    ignore_reason_code, ignore_reason_detail
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17);
+
+-- name: ListAlertDispositionEvents :many
+SELECT *
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind IN ('ACKED', 'IGNORED')
+ORDER BY acted_at, id;
+
 -- name: GetAlertStatus :one
 SELECT status
 FROM alert_instance

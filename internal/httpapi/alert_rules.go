@@ -171,11 +171,6 @@ func (handler *Handler) UpdateAlertRuleEnabled(ctx context.Context, request api.
 	return api.UpdateAlertRuleEnabled200JSONResponse(toAPIAlertRule(rule, instanceIDs)), nil
 }
 
-type fieldError struct {
-	field   string
-	message string
-}
-
 func validateAlertRule(rule api.AlertRuleInput) []fieldError {
 	fieldErrors := make([]fieldError, 0)
 	if strings.TrimSpace(rule.Name) == "" {
@@ -375,19 +370,7 @@ func invalidAlertRule(fieldErrors []fieldError) api.CreateAlertRule400JSONRespon
 }
 
 func alertRuleValidationError(fieldErrors []fieldError) api.Error {
-	body := errorBody(api.VALIDATIONFAILED, "alert rule validation failed")
-	responseErrors := make([]struct {
-		Field   string `json:"field"`
-		Message string `json:"message"`
-	}, 0, len(fieldErrors))
-	for _, item := range fieldErrors {
-		responseErrors = append(responseErrors, struct {
-			Field   string `json:"field"`
-			Message string `json:"message"`
-		}{Field: item.field, Message: item.message})
-	}
-	body.Error.FieldErrors = &responseErrors
-	return body
+	return validationErrorBody("alert rule validation failed", fieldErrors)
 }
 
 func toAPIAlertRule(rule alerting.AlertRule, scopedInstanceIDs []pgtype.UUID) api.AlertRule {

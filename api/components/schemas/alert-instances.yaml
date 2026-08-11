@@ -1,0 +1,57 @@
+AlertDispositionInput:
+  type: object
+  required: [disposition]
+  properties:
+    disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    note: { type: string }
+    ignore_reason_code: { $ref: ../enums.yaml#/IgnoreReasonCode }
+    ignore_reason_detail: { type: string }
+AlertDispositionDetail:
+  type: object
+  required:
+    - alert_instance_id
+    - disposition
+    - stops_repeat_notifications
+    - excluded_from_health_rollup
+    - history
+  properties:
+    alert_instance_id: { type: string, format: uuid }
+    disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    disposition_by: { type: string, format: uuid }
+    disposition_at: { type: string, format: date-time }
+    note: { type: string }
+    ignore_reason_code: { $ref: ../enums.yaml#/IgnoreReasonCode }
+    ignore_reason_detail: { type: string }
+    stops_repeat_notifications: { type: boolean }
+    excluded_from_health_rollup: { type: boolean }
+    history:
+      type: array
+      items: { $ref: '#/AlertDispositionEvent' }
+AlertDispositionEvent:
+  type: object
+  required:
+    - kind
+    - from_disposition
+    - to_disposition
+    - actor_id
+    - rule_version
+    - rule_snapshot
+    - evaluated_at
+    - acted_at
+  properties:
+    kind:
+      type: string
+      enum: [ACKED, IGNORED]
+    from_disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    to_disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    actor_id: { type: string, format: uuid }
+    note: { type: string }
+    ignore_reason_code: { $ref: ../enums.yaml#/IgnoreReasonCode }
+    ignore_reason_detail: { type: string }
+    rule_version: { type: integer }
+    current_value: { type: number, format: double }
+    rule_snapshot:
+      type: object
+      additionalProperties: true
+    evaluated_at: { type: string, format: date-time }
+    acted_at: { type: string, format: date-time }

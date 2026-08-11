@@ -55,6 +55,13 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 			api.HealthSourcePartitionMaintenance: "", api.HealthSourceTLSCertificate: "", api.HealthSourceAgentIngress: "",
 			api.HealthSourceDisk: "", api.HealthSourceCredentialKeyring: "",
 		})},
+		{"AlertDisposition", mapKeys(map[api.AlertDisposition]string{
+			api.AlertDispositionNONE: "", api.AlertDispositionACKED: "", api.AlertDispositionIGNORED: "",
+		})},
+		{"IgnoreReasonCode", mapKeys(map[api.IgnoreReasonCode]string{
+			api.KNOWNISSUE: "", api.FALSEPOSITIVE: "", api.DUPLICATE: "",
+			api.IMPACTACCEPTABLE: "", api.OTHER: "",
+		})},
 	}
 
 	for _, tt := range tests {
