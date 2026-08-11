@@ -22,6 +22,7 @@ import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import type { components } from '../../api/schema'
 import { rootRoute } from '../root'
+import { AlertSettingsHeader } from './header'
 
 type SMTPChannelInput = components['schemas']['SMTPChannelInput']
 type WebhookTargetInput = components['schemas']['WebhookTargetInput']
@@ -173,14 +174,7 @@ function NotificationSettingsPage() {
 
   return (
     <Space orientation="vertical" size="large" style={{ width: '100%' }}>
-      <div>
-        <Typography.Title level={2} style={{ marginBottom: 4 }}>
-          告警设置
-        </Typography.Title>
-        <Typography.Title level={4} style={{ margin: 0 }}>
-          通知渠道
-        </Typography.Title>
-      </div>
+      <AlertSettingsHeader active="notifications" />
       {!canManage && (
         <Alert type="info" showIcon title="只读模式" description="需要告警管理员角色才能修改配置或发送测试通知" />
       )}

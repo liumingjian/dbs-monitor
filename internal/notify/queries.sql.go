@@ -11,6 +11,63 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addNotificationContactGroupMember = `-- name: AddNotificationContactGroupMember :exec
+INSERT INTO notification_contact_group_member (group_id, contact_id) VALUES ($1, $2)
+`
+
+type AddNotificationContactGroupMemberParams struct {
+	GroupID   pgtype.UUID
+	ContactID pgtype.UUID
+}
+
+func (q *Queries) AddNotificationContactGroupMember(ctx context.Context, arg AddNotificationContactGroupMemberParams) error {
+	_, err := q.db.Exec(ctx, addNotificationContactGroupMember, arg.GroupID, arg.ContactID)
+	return err
+}
+
+const addNotificationPolicyChannel = `-- name: AddNotificationPolicyChannel :exec
+INSERT INTO notification_policy_channel (policy_id, channel, channel_target_id) VALUES ($1, $2, $3)
+`
+
+type AddNotificationPolicyChannelParams struct {
+	PolicyID        pgtype.UUID
+	Channel         string
+	ChannelTargetID pgtype.UUID
+}
+
+func (q *Queries) AddNotificationPolicyChannel(ctx context.Context, arg AddNotificationPolicyChannelParams) error {
+	_, err := q.db.Exec(ctx, addNotificationPolicyChannel, arg.PolicyID, arg.Channel, arg.ChannelTargetID)
+	return err
+}
+
+const addNotificationPolicyContact = `-- name: AddNotificationPolicyContact :exec
+INSERT INTO notification_policy_contact (policy_id, contact_id) VALUES ($1, $2)
+`
+
+type AddNotificationPolicyContactParams struct {
+	PolicyID  pgtype.UUID
+	ContactID pgtype.UUID
+}
+
+func (q *Queries) AddNotificationPolicyContact(ctx context.Context, arg AddNotificationPolicyContactParams) error {
+	_, err := q.db.Exec(ctx, addNotificationPolicyContact, arg.PolicyID, arg.ContactID)
+	return err
+}
+
+const addNotificationPolicyContactGroup = `-- name: AddNotificationPolicyContactGroup :exec
+INSERT INTO notification_policy_contact_group (policy_id, group_id) VALUES ($1, $2)
+`
+
+type AddNotificationPolicyContactGroupParams struct {
+	PolicyID pgtype.UUID
+	GroupID  pgtype.UUID
+}
+
+func (q *Queries) AddNotificationPolicyContactGroup(ctx context.Context, arg AddNotificationPolicyContactGroupParams) error {
+	_, err := q.db.Exec(ctx, addNotificationPolicyContactGroup, arg.PolicyID, arg.GroupID)
+	return err
+}
+
 const claimDueNotification = `-- name: ClaimDueNotification :one
 UPDATE notification_delivery delivery
 SET locked_until = $1::timestamptz + interval '30 seconds'
@@ -45,6 +102,150 @@ func (q *Queries) ClaimDueNotification(ctx context.Context, claimedAt pgtype.Tim
 		&i.CreatedAt,
 		&i.CompletedAt,
 		&i.ChannelTargetID,
+	)
+	return i, err
+}
+
+const clearNotificationContactGroupMembers = `-- name: ClearNotificationContactGroupMembers :exec
+DELETE FROM notification_contact_group_member WHERE group_id = $1
+`
+
+func (q *Queries) ClearNotificationContactGroupMembers(ctx context.Context, groupID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearNotificationContactGroupMembers, groupID)
+	return err
+}
+
+const clearNotificationPolicyChannels = `-- name: ClearNotificationPolicyChannels :exec
+DELETE FROM notification_policy_channel WHERE policy_id = $1
+`
+
+func (q *Queries) ClearNotificationPolicyChannels(ctx context.Context, policyID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearNotificationPolicyChannels, policyID)
+	return err
+}
+
+const clearNotificationPolicyContactGroups = `-- name: ClearNotificationPolicyContactGroups :exec
+DELETE FROM notification_policy_contact_group WHERE policy_id = $1
+`
+
+func (q *Queries) ClearNotificationPolicyContactGroups(ctx context.Context, policyID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearNotificationPolicyContactGroups, policyID)
+	return err
+}
+
+const clearNotificationPolicyContacts = `-- name: ClearNotificationPolicyContacts :exec
+DELETE FROM notification_policy_contact WHERE policy_id = $1
+`
+
+func (q *Queries) ClearNotificationPolicyContacts(ctx context.Context, policyID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearNotificationPolicyContacts, policyID)
+	return err
+}
+
+const createNotificationContact = `-- name: CreateNotificationContact :one
+INSERT INTO notification_contact (id, name, email, external_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $5)
+RETURNING id, name, email, external_id, created_at, updated_at
+`
+
+type CreateNotificationContactParams struct {
+	ID         pgtype.UUID
+	Name       string
+	Email      string
+	ExternalID pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) CreateNotificationContact(ctx context.Context, arg CreateNotificationContactParams) (NotificationContact, error) {
+	row := q.db.QueryRow(ctx, createNotificationContact,
+		arg.ID,
+		arg.Name,
+		arg.Email,
+		arg.ExternalID,
+		arg.CreatedAt,
+	)
+	var i NotificationContact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.ExternalID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createNotificationContactGroup = `-- name: CreateNotificationContactGroup :one
+INSERT INTO notification_contact_group (id, name, created_at, updated_at)
+VALUES ($1, $2, $3, $3)
+RETURNING id, name, created_at, updated_at
+`
+
+type CreateNotificationContactGroupParams struct {
+	ID        pgtype.UUID
+	Name      string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateNotificationContactGroup(ctx context.Context, arg CreateNotificationContactGroupParams) (NotificationContactGroup, error) {
+	row := q.db.QueryRow(ctx, createNotificationContactGroup, arg.ID, arg.Name, arg.CreatedAt)
+	var i NotificationContactGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const createNotificationPolicy = `-- name: CreateNotificationPolicy :one
+INSERT INTO notification_policy (
+    id, identifier, name, is_default, severity_filter, notify_on_fire,
+    notify_on_recovery, repeat_interval, template_id, created_at, updated_at
+)
+VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8, $9, $9)
+RETURNING id, identifier, name, is_default, created_at, updated_at, severity_filter, notify_on_fire, notify_on_recovery, repeat_interval, template_id
+`
+
+type CreateNotificationPolicyParams struct {
+	ID               pgtype.UUID
+	Identifier       string
+	Name             string
+	SeverityFilter   []string
+	NotifyOnFire     bool
+	NotifyOnRecovery bool
+	RepeatInterval   int32
+	TemplateID       pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) CreateNotificationPolicy(ctx context.Context, arg CreateNotificationPolicyParams) (NotificationPolicy, error) {
+	row := q.db.QueryRow(ctx, createNotificationPolicy,
+		arg.ID,
+		arg.Identifier,
+		arg.Name,
+		arg.SeverityFilter,
+		arg.NotifyOnFire,
+		arg.NotifyOnRecovery,
+		arg.RepeatInterval,
+		arg.TemplateID,
+		arg.CreatedAt,
+	)
+	var i NotificationPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.Identifier,
+		&i.Name,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SeverityFilter,
+		&i.NotifyOnFire,
+		&i.NotifyOnRecovery,
+		&i.RepeatInterval,
+		&i.TemplateID,
 	)
 	return i, err
 }
@@ -95,6 +296,42 @@ func (q *Queries) CreateWebhookTarget(ctx context.Context, arg CreateWebhookTarg
 	return i, err
 }
 
+const deleteNotificationContact = `-- name: DeleteNotificationContact :execrows
+DELETE FROM notification_contact WHERE id = $1
+`
+
+func (q *Queries) DeleteNotificationContact(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotificationContact, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteNotificationContactGroup = `-- name: DeleteNotificationContactGroup :execrows
+DELETE FROM notification_contact_group WHERE id = $1
+`
+
+func (q *Queries) DeleteNotificationContactGroup(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotificationContactGroup, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteNotificationPolicy = `-- name: DeleteNotificationPolicy :execrows
+DELETE FROM notification_policy WHERE id = $1 AND NOT is_default
+`
+
+func (q *Queries) DeleteNotificationPolicy(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteNotificationPolicy, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteWebhookTarget = `-- name: DeleteWebhookTarget :execrows
 DELETE FROM webhook_target WHERE id = $1
 `
@@ -108,6 +345,35 @@ func (q *Queries) DeleteWebhookTarget(ctx context.Context, id pgtype.UUID) (int6
 }
 
 const enqueueAlertNotifications = `-- name: EnqueueAlertNotifications :many
+WITH selected_policy AS (
+    SELECT policy.id, policy.identifier, policy.name, policy.is_default, policy.created_at, policy.updated_at, policy.severity_filter, policy.notify_on_fire, policy.notify_on_recovery, policy.repeat_interval, policy.template_id
+    FROM alert_instance alert
+    JOIN alert_rule rule ON rule.id = alert.rule_id
+    JOIN notification_policy policy ON policy.id = COALESCE(
+        rule.notification_policy_id,
+        (SELECT id FROM notification_policy WHERE is_default)
+    )
+    WHERE alert.id = $1
+      AND alert.severity = ANY(policy.severity_filter)
+      AND (($2 = 'FIRING' AND policy.notify_on_fire)
+        OR ($2 = 'RECOVERY' AND policy.notify_on_recovery)
+        OR $2 = 'REPEAT')
+), smtp_recipients AS (
+    SELECT contact.email AS target
+    FROM selected_policy policy
+    JOIN notification_policy_channel channel
+      ON channel.policy_id = policy.id AND channel.channel = 'SMTP'
+    JOIN notification_policy_contact selected_contact ON selected_contact.policy_id = policy.id
+    JOIN notification_contact contact ON contact.id = selected_contact.contact_id
+    UNION
+    SELECT contact.email
+    FROM selected_policy policy
+    JOIN notification_policy_channel channel
+      ON channel.policy_id = policy.id AND channel.channel = 'SMTP'
+    JOIN notification_policy_contact_group selected_group ON selected_group.policy_id = policy.id
+    JOIN notification_contact_group_member member ON member.group_id = selected_group.group_id
+    JOIN notification_contact contact ON contact.id = member.contact_id
+)
 INSERT INTO notification_delivery (
     alert_instance_id, event_type, channel, channel_target_id, target, template_id,
     payload, next_attempt_at, created_at
@@ -115,12 +381,26 @@ INSERT INTO notification_delivery (
 SELECT $1, $2, destination.channel, destination.channel_target_id,
        destination.target, $3, $4, $5, $5
 FROM (
-    SELECT 'SMTP'::text AS channel, NULL::uuid AS channel_target_id, smtp.recipient AS target
+    SELECT 'SMTP'::text AS channel, NULL::uuid AS channel_target_id, recipient.target
     FROM smtp_channel smtp
+    CROSS JOIN LATERAL (
+        SELECT target FROM smtp_recipients
+        UNION ALL
+        SELECT smtp.recipient
+        WHERE NOT EXISTS (SELECT 1 FROM smtp_recipients)
+          AND EXISTS (
+              SELECT 1 FROM selected_policy policy
+              JOIN notification_policy_channel channel
+                ON channel.policy_id = policy.id AND channel.channel = 'SMTP'
+          )
+    ) recipient
     WHERE smtp.singleton AND smtp.enabled
     UNION ALL
     SELECT 'WEBHOOK', webhook.id, webhook.url
-    FROM webhook_target webhook
+    FROM selected_policy policy
+    JOIN notification_policy_channel channel
+      ON channel.policy_id = policy.id AND channel.channel = 'WEBHOOK'
+    JOIN webhook_target webhook ON webhook.id = channel.channel_target_id
     WHERE webhook.enabled
 ) destination
 RETURNING id
@@ -201,6 +481,63 @@ func (q *Queries) EnqueueTestWebhookNotification(ctx context.Context, arg Enqueu
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getNotificationContact = `-- name: GetNotificationContact :one
+SELECT id, name, email, external_id, created_at, updated_at FROM notification_contact WHERE id = $1
+`
+
+func (q *Queries) GetNotificationContact(ctx context.Context, id pgtype.UUID) (NotificationContact, error) {
+	row := q.db.QueryRow(ctx, getNotificationContact, id)
+	var i NotificationContact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.ExternalID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getNotificationContactGroup = `-- name: GetNotificationContactGroup :one
+SELECT id, name, created_at, updated_at FROM notification_contact_group WHERE id = $1
+`
+
+func (q *Queries) GetNotificationContactGroup(ctx context.Context, id pgtype.UUID) (NotificationContactGroup, error) {
+	row := q.db.QueryRow(ctx, getNotificationContactGroup, id)
+	var i NotificationContactGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getNotificationPolicy = `-- name: GetNotificationPolicy :one
+SELECT id, identifier, name, is_default, created_at, updated_at, severity_filter, notify_on_fire, notify_on_recovery, repeat_interval, template_id FROM notification_policy WHERE id = $1
+`
+
+func (q *Queries) GetNotificationPolicy(ctx context.Context, id pgtype.UUID) (NotificationPolicy, error) {
+	row := q.db.QueryRow(ctx, getNotificationPolicy, id)
+	var i NotificationPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.Identifier,
+		&i.Name,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SeverityFilter,
+		&i.NotifyOnFire,
+		&i.NotifyOnRecovery,
+		&i.RepeatInterval,
+		&i.TemplateID,
+	)
+	return i, err
 }
 
 const getSMTPChannel = `-- name: GetSMTPChannel :one
@@ -401,6 +738,205 @@ func (q *Queries) ListAlertNotificationAttempts(ctx context.Context, alertInstan
 	return items, nil
 }
 
+const listNotificationContactGroupMembers = `-- name: ListNotificationContactGroupMembers :many
+SELECT contact_id FROM notification_contact_group_member
+WHERE group_id = $1 ORDER BY contact_id
+`
+
+func (q *Queries) ListNotificationContactGroupMembers(ctx context.Context, groupID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listNotificationContactGroupMembers, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var contact_id pgtype.UUID
+		if err := rows.Scan(&contact_id); err != nil {
+			return nil, err
+		}
+		items = append(items, contact_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationContactGroups = `-- name: ListNotificationContactGroups :many
+SELECT id, name, created_at, updated_at FROM notification_contact_group ORDER BY name, id
+`
+
+func (q *Queries) ListNotificationContactGroups(ctx context.Context) ([]NotificationContactGroup, error) {
+	rows, err := q.db.Query(ctx, listNotificationContactGroups)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NotificationContactGroup
+	for rows.Next() {
+		var i NotificationContactGroup
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationContacts = `-- name: ListNotificationContacts :many
+SELECT id, name, email, external_id, created_at, updated_at FROM notification_contact ORDER BY name, id
+`
+
+func (q *Queries) ListNotificationContacts(ctx context.Context) ([]NotificationContact, error) {
+	rows, err := q.db.Query(ctx, listNotificationContacts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NotificationContact
+	for rows.Next() {
+		var i NotificationContact
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Email,
+			&i.ExternalID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationPolicies = `-- name: ListNotificationPolicies :many
+SELECT id, identifier, name, is_default, created_at, updated_at, severity_filter, notify_on_fire, notify_on_recovery, repeat_interval, template_id FROM notification_policy ORDER BY is_default DESC, name, id
+`
+
+func (q *Queries) ListNotificationPolicies(ctx context.Context) ([]NotificationPolicy, error) {
+	rows, err := q.db.Query(ctx, listNotificationPolicies)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NotificationPolicy
+	for rows.Next() {
+		var i NotificationPolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.Identifier,
+			&i.Name,
+			&i.IsDefault,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.SeverityFilter,
+			&i.NotifyOnFire,
+			&i.NotifyOnRecovery,
+			&i.RepeatInterval,
+			&i.TemplateID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationPolicyChannels = `-- name: ListNotificationPolicyChannels :many
+SELECT channel, channel_target_id FROM notification_policy_channel
+WHERE policy_id = $1 ORDER BY channel, channel_target_id
+`
+
+type ListNotificationPolicyChannelsRow struct {
+	Channel         string
+	ChannelTargetID pgtype.UUID
+}
+
+func (q *Queries) ListNotificationPolicyChannels(ctx context.Context, policyID pgtype.UUID) ([]ListNotificationPolicyChannelsRow, error) {
+	rows, err := q.db.Query(ctx, listNotificationPolicyChannels, policyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListNotificationPolicyChannelsRow
+	for rows.Next() {
+		var i ListNotificationPolicyChannelsRow
+		if err := rows.Scan(&i.Channel, &i.ChannelTargetID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationPolicyContactGroups = `-- name: ListNotificationPolicyContactGroups :many
+SELECT group_id FROM notification_policy_contact_group WHERE policy_id = $1 ORDER BY group_id
+`
+
+func (q *Queries) ListNotificationPolicyContactGroups(ctx context.Context, policyID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listNotificationPolicyContactGroups, policyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var group_id pgtype.UUID
+		if err := rows.Scan(&group_id); err != nil {
+			return nil, err
+		}
+		items = append(items, group_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotificationPolicyContacts = `-- name: ListNotificationPolicyContacts :many
+SELECT contact_id FROM notification_policy_contact WHERE policy_id = $1 ORDER BY contact_id
+`
+
+func (q *Queries) ListNotificationPolicyContacts(ctx context.Context, policyID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listNotificationPolicyContacts, policyID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var contact_id pgtype.UUID
+		if err := rows.Scan(&contact_id); err != nil {
+			return nil, err
+		}
+		items = append(items, contact_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentActiveChannelFailures = `-- name: ListRecentActiveChannelFailures :many
 WITH terminal_failures AS (
     SELECT delivery.channel, delivery.channel_target_id, delivery.target,
@@ -458,6 +994,68 @@ func (q *Queries) ListRecentActiveChannelFailures(ctx context.Context) ([]ListRe
 			&i.Target,
 			&i.FailureReason,
 			&i.RetryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRepeatCandidates = `-- name: ListRepeatCandidates :many
+SELECT alert.id AS alert_instance_id, alert.disposition,
+       policy.repeat_interval,
+       latest.created_at AS last_notification_at,
+       latest.payload
+FROM alert_instance alert
+JOIN alert_rule rule ON rule.id = alert.rule_id
+JOIN notification_policy policy ON policy.id = COALESCE(
+    rule.notification_policy_id,
+    (SELECT id FROM notification_policy WHERE is_default)
+)
+JOIN LATERAL (
+    SELECT delivery.created_at, delivery.payload
+    FROM notification_delivery delivery
+    WHERE delivery.alert_instance_id = alert.id
+      AND delivery.event_type IN ('FIRING', 'REPEAT')
+    ORDER BY delivery.created_at DESC, delivery.id DESC
+    LIMIT 1
+) latest ON true
+WHERE alert.status = 'FIRING'
+  AND alert.severity = ANY(policy.severity_filter)
+  AND NOT EXISTS (
+      SELECT 1 FROM notification_delivery pending
+      WHERE pending.alert_instance_id = alert.id AND pending.status = 'PENDING'
+  )
+ORDER BY alert.id
+`
+
+type ListRepeatCandidatesRow struct {
+	AlertInstanceID    pgtype.UUID
+	Disposition        string
+	RepeatInterval     int32
+	LastNotificationAt pgtype.Timestamptz
+	Payload            []byte
+}
+
+func (q *Queries) ListRepeatCandidates(ctx context.Context) ([]ListRepeatCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listRepeatCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRepeatCandidatesRow
+	for rows.Next() {
+		var i ListRepeatCandidatesRow
+		if err := rows.Scan(
+			&i.AlertInstanceID,
+			&i.Disposition,
+			&i.RepeatInterval,
+			&i.LastNotificationAt,
+			&i.Payload,
 		); err != nil {
 			return nil, err
 		}
@@ -619,6 +1217,114 @@ type RecordNotificationSentParams struct {
 func (q *Queries) RecordNotificationSent(ctx context.Context, arg RecordNotificationSentParams) error {
 	_, err := q.db.Exec(ctx, recordNotificationSent, arg.NotificationID, arg.EvaluatedAt, arg.RetryCount)
 	return err
+}
+
+const updateNotificationContact = `-- name: UpdateNotificationContact :one
+UPDATE notification_contact
+SET name = $2, email = $3, external_id = $4, updated_at = $5
+WHERE id = $1
+RETURNING id, name, email, external_id, created_at, updated_at
+`
+
+type UpdateNotificationContactParams struct {
+	ID         pgtype.UUID
+	Name       string
+	Email      string
+	ExternalID pgtype.Text
+	UpdatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateNotificationContact(ctx context.Context, arg UpdateNotificationContactParams) (NotificationContact, error) {
+	row := q.db.QueryRow(ctx, updateNotificationContact,
+		arg.ID,
+		arg.Name,
+		arg.Email,
+		arg.ExternalID,
+		arg.UpdatedAt,
+	)
+	var i NotificationContact
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.ExternalID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateNotificationContactGroup = `-- name: UpdateNotificationContactGroup :one
+UPDATE notification_contact_group
+SET name = $2, updated_at = $3
+WHERE id = $1
+RETURNING id, name, created_at, updated_at
+`
+
+type UpdateNotificationContactGroupParams struct {
+	ID        pgtype.UUID
+	Name      string
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateNotificationContactGroup(ctx context.Context, arg UpdateNotificationContactGroupParams) (NotificationContactGroup, error) {
+	row := q.db.QueryRow(ctx, updateNotificationContactGroup, arg.ID, arg.Name, arg.UpdatedAt)
+	var i NotificationContactGroup
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateNotificationPolicy = `-- name: UpdateNotificationPolicy :one
+UPDATE notification_policy
+SET name = $2, severity_filter = $3, notify_on_fire = $4,
+    notify_on_recovery = $5, repeat_interval = $6, template_id = $7,
+    updated_at = $8
+WHERE id = $1
+RETURNING id, identifier, name, is_default, created_at, updated_at, severity_filter, notify_on_fire, notify_on_recovery, repeat_interval, template_id
+`
+
+type UpdateNotificationPolicyParams struct {
+	ID               pgtype.UUID
+	Name             string
+	SeverityFilter   []string
+	NotifyOnFire     bool
+	NotifyOnRecovery bool
+	RepeatInterval   int32
+	TemplateID       pgtype.Text
+	UpdatedAt        pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateNotificationPolicy(ctx context.Context, arg UpdateNotificationPolicyParams) (NotificationPolicy, error) {
+	row := q.db.QueryRow(ctx, updateNotificationPolicy,
+		arg.ID,
+		arg.Name,
+		arg.SeverityFilter,
+		arg.NotifyOnFire,
+		arg.NotifyOnRecovery,
+		arg.RepeatInterval,
+		arg.TemplateID,
+		arg.UpdatedAt,
+	)
+	var i NotificationPolicy
+	err := row.Scan(
+		&i.ID,
+		&i.Identifier,
+		&i.Name,
+		&i.IsDefault,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SeverityFilter,
+		&i.NotifyOnFire,
+		&i.NotifyOnRecovery,
+		&i.RepeatInterval,
+		&i.TemplateID,
+	)
+	return i, err
 }
 
 const updateSMTPChannelAuthKey = `-- name: UpdateSMTPChannelAuthKey :exec

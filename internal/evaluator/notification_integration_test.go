@@ -109,7 +109,7 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	evaluation := New(platform, currentClock, nil)
 	evaluationDone := make(chan error, 1)
 	go func() { evaluationDone <- evaluation.RunOnce(ctx) }()
-	waitForNotificationLock(t, ctx, platform)
+	waitForNotificationLock(t, ctx, platform, evaluationDone)
 	channels := map[string]notify.Channel{notify.SMTPChannelKey: channel}
 	if processed, err := dispatcher.DispatchOne(ctx, now, channels); err != nil || processed {
 		t.Fatalf("delivery before evaluator commit = %t, %v; want false, nil", processed, err)
@@ -196,6 +196,125 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	}
 }
 
+func TestNotificationRepeatAcknowledgementAndNewLifecycle(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	platform, keyring := notificationTestDatabase(t, ctx)
+	defer platform.Close()
+
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	instanceID := uuid.New()
+	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "unused-test-value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := instance.New(platform).CreateInstance(ctx, instance.CreateInstanceParams{
+		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "repeat-primary",
+		Host: "127.0.0.1", Port: 5432, DatabaseName: "postgres", Username: "monitor",
+		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+	}); err != nil {
+		t.Fatalf("create repeat test instance: %v", err)
+	}
+	ruleID := uuid.New()
+	actorID := uuid.New()
+	if _, err := platform.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role, enabled, created_at)
+		VALUES ($1, 'repeat-admin', decode('00', 'hex'), 'ALERT_ADMIN', true, $2)`, actorID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `INSERT INTO alert_rule
+		(id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold,
+		 window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy,
+		 enabled, version, scope, evaluation_interval_seconds)
+		VALUES ($1, 'Repeat tracer', 'pg.connection.total', 'latest', '>=', 20, '<', 15,
+		 30, 1, 1, 'critical', 'mark_no_data', true, 1, 'ALL', 30)`, ruleID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `UPDATE notification_policy SET repeat_interval = 900 WHERE is_default`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `INSERT INTO smtp_channel
+		(enabled, host, port, from_address, recipient, auth_type, tls_mode, updated_at)
+		VALUES (true, '127.0.0.1', 465, 'monitor@example.com', 'dba@example.com', 'NONE', 'IMPLICIT', $1)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	createAlert := func(at time.Time) uuid.UUID {
+		t.Helper()
+		var alertID uuid.UUID
+		if err := platform.QueryRow(ctx, `INSERT INTO alert_instance
+			(rule_id, instance_id, metric_id, metric_dimension_key, status, rule_version,
+			 severity, current_value, rule_snapshot, first_triggered_at, first_rule_version, first_rule_snapshot, updated_at)
+			VALUES ($1, $2, 'pg.connection.total', '{}', 'FIRING', 1,
+			 'critical', 25, '{"name":"Repeat tracer"}', $3, 1, '{"name":"Repeat tracer"}', $3)
+			RETURNING id`, ruleID, instanceID, at).Scan(&alertID); err != nil {
+			t.Fatalf("create alert lifecycle: %v", err)
+		}
+		return alertID
+	}
+	markSent := func(alertID uuid.UUID, eventType string, at time.Time) {
+		t.Helper()
+		if _, err := platform.Exec(ctx, `UPDATE notification_delivery
+			SET status = 'SENT', attempt_count = 1, completed_at = $3
+			WHERE alert_instance_id = $1 AND event_type = $2 AND status = 'PENDING'`, alertID, eventType, at); err != nil {
+			t.Fatalf("mark %s sent: %v", eventType, err)
+		}
+	}
+	queue := func(alertID uuid.UUID, eventType notify.EventType, at time.Time) int {
+		t.Helper()
+		ids, err := notify.New(platform).EnqueueAlertNotifications(ctx, notify.EnqueueAlertNotificationsParams{
+			AlertInstanceID: pgtype.UUID{Bytes: alertID, Valid: true}, EventType: string(eventType),
+			TemplateID: pgtype.Text{String: "builtin.test.v1", Valid: true}, Payload: []byte(`{"test":true}`),
+			NextAttemptAt: pgtype.Timestamptz{Time: at, Valid: true},
+		})
+		if err != nil {
+			t.Fatalf("queue %s: %v", eventType, err)
+		}
+		return len(ids)
+	}
+
+	firstAlertID := createAlert(now)
+	if count := queue(firstAlertID, notify.EventFiring, now); count != 1 {
+		t.Fatalf("firing deliveries = %d, want 1", count)
+	}
+	markSent(firstAlertID, string(notify.EventFiring), now)
+	dispatcher := notify.NewDispatcher(platform)
+	if count, err := dispatcher.EnqueueDueRepeats(ctx, now.Add(899*time.Second)); err != nil || count != 0 {
+		t.Fatalf("repeat before interval = %d, %v; want 0, nil", count, err)
+	}
+	if count, err := dispatcher.EnqueueDueRepeats(ctx, now.Add(900*time.Second)); err != nil || count != 1 {
+		t.Fatalf("repeat at interval = %d, %v; want 1, nil", count, err)
+	}
+	markSent(firstAlertID, string(notify.EventRepeat), now.Add(900*time.Second))
+	if _, err := platform.Exec(ctx, `UPDATE alert_instance SET disposition = 'ACKED',
+		disposition_by = $2, disposition_at = $3
+		WHERE id = $1`, firstAlertID, actorID, now.Add(901*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if count, err := dispatcher.EnqueueDueRepeats(ctx, now.Add(1800*time.Second)); err != nil || count != 0 {
+		t.Fatalf("acknowledged repeat = %d, %v; want 0, nil", count, err)
+	}
+	if count := queue(firstAlertID, notify.EventRecovery, now.Add(1800*time.Second)); count != 1 {
+		t.Fatalf("recovery deliveries after acknowledgement = %d, want 1", count)
+	}
+	if _, err := platform.Exec(ctx, `UPDATE alert_instance SET status = 'RECOVERED', recovered_at = $2 WHERE id = $1`, firstAlertID, now.Add(1800*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	secondFiringAt := now.Add(2 * time.Hour)
+	secondAlertID := createAlert(secondFiringAt)
+	if count := queue(secondAlertID, notify.EventFiring, secondFiringAt); count != 1 {
+		t.Fatalf("new lifecycle firing deliveries = %d, want 1", count)
+	}
+	markSent(secondAlertID, string(notify.EventFiring), secondFiringAt)
+	if count, err := dispatcher.EnqueueDueRepeats(ctx, secondFiringAt.Add(900*time.Second)); err != nil || count != 1 {
+		t.Fatalf("new lifecycle repeat = %d, %v; want 1, nil", count, err)
+	}
+	var disposition string
+	if err := platform.QueryRow(ctx, `SELECT disposition FROM alert_instance WHERE id = $1`, secondAlertID).Scan(&disposition); err != nil || disposition != "NONE" {
+		t.Fatalf("new lifecycle disposition = %q, %v; want NONE", disposition, err)
+	}
+}
+
 type notificationClock struct{ now time.Time }
 
 func (clock *notificationClock) Now() time.Time { return clock.now }
@@ -203,7 +322,7 @@ func (*notificationClock) Ticker(time.Duration) (<-chan time.Time, func()) {
 	return make(chan time.Time), func() {}
 }
 
-func waitForNotificationLock(t *testing.T, ctx context.Context, platform *db.Pool) {
+func waitForNotificationLock(t *testing.T, ctx context.Context, platform *db.Pool, evaluationDone <-chan error) {
 	t.Helper()
 	for deadline := time.Now().Add(3 * time.Second); time.Now().Before(deadline); {
 		var waiting bool
@@ -214,6 +333,11 @@ func waitForNotificationLock(t *testing.T, ctx context.Context, platform *db.Poo
 		}
 		if waiting {
 			return
+		}
+		select {
+		case err := <-evaluationDone:
+			t.Fatalf("evaluation exited before notification commit gate: %v", err)
+		default:
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

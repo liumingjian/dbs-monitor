@@ -240,6 +240,12 @@ const (
 	NotificationSent    NotificationAttemptStatus = "SENT"
 )
 
+// Defines values for NotificationPolicyChannelChannel.
+const (
+	PolicySMTP    NotificationPolicyChannelChannel = "SMTP"
+	PolicyWebhook NotificationPolicyChannelChannel = "WEBHOOK"
+)
+
 // Defines values for PerformanceEventType.
 const (
 	EventActiveSessionsHigh PerformanceEventType = "ACTIVE_SESSIONS_HIGH"
@@ -954,6 +960,81 @@ type NotificationAttemptResult string
 // NotificationAttemptStatus defines model for NotificationAttempt.Status.
 type NotificationAttemptStatus string
 
+// NotificationContact defines model for NotificationContact.
+type NotificationContact struct {
+	CreatedAt  time.Time           `json:"created_at"`
+	Email      openapi_types.Email `json:"email"`
+	ExternalId *string             `json:"external_id,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+	Name       string              `json:"name"`
+	UpdatedAt  time.Time           `json:"updated_at"`
+}
+
+// NotificationContactGroup defines model for NotificationContactGroup.
+type NotificationContactGroup struct {
+	ContactIds []openapi_types.UUID `json:"contact_ids"`
+	CreatedAt  time.Time            `json:"created_at"`
+	Id         openapi_types.UUID   `json:"id"`
+	Name       string               `json:"name"`
+	UpdatedAt  time.Time            `json:"updated_at"`
+}
+
+// NotificationContactGroupInput defines model for NotificationContactGroupInput.
+type NotificationContactGroupInput struct {
+	ContactIds []openapi_types.UUID `json:"contact_ids"`
+	Name       string               `json:"name"`
+}
+
+// NotificationContactInput defines model for NotificationContactInput.
+type NotificationContactInput struct {
+	Email      openapi_types.Email `json:"email"`
+	ExternalId *string             `json:"external_id,omitempty"`
+	Name       string              `json:"name"`
+}
+
+// NotificationPolicy defines model for NotificationPolicy.
+type NotificationPolicy struct {
+	Channels         []NotificationPolicyChannel `json:"channels"`
+	ContactGroupIds  []openapi_types.UUID        `json:"contact_group_ids"`
+	ContactIds       []openapi_types.UUID        `json:"contact_ids"`
+	CreatedAt        time.Time                   `json:"created_at"`
+	Id               openapi_types.UUID          `json:"id"`
+	IsDefault        bool                        `json:"is_default"`
+	Name             string                      `json:"name"`
+	NotifyOnFire     bool                        `json:"notify_on_fire"`
+	NotifyOnRecovery bool                        `json:"notify_on_recovery"`
+
+	// RepeatInterval Repeat interval in seconds.
+	RepeatInterval int             `json:"repeat_interval"`
+	SeverityFilter []AlertSeverity `json:"severity_filter"`
+	TemplateId     *string         `json:"template_id,omitempty"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
+// NotificationPolicyChannel defines model for NotificationPolicyChannel.
+type NotificationPolicyChannel struct {
+	Channel  NotificationPolicyChannelChannel `json:"channel"`
+	TargetId *openapi_types.UUID              `json:"target_id,omitempty"`
+}
+
+// NotificationPolicyChannelChannel defines model for NotificationPolicyChannel.Channel.
+type NotificationPolicyChannelChannel string
+
+// NotificationPolicyInput defines model for NotificationPolicyInput.
+type NotificationPolicyInput struct {
+	Channels         []NotificationPolicyChannel `json:"channels"`
+	ContactGroupIds  []openapi_types.UUID        `json:"contact_group_ids"`
+	ContactIds       []openapi_types.UUID        `json:"contact_ids"`
+	Name             string                      `json:"name"`
+	NotifyOnFire     bool                        `json:"notify_on_fire"`
+	NotifyOnRecovery bool                        `json:"notify_on_recovery"`
+
+	// RepeatInterval Repeat interval in seconds.
+	RepeatInterval int             `json:"repeat_interval"`
+	SeverityFilter []AlertSeverity `json:"severity_filter"`
+	TemplateId     *string         `json:"template_id,omitempty"`
+}
+
 // NotificationQueued defines model for NotificationQueued.
 type NotificationQueued struct {
 	Id openapi_types.UUID `json:"id"`
@@ -1291,6 +1372,24 @@ type CreateWebhookTargetJSONRequestBody = WebhookTargetInput
 // UpdateWebhookTargetJSONRequestBody defines body for UpdateWebhookTarget for application/json ContentType.
 type UpdateWebhookTargetJSONRequestBody = WebhookTargetInput
 
+// CreateNotificationContactGroupJSONRequestBody defines body for CreateNotificationContactGroup for application/json ContentType.
+type CreateNotificationContactGroupJSONRequestBody = NotificationContactGroupInput
+
+// UpdateNotificationContactGroupJSONRequestBody defines body for UpdateNotificationContactGroup for application/json ContentType.
+type UpdateNotificationContactGroupJSONRequestBody = NotificationContactGroupInput
+
+// CreateNotificationContactJSONRequestBody defines body for CreateNotificationContact for application/json ContentType.
+type CreateNotificationContactJSONRequestBody = NotificationContactInput
+
+// UpdateNotificationContactJSONRequestBody defines body for UpdateNotificationContact for application/json ContentType.
+type UpdateNotificationContactJSONRequestBody = NotificationContactInput
+
+// CreateNotificationPolicyJSONRequestBody defines body for CreateNotificationPolicy for application/json ContentType.
+type CreateNotificationPolicyJSONRequestBody = NotificationPolicyInput
+
+// UpdateNotificationPolicyJSONRequestBody defines body for UpdateNotificationPolicy for application/json ContentType.
+type UpdateNotificationPolicyJSONRequestBody = NotificationPolicyInput
+
 // ChangeOwnPasswordJSONRequestBody defines body for ChangeOwnPassword for application/json ContentType.
 type ChangeOwnPasswordJSONRequestBody = PasswordChangeInput
 
@@ -1473,6 +1572,42 @@ type ServerInterface interface {
 
 	// (POST /api/v1/notification-channels/webhooks/{id}/test)
 	TestWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-contact-groups)
+	ListNotificationContactGroups(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-contact-groups)
+	CreateNotificationContactGroup(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-contact-groups/{id})
+	DeleteNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-contact-groups/{id})
+	UpdateNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-contacts)
+	ListNotificationContacts(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-contacts)
+	CreateNotificationContact(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-contacts/{id})
+	DeleteNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-contacts/{id})
+	UpdateNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-policies)
+	ListNotificationPolicies(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-policies)
+	CreateNotificationPolicy(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-policies/{id})
+	DeleteNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-policies/{id})
+	UpdateNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
@@ -2919,6 +3054,240 @@ func (siw *ServerInterfaceWrapper) TestWebhookTarget(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ListNotificationContactGroups operation middleware
+func (siw *ServerInterfaceWrapper) ListNotificationContactGroups(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotificationContactGroups(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNotificationContactGroup operation middleware
+func (siw *ServerInterfaceWrapper) CreateNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNotificationContactGroup(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotificationContactGroup operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotificationContactGroup(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationContactGroup operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationContactGroup(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNotificationContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListNotificationContacts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotificationContacts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNotificationContact operation middleware
+func (siw *ServerInterfaceWrapper) CreateNotificationContact(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNotificationContact(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotificationContact operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotificationContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotificationContact(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationContact operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationContact(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNotificationPolicies operation middleware
+func (siw *ServerInterfaceWrapper) ListNotificationPolicies(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotificationPolicies(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNotificationPolicy operation middleware
+func (siw *ServerInterfaceWrapper) CreateNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNotificationPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotificationPolicy operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotificationPolicy(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationPolicy operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationPolicy(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangeOwnPassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
@@ -3237,6 +3606,18 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}", wrapper.DeleteWebhookTarget)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}", wrapper.UpdateWebhookTarget)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}/test", wrapper.TestWebhookTarget)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-contact-groups", wrapper.ListNotificationContactGroups)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-contact-groups", wrapper.CreateNotificationContactGroup)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-contact-groups/{id}", wrapper.DeleteNotificationContactGroup)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-contact-groups/{id}", wrapper.UpdateNotificationContactGroup)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-contacts", wrapper.ListNotificationContacts)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-contacts", wrapper.CreateNotificationContact)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-contacts/{id}", wrapper.DeleteNotificationContact)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-contacts/{id}", wrapper.UpdateNotificationContact)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-policies", wrapper.ListNotificationPolicies)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-policies", wrapper.CreateNotificationPolicy)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.DeleteNotificationPolicy)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.UpdateNotificationPolicy)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
@@ -4579,6 +4960,324 @@ func (response TestWebhookTarget404JSONResponse) VisitTestWebhookTargetResponse(
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListNotificationContactGroupsRequestObject struct {
+}
+
+type ListNotificationContactGroupsResponseObject interface {
+	VisitListNotificationContactGroupsResponse(w http.ResponseWriter) error
+}
+
+type ListNotificationContactGroups200JSONResponse []NotificationContactGroup
+
+func (response ListNotificationContactGroups200JSONResponse) VisitListNotificationContactGroupsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContactGroupRequestObject struct {
+	Body *CreateNotificationContactGroupJSONRequestBody
+}
+
+type CreateNotificationContactGroupResponseObject interface {
+	VisitCreateNotificationContactGroupResponse(w http.ResponseWriter) error
+}
+
+type CreateNotificationContactGroup201JSONResponse NotificationContactGroup
+
+func (response CreateNotificationContactGroup201JSONResponse) VisitCreateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContactGroup400JSONResponse Error
+
+func (response CreateNotificationContactGroup400JSONResponse) VisitCreateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationContactGroupRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNotificationContactGroupResponseObject interface {
+	VisitDeleteNotificationContactGroupResponse(w http.ResponseWriter) error
+}
+
+type DeleteNotificationContactGroup204Response struct {
+}
+
+func (response DeleteNotificationContactGroup204Response) VisitDeleteNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNotificationContactGroup404JSONResponse Error
+
+func (response DeleteNotificationContactGroup404JSONResponse) VisitDeleteNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactGroupRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateNotificationContactGroupJSONRequestBody
+}
+
+type UpdateNotificationContactGroupResponseObject interface {
+	VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationContactGroup200JSONResponse NotificationContactGroup
+
+func (response UpdateNotificationContactGroup200JSONResponse) VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactGroup400JSONResponse Error
+
+func (response UpdateNotificationContactGroup400JSONResponse) VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactGroup404JSONResponse Error
+
+func (response UpdateNotificationContactGroup404JSONResponse) VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListNotificationContactsRequestObject struct {
+}
+
+type ListNotificationContactsResponseObject interface {
+	VisitListNotificationContactsResponse(w http.ResponseWriter) error
+}
+
+type ListNotificationContacts200JSONResponse []NotificationContact
+
+func (response ListNotificationContacts200JSONResponse) VisitListNotificationContactsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContactRequestObject struct {
+	Body *CreateNotificationContactJSONRequestBody
+}
+
+type CreateNotificationContactResponseObject interface {
+	VisitCreateNotificationContactResponse(w http.ResponseWriter) error
+}
+
+type CreateNotificationContact201JSONResponse NotificationContact
+
+func (response CreateNotificationContact201JSONResponse) VisitCreateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContact400JSONResponse Error
+
+func (response CreateNotificationContact400JSONResponse) VisitCreateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationContactRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNotificationContactResponseObject interface {
+	VisitDeleteNotificationContactResponse(w http.ResponseWriter) error
+}
+
+type DeleteNotificationContact204Response struct {
+}
+
+func (response DeleteNotificationContact204Response) VisitDeleteNotificationContactResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNotificationContact404JSONResponse Error
+
+func (response DeleteNotificationContact404JSONResponse) VisitDeleteNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateNotificationContactJSONRequestBody
+}
+
+type UpdateNotificationContactResponseObject interface {
+	VisitUpdateNotificationContactResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationContact200JSONResponse NotificationContact
+
+func (response UpdateNotificationContact200JSONResponse) VisitUpdateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContact400JSONResponse Error
+
+func (response UpdateNotificationContact400JSONResponse) VisitUpdateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContact404JSONResponse Error
+
+func (response UpdateNotificationContact404JSONResponse) VisitUpdateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListNotificationPoliciesRequestObject struct {
+}
+
+type ListNotificationPoliciesResponseObject interface {
+	VisitListNotificationPoliciesResponse(w http.ResponseWriter) error
+}
+
+type ListNotificationPolicies200JSONResponse []NotificationPolicy
+
+func (response ListNotificationPolicies200JSONResponse) VisitListNotificationPoliciesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationPolicyRequestObject struct {
+	Body *CreateNotificationPolicyJSONRequestBody
+}
+
+type CreateNotificationPolicyResponseObject interface {
+	VisitCreateNotificationPolicyResponse(w http.ResponseWriter) error
+}
+
+type CreateNotificationPolicy201JSONResponse NotificationPolicy
+
+func (response CreateNotificationPolicy201JSONResponse) VisitCreateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationPolicy400JSONResponse Error
+
+func (response CreateNotificationPolicy400JSONResponse) VisitCreateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationPolicyRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNotificationPolicyResponseObject interface {
+	VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error
+}
+
+type DeleteNotificationPolicy204Response struct {
+}
+
+func (response DeleteNotificationPolicy204Response) VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNotificationPolicy404JSONResponse Error
+
+func (response DeleteNotificationPolicy404JSONResponse) VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationPolicy409JSONResponse Error
+
+func (response DeleteNotificationPolicy409JSONResponse) VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationPolicyRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateNotificationPolicyJSONRequestBody
+}
+
+type UpdateNotificationPolicyResponseObject interface {
+	VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationPolicy200JSONResponse NotificationPolicy
+
+func (response UpdateNotificationPolicy200JSONResponse) VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationPolicy400JSONResponse Error
+
+func (response UpdateNotificationPolicy400JSONResponse) VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationPolicy404JSONResponse Error
+
+func (response UpdateNotificationPolicy404JSONResponse) VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ChangeOwnPasswordRequestObject struct {
 	Body *ChangeOwnPasswordJSONRequestBody
 }
@@ -4958,6 +5657,42 @@ type StrictServerInterface interface {
 
 	// (POST /api/v1/notification-channels/webhooks/{id}/test)
 	TestWebhookTarget(ctx context.Context, request TestWebhookTargetRequestObject) (TestWebhookTargetResponseObject, error)
+
+	// (GET /api/v1/notification-contact-groups)
+	ListNotificationContactGroups(ctx context.Context, request ListNotificationContactGroupsRequestObject) (ListNotificationContactGroupsResponseObject, error)
+
+	// (POST /api/v1/notification-contact-groups)
+	CreateNotificationContactGroup(ctx context.Context, request CreateNotificationContactGroupRequestObject) (CreateNotificationContactGroupResponseObject, error)
+
+	// (DELETE /api/v1/notification-contact-groups/{id})
+	DeleteNotificationContactGroup(ctx context.Context, request DeleteNotificationContactGroupRequestObject) (DeleteNotificationContactGroupResponseObject, error)
+
+	// (PUT /api/v1/notification-contact-groups/{id})
+	UpdateNotificationContactGroup(ctx context.Context, request UpdateNotificationContactGroupRequestObject) (UpdateNotificationContactGroupResponseObject, error)
+
+	// (GET /api/v1/notification-contacts)
+	ListNotificationContacts(ctx context.Context, request ListNotificationContactsRequestObject) (ListNotificationContactsResponseObject, error)
+
+	// (POST /api/v1/notification-contacts)
+	CreateNotificationContact(ctx context.Context, request CreateNotificationContactRequestObject) (CreateNotificationContactResponseObject, error)
+
+	// (DELETE /api/v1/notification-contacts/{id})
+	DeleteNotificationContact(ctx context.Context, request DeleteNotificationContactRequestObject) (DeleteNotificationContactResponseObject, error)
+
+	// (PUT /api/v1/notification-contacts/{id})
+	UpdateNotificationContact(ctx context.Context, request UpdateNotificationContactRequestObject) (UpdateNotificationContactResponseObject, error)
+
+	// (GET /api/v1/notification-policies)
+	ListNotificationPolicies(ctx context.Context, request ListNotificationPoliciesRequestObject) (ListNotificationPoliciesResponseObject, error)
+
+	// (POST /api/v1/notification-policies)
+	CreateNotificationPolicy(ctx context.Context, request CreateNotificationPolicyRequestObject) (CreateNotificationPolicyResponseObject, error)
+
+	// (DELETE /api/v1/notification-policies/{id})
+	DeleteNotificationPolicy(ctx context.Context, request DeleteNotificationPolicyRequestObject) (DeleteNotificationPolicyResponseObject, error)
+
+	// (PUT /api/v1/notification-policies/{id})
+	UpdateNotificationPolicy(ctx context.Context, request UpdateNotificationPolicyRequestObject) (UpdateNotificationPolicyResponseObject, error)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
@@ -6540,6 +7275,348 @@ func (sh *strictHandler) TestWebhookTarget(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TestWebhookTargetResponseObject); ok {
 		if err := validResponse.VisitTestWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNotificationContactGroups operation middleware
+func (sh *strictHandler) ListNotificationContactGroups(w http.ResponseWriter, r *http.Request) {
+	var request ListNotificationContactGroupsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNotificationContactGroups(ctx, request.(ListNotificationContactGroupsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNotificationContactGroups")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNotificationContactGroupsResponseObject); ok {
+		if err := validResponse.VisitListNotificationContactGroupsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNotificationContactGroup operation middleware
+func (sh *strictHandler) CreateNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+	var request CreateNotificationContactGroupRequestObject
+
+	var body CreateNotificationContactGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNotificationContactGroup(ctx, request.(CreateNotificationContactGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNotificationContactGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNotificationContactGroupResponseObject); ok {
+		if err := validResponse.VisitCreateNotificationContactGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNotificationContactGroup operation middleware
+func (sh *strictHandler) DeleteNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNotificationContactGroupRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNotificationContactGroup(ctx, request.(DeleteNotificationContactGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNotificationContactGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNotificationContactGroupResponseObject); ok {
+		if err := validResponse.VisitDeleteNotificationContactGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationContactGroup operation middleware
+func (sh *strictHandler) UpdateNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateNotificationContactGroupRequestObject
+
+	request.Id = id
+
+	var body UpdateNotificationContactGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationContactGroup(ctx, request.(UpdateNotificationContactGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationContactGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationContactGroupResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationContactGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNotificationContacts operation middleware
+func (sh *strictHandler) ListNotificationContacts(w http.ResponseWriter, r *http.Request) {
+	var request ListNotificationContactsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNotificationContacts(ctx, request.(ListNotificationContactsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNotificationContacts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNotificationContactsResponseObject); ok {
+		if err := validResponse.VisitListNotificationContactsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNotificationContact operation middleware
+func (sh *strictHandler) CreateNotificationContact(w http.ResponseWriter, r *http.Request) {
+	var request CreateNotificationContactRequestObject
+
+	var body CreateNotificationContactJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNotificationContact(ctx, request.(CreateNotificationContactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNotificationContact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNotificationContactResponseObject); ok {
+		if err := validResponse.VisitCreateNotificationContactResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNotificationContact operation middleware
+func (sh *strictHandler) DeleteNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNotificationContactRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNotificationContact(ctx, request.(DeleteNotificationContactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNotificationContact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNotificationContactResponseObject); ok {
+		if err := validResponse.VisitDeleteNotificationContactResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationContact operation middleware
+func (sh *strictHandler) UpdateNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateNotificationContactRequestObject
+
+	request.Id = id
+
+	var body UpdateNotificationContactJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationContact(ctx, request.(UpdateNotificationContactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationContact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationContactResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationContactResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNotificationPolicies operation middleware
+func (sh *strictHandler) ListNotificationPolicies(w http.ResponseWriter, r *http.Request) {
+	var request ListNotificationPoliciesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNotificationPolicies(ctx, request.(ListNotificationPoliciesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNotificationPolicies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNotificationPoliciesResponseObject); ok {
+		if err := validResponse.VisitListNotificationPoliciesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNotificationPolicy operation middleware
+func (sh *strictHandler) CreateNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+	var request CreateNotificationPolicyRequestObject
+
+	var body CreateNotificationPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNotificationPolicy(ctx, request.(CreateNotificationPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNotificationPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNotificationPolicyResponseObject); ok {
+		if err := validResponse.VisitCreateNotificationPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNotificationPolicy operation middleware
+func (sh *strictHandler) DeleteNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNotificationPolicyRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNotificationPolicy(ctx, request.(DeleteNotificationPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNotificationPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNotificationPolicyResponseObject); ok {
+		if err := validResponse.VisitDeleteNotificationPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationPolicy operation middleware
+func (sh *strictHandler) UpdateNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateNotificationPolicyRequestObject
+
+	request.Id = id
+
+	var body UpdateNotificationPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationPolicy(ctx, request.(UpdateNotificationPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationPolicyResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationPolicyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -593,7 +593,7 @@ func (q *Queries) GetAlertStatus(ctx context.Context, instanceID pgtype.UUID) (s
 }
 
 const getDefaultNotificationPolicy = `-- name: GetDefaultNotificationPolicy :one
-SELECT id, identifier, name, is_default, created_at, updated_at FROM notification_policy WHERE is_default
+SELECT id, identifier, name, is_default, created_at, updated_at, severity_filter, notify_on_fire, notify_on_recovery, repeat_interval, template_id FROM notification_policy WHERE is_default
 `
 
 func (q *Queries) GetDefaultNotificationPolicy(ctx context.Context) (NotificationPolicy, error) {
@@ -606,6 +606,11 @@ func (q *Queries) GetDefaultNotificationPolicy(ctx context.Context) (Notificatio
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SeverityFilter,
+		&i.NotifyOnFire,
+		&i.NotifyOnRecovery,
+		&i.RepeatInterval,
+		&i.TemplateID,
 	)
 	return i, err
 }
@@ -753,7 +758,7 @@ func (q *Queries) GetEvaluationTarget(ctx context.Context, arg GetEvaluationTarg
 }
 
 const getNotificationPolicy = `-- name: GetNotificationPolicy :one
-SELECT id, identifier, name, is_default, created_at, updated_at FROM notification_policy WHERE id = $1
+SELECT id, identifier, name, is_default, created_at, updated_at, severity_filter, notify_on_fire, notify_on_recovery, repeat_interval, template_id FROM notification_policy WHERE id = $1
 `
 
 func (q *Queries) GetNotificationPolicy(ctx context.Context, id pgtype.UUID) (NotificationPolicy, error) {
@@ -766,6 +771,11 @@ func (q *Queries) GetNotificationPolicy(ctx context.Context, id pgtype.UUID) (No
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.SeverityFilter,
+		&i.NotifyOnFire,
+		&i.NotifyOnRecovery,
+		&i.RepeatInterval,
+		&i.TemplateID,
 	)
 	return i, err
 }

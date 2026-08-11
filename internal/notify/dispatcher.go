@@ -25,6 +25,39 @@ func WebhookChannelKey(targetID pgtype.UUID) string {
 	return fmt.Sprintf("WEBHOOK:%x", targetID.Bytes)
 }
 
+func (dispatcher *Dispatcher) EnqueueDueRepeats(ctx context.Context, now time.Time) (int, error) {
+	candidates, err := dispatcher.queries.ListRepeatCandidates(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list repeat candidates: %w", err)
+	}
+	now = now.UTC()
+	enqueued := 0
+	for _, candidate := range candidates {
+		lastNotificationAt := candidate.LastNotificationAt.Time
+		if !NotificationDue(
+			EventRepeat,
+			&lastNotificationAt,
+			time.Duration(candidate.RepeatInterval)*time.Second,
+			candidate.Disposition,
+			now,
+		) {
+			continue
+		}
+		ids, err := dispatcher.queries.EnqueueAlertNotifications(ctx, EnqueueAlertNotificationsParams{
+			AlertInstanceID: candidate.AlertInstanceID,
+			EventType:       string(EventRepeat),
+			TemplateID:      pgtype.Text{String: "builtin.notification.repeat.v1", Valid: true},
+			Payload:         candidate.Payload,
+			NextAttemptAt:   pgtype.Timestamptz{Time: now, Valid: true},
+		})
+		if err != nil {
+			return enqueued, fmt.Errorf("enqueue repeat notification: %w", err)
+		}
+		enqueued += len(ids)
+	}
+	return enqueued, nil
+}
+
 func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, channelsByKey map[string]Channel) (bool, error) {
 	delivery, err := dispatcher.queries.ClaimDueNotification(ctx, pgtype.Timestamptz{Time: now.UTC(), Valid: true})
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -24,6 +24,11 @@ func reconcileAlertingSeeds(ctx context.Context, database *sql.DB) error {
 	); err != nil {
 		return fmt.Errorf("seed default notification policy: %w", err)
 	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO notification_policy_channel (policy_id, channel)
+		SELECT id, 'SMTP' FROM notification_policy WHERE is_default
+		ON CONFLICT DO NOTHING`); err != nil {
+		return fmt.Errorf("seed default notification policy channel: %w", err)
+	}
 	var defaultPolicyName string
 	if err := tx.QueryRowContext(ctx, "SELECT name FROM notification_policy WHERE is_default").Scan(&defaultPolicyName); err != nil {
 		return fmt.Errorf("read default notification policy: %w", err)
