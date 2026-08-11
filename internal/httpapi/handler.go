@@ -20,6 +20,7 @@ import (
 	"github.com/oapi-codegen/nullable"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -366,7 +367,27 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 }
 
 func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteInstanceRequestObject) (api.DeleteInstanceResponseObject, error) {
-	if err := instance.New(handler.platform).DeleteInstance(ctx, pgtype.UUID{Bytes: request.Id, Valid: true}); err != nil {
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	removedAt := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
+	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		instanceQueries := instance.New(tx)
+		if _, err := instanceQueries.LockInstanceForRemoval(ctx, instanceID); err != nil {
+			return err
+		}
+		if err := alerting.New(tx).CloseAlertsForInstanceRemoval(ctx, alerting.CloseAlertsForInstanceRemovalParams{
+			InstanceID: instanceID,
+			UpdatedAt:  removedAt,
+			ActorID:    actorID,
+		}); err != nil {
+			return err
+		}
+		return instanceQueries.DeleteInstance(ctx, instance.DeleteInstanceParams{ID: instanceID, RemovedAt: removedAt})
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.DeleteInstance204Response{}, nil
+	}
+	if err != nil {
 		return nil, err
 	}
 	return api.DeleteInstance204Response{}, nil

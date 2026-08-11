@@ -1,7 +1,12 @@
 -- name: CreateInstance :one
-WITH created AS (
+WITH created_identity AS (
+    INSERT INTO instance_identity (id, name)
+    VALUES ($1, $2)
+    RETURNING id
+), created AS (
     INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8
+    FROM created_identity
     RETURNING id, name, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
@@ -38,7 +43,19 @@ FROM instance
 WHERE id = $1
 FOR UPDATE;
 
+-- name: LockInstanceForRemoval :one
+SELECT id
+FROM instance
+WHERE id = $1
+FOR UPDATE;
+
 -- name: UpdateInstanceMetadata :one
+WITH updated_identity AS (
+    UPDATE instance_identity
+    SET name = $2
+    WHERE instance_identity.id = $1
+    RETURNING instance_identity.id
+)
 UPDATE instance
 SET name = $2,
     host = $3,
@@ -48,8 +65,10 @@ SET name = $2,
         WHEN host <> $3 OR port <> $4 OR database_name <> $5 THEN 1
         ELSE 0
     END
-WHERE id = $1
-RETURNING id, name, host, port, database_name, username, agent_version;
+FROM updated_identity
+WHERE instance.id = updated_identity.id
+RETURNING instance.id, instance.name, instance.host, instance.port, instance.database_name,
+          instance.username, instance.agent_version;
 
 -- name: GetAgentRegistration :one
 SELECT agent_expected, agent_token_issued_at, agent_token_revoked_at,
@@ -115,7 +134,16 @@ WHERE id = $1
 RETURNING username;
 
 -- name: DeleteInstance :exec
-DELETE FROM instance WHERE id = $1;
+WITH deleted_instance AS (
+    DELETE FROM instance
+    WHERE instance.id = $1
+    RETURNING instance.id, instance.name
+)
+UPDATE instance_identity identity
+SET name = deleted_instance.name,
+    removed_at = $2
+FROM deleted_instance
+WHERE identity.id = deleted_instance.id;
 
 -- name: ListCollectionTargets :many
 SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version

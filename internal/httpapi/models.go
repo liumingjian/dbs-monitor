@@ -257,6 +257,12 @@ type LongQuerySampleSnapshot struct {
 	Truncated     bool
 }
 
+type InstanceIdentity struct {
+	ID        pgtype.UUID
+	Name      string
+	RemovedAt pgtype.Timestamptz
+}
+
 type MetricSample struct {
 	SeriesID int64
 	Ts       pgtype.Timestamptz

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { components } from '../../api/schema'
-import { AgentRegistrationPanel, AgentTokenModal, CredentialSummary, buildAgentInstallCommand } from './settings'
+import { AgentRegistrationPanel, AgentTokenModal, CredentialSummary, InstanceRemovalPanel, buildAgentInstallCommand } from './settings'
 
 beforeAll(() => {
   const getComputedStyle = window.getComputedStyle
@@ -34,6 +34,28 @@ describe('credential summary', () => {
     expect(mask.value).toBe('************')
     expect(mask.type).toBe('password')
     expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+describe('instance removal', () => {
+  it('requires the exact instance name before removal', () => {
+    const onRemove = vi.fn()
+    const view = render(<InstanceRemovalPanel instanceName="production-db" canRemove={false} actionPending={false} onRemove={onRemove} />)
+
+    expect((screen.getByRole('button', { name: /移.*除.*实.*例/ }) as HTMLButtonElement).disabled).toBe(true)
+    view.rerender(<InstanceRemovalPanel instanceName="production-db" canRemove actionPending={false} onRemove={onRemove} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /移.*除.*实.*例/ }))
+    const confirm = screen.getByRole('button', { name: /确.*认.*移.*除/ }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+
+    fireEvent.change(screen.getByLabelText('输入实例名确认移除'), { target: { value: 'production' } })
+    expect(confirm.disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('输入实例名确认移除'), { target: { value: 'production-db' } })
+    expect(confirm.disabled).toBe(false)
+
+    fireEvent.click(confirm)
+    expect(onRemove).toHaveBeenCalledOnce()
   })
 })
 
