@@ -47,6 +47,7 @@
 | [`docs/design/19-v1-macos-runtime-and-postgresql.md`](design/19-v1-macos-runtime-and-postgresql.md) | v1 macOS 运行与 PostgreSQL 交付：随包 PG 17、系统级 launchd、离线安装，以及备份/升级/卸载闭环 | **v1.0** |
 | [`docs/design/20-v1-macos-build-validation-and-release.md`](design/20-v1-macos-build-validation-and-release.md) | v1 macOS 构建、验证与发布：原生 runner/干净机分工、签名公证 `.pkg`、tag/审批门与 Linux 四组合拆分 | **v1.0** |
 | [`docs/design/21-v1-linux-release-disposition.md`](design/21-v1-linux-release-disposition.md) | 现有 Linux 发布票 #92 的 v1 处置：可复用资产、legacy 隔离、票务结论与 post-v1 重启入口 | **v1.0** |
+| [`docs/design/22-v1-macos-release-boundary-index.md`](design/22-v1-macos-release-boundary-index.md) | 地图 #98 收口索引：固化 macOS v1 支持、运行、发布与 Linux 延期四项决策，并划清下游实现验收边界 | **v1.0** |
 | [`docs/validation/t11-windows-amd64-progress.md`](validation/t11-windows-amd64-progress.md) | T11 · Windows amd64 环境验证记录、Docker Desktop 兼容性结论与 Linux amd64 后续验收清单 | 已完成（T11 已验收） |
 
 ### 2.1 四条跨文档不变式
