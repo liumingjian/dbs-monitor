@@ -294,10 +294,10 @@ FROM aggregate`,
 FROM pg_stat_replication
 UNION ALL
 SELECT
-	       COALESCE(sender_host::text, 'standby') AS replica,
-	       status::text AS connection_state,
-	       NULL::double precision AS replay_lag_ms,
-	       pg_wal_lsn_diff(COALESCE(latest_end_lsn, flushed_lsn), pg_last_wal_replay_lsn())::double precision AS wal_lag_bytes
+       COALESCE(sender_host::text, 'standby') AS replica,
+       status::text AS connection_state,
+       NULL::double precision AS replay_lag_ms,
+       pg_wal_lsn_diff(COALESCE(latest_end_lsn, flushed_lsn), pg_last_wal_replay_lsn())::double precision AS wal_lag_bytes
 FROM pg_stat_wal_receiver`,
 		Yields: []MetricYield{
 			{Metric: MetricReplicationConnectionState, Columns: []string{"replica", "connection_state"}, Dimensions: []string{"replica"}},
@@ -316,7 +316,7 @@ WHERE COALESCE(confirmed_flush_lsn, restart_lsn) IS NOT NULL`,
 	{
 		ID: TaskPreparedXacts, Kind: TaskKindSQL, Interval: 5 * time.Minute,
 		SQL: `SELECT database.datname::text AS database,
-	       count(prepared.gid)::double precision AS prepared_xacts_count
+       count(prepared.gid)::double precision AS prepared_xacts_count
 FROM pg_database AS database
 LEFT JOIN pg_prepared_xacts AS prepared ON prepared.database = database.datname
 WHERE database.datallowconn
@@ -326,10 +326,10 @@ GROUP BY database.datname`,
 	{
 		ID: TaskRole, Kind: TaskKindSQL, Interval: 5 * time.Minute,
 		SQL: `SELECT CASE
-	    WHEN pg_is_in_recovery() THEN 'replica'
-	    WHEN EXISTS (SELECT 1 FROM pg_stat_replication) THEN 'primary'
-	    ELSE 'standalone'
-	END::text AS role`,
+    WHEN pg_is_in_recovery() THEN 'replica'
+    WHEN EXISTS (SELECT 1 FROM pg_stat_replication) THEN 'primary'
+    ELSE 'standalone'
+END::text AS role`,
 		Yields: []MetricYield{{Metric: MetricReplicationRole, Columns: []string{"role"}}},
 	},
 	{

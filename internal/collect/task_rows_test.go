@@ -59,7 +59,7 @@ func TestSamplesForTaskRow(t *testing.T) {
 	}
 }
 
-func TestScheduledTasksIncludesIssue57Tasks(t *testing.T) {
+func TestScheduledTasksIncludesDeclaredRowTasks(t *testing.T) {
 	want := map[metric.TaskID]bool{
 		metric.TaskReplication:     false,
 		metric.TaskReplicationSlot: false,

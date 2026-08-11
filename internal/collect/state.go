@@ -144,7 +144,7 @@ func (service *Service) recordCapabilityBlocked(ctx context.Context, run schedul
 	})
 }
 
-func (service *Service) recordNotApplicable(ctx context.Context, run scheduledRun, reason metric.CapabilityBlockReason) error {
+func (service *Service) recordCapabilityNotApplicable(ctx context.Context, run scheduledRun, reason metric.CapabilityBlockReason) error {
 	finished := service.clock.Now().UTC()
 	code := string(reason)
 	message := collectionErrorMessage(code)
@@ -173,7 +173,7 @@ func (service *Service) recordNotApplicable(ctx context.Context, run scheduledRu
 		if err != nil {
 			return err
 		}
-		return advanceWatermarkIfComplete(ctx, tx, run.target.ID, finished)
+		return advanceCollectionWatermarkIfComplete(ctx, tx, run.target.ID, finished)
 	})
 }
 
@@ -303,13 +303,13 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, bat
 					return err
 				}
 			}
-			return advanceWatermarkIfComplete(ctx, tx, run.target.ID, finished)
+			return advanceCollectionWatermarkIfComplete(ctx, tx, run.target.ID, finished)
 		})
 	}
 	return service.withPartitionRepair(ctx, finished, write)
 }
 
-func advanceWatermarkIfComplete(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, finished time.Time) error {
+func advanceCollectionWatermarkIfComplete(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, finished time.Time) error {
 	var complete bool
 	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (
 		SELECT 1 FROM instance_collection_task_state

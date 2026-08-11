@@ -180,7 +180,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		}
 		if blocked {
 			if reason == metric.CapabilityBlockNotApplicableRole {
-				outcome.err = service.recordNotApplicable(ctx, run, reason)
+				outcome.err = service.recordCapabilityNotApplicable(ctx, run, reason)
 				outcome.result = resultSuccess
 			} else {
 				outcome.err = service.recordCapabilityBlocked(ctx, run, reason)
@@ -544,7 +544,7 @@ func (service *Service) taskIntervals(ctx context.Context, targetID pgtype.UUID)
 }
 
 func scheduledTasks() []metric.Task {
-	tasks := make([]metric.Task, 0, 7)
+	tasks := make([]metric.Task, 0, len(metric.Tasks))
 	for _, task := range metric.Tasks {
 		switch task.ID {
 		case metric.TaskProbe, metric.TaskStatDatabase, metric.TaskStatActivity,

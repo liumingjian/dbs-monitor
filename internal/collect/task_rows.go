@@ -15,22 +15,22 @@ func collectDeclaredTask(ctx context.Context, conn *monitorpg.TargetConn, task m
 	}
 	defer rows.Close()
 
-	fields := rows.FieldDescriptions()
+	fieldDescriptions := rows.FieldDescriptions()
 	samples := make([]collectedSample, 0)
 	for rows.Next() {
 		values, err := rows.Values()
 		if err != nil {
 			return collectedBatch{}, err
 		}
-		row := make(map[string]any, len(fields))
-		for index, field := range fields {
+		row := make(map[string]any, len(fieldDescriptions))
+		for index, field := range fieldDescriptions {
 			row[field.Name] = values[index]
 		}
-		found, err := samplesForTaskRow(task, row)
+		rowSamples, err := samplesForTaskRow(task, row)
 		if err != nil {
 			return collectedBatch{}, err
 		}
-		samples = append(samples, found...)
+		samples = append(samples, rowSamples...)
 	}
 	if err := rows.Err(); err != nil {
 		return collectedBatch{}, err
@@ -41,7 +41,7 @@ func collectDeclaredTask(ctx context.Context, conn *monitorpg.TargetConn, task m
 func samplesForTaskRow(task metric.Task, row map[string]any) ([]collectedSample, error) {
 	samples := make([]collectedSample, 0, len(task.Yields))
 	for _, yield := range task.Yields {
-		valueColumn, err := yieldValueColumn(yield)
+		valueColumn, err := valueColumnForYield(yield)
 		if err != nil {
 			return nil, fmt.Errorf("decode task %q metric %q: %w", task.ID, yield.Metric, err)
 		}
@@ -76,7 +76,7 @@ func samplesForTaskRow(task metric.Task, row map[string]any) ([]collectedSample,
 	return samples, nil
 }
 
-func yieldValueColumn(yield metric.MetricYield) (string, error) {
+func valueColumnForYield(yield metric.MetricYield) (string, error) {
 	for index := len(yield.Columns) - 1; index >= 0; index-- {
 		column := yield.Columns[index]
 		isDimension := false
