@@ -43,6 +43,40 @@ func (q *Queries) CountLongQuerySamples(ctx context.Context, arg CountLongQueryS
 	return count, err
 }
 
+const countPerformanceEvents = `-- name: CountPerformanceEvents :one
+SELECT count(*)
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+WHERE alert.instance_id = $1
+  AND event.derived_at >= $2
+  AND event.derived_at <= $3
+  AND ($4::boolean IS NULL
+       OR (alert.recovered_at IS NOT NULL) = $4::boolean)
+  AND ($5::text IS NULL
+       OR alert.disposition = $5::text)
+`
+
+type CountPerformanceEventsParams struct {
+	InstanceID  pgtype.UUID
+	FromTime    pgtype.Timestamptz
+	ToTime      pgtype.Timestamptz
+	Recovered   pgtype.Bool
+	Disposition pgtype.Text
+}
+
+func (q *Queries) CountPerformanceEvents(ctx context.Context, arg CountPerformanceEventsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPerformanceEvents,
+		arg.InstanceID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.Recovered,
+		arg.Disposition,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAdmin = `-- name: CreateAdmin :exec
 INSERT INTO app_user (id, username, password_hash, role)
 VALUES ($1, $2, $3, 'PLATFORM_ADMIN')
@@ -287,6 +321,65 @@ func (q *Queries) GetInstanceAlertStatus(ctx context.Context, instanceID pgtype.
 	return status, err
 }
 
+const getPerformanceEvent = `-- name: GetPerformanceEvent :one
+SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
+       alert.instance_id, alert.status AS alert_status, alert.severity,
+       alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
+       fired.current_value AS trigger_value,
+       (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
+       snapshot.result AS trigger_snapshot_result
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+JOIN LATERAL (
+    SELECT current_value, rule_snapshot
+    FROM alert_event
+    WHERE alert_instance_id = alert.id AND kind = 'FIRED'
+    ORDER BY evaluated_at, id
+    LIMIT 1
+) fired ON true
+LEFT JOIN alert_trigger_snapshot snapshot ON snapshot.alert_instance_id = alert.id
+WHERE event.id = $1
+`
+
+type GetPerformanceEventRow struct {
+	ID                    pgtype.UUID
+	AlertInstanceID       pgtype.UUID
+	EventType             string
+	DerivedAt             pgtype.Timestamptz
+	InstanceID            pgtype.UUID
+	AlertStatus           string
+	Severity              string
+	Disposition           string
+	UpdatedAt             pgtype.Timestamptz
+	RecoveredAt           pgtype.Timestamptz
+	MetricID              string
+	TriggerValue          pgtype.Float8
+	Threshold             float64
+	TriggerSnapshotResult pgtype.Text
+}
+
+func (q *Queries) GetPerformanceEvent(ctx context.Context, id pgtype.UUID) (GetPerformanceEventRow, error) {
+	row := q.db.QueryRow(ctx, getPerformanceEvent, id)
+	var i GetPerformanceEventRow
+	err := row.Scan(
+		&i.ID,
+		&i.AlertInstanceID,
+		&i.EventType,
+		&i.DerivedAt,
+		&i.InstanceID,
+		&i.AlertStatus,
+		&i.Severity,
+		&i.Disposition,
+		&i.UpdatedAt,
+		&i.RecoveredAt,
+		&i.MetricID,
+		&i.TriggerValue,
+		&i.Threshold,
+		&i.TriggerSnapshotResult,
+	)
+	return i, err
+}
+
 const getSessionUser = `-- name: GetSessionUser :one
 SELECT u.id, u.role
 FROM user_session session
@@ -505,6 +598,111 @@ func (q *Queries) ListLongQuerySamples(ctx context.Context, arg ListLongQuerySam
 			&i.BlockingPids,
 			&i.OriginalCount,
 			&i.Truncated,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPerformanceEvents = `-- name: ListPerformanceEvents :many
+SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
+       alert.instance_id, alert.status AS alert_status, alert.severity,
+       alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
+       fired.current_value AS trigger_value,
+       (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
+       snapshot.result AS trigger_snapshot_result
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+JOIN LATERAL (
+    SELECT current_value, rule_snapshot
+    FROM alert_event
+    WHERE alert_instance_id = alert.id AND kind = 'FIRED'
+    ORDER BY evaluated_at, id
+    LIMIT 1
+) fired ON true
+LEFT JOIN alert_trigger_snapshot snapshot ON snapshot.alert_instance_id = alert.id
+WHERE alert.instance_id = $1
+  AND event.derived_at >= $2
+  AND event.derived_at <= $3
+  AND ($4::boolean IS NULL
+       OR (alert.recovered_at IS NOT NULL) = $4::boolean)
+  AND ($5::text IS NULL
+       OR alert.disposition = $5::text)
+ORDER BY
+  CASE WHEN $6::text = 'derived_at' THEN event.derived_at END ASC,
+  CASE WHEN $6::text = '-derived_at' THEN event.derived_at END DESC,
+  CASE WHEN $6::text = 'updated_at' THEN alert.updated_at END ASC,
+  CASE WHEN $6::text = '-updated_at' THEN alert.updated_at END DESC,
+  event.derived_at DESC, event.id
+LIMIT $8 OFFSET $7
+`
+
+type ListPerformanceEventsParams struct {
+	InstanceID  pgtype.UUID
+	FromTime    pgtype.Timestamptz
+	ToTime      pgtype.Timestamptz
+	Recovered   pgtype.Bool
+	Disposition pgtype.Text
+	SortOrder   string
+	PageOffset  int32
+	PageLimit   int32
+}
+
+type ListPerformanceEventsRow struct {
+	ID                    pgtype.UUID
+	AlertInstanceID       pgtype.UUID
+	EventType             string
+	DerivedAt             pgtype.Timestamptz
+	InstanceID            pgtype.UUID
+	AlertStatus           string
+	Severity              string
+	Disposition           string
+	UpdatedAt             pgtype.Timestamptz
+	RecoveredAt           pgtype.Timestamptz
+	MetricID              string
+	TriggerValue          pgtype.Float8
+	Threshold             float64
+	TriggerSnapshotResult pgtype.Text
+}
+
+func (q *Queries) ListPerformanceEvents(ctx context.Context, arg ListPerformanceEventsParams) ([]ListPerformanceEventsRow, error) {
+	rows, err := q.db.Query(ctx, listPerformanceEvents,
+		arg.InstanceID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.Recovered,
+		arg.Disposition,
+		arg.SortOrder,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPerformanceEventsRow
+	for rows.Next() {
+		var i ListPerformanceEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AlertInstanceID,
+			&i.EventType,
+			&i.DerivedAt,
+			&i.InstanceID,
+			&i.AlertStatus,
+			&i.Severity,
+			&i.Disposition,
+			&i.UpdatedAt,
+			&i.RecoveredAt,
+			&i.MetricID,
+			&i.TriggerValue,
+			&i.Threshold,
+			&i.TriggerSnapshotResult,
 		); err != nil {
 			return nil, err
 		}

@@ -279,6 +279,13 @@ type MetricSeries struct {
 	LastSeen   pgtype.Timestamptz
 }
 
+type PerformanceEvent struct {
+	ID              pgtype.UUID
+	AlertInstanceID pgtype.UUID
+	EventType       string
+	DerivedAt       pgtype.Timestamptz
+}
+
 type UserSession struct {
 	TokenHash []byte
 	UserID    pgtype.UUID

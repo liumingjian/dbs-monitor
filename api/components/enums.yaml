@@ -76,3 +76,19 @@ AlertDisposition:
 IgnoreReasonCode:
   type: string
   enum: [KNOWN_ISSUE, FALSE_POSITIVE, DUPLICATE, IMPACT_ACCEPTABLE, OTHER]
+PerformanceEventType:
+  type: string
+  enum:
+    - LOCK_BLOCKING
+    - LONG_TRANSACTION
+    - IDLE_IN_TRANSACTION
+    - ACTIVE_SESSIONS_HIGH
+    - REPLICATION_LAG
+    - TEMP_FILES_SURGE
+  x-enum-varnames:
+    - EventLockBlocking
+    - EventLongTransaction
+    - EventIdleInTransaction
+    - EventActiveSessionsHigh
+    - EventReplicationLag
+    - EventTempFilesSurge

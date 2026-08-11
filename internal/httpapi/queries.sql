@@ -141,6 +141,69 @@ FROM alert_trigger_snapshot_session
 WHERE snapshot_id = $1
 ORDER BY pid;
 
+-- name: CountPerformanceEvents :one
+SELECT count(*)
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+WHERE alert.instance_id = sqlc.arg(instance_id)
+  AND event.derived_at >= sqlc.arg(from_time)
+  AND event.derived_at <= sqlc.arg(to_time)
+  AND (sqlc.narg(recovered)::boolean IS NULL
+       OR (alert.recovered_at IS NOT NULL) = sqlc.narg(recovered)::boolean)
+  AND (sqlc.narg(disposition)::text IS NULL
+       OR alert.disposition = sqlc.narg(disposition)::text);
+
+-- name: ListPerformanceEvents :many
+SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
+       alert.instance_id, alert.status AS alert_status, alert.severity,
+       alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
+       fired.current_value AS trigger_value,
+       (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
+       snapshot.result AS trigger_snapshot_result
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+JOIN LATERAL (
+    SELECT current_value, rule_snapshot
+    FROM alert_event
+    WHERE alert_instance_id = alert.id AND kind = 'FIRED'
+    ORDER BY evaluated_at, id
+    LIMIT 1
+) fired ON true
+LEFT JOIN alert_trigger_snapshot snapshot ON snapshot.alert_instance_id = alert.id
+WHERE alert.instance_id = sqlc.arg(instance_id)
+  AND event.derived_at >= sqlc.arg(from_time)
+  AND event.derived_at <= sqlc.arg(to_time)
+  AND (sqlc.narg(recovered)::boolean IS NULL
+       OR (alert.recovered_at IS NOT NULL) = sqlc.narg(recovered)::boolean)
+  AND (sqlc.narg(disposition)::text IS NULL
+       OR alert.disposition = sqlc.narg(disposition)::text)
+ORDER BY
+  CASE WHEN sqlc.arg(sort_order)::text = 'derived_at' THEN event.derived_at END ASC,
+  CASE WHEN sqlc.arg(sort_order)::text = '-derived_at' THEN event.derived_at END DESC,
+  CASE WHEN sqlc.arg(sort_order)::text = 'updated_at' THEN alert.updated_at END ASC,
+  CASE WHEN sqlc.arg(sort_order)::text = '-updated_at' THEN alert.updated_at END DESC,
+  event.derived_at DESC, event.id
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
+-- name: GetPerformanceEvent :one
+SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
+       alert.instance_id, alert.status AS alert_status, alert.severity,
+       alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
+       fired.current_value AS trigger_value,
+       (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
+       snapshot.result AS trigger_snapshot_result
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+JOIN LATERAL (
+    SELECT current_value, rule_snapshot
+    FROM alert_event
+    WHERE alert_instance_id = alert.id AND kind = 'FIRED'
+    ORDER BY evaluated_at, id
+    LIMIT 1
+) fired ON true
+LEFT JOIN alert_trigger_snapshot snapshot ON snapshot.alert_instance_id = alert.id
+WHERE event.id = $1;
+
 -- name: ListPersistedCollectionTaskStates :many
 SELECT task.task_id, task.last_due_at, task.last_started_at, task.last_finished_at, task.last_success_at,
        task.last_result, task.consecutive_failures,

@@ -228,6 +228,15 @@ func (service *Service) evaluateRule(
 			return err
 		}
 	}
+	if eventType, derivesEvent := alerting.PerformanceEventTypeForMetric(evaluationTarget.MetricID); startsFiringLifecycle && derivesEvent {
+		if err := queries.CreatePerformanceEvent(ctx, alerting.CreatePerformanceEventParams{
+			AlertInstanceID: alertInstanceID,
+			EventType:       string(eventType),
+			DerivedAt:       evaluatedAt,
+		}); err != nil {
+			return fmt.Errorf("save performance event: %w", err)
+		}
+	}
 
 	for _, kind := range alerting.StateEvents(previousState, nextSnapshot.State) {
 		if kind == alerting.EventUpdated && !metricResult.currentValue.Valid {
