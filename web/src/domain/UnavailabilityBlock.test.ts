@@ -15,4 +15,11 @@ describe('unavailability copy', () => {
     expect(copy.description.length).toBeGreaterThan(0)
     expect(copy.action.length).toBeGreaterThan(0)
   })
+
+  it('never presents collection pause as collection failure or database unreachability', () => {
+    const copy = unavailabilityCopy('COLLECTION_PAUSED')
+    const text = `${copy.title}${copy.description}${copy.action}`
+    expect(text).not.toContain('采集失败')
+    expect(text).not.toContain('数据库不可达')
+  })
 })

@@ -150,6 +150,13 @@ func (service *Service) RunOnce(ctx context.Context) error {
 }
 
 func (service *Service) executeTask(ctx context.Context, run scheduledRun) executionOutcome {
+	paused, err := service.isCollectionPaused(ctx, run.target.ID)
+	if err != nil {
+		return executionOutcome{run: run, result: resultFailed, err: err}
+	}
+	if paused {
+		return executionOutcome{run: run, result: resultSuccess}
+	}
 	if isCapabilitySnapshotTask(run.task) {
 		return service.executeCapabilitySnapshot(ctx, run)
 	}
@@ -167,8 +174,13 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 			return outcome
 		}
 	}
-	if err := service.recordStarted(ctx, run); err != nil {
+	recorded, err := service.recordStarted(ctx, run)
+	if err != nil {
 		outcome.err = err
+		return outcome
+	}
+	if !recorded {
+		outcome.result = resultSuccess
 		return outcome
 	}
 
@@ -261,6 +273,13 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 	default:
 		return collectedBatch{}, fmt.Errorf("unsupported collection task %q", run.task.ID)
 	}
+}
+
+func (service *Service) isCollectionPaused(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	var paused bool
+	err := service.platform.QueryRow(ctx, `SELECT collection_paused FROM instance_collection_config
+		WHERE instance_id = $1`, instanceID).Scan(&paused)
+	return paused, err
 }
 
 func (service *Service) executeCapabilitySnapshot(ctx context.Context, run scheduledRun) executionOutcome {

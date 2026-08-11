@@ -73,6 +73,37 @@ DELETE FROM user_session WHERE user_id = $1;
 -- name: GetAgentTokenHash :one
 SELECT agent_token_hash FROM instance WHERE id = $1;
 
+-- name: GetCollectionPause :one
+SELECT collection_paused, collection_pause_updated_by,
+       collection_pause_updated_at, collection_pause_reason
+FROM instance_collection_config
+WHERE instance_id = $1;
+
+-- name: SetCollectionPause :one
+UPDATE instance_collection_config
+SET collection_paused = $2,
+    collection_pause_updated_by = $3,
+    collection_pause_updated_at = $4,
+    collection_pause_reason = $5,
+    updated_at = $4
+WHERE instance_id = $1
+  AND collection_paused <> $2
+RETURNING collection_paused, collection_pause_updated_by,
+          collection_pause_updated_at, collection_pause_reason;
+
+-- name: CreateCollectionPauseEvents :exec
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, actor_id
+)
+SELECT alert.id, alert.rule_id, alert.rule_version, $2,
+       alert.status, alert.status, alert.current_value, alert.unavailability,
+       alert.rule_snapshot, $3, $4
+FROM alert_instance alert
+WHERE alert.instance_id = $1
+  AND alert.status <> 'RECOVERED';
+
 -- name: GetInstanceAlertStatus :one
 SELECT status
 FROM alert_instance

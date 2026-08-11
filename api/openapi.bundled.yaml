@@ -304,6 +304,44 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CapabilitySnapshotEntry'
+  /api/v1/instances/{id}/collection/pause:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - collection
+      operationId: getCollectionPause
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current collection pause status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionPauseStatus'
+    put:
+      tags:
+        - collection
+      operationId: updateCollectionPause
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionPauseInput'
+      responses:
+        '200':
+          description: Updated collection pause status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionPauseStatus'
   /api/v1/instances/{id}/collection/tasks/{task_id}:
     parameters:
       - name: id
@@ -987,6 +1025,7 @@ components:
         - database
         - username
         - alert_status
+        - collection_pause
       properties:
         id:
           type: string
@@ -1006,6 +1045,8 @@ components:
           description: Version reported by the Agent, when one has reported.
         alert_status:
           $ref: '#/components/schemas/AlertStatus'
+        collection_pause:
+          $ref: '#/components/schemas/CollectionPauseStatus'
     InstanceCreated:
       type: object
       required:
@@ -1105,6 +1146,30 @@ components:
         affected_metric_count:
           type: integer
           minimum: 0
+    CollectionPauseInput:
+      type: object
+      required:
+        - paused
+      properties:
+        paused:
+          type: boolean
+        reason:
+          type: string
+    CollectionPauseStatus:
+      type: object
+      required:
+        - paused
+      properties:
+        paused:
+          type: boolean
+        updated_by:
+          type: string
+          format: uuid
+        updated_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
     MetricSeriesResponse:
       type: object
       required:

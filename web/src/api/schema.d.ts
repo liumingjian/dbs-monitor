@@ -124,6 +124,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/collection/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getCollectionPause"];
+        put: operations["updateCollectionPause"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/collection/tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -419,6 +437,7 @@ export interface components {
             /** @description Version reported by the Agent, when one has reported. */
             agent_version?: string;
             alert_status: components["schemas"]["AlertStatus"];
+            collection_pause: components["schemas"]["CollectionPauseStatus"];
         };
         InstanceCreated: {
             instance: components["schemas"]["Instance"];
@@ -458,6 +477,18 @@ export interface components {
             fix_hint?: string;
             na_reason?: string;
             affected_metric_count: number;
+        };
+        CollectionPauseInput: {
+            paused: boolean;
+            reason?: string;
+        };
+        CollectionPauseStatus: {
+            paused: boolean;
+            /** Format: uuid */
+            updated_by?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            reason?: string;
         };
         MetricSeriesResponse: {
             /** Format: date-time */
@@ -830,6 +861,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CapabilitySnapshotEntry"][];
+                };
+            };
+        };
+    };
+    getCollectionPause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current collection pause status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionPauseStatus"];
+                };
+            };
+        };
+    };
+    updateCollectionPause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionPauseInput"];
+            };
+        };
+        responses: {
+            /** @description Updated collection pause status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionPauseStatus"];
                 };
             };
         };

@@ -13,14 +13,22 @@ FROM created
 JOIN configured ON configured.instance_id = created.id;
 
 -- name: ListInstances :many
-SELECT id, name, host, port, database_name, username, agent_version, created_at
+SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+       instance.username, instance.agent_version, instance.created_at,
+       config.collection_paused, config.collection_pause_updated_by,
+       config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
+JOIN instance_collection_config config ON config.instance_id = instance.id
 ORDER BY name, id;
 
 -- name: GetInstance :one
-SELECT id, name, host, port, database_name, username, agent_token_hash, agent_version, created_at
+SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+       instance.username, instance.agent_token_hash, instance.agent_version, instance.created_at,
+       config.collection_paused, config.collection_pause_updated_by,
+       config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
-WHERE id = $1;
+JOIN instance_collection_config config ON config.instance_id = instance.id
+WHERE instance.id = $1;
 
 -- name: GetInstanceForUpdate :one
 SELECT host, port, database_name, username, password_ciphertext, password_key_version
@@ -56,6 +64,8 @@ DELETE FROM instance WHERE id = $1;
 -- name: ListCollectionTargets :many
 SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version
 FROM instance
+JOIN instance_collection_config config ON config.instance_id = instance.id
+WHERE NOT config.collection_paused
 ORDER BY id;
 
 -- name: SetCollectSuccess :exec

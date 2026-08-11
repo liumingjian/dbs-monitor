@@ -101,21 +101,29 @@ func (q *Queries) GetCollectState(ctx context.Context, instanceID pgtype.UUID) (
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT id, name, host, port, database_name, username, agent_token_hash, agent_version, created_at
+SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+       instance.username, instance.agent_token_hash, instance.agent_version, instance.created_at,
+       config.collection_paused, config.collection_pause_updated_by,
+       config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
-WHERE id = $1
+JOIN instance_collection_config config ON config.instance_id = instance.id
+WHERE instance.id = $1
 `
 
 type GetInstanceRow struct {
-	ID             pgtype.UUID
-	Name           string
-	Host           string
-	Port           int32
-	DatabaseName   string
-	Username       string
-	AgentTokenHash []byte
-	AgentVersion   pgtype.Text
-	CreatedAt      pgtype.Timestamptz
+	ID                       pgtype.UUID
+	Name                     string
+	Host                     string
+	Port                     int32
+	DatabaseName             string
+	Username                 string
+	AgentTokenHash           []byte
+	AgentVersion             pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
 }
 
 func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceRow, error) {
@@ -131,6 +139,10 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 		&i.AgentTokenHash,
 		&i.AgentVersion,
 		&i.CreatedAt,
+		&i.CollectionPaused,
+		&i.CollectionPauseUpdatedBy,
+		&i.CollectionPauseUpdatedAt,
+		&i.CollectionPauseReason,
 	)
 	return i, err
 }
@@ -168,6 +180,8 @@ func (q *Queries) GetInstanceForUpdate(ctx context.Context, id pgtype.UUID) (Get
 const listCollectionTargets = `-- name: ListCollectionTargets :many
 SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version
 FROM instance
+JOIN instance_collection_config config ON config.instance_id = instance.id
+WHERE NOT config.collection_paused
 ORDER BY id
 `
 
@@ -212,20 +226,28 @@ func (q *Queries) ListCollectionTargets(ctx context.Context) ([]ListCollectionTa
 }
 
 const listInstances = `-- name: ListInstances :many
-SELECT id, name, host, port, database_name, username, agent_version, created_at
+SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+       instance.username, instance.agent_version, instance.created_at,
+       config.collection_paused, config.collection_pause_updated_by,
+       config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
+JOIN instance_collection_config config ON config.instance_id = instance.id
 ORDER BY name, id
 `
 
 type ListInstancesRow struct {
-	ID           pgtype.UUID
-	Name         string
-	Host         string
-	Port         int32
-	DatabaseName string
-	Username     string
-	AgentVersion pgtype.Text
-	CreatedAt    pgtype.Timestamptz
+	ID                       pgtype.UUID
+	Name                     string
+	Host                     string
+	Port                     int32
+	DatabaseName             string
+	Username                 string
+	AgentVersion             pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
 }
 
 func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error) {
@@ -246,6 +268,10 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 			&i.Username,
 			&i.AgentVersion,
 			&i.CreatedAt,
+			&i.CollectionPaused,
+			&i.CollectionPauseUpdatedBy,
+			&i.CollectionPauseUpdatedAt,
+			&i.CollectionPauseReason,
 		); err != nil {
 			return nil, err
 		}

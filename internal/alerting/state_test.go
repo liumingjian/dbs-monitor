@@ -214,3 +214,54 @@ func TestStepNoDataPolicy(t *testing.T) {
 		})
 	}
 }
+
+func TestStepCollectionPausePolicy(t *testing.T) {
+	tests := []struct {
+		name    string
+		current *Snapshot
+		input   Evaluation
+		paused  bool
+		want    *Snapshot
+	}{
+		{
+			name:    "pause freezes firing instead of recovering",
+			current: &Snapshot{State: FIRING, RecoveryCount: 1},
+			input:   Recovering,
+			paused:  true,
+			want:    &Snapshot{State: FIRING, RecoveryCount: 1},
+		},
+		{
+			name:    "pause does not accumulate no data",
+			current: &Snapshot{State: FIRING, NoDataCount: 1},
+			input:   Missing,
+			paused:  true,
+			want:    &Snapshot{State: FIRING, NoDataCount: 1},
+		},
+		{
+			name:   "pause does not create an alert instance",
+			input:  Breaching,
+			paused: true,
+		},
+		{
+			name:    "unpause evaluates current condition without replay",
+			current: &Snapshot{State: FIRING},
+			input:   Breaching,
+			want:    &Snapshot{State: FIRING},
+		},
+		{
+			name:    "unpause recovers normally when the current condition clears",
+			current: &Snapshot{State: FIRING, RecoveryCount: 1},
+			input:   Recovering,
+			want:    &Snapshot{State: RECOVERED, RecoveryCount: 2},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := StepCollection(test.current, test.input, test.paused, 2, 2)
+			if (got == nil) != (test.want == nil) || got != nil && *got != *test.want {
+				t.Fatalf("StepCollection() = %+v, want %+v", got, test.want)
+			}
+		})
+	}
+}

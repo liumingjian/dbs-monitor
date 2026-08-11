@@ -436,6 +436,8 @@ SELECT rule.id AS rule_id,
        COALESCE(metric_dimension.metric_dimension_key, '{}') AS metric_dimension_key
 FROM alert_rule rule
 CROSS JOIN instance
+JOIN instance_collection_config collection_config
+  ON collection_config.instance_id = instance.id
 LEFT JOIN LATERAL (
     SELECT series.labels_key AS metric_dimension_key
     FROM metric_series series
@@ -453,6 +455,7 @@ LEFT JOIN alert_rule_evaluation_state evaluation_state
  AND evaluation_state.instance_id = instance.id
  AND evaluation_state.metric_dimension_key = COALESCE(metric_dimension.metric_dimension_key, '{}')
 WHERE rule.enabled
+  AND NOT collection_config.collection_paused
   AND (rule.scope = 'ALL' OR EXISTS (
       SELECT 1
       FROM alert_rule_scope_instance scope_instance

@@ -39,6 +39,37 @@ func (q *Queries) CreateAdmin(ctx context.Context, arg CreateAdminParams) error 
 	return err
 }
 
+const createCollectionPauseEvents = `-- name: CreateCollectionPauseEvents :exec
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, actor_id
+)
+SELECT alert.id, alert.rule_id, alert.rule_version, $2,
+       alert.status, alert.status, alert.current_value, alert.unavailability,
+       alert.rule_snapshot, $3, $4
+FROM alert_instance alert
+WHERE alert.instance_id = $1
+  AND alert.status <> 'RECOVERED'
+`
+
+type CreateCollectionPauseEventsParams struct {
+	InstanceID  pgtype.UUID
+	Kind        string
+	EvaluatedAt pgtype.Timestamptz
+	ActorID     pgtype.UUID
+}
+
+func (q *Queries) CreateCollectionPauseEvents(ctx context.Context, arg CreateCollectionPauseEventsParams) error {
+	_, err := q.db.Exec(ctx, createCollectionPauseEvents,
+		arg.InstanceID,
+		arg.Kind,
+		arg.EvaluatedAt,
+		arg.ActorID,
+	)
+	return err
+}
+
 const createSession = `-- name: CreateSession :exec
 INSERT INTO user_session (token_hash, user_id, expires_at)
 VALUES ($1, $2, $3)
@@ -112,6 +143,32 @@ func (q *Queries) GetAgentTokenHash(ctx context.Context, id pgtype.UUID) ([]byte
 	var agent_token_hash []byte
 	err := row.Scan(&agent_token_hash)
 	return agent_token_hash, err
+}
+
+const getCollectionPause = `-- name: GetCollectionPause :one
+SELECT collection_paused, collection_pause_updated_by,
+       collection_pause_updated_at, collection_pause_reason
+FROM instance_collection_config
+WHERE instance_id = $1
+`
+
+type GetCollectionPauseRow struct {
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+}
+
+func (q *Queries) GetCollectionPause(ctx context.Context, instanceID pgtype.UUID) (GetCollectionPauseRow, error) {
+	row := q.db.QueryRow(ctx, getCollectionPause, instanceID)
+	var i GetCollectionPauseRow
+	err := row.Scan(
+		&i.CollectionPaused,
+		&i.CollectionPauseUpdatedBy,
+		&i.CollectionPauseUpdatedAt,
+		&i.CollectionPauseReason,
+	)
+	return i, err
 }
 
 const getCurrentUser = `-- name: GetCurrentUser :one
@@ -367,6 +424,52 @@ func (q *Queries) LockEnabledPlatformAdmins(ctx context.Context) ([]pgtype.UUID,
 		return nil, err
 	}
 	return items, nil
+}
+
+const setCollectionPause = `-- name: SetCollectionPause :one
+UPDATE instance_collection_config
+SET collection_paused = $2,
+    collection_pause_updated_by = $3,
+    collection_pause_updated_at = $4,
+    collection_pause_reason = $5,
+    updated_at = $4
+WHERE instance_id = $1
+  AND collection_paused <> $2
+RETURNING collection_paused, collection_pause_updated_by,
+          collection_pause_updated_at, collection_pause_reason
+`
+
+type SetCollectionPauseParams struct {
+	InstanceID               pgtype.UUID
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+}
+
+type SetCollectionPauseRow struct {
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+}
+
+func (q *Queries) SetCollectionPause(ctx context.Context, arg SetCollectionPauseParams) (SetCollectionPauseRow, error) {
+	row := q.db.QueryRow(ctx, setCollectionPause,
+		arg.InstanceID,
+		arg.CollectionPaused,
+		arg.CollectionPauseUpdatedBy,
+		arg.CollectionPauseUpdatedAt,
+		arg.CollectionPauseReason,
+	)
+	var i SetCollectionPauseRow
+	err := row.Scan(
+		&i.CollectionPaused,
+		&i.CollectionPauseUpdatedBy,
+		&i.CollectionPauseUpdatedAt,
+		&i.CollectionPauseReason,
+	)
+	return i, err
 }
 
 const setUserEnabled = `-- name: SetUserEnabled :one

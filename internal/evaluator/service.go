@@ -51,6 +51,14 @@ func (service *Service) RunOnce(ctx context.Context) error {
 
 func (service *Service) evaluateInstance(ctx context.Context, targets []alerting.ListEvaluationTargetsRow, now time.Time) error {
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
+		var paused bool
+		if err := tx.QueryRow(ctx, `SELECT collection_paused FROM instance_collection_config
+			WHERE instance_id = $1 FOR SHARE`, targets[0].InstanceID).Scan(&paused); err != nil {
+			return err
+		}
+		if paused {
+			return nil
+		}
 		queries := alerting.New(tx)
 		for _, target := range targets {
 			if err := service.evaluateRule(ctx, queries, target, now); err != nil {
@@ -99,9 +107,10 @@ func (service *Service) evaluateRule(
 	}
 	if metricResult.outcome == alerting.Missing && evaluationTarget.NoDataPolicy == "ignore" {
 		if evaluationTarget.AlertInstanceID.Valid && currentSnapshot.State != alerting.RECOVERED {
-			nextSnapshot := alerting.Step(
-				currentSnapshot,
+			nextSnapshot := *alerting.StepCollection(
+				&currentSnapshot,
 				alerting.MissingIgnored,
+				false,
 				int(evaluationTarget.ConsecutiveCount),
 				int(evaluationTarget.RecoveryConsecutiveCount),
 			)
@@ -124,9 +133,10 @@ func (service *Service) evaluateRule(
 		return queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint)
 	}
 
-	nextSnapshot := alerting.Step(
-		currentSnapshot,
+	nextSnapshot := *alerting.StepCollection(
+		&currentSnapshot,
 		metricResult.outcome,
+		false,
 		int(evaluationTarget.ConsecutiveCount),
 		int(evaluationTarget.RecoveryConsecutiveCount),
 	)
