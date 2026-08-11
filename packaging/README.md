@@ -1,5 +1,15 @@
 # Deferred legacy Linux package build
 
+## Host diagnostics
+
+On an installed Linux host, generate a support bundle with:
+
+```sh
+/opt/dbs-monitor/bin/dbs-monitor-server diagnostic-bundle
+```
+
+An explicit output path may be supplied as the second argument. The command exports the last 24 hours of `dbs-monitor-server.service` journal entries, the current diagnostic endpoint snapshots, and the platform version/deployment summary into a mode `0600` `.tar.gz` archive. Archives are capped at 64 MB; when necessary, only the oldest journal records are removed and `manifest.json` declares the truncation. The command refuses to publish an archive when its secret scan finds a forbidden marker or credential shape.
+
 These targets are retained as post-v1 engineering references. They are manual-only, do not produce supported v1 assets, and must not be added to `check-full`, branch protection, a release workflow, or the macOS v1 Release. See [the #92 disposition](../docs/design/21-v1-linux-release-disposition.md).
 
 Run each target as a non-root build user on a native Linux builder matching the delivery baseline; PostgreSQL is never QEMU-cross-built. PostgreSQL's own `make check` rejects root, and the packaging script enforces that requirement before starting the expensive build.

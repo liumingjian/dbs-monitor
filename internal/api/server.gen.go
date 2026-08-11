@@ -920,8 +920,26 @@ type ServerInterface interface {
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (GET /api/v1/diagnostics/certificate)
+	GetCertificateDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/disk)
+	GetDiskDiagnostics(w http.ResponseWriter, r *http.Request)
+
 	// (GET /api/v1/diagnostics/health)
 	GetPlatformHealth(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/keyring)
+	GetKeyringDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/partitions)
+	GetPartitionDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/platform)
+	GetPlatformDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/scheduler)
+	GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/instances)
 	ListInstances(w http.ResponseWriter, r *http.Request)
@@ -1193,11 +1211,95 @@ func (siw *ServerInterfaceWrapper) UpdateAlertRuleEnabled(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
+// GetCertificateDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetCertificateDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCertificateDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDiskDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetDiskDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDiskDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetPlatformHealth operation middleware
 func (siw *ServerInterfaceWrapper) GetPlatformHealth(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetPlatformHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetKeyringDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetKeyringDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetKeyringDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPartitionDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetPartitionDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPartitionDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlatformDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetPlatformDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlatformDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSchedulerDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSchedulerDiagnostics(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2178,7 +2280,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}/enabled", wrapper.UpdateAlertRuleEnabled)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/certificate", wrapper.GetCertificateDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/disk", wrapper.GetDiskDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/health", wrapper.GetPlatformHealth)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/keyring", wrapper.GetKeyringDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/partitions", wrapper.GetPartitionDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/platform", wrapper.GetPlatformDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/scheduler", wrapper.GetSchedulerDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances", wrapper.ListInstances)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances", wrapper.CreateInstance)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
@@ -2457,6 +2565,38 @@ func (response UpdateAlertRuleEnabled404JSONResponse) VisitUpdateAlertRuleEnable
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetCertificateDiagnosticsRequestObject struct {
+}
+
+type GetCertificateDiagnosticsResponseObject interface {
+	VisitGetCertificateDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetCertificateDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetCertificateDiagnostics200JSONResponse) VisitGetCertificateDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetDiskDiagnosticsRequestObject struct {
+}
+
+type GetDiskDiagnosticsResponseObject interface {
+	VisitGetDiskDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetDiskDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetDiskDiagnostics200JSONResponse) VisitGetDiskDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetPlatformHealthRequestObject struct {
 }
 
@@ -2467,6 +2607,70 @@ type GetPlatformHealthResponseObject interface {
 type GetPlatformHealth200JSONResponse PlatformHealthSnapshot
 
 func (response GetPlatformHealth200JSONResponse) VisitGetPlatformHealthResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetKeyringDiagnosticsRequestObject struct {
+}
+
+type GetKeyringDiagnosticsResponseObject interface {
+	VisitGetKeyringDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetKeyringDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetKeyringDiagnostics200JSONResponse) VisitGetKeyringDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPartitionDiagnosticsRequestObject struct {
+}
+
+type GetPartitionDiagnosticsResponseObject interface {
+	VisitGetPartitionDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetPartitionDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetPartitionDiagnostics200JSONResponse) VisitGetPartitionDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPlatformDiagnosticsRequestObject struct {
+}
+
+type GetPlatformDiagnosticsResponseObject interface {
+	VisitGetPlatformDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetPlatformDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetPlatformDiagnostics200JSONResponse) VisitGetPlatformDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSchedulerDiagnosticsRequestObject struct {
+}
+
+type GetSchedulerDiagnosticsResponseObject interface {
+	VisitGetSchedulerDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetSchedulerDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetSchedulerDiagnostics200JSONResponse) VisitGetSchedulerDiagnosticsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
@@ -3201,8 +3405,26 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/alert-rules/{id}/enabled)
 	UpdateAlertRuleEnabled(ctx context.Context, request UpdateAlertRuleEnabledRequestObject) (UpdateAlertRuleEnabledResponseObject, error)
 
+	// (GET /api/v1/diagnostics/certificate)
+	GetCertificateDiagnostics(ctx context.Context, request GetCertificateDiagnosticsRequestObject) (GetCertificateDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/disk)
+	GetDiskDiagnostics(ctx context.Context, request GetDiskDiagnosticsRequestObject) (GetDiskDiagnosticsResponseObject, error)
+
 	// (GET /api/v1/diagnostics/health)
 	GetPlatformHealth(ctx context.Context, request GetPlatformHealthRequestObject) (GetPlatformHealthResponseObject, error)
+
+	// (GET /api/v1/diagnostics/keyring)
+	GetKeyringDiagnostics(ctx context.Context, request GetKeyringDiagnosticsRequestObject) (GetKeyringDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/partitions)
+	GetPartitionDiagnostics(ctx context.Context, request GetPartitionDiagnosticsRequestObject) (GetPartitionDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/platform)
+	GetPlatformDiagnostics(ctx context.Context, request GetPlatformDiagnosticsRequestObject) (GetPlatformDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/scheduler)
+	GetSchedulerDiagnostics(ctx context.Context, request GetSchedulerDiagnosticsRequestObject) (GetSchedulerDiagnosticsResponseObject, error)
 
 	// (GET /api/v1/instances)
 	ListInstances(ctx context.Context, request ListInstancesRequestObject) (ListInstancesResponseObject, error)
@@ -3558,6 +3780,54 @@ func (sh *strictHandler) UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.R
 	}
 }
 
+// GetCertificateDiagnostics operation middleware
+func (sh *strictHandler) GetCertificateDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetCertificateDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCertificateDiagnostics(ctx, request.(GetCertificateDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCertificateDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCertificateDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetCertificateDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDiskDiagnostics operation middleware
+func (sh *strictHandler) GetDiskDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetDiskDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDiskDiagnostics(ctx, request.(GetDiskDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDiskDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDiskDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetDiskDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetPlatformHealth operation middleware
 func (sh *strictHandler) GetPlatformHealth(w http.ResponseWriter, r *http.Request) {
 	var request GetPlatformHealthRequestObject
@@ -3575,6 +3845,102 @@ func (sh *strictHandler) GetPlatformHealth(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPlatformHealthResponseObject); ok {
 		if err := validResponse.VisitGetPlatformHealthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetKeyringDiagnostics operation middleware
+func (sh *strictHandler) GetKeyringDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetKeyringDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetKeyringDiagnostics(ctx, request.(GetKeyringDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetKeyringDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetKeyringDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetKeyringDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPartitionDiagnostics operation middleware
+func (sh *strictHandler) GetPartitionDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetPartitionDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPartitionDiagnostics(ctx, request.(GetPartitionDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPartitionDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPartitionDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetPartitionDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlatformDiagnostics operation middleware
+func (sh *strictHandler) GetPlatformDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetPlatformDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlatformDiagnostics(ctx, request.(GetPlatformDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlatformDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlatformDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetPlatformDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSchedulerDiagnostics operation middleware
+func (sh *strictHandler) GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetSchedulerDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSchedulerDiagnostics(ctx, request.(GetSchedulerDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSchedulerDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSchedulerDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetSchedulerDiagnosticsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

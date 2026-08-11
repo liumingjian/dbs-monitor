@@ -66,6 +66,10 @@ func TestPlatformFailureHandler(t *testing.T) {
 			path: "/api/v1/diagnostics/health", failed: true, status: http.StatusOK, body: "next",
 		},
 		{
+			name: "focused diagnostics remain available during failure",
+			path: "/api/v1/diagnostics/disk", failed: true, status: http.StatusOK, body: "next",
+		},
+		{
 			name: "API failure returns JSON",
 			path: "/api/v1/instances", failed: true, status: http.StatusServiceUnavailable,
 			contentType: "application/json; charset=utf-8",

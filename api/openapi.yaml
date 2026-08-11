@@ -76,6 +76,18 @@ paths:
     $ref: paths/users.yaml#/~1api~1v1~1password
   /api/v1/diagnostics/health:
     $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1health
+  /api/v1/diagnostics/disk:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1disk
+  /api/v1/diagnostics/scheduler:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1scheduler
+  /api/v1/diagnostics/partitions:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1partitions
+  /api/v1/diagnostics/certificate:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1certificate
+  /api/v1/diagnostics/keyring:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1keyring
+  /api/v1/diagnostics/platform:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1platform
 components:
   securitySchemes:
     agentToken:

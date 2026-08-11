@@ -1115,6 +1115,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlatformHealthSnapshot'
+  /api/v1/diagnostics/disk:
+    get:
+      tags:
+        - diagnostics
+      operationId: getDiskDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory disk watermark facts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/scheduler:
+    get:
+      tags:
+        - diagnostics
+      operationId: getSchedulerDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Most recent in-memory 60-second scheduler summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/partitions:
+    get:
+      tags:
+        - diagnostics
+      operationId: getPartitionDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory partition maintenance headroom
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/certificate:
+    get:
+      tags:
+        - diagnostics
+      operationId: getCertificateDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory platform certificate validity facts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/keyring:
+    get:
+      tags:
+        - diagnostics
+      operationId: getKeyringDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory credential keyring status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/platform:
+    get:
+      tags:
+        - diagnostics
+      operationId: getPlatformDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory platform version and process start time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
 components:
   securitySchemes:
     agentToken:
