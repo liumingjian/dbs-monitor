@@ -151,7 +151,8 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		}
 	}
 	if builtinCount != 3 || databaseRule.Id == uuid.Nil || !databaseRule.Enabled || databaseRule.Scope != api.ALL ||
-		databaseRule.Severity != api.Critical || databaseRule.EffectiveNotificationPolicyName != "默认策略（继承）" {
+		databaseRule.Severity != api.Critical || databaseRule.EffectiveNotificationPolicyName != "默认策略（继承）" ||
+		databaseRule.CurrentAlertCount != 0 || databaseRule.LastTriggeredAt != nil {
 		t.Fatalf("seeded built-in rules = count %d database rule %+v", builtinCount, databaseRule)
 	}
 
@@ -188,6 +189,26 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		}
 	}
 	assertAlertState(t, ctx, pool, databaseRule.Id, targetID, "FIRING", 3, 0, 0, 1)
+	updatedRulesResponse := getResponse(t, client, server.URL+"/api/v1/alert-rules")
+	defer updatedRulesResponse.Body.Close()
+	var updatedRules []api.AlertRule
+	if updatedRulesResponse.StatusCode != http.StatusOK || json.NewDecoder(updatedRulesResponse.Body).Decode(&updatedRules) != nil {
+		t.Fatalf("list updated alert rules status = %d", updatedRulesResponse.StatusCode)
+	}
+	foundDatabaseRule := false
+	for _, rule := range updatedRules {
+		if rule.Id != databaseRule.Id {
+			continue
+		}
+		foundDatabaseRule = true
+		if rule.CurrentAlertCount != 2 || rule.LastTriggeredAt == nil || !rule.LastTriggeredAt.Equal(currentClock.now) {
+			t.Fatalf("database rule list projection = %+v", rule)
+		}
+		break
+	}
+	if !foundDatabaseRule {
+		t.Fatal("database rule missing from updated alert rule list")
+	}
 
 	invalidInput := alertRuleInput(targetID)
 	delete(invalidInput, "recovery_threshold")

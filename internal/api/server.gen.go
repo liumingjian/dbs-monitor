@@ -529,6 +529,7 @@ type AlertRule struct {
 	BuiltinIdentifier               *string              `json:"builtin_identifier,omitempty"`
 	ConsecutiveCount                int                  `json:"consecutive_count"`
 	CreatedAt                       time.Time            `json:"created_at"`
+	CurrentAlertCount               int                  `json:"current_alert_count"`
 	EffectiveNotificationPolicyName string               `json:"effective_notification_policy_name"`
 	Enabled                         bool                 `json:"enabled"`
 	EnabledUpdatedAt                *time.Time           `json:"enabled_updated_at,omitempty"`
@@ -537,6 +538,7 @@ type AlertRule struct {
 	Id                              openapi_types.UUID   `json:"id"`
 	InstanceIds                     []openapi_types.UUID `json:"instance_ids"`
 	IsBuiltin                       bool                 `json:"is_builtin"`
+	LastTriggeredAt                 *time.Time           `json:"last_triggered_at,omitempty"`
 	MetricId                        string               `json:"metric_id"`
 	Name                            string               `json:"name"`
 	NoDataPolicy                    NoDataPolicy         `json:"no_data_policy"`

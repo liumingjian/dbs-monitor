@@ -887,6 +887,9 @@ export interface components {
             /** Format: uuid */
             notification_policy_id?: string;
             effective_notification_policy_name: string;
+            /** Format: date-time */
+            last_triggered_at?: string;
+            current_alert_count: number;
             source_template_id?: string;
             source_template_version?: number;
             /** Format: uuid */

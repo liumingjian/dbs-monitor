@@ -10,6 +10,7 @@ import { notificationSettingsRoute } from './routes/alert-settings/notifications
 import { instanceRoute } from './routes/instances.$id'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
+import { alertRulesRoute } from './routes/instances.$id/alerts/rules'
 import { instanceSettingsRoute } from './routes/instances.$id/settings'
 import { longQuerySamplesRoute } from './routes/instances.$id/longQuerySamples'
 import { queryStatisticsRoute } from './routes/instances.$id/queryStatisticsPage'
@@ -28,6 +29,7 @@ const routeTree = rootRoute.addChildren([
   standardMonitoringRoute,
   instanceAlertsRoute,
   instanceAlertDetailRoute,
+  alertRulesRoute,
   collectionManagementRoute,
   instanceSettingsRoute,
   sessionsRoute,

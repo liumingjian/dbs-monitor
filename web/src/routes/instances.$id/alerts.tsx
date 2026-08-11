@@ -1,3 +1,4 @@
+import { SettingOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Space } from 'antd'
 import { $api } from '../../api/client'
@@ -32,6 +33,9 @@ function InstanceAlertsPage() {
   const scopedSearch = { ...search, instance_id: id }
   return <Space direction="vertical" size="large" style={{ width: '100%' }}>
     <WorkbenchHeader id={id} instanceName={instance.data?.name} activeKey="alerts" search={defaultTimeRange()} />
+    <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+      <Link to="/instances/$id/alerts/rules" params={{ id }}><Button icon={<SettingOutlined />}>告警规则</Button></Link>
+    </Space>
     <AlertObservationLists
       search={scopedSearch}
       onSearchChange={(next) => void navigate({ search: { ...next, instance_id: undefined } })}
