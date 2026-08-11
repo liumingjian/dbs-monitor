@@ -175,7 +175,7 @@ func TestBuiltinRuleTemplatesPassRuleValidation(t *testing.T) {
 				Severity:                  api.AlertSeverity(template.Severity),
 				NoDataPolicy:              api.NoDataPolicy(template.NoDataPolicy),
 				Scope:                     api.ALL,
-				EvaluationIntervalSeconds: template.EvaluationInterval,
+				EvaluationIntervalSeconds: template.EvaluationIntervalSeconds,
 				Enabled:                   true,
 			}
 			if fieldErrors := validateAlertRule(rule); len(fieldErrors) != 0 {

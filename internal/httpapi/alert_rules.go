@@ -118,7 +118,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 			NoDataPolicy:              string(input.NoDataPolicy),
 			Scope:                     string(input.Scope),
 			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
-			NotificationPolicyID:      databaseOptionalUUID(input.NotificationPolicyId),
+			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
 			UpdatedAt:                 now,
 		})
 		if err != nil {
@@ -213,12 +213,22 @@ func (handler *Handler) CreateAlertRuleFromTemplate(ctx context.Context, request
 	recoveryThreshold := template.RecoveryThreshold
 	recoveryCount := int(template.RecoveryConsecutiveCount)
 	input := api.AlertRuleInput{
-		Name: template.Name, MetricId: template.MetricID,
-		Aggregation: api.AlertAggregation(template.Aggregation), Operator: api.AlertOperator(template.Operator), Threshold: template.Threshold,
-		RecoveryOperator: api.AlertOperator(template.RecoveryOperator), RecoveryThreshold: &recoveryThreshold,
-		WindowSeconds: int(template.WindowSeconds), ConsecutiveCount: int(template.ConsecutiveCount), RecoveryConsecutiveCount: &recoveryCount,
-		Severity: api.AlertSeverity(template.Severity), NoDataPolicy: api.NoDataPolicy(template.NoDataPolicy),
-		Scope: api.ALL, InstanceIds: []uuid.UUID{}, EvaluationIntervalSeconds: int(template.EvaluationIntervalSeconds), Enabled: true,
+		Name:                      template.Name,
+		MetricId:                  template.MetricID,
+		Aggregation:               api.AlertAggregation(template.Aggregation),
+		Operator:                  api.AlertOperator(template.Operator),
+		Threshold:                 template.Threshold,
+		RecoveryOperator:          api.AlertOperator(template.RecoveryOperator),
+		RecoveryThreshold:         &recoveryThreshold,
+		WindowSeconds:             int(template.WindowSeconds),
+		ConsecutiveCount:          int(template.ConsecutiveCount),
+		RecoveryConsecutiveCount:  &recoveryCount,
+		Severity:                  api.AlertSeverity(template.Severity),
+		NoDataPolicy:              api.NoDataPolicy(template.NoDataPolicy),
+		Scope:                     api.ALL,
+		InstanceIds:               []uuid.UUID{},
+		EvaluationIntervalSeconds: int(template.EvaluationIntervalSeconds),
+		Enabled:                   true,
 	}
 	if request.Body != nil {
 		applyTemplateOverrides(&input, *request.Body)
@@ -249,14 +259,23 @@ func (handler *Handler) CopyAlertRule(ctx context.Context, request api.CopyAlert
 	recoveryThreshold := rule.RecoveryThreshold
 	recoveryCount := int(rule.RecoveryConsecutiveCount)
 	input := api.AlertRuleInput{
-		Name: rule.Name + " 副本", MetricId: rule.MetricID,
-		Aggregation: api.AlertAggregation(rule.Aggregation), Operator: api.AlertOperator(rule.Operator), Threshold: rule.Threshold,
-		RecoveryOperator: api.AlertOperator(rule.RecoveryOperator), RecoveryThreshold: &recoveryThreshold,
-		WindowSeconds: int(rule.WindowSeconds), ConsecutiveCount: int(rule.ConsecutiveCount), RecoveryConsecutiveCount: &recoveryCount,
-		Severity: api.AlertSeverity(rule.Severity), NoDataPolicy: api.NoDataPolicy(rule.NoDataPolicy),
-		Scope: api.AlertRuleScope(rule.Scope), InstanceIds: toAPIUUIDs(instanceIDs),
-		EvaluationIntervalSeconds: int(rule.EvaluationIntervalSeconds), Enabled: rule.Enabled,
-		NotificationPolicyId: apiUUIDPointer(rule.NotificationPolicyID),
+		Name:                      rule.Name + " 副本",
+		MetricId:                  rule.MetricID,
+		Aggregation:               api.AlertAggregation(rule.Aggregation),
+		Operator:                  api.AlertOperator(rule.Operator),
+		Threshold:                 rule.Threshold,
+		RecoveryOperator:          api.AlertOperator(rule.RecoveryOperator),
+		RecoveryThreshold:         &recoveryThreshold,
+		WindowSeconds:             int(rule.WindowSeconds),
+		ConsecutiveCount:          int(rule.ConsecutiveCount),
+		RecoveryConsecutiveCount:  &recoveryCount,
+		Severity:                  api.AlertSeverity(rule.Severity),
+		NoDataPolicy:              api.NoDataPolicy(rule.NoDataPolicy),
+		Scope:                     api.AlertRuleScope(rule.Scope),
+		InstanceIds:               toAPIUUIDs(instanceIDs),
+		EvaluationIntervalSeconds: int(rule.EvaluationIntervalSeconds),
+		Enabled:                   rule.Enabled,
+		NotificationPolicyId:      toAPIOptionalUUID(rule.NotificationPolicyID),
 	}
 	if request.Body != nil && request.Body.Name != nil {
 		input.Name = *request.Body.Name
@@ -284,25 +303,36 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
 	ruleID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
-	sourceID := pgtype.Text{}
-	sourceVersion := pgtype.Int4{}
+	databaseSourceTemplateID := pgtype.Text{}
+	databaseSourceTemplateVersion := pgtype.Int4{}
 	if sourceTemplateID != "" {
-		sourceID = pgtype.Text{String: sourceTemplateID, Valid: true}
-		sourceVersion = pgtype.Int4{Int32: sourceTemplateVersion, Valid: true}
+		databaseSourceTemplateID = pgtype.Text{String: sourceTemplateID, Valid: true}
+		databaseSourceTemplateVersion = pgtype.Int4{Int32: sourceTemplateVersion, Valid: true}
 	}
 	var response api.AlertRule
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := alerting.New(tx)
 		rule, err := queries.CreateAlertRule(ctx, alerting.CreateAlertRuleParams{
-			ID: ruleID, Name: strings.TrimSpace(input.Name), MetricID: input.MetricId,
-			Aggregation: string(input.Aggregation), Operator: string(input.Operator), Threshold: input.Threshold,
-			RecoveryOperator: string(input.RecoveryOperator), RecoveryThreshold: *input.RecoveryThreshold,
-			WindowSeconds: int32(input.WindowSeconds), ConsecutiveCount: int32(input.ConsecutiveCount),
-			RecoveryConsecutiveCount: int32(recoveryConsecutiveCount(input)), Severity: string(input.Severity),
-			NoDataPolicy: string(input.NoDataPolicy), Scope: string(input.Scope),
-			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds), Enabled: input.Enabled, CreatedAt: now,
-			NotificationPolicyID: databaseOptionalUUID(input.NotificationPolicyId),
-			SourceTemplateID:     sourceID, SourceTemplateVersion: sourceVersion,
+			ID:                        ruleID,
+			Name:                      strings.TrimSpace(input.Name),
+			MetricID:                  input.MetricId,
+			Aggregation:               string(input.Aggregation),
+			Operator:                  string(input.Operator),
+			Threshold:                 input.Threshold,
+			RecoveryOperator:          string(input.RecoveryOperator),
+			RecoveryThreshold:         *input.RecoveryThreshold,
+			WindowSeconds:             int32(input.WindowSeconds),
+			ConsecutiveCount:          int32(input.ConsecutiveCount),
+			RecoveryConsecutiveCount:  int32(recoveryConsecutiveCount(input)),
+			Severity:                  string(input.Severity),
+			NoDataPolicy:              string(input.NoDataPolicy),
+			Scope:                     string(input.Scope),
+			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
+			Enabled:                   input.Enabled,
+			CreatedAt:                 now,
+			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
+			SourceTemplateID:          databaseSourceTemplateID,
+			SourceTemplateVersion:     databaseSourceTemplateVersion,
 		})
 		if err != nil {
 			return err
@@ -465,7 +495,7 @@ func (handler *Handler) validateAlertRuleReferences(ctx context.Context, rule ap
 		}
 	}
 	if rule.NotificationPolicyId != nil {
-		_, err := queries.GetNotificationPolicy(ctx, databaseOptionalUUID(rule.NotificationPolicyId))
+		_, err := queries.GetNotificationPolicy(ctx, toDatabaseOptionalUUID(rule.NotificationPolicyId))
 		if errors.Is(err, pgx.ErrNoRows) {
 			return []fieldError{{field: "notification_policy_id", message: "must identify an existing notification policy"}}, nil
 		}
@@ -522,14 +552,14 @@ func toAPIUUIDs(instanceIDs []pgtype.UUID) []uuid.UUID {
 	return result
 }
 
-func databaseOptionalUUID(value *uuid.UUID) pgtype.UUID {
+func toDatabaseOptionalUUID(value *uuid.UUID) pgtype.UUID {
 	if value == nil {
 		return pgtype.UUID{}
 	}
 	return pgtype.UUID{Bytes: *value, Valid: true}
 }
 
-func apiUUIDPointer(value pgtype.UUID) *uuid.UUID {
+func toAPIOptionalUUID(value pgtype.UUID) *uuid.UUID {
 	if !value.Valid {
 		return nil
 	}
@@ -589,9 +619,12 @@ func alertRuleValidationError(fieldErrors []fieldError) api.Error {
 }
 
 func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alerting.AlertRule, scopedInstanceIDs []pgtype.UUID) (api.AlertRule, error) {
-	policy, err := queries.GetDefaultNotificationPolicy(ctx)
+	var policy alerting.NotificationPolicy
+	var err error
 	if rule.NotificationPolicyID.Valid {
 		policy, err = queries.GetNotificationPolicy(ctx, rule.NotificationPolicyID)
+	} else {
+		policy, err = queries.GetDefaultNotificationPolicy(ctx)
 	}
 	if err != nil {
 		return api.AlertRule{}, err
@@ -599,10 +632,6 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 	policyName := policy.Name
 	if !rule.NotificationPolicyID.Valid {
 		policyName += "（继承）"
-	}
-	instanceIDs := make([]uuid.UUID, 0, len(scopedInstanceIDs))
-	for _, instanceID := range scopedInstanceIDs {
-		instanceIDs = append(instanceIDs, instanceID.Bytes)
 	}
 	result := api.AlertRule{
 		Id:                              rule.ID.Bytes,
@@ -619,7 +648,7 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 		Severity:                        api.AlertSeverity(rule.Severity),
 		NoDataPolicy:                    api.NoDataPolicy(rule.NoDataPolicy),
 		Scope:                           api.AlertRuleScope(rule.Scope),
-		InstanceIds:                     instanceIDs,
+		InstanceIds:                     toAPIUUIDs(scopedInstanceIDs),
 		EvaluationIntervalSeconds:       int(rule.EvaluationIntervalSeconds),
 		Enabled:                         rule.Enabled,
 		IsBuiltin:                       rule.BuiltinIdentifier.Valid,
@@ -657,11 +686,20 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 
 func toAPIAlertRuleTemplate(template alerting.AlertRuleTemplate) api.AlertRuleTemplate {
 	return api.AlertRuleTemplate{
-		Id: template.Identifier, Version: int(template.Version), Name: template.Name, MetricId: template.MetricID,
-		Aggregation: api.AlertAggregation(template.Aggregation), Operator: api.AlertOperator(template.Operator), Threshold: template.Threshold,
-		RecoveryOperator: api.AlertOperator(template.RecoveryOperator), RecoveryThreshold: template.RecoveryThreshold,
-		WindowSeconds: int(template.WindowSeconds), ConsecutiveCount: int(template.ConsecutiveCount),
-		RecoveryConsecutiveCount: int(template.RecoveryConsecutiveCount), Severity: api.AlertSeverity(template.Severity),
-		NoDataPolicy: api.NoDataPolicy(template.NoDataPolicy), EvaluationIntervalSeconds: int(template.EvaluationIntervalSeconds),
+		Id:                        template.Identifier,
+		Version:                   int(template.Version),
+		Name:                      template.Name,
+		MetricId:                  template.MetricID,
+		Aggregation:               api.AlertAggregation(template.Aggregation),
+		Operator:                  api.AlertOperator(template.Operator),
+		Threshold:                 template.Threshold,
+		RecoveryOperator:          api.AlertOperator(template.RecoveryOperator),
+		RecoveryThreshold:         template.RecoveryThreshold,
+		WindowSeconds:             int(template.WindowSeconds),
+		ConsecutiveCount:          int(template.ConsecutiveCount),
+		RecoveryConsecutiveCount:  int(template.RecoveryConsecutiveCount),
+		Severity:                  api.AlertSeverity(template.Severity),
+		NoDataPolicy:              api.NoDataPolicy(template.NoDataPolicy),
+		EvaluationIntervalSeconds: int(template.EvaluationIntervalSeconds),
 	}
 }

@@ -43,7 +43,7 @@ func reconcileAlertingSeeds(ctx context.Context, database *sql.DB) error {
 			rule.ID, rule.Name, rule.MetricID, rule.Aggregation, rule.Operator, rule.Threshold,
 			rule.RecoveryOperator, rule.RecoveryThreshold, rule.WindowSeconds,
 			rule.ConsecutiveCount, rule.RecoveryConsecutiveCount, rule.Severity,
-			rule.NoDataPolicy, rule.Enabled, rule.EvaluationInterval, rule.Identifier,
+			rule.NoDataPolicy, rule.Enabled, rule.EvaluationIntervalSeconds, rule.Identifier,
 		); err != nil {
 			return fmt.Errorf("seed built-in alert rule %q: %w", rule.Identifier, err)
 		}
@@ -73,7 +73,7 @@ func reconcileAlertingSeeds(ctx context.Context, database *sql.DB) error {
 			template.Aggregation, template.Operator, template.Threshold,
 			template.RecoveryOperator, template.RecoveryThreshold, template.WindowSeconds,
 			template.ConsecutiveCount, template.RecoveryConsecutiveCount,
-			template.Severity, template.NoDataPolicy, template.EvaluationInterval,
+			template.Severity, template.NoDataPolicy, template.EvaluationIntervalSeconds,
 		); err != nil {
 			return fmt.Errorf("seed alert rule template %q: %w", template.Identifier, err)
 		}

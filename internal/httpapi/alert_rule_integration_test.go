@@ -157,10 +157,10 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 
 	disabledBuiltin := requestJSON(t, client, http.MethodPut,
 		server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String()+"/enabled", map[string]any{"enabled": false}, "")
-	assertRuleErrorCode(t, disabledBuiltin, http.StatusBadRequest, "BUILTIN_RULE_DISABLE_FORBIDDEN")
+	assertRuleErrorCode(t, disabledBuiltin, http.StatusBadRequest, api.BUILTINRULEDISABLEFORBIDDEN)
 	deletedBuiltin := requestJSON(t, client, http.MethodDelete,
 		server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String(), nil, "")
-	assertRuleErrorCode(t, deletedBuiltin, http.StatusConflict, "BUILTIN_RULE_DELETE_FORBIDDEN")
+	assertRuleErrorCode(t, deletedBuiltin, http.StatusConflict, api.BUILTINRULEDELETEFORBIDDEN)
 	infoInput := map[string]any{
 		"name": databaseRule.Name, "metric_id": databaseRule.MetricId,
 		"aggregation": databaseRule.Aggregation, "operator": databaseRule.Operator, "threshold": databaseRule.Threshold,
@@ -173,7 +173,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	}
 	infoBuiltin := requestJSON(t, client, http.MethodPut,
 		server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String(), infoInput, "")
-	assertRuleErrorCode(t, infoBuiltin, http.StatusBadRequest, "BUILTIN_RULE_SEVERITY_TOO_LOW")
+	assertRuleErrorCode(t, infoBuiltin, http.StatusBadRequest, api.BUILTINRULESEVERITYTOOLOW)
 
 	targetID := createAlertTestInstance(t, ctx, pool, keyring, "target")
 	otherID := createAlertTestInstance(t, ctx, pool, keyring, "out-of-scope")
@@ -743,14 +743,10 @@ func runAlertEvaluation(t *testing.T, ctx context.Context, service *evaluator.Se
 	}
 }
 
-func assertRuleErrorCode(t *testing.T, response *http.Response, wantStatus int, wantCode string) {
+func assertRuleErrorCode(t *testing.T, response *http.Response, wantStatus int, wantCode api.ErrorErrorCode) {
 	t.Helper()
 	defer response.Body.Close()
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
+	var body api.Error
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode alert rule error: %v", err)
 	}
