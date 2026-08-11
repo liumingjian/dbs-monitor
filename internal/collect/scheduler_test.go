@@ -154,9 +154,11 @@ func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.
 	health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{PrebuildDaysRemaining: 7}))
 	health.Update(now, platformhealth.CertificateSource(now, &expiresAt))
 	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY"})
-	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceDisk, Status: platformhealth.StatusOK, Code: "DISK_CLASSIFICATION_PENDING"})
 	health.Update(now, platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
 	service := &Service{health: health}
+	if err := service.SetDiskMonitor(t.TempDir(), platformhealth.DefaultDiskThresholds()); err != nil {
+		t.Fatalf("configure disk monitor: %v", err)
+	}
 	scheduler := &centralScheduler{
 		service:    service,
 		dispatcher: newDispatcher(1, 2),
@@ -167,12 +169,17 @@ func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.
 	scheduler.pending.put(scheduledRun{key: taskKey{instanceID: "one", taskID: metric.TaskProbe}})
 	scheduler.counts.skipped = 7
 
+	scheduler.refreshDiskHealth(now)
 	scheduler.publishPlatformHealth(now, nil, nil)
 
 	source := health.Source(platformhealth.SourceCollectionScheduler)
 	if source.Status != platformhealth.StatusDegraded || source.Pending == nil || *source.Pending != 1 ||
 		source.SkippedBackpressure == nil || *source.SkippedBackpressure != 7 {
 		t.Fatalf("scheduler platform health = %+v, want DEGRADED pending=1 skipped_backpressure=7", source)
+	}
+	diskSource := health.Source(platformhealth.SourceDisk)
+	if diskSource.DiskLevel == nil || diskSource.DiskUsagePercent == nil || diskSource.Code == "DISK_USAGE_UNAVAILABLE" {
+		t.Fatalf("scheduler disk health = %+v, want sampled filesystem facts", diskSource)
 	}
 	if got := health.Current().Status; got != platformhealth.StatusDegraded {
 		t.Fatalf("aggregate platform health = %s, want DEGRADED", got)

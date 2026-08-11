@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,6 +25,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
@@ -76,6 +79,8 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	dialer := &countingDialer{}
 	currentClock := &fixedClock{now: time.Now().UTC()}
 	collector := New(platform, dialer, currentClock, keyring)
+	health := platformhealth.NewStore("3.0.0", currentClock.now.Add(-time.Hour), log.New(io.Discard, "", 0))
+	collector.SetPlatformHealth(health)
 	eval := evaluator.New(platform, currentClock, collector.WithTriggerSnapshotConnection)
 
 	extra := make([]*pgx.Conn, 25)
@@ -133,6 +138,67 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if successfulTasks != 3 {
 		t.Fatalf("successful task count = %d, want 3", successfulTasks)
 	}
+	var samplesBeforeEmergency int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1`, pgID).Scan(&samplesBeforeEmergency); err != nil {
+		t.Fatalf("count samples before disk emergency: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `CREATE TABLE metric_sample_20000101 PARTITION OF metric_sample
+		FOR VALUES FROM ('2000-01-01T00:00:00Z') TO ('2000-01-02T00:00:00Z')`); err != nil {
+		t.Fatalf("create retention sentinel partition: %v", err)
+	}
+	var alertsBeforeEmergency int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alert_instance WHERE instance_id = $1", pgID).Scan(&alertsBeforeEmergency); err != nil {
+		t.Fatalf("count alerts before disk emergency: %v", err)
+	}
+	health.Update(currentClock.now, platformhealth.DiskSource(
+		96, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds(),
+	))
+	currentClock.Advance(30 * time.Second)
+	if err := collector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect at disk emergency: %v", err)
+	}
+	if err := eval.RunOnce(ctx); err != nil {
+		t.Fatalf("evaluate naturally at disk emergency: %v", err)
+	}
+	var samplesAfterEmergency, alertsAfterEmergency int
+	var emergencyWatermark time.Time
+	var emergencyResult, emergencyCode, emergencyMessage string
+	var retentionSentinelExists bool
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1`, pgID).Scan(&samplesAfterEmergency); err != nil {
+		t.Fatalf("count samples after disk emergency: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT last_success_at FROM instance_collect_state
+		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, pgID).Scan(&emergencyWatermark); err != nil {
+		t.Fatalf("read disk emergency integrity watermark: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT last_result, last_error_code, last_error_message
+		FROM instance_collection_task_state WHERE instance_id = $1 AND task_id = 'pg.probe'`, pgID).
+		Scan(&emergencyResult, &emergencyCode, &emergencyMessage); err != nil {
+		t.Fatalf("read disk emergency task state: %v", err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT to_regclass('metric_sample_20000101') IS NOT NULL").Scan(&retentionSentinelExists); err != nil {
+		t.Fatalf("check retention sentinel partition: %v", err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alert_instance WHERE instance_id = $1", pgID).Scan(&alertsAfterEmergency); err != nil {
+		t.Fatalf("count alerts after disk emergency: %v", err)
+	}
+	if samplesAfterEmergency != samplesBeforeEmergency || !emergencyWatermark.Equal(healthyWatermark) ||
+		emergencyResult != "FAILED" || emergencyCode != "DISK_EMERGENCY_WATERMARK" || emergencyMessage == "" ||
+		!retentionSentinelExists || alertsAfterEmergency != alertsBeforeEmergency {
+		t.Fatalf("disk emergency samples/watermark/task/retention/alerts = %d/%s/%s:%s/%t/%d, want %d/%s/FAILED:DISK_EMERGENCY_WATERMARK/true/%d",
+			samplesAfterEmergency, emergencyWatermark, emergencyResult, emergencyCode, retentionSentinelExists, alertsAfterEmergency,
+			samplesBeforeEmergency, healthyWatermark, alertsBeforeEmergency)
+	}
+	if _, err := pool.Exec(ctx, "UPDATE instance SET name = 'emergency control write' WHERE id = $1", pgID); err != nil {
+		t.Fatalf("control-plane write during disk emergency: %v", err)
+	}
+	health.Update(currentClock.now, platformhealth.DiskSource(
+		77, health.DiskLevel(), platformhealth.DefaultDiskThresholds(),
+	))
 	collector.queryConnectionMu.Lock()
 	cached := collector.queryConnections[instanceID.String()]
 	collector.queryConnectionMu.Unlock()

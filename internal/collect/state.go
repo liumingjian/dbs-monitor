@@ -28,6 +28,7 @@ const (
 	errorCodeQueryFailed      = "QUERY_FAILED"
 	errorCodeTimeout          = "TIMEOUT"
 	errorCodeCounterReset     = string(metric.ResetCounter)
+	errorCodeDiskEmergency    = "DISK_EMERGENCY_WATERMARK"
 )
 
 type collectedSample struct {
@@ -302,6 +303,34 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, bat
 	return service.withPartitionRepair(ctx, finished, write)
 }
 
+func (service *Service) recordDiskEmergency(ctx context.Context, run scheduledRun) error {
+	finished := service.clock.Now().UTC()
+	message := collectionErrorMessage(errorCodeDiskEmergency)
+	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
+		collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
+		if err != nil {
+			return err
+		}
+		if !collectionActive {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, `UPDATE instance_collection_task_state SET
+			last_due_at = $3,
+			last_started_at = $4,
+			last_finished_at = $5,
+			last_result = 'FAILED',
+			consecutive_failures = consecutive_failures + 1,
+			next_eligible_at = NULL,
+			last_error_code = $6,
+			last_error_message = $7
+			WHERE instance_id = $1 AND task_id = $2`,
+			run.target.ID, run.task.ID, run.dueAt, run.startedAt, finished, errorCodeDiskEmergency, message); err != nil {
+			return err
+		}
+		return setSourceFailure(ctx, tx, run.target.ID, errorCodeDiskEmergency, message)
+	})
+}
+
 func (service *Service) nextEligible(ctx context.Context, run scheduledRun) (time.Time, error) {
 	if run.task.Kind == metric.TaskKindProbe || isCapabilitySnapshotTask(run.task) {
 		return time.Time{}, nil
@@ -400,6 +429,8 @@ func collectionErrorMessage(code string) string {
 		return "collection deadline exceeded"
 	case errorCodeCounterReset:
 		return "database statistics counters reset"
+	case errorCodeDiskEmergency:
+		return "sample writes rejected at disk emergency watermark"
 	case string(metric.CapabilityBlockPermissionDenied):
 		return "required database role is missing"
 	case string(metric.CapabilityBlockExtensionMissing):

@@ -72,7 +72,10 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("seed admin: %v", err)
 	}
 
-	server := httptest.NewTLSServer(httpapi.NewHandlerWithVersion(platform, clock.Real{}, keyring, "3.0.0").Routes())
+	health := platformhealth.NewStore("3.0.0", time.Now().Add(-time.Hour), log.New(io.Discard, "", 0))
+	server := httptest.NewTLSServer(httpapi.NewHandlerWithPlatformHealth(
+		platform, clock.Real{}, keyring, monitorpg.DirectDialer{}, "3.0.0", health,
+	).Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
@@ -458,7 +461,6 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1), "COLLECTION_FAILED")
 
 	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{}, keyring)
-	health := platformhealth.NewStore("3.0.0", time.Now().Add(-time.Hour), log.New(io.Discard, "", 0))
 	collector.SetPlatformHealth(health)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect samples: %v", err)
@@ -683,6 +685,51 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if len(iops) != 3 || iops[0] != 20 || iops[1] != 9 || iops[2] != 15 {
 		t.Fatalf("backfilled IOPS values = %v, want [20 9 15] without reset reclassification", iops)
 	}
+	assertAgentState(t, ctx, pool, instanceID, "2.4.0", "", "")
+	health.Update(now, platformhealth.DiskSource(
+		96, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds(),
+	))
+	diagnostics := getResponse(t, client, server.URL+"/api/v1/diagnostics/health")
+	var diagnosticSnapshot api.PlatformHealthSnapshot
+	if err := json.NewDecoder(diagnostics.Body).Decode(&diagnosticSnapshot); err != nil {
+		t.Fatalf("decode disk emergency diagnostics: %v", err)
+	}
+	diagnostics.Body.Close()
+	var diagnosticDisk *api.PlatformHealthSourceSnapshot
+	for index := range diagnosticSnapshot.Sources {
+		if diagnosticSnapshot.Sources[index].Source == api.HealthSourceDisk {
+			diagnosticDisk = &diagnosticSnapshot.Sources[index]
+			break
+		}
+	}
+	if diagnostics.StatusCode != http.StatusOK || diagnosticDisk == nil || diagnosticDisk.DiskLevel == nil ||
+		*diagnosticDisk.DiskLevel != "EMERGENCY" || diagnosticDisk.DiskUsagePercent == nil ||
+		diagnosticDisk.DiskEmergencyPercent == nil || *diagnosticDisk.DiskEmergencyPercent != 95 {
+		t.Fatalf("disk emergency diagnostics status/source = %d/%+v", diagnostics.StatusCode, diagnosticDisk)
+	}
+	rejectedAtEmergency := report(time.Now(), "2.4.0", agentToken, nil)
+	rejectedAtEmergency.Body.Close()
+	if rejectedAtEmergency.StatusCode != http.StatusBadRequest {
+		t.Fatalf("disk emergency Agent report status = %d, want 400", rejectedAtEmergency.StatusCode)
+	}
+	var emergencyIOPSCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1 AND series.metric_id = 'host.disk.iops'`, instanceID).Scan(&emergencyIOPSCount); err != nil {
+		t.Fatalf("count Agent samples after disk emergency: %v", err)
+	}
+	if emergencyIOPSCount != len(iops) {
+		t.Fatalf("Agent samples after disk emergency = %d, want unchanged %d", emergencyIOPSCount, len(iops))
+	}
+	assertAgentState(t, ctx, pool, instanceID, "2.4.0", "DISK_EMERGENCY_WATERMARK", "磁盘紧急水位，样本写入已拒绝")
+	controlWrite := requestJSON(t, client, http.MethodPut, tasksURL+"/pg.stat_activity", map[string]any{"interval_seconds": 7}, "")
+	controlWrite.Body.Close()
+	if controlWrite.StatusCode != http.StatusOK {
+		t.Fatalf("control-plane write during disk emergency status = %d, want 200", controlWrite.StatusCode)
+	}
+	health.Update(now, platformhealth.DiskSource(
+		77, health.DiskLevel(), platformhealth.DefaultDiskThresholds(),
+	))
 	hostSeriesURL, err := url.Parse(fmt.Sprintf("%s/api/v1/instances/%s/metrics/series", server.URL, instanceID))
 	if err != nil {
 		t.Fatalf("parse host series URL: %v", err)
@@ -727,8 +774,6 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 			}
 		}
 	}
-	assertAgentState(t, ctx, pool, instanceID, "2.4.0", "", "")
-
 	var unchanged time.Time
 	if err := pool.QueryRow(ctx, "SELECT updated_at FROM alert_instance WHERE instance_id = $1", instanceID).Scan(&unchanged); err != nil {
 		t.Fatalf("read alert state after backfill: %v", err)

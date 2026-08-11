@@ -130,6 +130,11 @@ func (handler *Handler) GetPlatformHealth(context.Context, api.GetPlatformHealth
 }
 
 func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.PlatformHealthSourceSnapshot {
+	var diskLevel *string
+	if source.DiskLevel != nil {
+		value := string(*source.DiskLevel)
+		diskLevel = &value
+	}
 	return api.PlatformHealthSourceSnapshot{
 		Source:                api.PlatformHealthSource(source.Source),
 		Status:                api.PlatformHealthStatus(source.Status),
@@ -146,6 +151,12 @@ func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.Platfor
 		Backoff:               source.Backoff,
 		ConsecutiveFailures:   source.ConsecutiveFailures,
 		PrebuildDaysRemaining: source.PrebuildDaysRemaining,
+		DiskLevel:             diskLevel,
+		DiskUsagePercent:      source.DiskUsagePercent,
+		DiskWarningPercent:    source.DiskWarningPercent,
+		DiskCriticalPercent:   source.DiskCriticalPercent,
+		DiskEmergencyPercent:  source.DiskEmergencyPercent,
+		DiskHysteresisPoints:  source.DiskHysteresisPoints,
 	}
 }
 
@@ -806,6 +817,9 @@ func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.Repo
 	now := handler.clock.Now().UTC()
 	if agentReportHasClockSkew(*request.Body, now) {
 		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentClockSkewErrorCode, agentClockSkewMessage)
+	}
+	if handler.health != nil && handler.health.RejectSampleWrites() {
+		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, "DISK_EMERGENCY_WATERMARK", "磁盘紧急水位，样本写入已拒绝")
 	}
 
 	if err := handler.storeAgentReport(ctx, authenticated, *request.Body, now); err != nil {

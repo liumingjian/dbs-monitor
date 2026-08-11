@@ -51,10 +51,15 @@ func TestPlatformFailureHandler(t *testing.T) {
 		body             string
 		bodyContains     bool
 		platformFaultSet bool
+		diskEmergency    bool
 	}{
 		{
 			name: "non-failed platform delegates",
 			path: "/instances", status: http.StatusOK, body: "next",
+		},
+		{
+			name: "disk emergency keeps control plane available", diskEmergency: true,
+			path: "/api/v1/instances", status: http.StatusOK, body: "next",
 		},
 		{
 			name: "diagnostics remains available during failure",
@@ -79,6 +84,9 @@ func TestPlatformFailureHandler(t *testing.T) {
 			health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), nil)
 			if test.failed {
 				health.Update(now, platformhealth.DatabaseSource(errors.New("unavailable")))
+			}
+			if test.diskEmergency {
+				health.Update(now, platformhealth.DiskSource(96, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds()))
 			}
 			next := http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 				writer.WriteHeader(http.StatusOK)

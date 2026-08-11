@@ -210,6 +210,12 @@ type InstanceCollectionTaskState struct {
 	LastErrorMessage    pgtype.Text
 }
 
+type InstanceIdentity struct {
+	ID        pgtype.UUID
+	Name      string
+	RemovedAt pgtype.Timestamptz
+}
+
 type InstanceSessionSnapshot struct {
 	InstanceID    pgtype.UUID
 	SampledAt     pgtype.Timestamptz
@@ -255,12 +261,6 @@ type LongQuerySampleSnapshot struct {
 	SampledAt     pgtype.Timestamptz
 	OriginalCount int32
 	Truncated     bool
-}
-
-type InstanceIdentity struct {
-	ID        pgtype.UUID
-	Name      string
-	RemovedAt pgtype.Timestamptz
 }
 
 type MetricSample struct {

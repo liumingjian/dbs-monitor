@@ -2,7 +2,9 @@ package platformhealth
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
+	"math"
 	"sync"
 	"time"
 )
@@ -28,6 +30,61 @@ const (
 	SourceDisk                 Source = "DISK"
 	SourceCredentialKeyring    Source = "CREDENTIAL_KEYRING"
 )
+
+type DiskLevel string
+
+const (
+	DiskNormal    DiskLevel = "NORMAL"
+	DiskWarning   DiskLevel = "WARNING"
+	DiskCritical  DiskLevel = "CRITICAL"
+	DiskEmergency DiskLevel = "EMERGENCY"
+)
+
+type DiskThresholds struct {
+	Warning    float64
+	Critical   float64
+	Emergency  float64
+	Hysteresis float64
+}
+
+func DefaultDiskThresholds() DiskThresholds {
+	return DiskThresholds{Warning: 80, Critical: 90, Emergency: 95, Hysteresis: 2}
+}
+
+func (thresholds DiskThresholds) Validate() error {
+	if math.IsNaN(thresholds.Warning) || math.IsNaN(thresholds.Critical) || math.IsNaN(thresholds.Emergency) ||
+		math.IsNaN(thresholds.Hysteresis) || math.IsInf(thresholds.Warning, 0) || math.IsInf(thresholds.Critical, 0) ||
+		math.IsInf(thresholds.Emergency, 0) || math.IsInf(thresholds.Hysteresis, 0) {
+		return errors.New("disk thresholds must be finite")
+	}
+	if thresholds.Warning <= 0 || thresholds.Warning >= thresholds.Critical ||
+		thresholds.Critical >= thresholds.Emergency || thresholds.Emergency > 100 {
+		return errors.New("disk thresholds must be ordered between 0 and 100")
+	}
+	if thresholds.Hysteresis < 0 || thresholds.Hysteresis >= thresholds.Warning {
+		return errors.New("disk hysteresis must be non-negative and below the warning threshold")
+	}
+	return nil
+}
+
+func ClassifyDiskLevel(usagePercent float64, previous DiskLevel, thresholds DiskThresholds) DiskLevel {
+	switch {
+	case usagePercent >= thresholds.Emergency:
+		return DiskEmergency
+	case previous == DiskEmergency && usagePercent >= thresholds.Emergency-thresholds.Hysteresis:
+		return DiskEmergency
+	case usagePercent >= thresholds.Critical:
+		return DiskCritical
+	case (previous == DiskEmergency || previous == DiskCritical) && usagePercent >= thresholds.Critical-thresholds.Hysteresis:
+		return DiskCritical
+	case usagePercent >= thresholds.Warning:
+		return DiskWarning
+	case previous != DiskNormal && usagePercent >= thresholds.Warning-thresholds.Hysteresis:
+		return DiskWarning
+	default:
+		return DiskNormal
+	}
+}
 
 var sourceOrder = []Source{
 	SourceServerProcess,
@@ -56,6 +113,12 @@ type SourceSnapshot struct {
 	Backoff               *int64     `json:"backoff,omitempty"`
 	ConsecutiveFailures   *int       `json:"consecutive_failures,omitempty"`
 	PrebuildDaysRemaining *int       `json:"prebuild_days_remaining,omitempty"`
+	DiskLevel             *DiskLevel `json:"disk_level,omitempty"`
+	DiskUsagePercent      *float64   `json:"disk_usage_percent,omitempty"`
+	DiskWarningPercent    *float64   `json:"disk_warning_percent,omitempty"`
+	DiskCriticalPercent   *float64   `json:"disk_critical_percent,omitempty"`
+	DiskEmergencyPercent  *float64   `json:"disk_emergency_percent,omitempty"`
+	DiskHysteresisPoints  *float64   `json:"disk_hysteresis_points,omitempty"`
 }
 
 type Snapshot struct {
@@ -181,6 +244,35 @@ func PartitionSource(facts PartitionFacts) SourceSnapshot {
 	return result
 }
 
+func DiskSource(usagePercent float64, previous DiskLevel, thresholds DiskThresholds) SourceSnapshot {
+	if math.IsNaN(usagePercent) || math.IsInf(usagePercent, 0) || usagePercent < 0 || usagePercent > 100 {
+		return DiskUnavailableSource(previous)
+	}
+	level := ClassifyDiskLevel(usagePercent, previous, thresholds)
+	result := SourceSnapshot{
+		Source: SourceDisk, Status: StatusOK, Code: "DISK_NORMAL",
+		DiskLevel: &level, DiskUsagePercent: float64Pointer(usagePercent),
+		DiskWarningPercent: float64Pointer(thresholds.Warning), DiskCriticalPercent: float64Pointer(thresholds.Critical),
+		DiskEmergencyPercent: float64Pointer(thresholds.Emergency), DiskHysteresisPoints: float64Pointer(thresholds.Hysteresis),
+	}
+	switch level {
+	case DiskWarning:
+		result.Status = StatusDegraded
+		result.Code = "DISK_WARNING_WATERMARK"
+	case DiskCritical:
+		result.Status = StatusDegraded
+		result.Code = "DISK_CRITICAL_WATERMARK"
+	case DiskEmergency:
+		result.Status = StatusFailed
+		result.Code = "DISK_EMERGENCY_WATERMARK"
+	}
+	return result
+}
+
+func DiskUnavailableSource(previous DiskLevel) SourceSnapshot {
+	return SourceSnapshot{Source: SourceDisk, Status: StatusUnknown, Code: "DISK_USAGE_UNAVAILABLE", DiskLevel: &previous}
+}
+
 type Store struct {
 	mu       sync.RWMutex
 	sources  map[Source]SourceSnapshot
@@ -234,6 +326,20 @@ func (store *Store) Source(source Source) SourceSnapshot {
 	store.mu.RLock()
 	defer store.mu.RUnlock()
 	return store.sources[source]
+}
+
+func (store *Store) DiskLevel() DiskLevel {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	level := store.sources[SourceDisk].DiskLevel
+	if level == nil {
+		return DiskNormal
+	}
+	return *level
+}
+
+func (store *Store) RejectSampleWrites() bool {
+	return store.DiskLevel() == DiskEmergency
 }
 
 func (store *Store) assemble(now time.Time) Snapshot {
@@ -308,7 +414,7 @@ func changedSources(previous, current []SourceSnapshot) []sourceChange {
 	changes := make([]sourceChange, 0)
 	for _, source := range current {
 		before := previousBySource[source.Source]
-		if before.Status == source.Status {
+		if before.Status == source.Status && before.Code == source.Code {
 			continue
 		}
 		changes = append(changes, sourceChange{
@@ -318,5 +424,6 @@ func changedSources(previous, current []SourceSnapshot) []sourceChange {
 	return changes
 }
 
-func intPointer(value int) *int       { return &value }
-func int64Pointer(value int64) *int64 { return &value }
+func intPointer(value int) *int             { return &value }
+func int64Pointer(value int64) *int64       { return &value }
+func float64Pointer(value float64) *float64 { return &value }

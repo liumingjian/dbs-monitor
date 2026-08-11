@@ -689,6 +689,12 @@ type PlatformHealthSourceSnapshot struct {
 	Backoff               *int64               `json:"backoff,omitempty"`
 	Code                  string               `json:"code"`
 	ConsecutiveFailures   *int                 `json:"consecutive_failures,omitempty"`
+	DiskCriticalPercent   *float64             `json:"disk_critical_percent,omitempty"`
+	DiskEmergencyPercent  *float64             `json:"disk_emergency_percent,omitempty"`
+	DiskHysteresisPoints  *float64             `json:"disk_hysteresis_points,omitempty"`
+	DiskLevel             *string              `json:"disk_level,omitempty"`
+	DiskUsagePercent      *float64             `json:"disk_usage_percent,omitempty"`
+	DiskWarningPercent    *float64             `json:"disk_warning_percent,omitempty"`
 	ExpiresAt             *time.Time           `json:"expires_at,omitempty"`
 	Pending               *int                 `json:"pending,omitempty"`
 	PrebuildDaysRemaining *int                 `json:"prebuild_days_remaining,omitempty"`

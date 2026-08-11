@@ -78,12 +78,14 @@ type projectedCapabilitySnapshot struct {
 }
 
 type Service struct {
-	platform *db.Pool
-	dialer   monitorpg.Dialer
-	clock    clock.Clock
-	config   Config
-	keyring  *instance.CredentialKeyring
-	health   *platformhealth.Store
+	platform       *db.Pool
+	dialer         monitorpg.Dialer
+	clock          clock.Clock
+	config         Config
+	keyring        *instance.CredentialKeyring
+	health         *platformhealth.Store
+	diskPath       string
+	diskThresholds platformhealth.DiskThresholds
 
 	queryConnectionMu       sync.Mutex
 	queryConnections        map[string]cachedConnection
@@ -94,6 +96,18 @@ type Service struct {
 
 func (service *Service) SetPlatformHealth(health *platformhealth.Store) {
 	service.health = health
+}
+
+func (service *Service) SetDiskMonitor(path string, thresholds platformhealth.DiskThresholds) error {
+	if path == "" {
+		return errors.New("disk monitor path is required")
+	}
+	if err := thresholds.Validate(); err != nil {
+		return err
+	}
+	service.diskPath = path
+	service.diskThresholds = thresholds
+	return nil
 }
 
 func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Service {
@@ -172,6 +186,11 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	run.startedAt = service.clock.Now().UTC()
 	startedWall := time.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
+	if service.health != nil && service.health.RejectSampleWrites() {
+		outcome.err = service.recordDiskEmergency(ctx, run)
+		outcome.duration = time.Since(startedWall)
+		return outcome
+	}
 	if run.task.Kind != metric.TaskKindProbe {
 		reason, blocked, err := service.taskCapabilityBlockReason(ctx, run)
 		if err != nil {
@@ -652,6 +671,9 @@ func (service *Service) Run(ctx context.Context, interval time.Duration) {
 			scheduler.dispatch(ctx)
 		case <-ticks:
 			now := service.clock.Now().UTC()
+			if now.Sub(scheduler.lastLog) >= time.Minute {
+				scheduler.refreshDiskHealth(now)
+			}
 			refreshErr := scheduler.refresh(ctx, now)
 			if refreshErr != nil {
 				log.Printf("collection scheduler refresh failed: %v", refreshErr)
