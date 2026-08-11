@@ -256,17 +256,30 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 	switch run.task.ID {
 	case metric.TaskStatActivity:
 		values := make([]float64, len(statActivityMetricIDs))
+		var observedAt time.Time
+		var sessionsJSON, longQueriesJSON []byte
+		var sessionCount, longQueryCount int64
+		var sessionsTruncated, longQueriesTruncated bool
 		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
 			&values[0], &values[1], &values[2], &values[3],
 			&values[4], &values[5], &values[6], &values[7],
+			&observedAt, &sessionsJSON, &sessionCount, &sessionsTruncated,
+			&longQueriesJSON, &longQueryCount, &longQueriesTruncated,
 		); err != nil {
+			return collectedBatch{}, err
+		}
+		snapshot, err := decodeStatActivitySnapshot(
+			sessionsJSON, sessionCount, sessionsTruncated,
+			longQueriesJSON, longQueryCount, longQueriesTruncated,
+		)
+		if err != nil {
 			return collectedBatch{}, err
 		}
 		samples := make([]collectedSample, len(statActivityMetricIDs))
 		for index, metricID := range statActivityMetricIDs {
 			samples[index] = collectedSample{metricID: metricID, value: values[index]}
 		}
-		return collectedBatch{samples: samples}, nil
+		return collectedBatch{samples: samples, statActivitySnapshot: &snapshot}, nil
 	case metric.TaskStatDatabase:
 		observation := statDatabaseSnapshot{observedAt: service.clock.Now().UTC()}
 		if err := conn.QueryRow(ctx, run.task.SQL).Scan(

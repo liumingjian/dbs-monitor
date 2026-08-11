@@ -161,6 +161,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/long-query-samples": {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                limit?: number;
+                offset?: number;
+                sort?: "sampled_at" | "-sampled_at" | "query_started_at" | "-query_started_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listLongQuerySamples"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alert-rules": {
         parameters: {
             query?: never;
@@ -683,6 +707,33 @@ export interface components {
             na_reason?: string;
             affected_metric_count: number;
         };
+        LongQuerySample: {
+            /** Format: date-time */
+            sampled_at: string;
+            /** Format: int32 */
+            pid: number;
+            username?: string;
+            database_name?: string;
+            client_address?: string;
+            state?: string;
+            /** Format: date-time */
+            query_started_at: string;
+            /** Format: date-time */
+            transaction_started_at?: string;
+            /** Format: int64 */
+            query_duration_ms: number;
+            /** Format: int64 */
+            transaction_duration_ms?: number;
+            wait_event_type?: string;
+            wait_event?: string;
+            blocking_pids: number[];
+            snapshot_original_count: number;
+            snapshot_truncated: boolean;
+        };
+        LongQuerySamplePage: {
+            total: number;
+            items: components["schemas"]["LongQuerySample"][];
+        };
         CollectionPauseInput: {
             paused: boolean;
             reason?: string;
@@ -1199,6 +1250,43 @@ export interface operations {
                 };
             };
             /** @description Invalid task or interval */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLongQuerySamples: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                limit?: number;
+                offset?: number;
+                sort?: "sampled_at" | "-sampled_at" | "query_started_at" | "-query_started_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Long-query samples captured from pg_stat_activity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LongQuerySamplePage"];
+                };
+            };
+            /** @description Invalid time range or pagination */
             400: {
                 headers: {
                     [name: string]: unknown;

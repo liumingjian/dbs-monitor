@@ -202,16 +202,76 @@ WHERE datname NOT IN ('template0', 'template1')`,
 	{
 		ID: TaskStatActivity, Kind: TaskKindSQL, Interval: 5 * time.Second,
 		Requires: []CapabilityID{CapabilityRolePGMonitor},
-		SQL: `SELECT
-       count(*)::double precision AS connection_total,
-       count(*) FILTER (WHERE state = 'active' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS connection_active,
-       count(*) FILTER (WHERE state = 'idle in transaction' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS connection_idle_in_transaction,
-       count(*) FILTER (WHERE xact_start IS NOT NULL AND now() - xact_start > interval '5 minutes' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS long_transaction_count,
-       COALESCE(EXTRACT(epoch FROM max(now() - xact_start) FILTER (WHERE xact_start IS NOT NULL AND application_name IS DISTINCT FROM 'dbs-monitor')), 0)::double precision AS max_transaction_duration_sec,
-       count(*) FILTER (WHERE wait_event_type = 'Lock' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS lock_waiting_count,
-       count(*) FILTER (WHERE cardinality(pg_blocking_pids(pid)) > 0 AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS blocked_session_count,
-       count(*) FILTER (WHERE state = 'active' AND query_start IS NOT NULL AND now() - query_start > interval '5 seconds' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS long_running_query_count
-FROM pg_stat_activity`,
+		SQL: `WITH activity AS MATERIALIZED (
+    SELECT pid,
+           usename::text AS username,
+           datname::text AS database_name,
+           client_addr::text AS client_address,
+           state::text AS state,
+           query_start,
+           xact_start AS transaction_started_at,
+           GREATEST((EXTRACT(epoch FROM statement_timestamp() - query_start) * 1000)::bigint, 0) AS query_duration_ms,
+           GREATEST((EXTRACT(epoch FROM statement_timestamp() - xact_start) * 1000)::bigint, 0) AS transaction_duration_ms,
+           wait_event_type::text AS wait_event_type,
+           wait_event::text AS wait_event,
+           pg_blocking_pids(pid) AS blocking_pids,
+           application_name IS NOT DISTINCT FROM 'dbs-monitor' AS is_monitor
+    FROM pg_stat_activity
+), aggregate AS (
+    SELECT count(*)::double precision AS connection_total,
+           count(*) FILTER (WHERE state = 'active' AND NOT is_monitor)::double precision AS connection_active,
+           count(*) FILTER (WHERE state = 'idle in transaction' AND NOT is_monitor)::double precision AS connection_idle_in_transaction,
+           count(*) FILTER (WHERE transaction_started_at IS NOT NULL AND statement_timestamp() - transaction_started_at > interval '5 minutes' AND NOT is_monitor)::double precision AS long_transaction_count,
+           COALESCE(max(transaction_duration_ms) FILTER (WHERE transaction_started_at IS NOT NULL AND NOT is_monitor), 0)::double precision / 1000 AS max_transaction_duration_sec,
+           count(*) FILTER (WHERE wait_event_type = 'Lock' AND NOT is_monitor)::double precision AS lock_waiting_count,
+           count(*) FILTER (WHERE cardinality(blocking_pids) > 0 AND NOT is_monitor)::double precision AS blocked_session_count,
+           count(*) FILTER (WHERE state = 'active' AND query_start IS NOT NULL AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor)::double precision AS long_running_query_count
+    FROM activity
+), sessions AS (
+    SELECT jsonb_build_object(
+               'pid', pid, 'username', username, 'database_name', database_name,
+               'client_address', client_address, 'state', state,
+               'query_started_at', query_start,
+               'transaction_started_at', transaction_started_at,
+               'query_duration_ms', query_duration_ms,
+               'transaction_duration_ms', transaction_duration_ms,
+               'wait_event_type', wait_event_type, 'wait_event', wait_event,
+               'blocking_pids', blocking_pids
+           ) AS value
+    FROM activity
+    WHERE NOT is_monitor
+    ORDER BY pid
+    LIMIT 500
+), long_queries AS (
+    SELECT jsonb_build_object(
+               'pid', pid, 'username', username, 'database_name', database_name,
+               'client_address', client_address, 'state', state,
+               'query_started_at', query_start,
+               'transaction_started_at', transaction_started_at,
+               'query_duration_ms', query_duration_ms,
+               'transaction_duration_ms', transaction_duration_ms,
+               'wait_event_type', wait_event_type, 'wait_event', wait_event,
+               'blocking_pids', blocking_pids
+           ) AS value
+    FROM activity
+    WHERE state = 'active'
+      AND query_start IS NOT NULL
+      AND statement_timestamp() - query_start > interval '5 seconds'
+      AND NOT is_monitor
+    ORDER BY query_start, pid
+    LIMIT 100
+)
+SELECT aggregate.*,
+       statement_timestamp() AS snapshot_at,
+       COALESCE((SELECT jsonb_agg(value) FROM sessions), '[]'::jsonb) AS sessions,
+       (SELECT count(*) FROM activity WHERE NOT is_monitor)::bigint AS session_count,
+       (SELECT count(*) > 500 FROM activity WHERE NOT is_monitor) AS sessions_truncated,
+       COALESCE((SELECT jsonb_agg(value) FROM long_queries), '[]'::jsonb) AS long_query_samples,
+       (SELECT count(*) FROM activity WHERE state = 'active' AND query_start IS NOT NULL
+            AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor)::bigint AS long_query_sample_count,
+       (SELECT count(*) > 100 FROM activity WHERE state = 'active' AND query_start IS NOT NULL
+            AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor) AS long_query_samples_truncated
+FROM aggregate`,
 		Yields: []MetricYield{
 			{Metric: MetricConnectionTotal, Columns: []string{"connection_total"}},
 			{Metric: MetricConnectionActive, Columns: []string{"connection_active"}},

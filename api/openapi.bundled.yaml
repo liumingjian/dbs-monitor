@@ -390,6 +390,67 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/long-query-samples:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum:
+            - sampled_at
+            - '-sampled_at'
+            - query_started_at
+            - '-query_started_at'
+          default: '-sampled_at'
+    get:
+      tags:
+        - collection
+      operationId: listLongQuerySamples
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Long-query samples captured from pg_stat_activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LongQuerySamplePage'
+        '400':
+          description: Invalid time range or pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/alert-rules:
     get:
       tags:
@@ -1580,6 +1641,72 @@ components:
         affected_metric_count:
           type: integer
           minimum: 0
+    LongQuerySample:
+      type: object
+      required:
+        - sampled_at
+        - pid
+        - query_started_at
+        - query_duration_ms
+        - blocking_pids
+        - snapshot_original_count
+        - snapshot_truncated
+      properties:
+        sampled_at:
+          type: string
+          format: date-time
+        pid:
+          type: integer
+          format: int32
+        username:
+          type: string
+        database_name:
+          type: string
+        client_address:
+          type: string
+        state:
+          type: string
+        query_started_at:
+          type: string
+          format: date-time
+        transaction_started_at:
+          type: string
+          format: date-time
+        query_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        transaction_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        wait_event_type:
+          type: string
+        wait_event:
+          type: string
+        blocking_pids:
+          type: array
+          items:
+            type: integer
+            format: int32
+        snapshot_original_count:
+          type: integer
+          minimum: 0
+        snapshot_truncated:
+          type: boolean
+    LongQuerySamplePage:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LongQuerySample'
     CollectionPauseInput:
       type: object
       required:

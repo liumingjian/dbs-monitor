@@ -105,3 +105,44 @@
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/{id}/long-query-samples:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    - name: from
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+    - name: to
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+    - name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    - name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    - name: sort
+      in: query
+      schema:
+        type: string
+        enum: [sampled_at, -sampled_at, query_started_at, -query_started_at]
+        default: -sampled_at
+  get:
+    tags: [collection]
+    operationId: listLongQuerySamples
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Long-query samples captured from pg_stat_activity
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/LongQuerySamplePage }
+      '400':
+        description: Invalid time range or pagination
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

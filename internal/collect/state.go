@@ -36,8 +36,9 @@ type collectedSample struct {
 }
 
 type collectedBatch struct {
-	samples      []collectedSample
-	counterReset bool
+	samples              []collectedSample
+	statActivitySnapshot *statActivitySnapshot
+	counterReset         bool
 }
 
 func (service *Service) ensureTaskStates(ctx context.Context, targetID pgtype.UUID) error {
@@ -226,6 +227,11 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, bat
 			}
 			for _, sample := range batch.samples {
 				if err := insertSample(ctx, tx, run.target.ID, sample.metricID, sample.value, finished); err != nil {
+					return err
+				}
+			}
+			if batch.statActivitySnapshot != nil {
+				if err := persistStatActivitySnapshot(ctx, tx, run.target.ID, finished, *batch.statActivitySnapshot); err != nil {
 					return err
 				}
 			}

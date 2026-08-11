@@ -22,6 +22,27 @@ func (q *Queries) AdminExists(ctx context.Context) (bool, error) {
 	return exists, err
 }
 
+const countLongQuerySamples = `-- name: CountLongQuerySamples :one
+SELECT count(*)
+FROM long_query_sample
+WHERE instance_id = $1
+  AND sampled_at >= $2
+  AND sampled_at <= $3
+`
+
+type CountLongQuerySamplesParams struct {
+	InstanceID pgtype.UUID
+	FromTime   pgtype.Timestamptz
+	ToTime     pgtype.Timestamptz
+}
+
+func (q *Queries) CountLongQuerySamples(ctx context.Context, arg CountLongQuerySamplesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLongQuerySamples, arg.InstanceID, arg.FromTime, arg.ToTime)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAdmin = `-- name: CreateAdmin :exec
 INSERT INTO app_user (id, username, password_hash, role)
 VALUES ($1, $2, $3, 'PLATFORM_ADMIN')
@@ -393,6 +414,97 @@ func (q *Queries) ListAlertTriggerSnapshotSessions(ctx context.Context, snapshot
 			&i.WaitEventType,
 			&i.WaitEvent,
 			&i.BlockingPids,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLongQuerySamples = `-- name: ListLongQuerySamples :many
+SELECT sample.sampled_at, sample.pid, sample.username, sample.database_name,
+       sample.client_address, sample.state, sample.query_started_at,
+       sample.transaction_started_at, sample.query_duration_ms,
+       sample.transaction_duration_ms, sample.wait_event_type, sample.wait_event,
+       sample.blocking_pids, snapshot.original_count, snapshot.truncated
+FROM long_query_sample sample
+JOIN long_query_sample_snapshot snapshot
+  ON snapshot.instance_id = sample.instance_id AND snapshot.sampled_at = sample.sampled_at
+WHERE sample.instance_id = $1
+  AND sample.sampled_at >= $2
+  AND sample.sampled_at <= $3
+ORDER BY
+  CASE WHEN $4::text = 'sampled_at' THEN sample.sampled_at END ASC,
+  CASE WHEN $4::text = '-sampled_at' THEN sample.sampled_at END DESC,
+  CASE WHEN $4::text = 'query_started_at' THEN sample.query_started_at END ASC,
+  CASE WHEN $4::text = '-query_started_at' THEN sample.query_started_at END DESC,
+  sample.sampled_at DESC, sample.pid
+LIMIT $6 OFFSET $5
+`
+
+type ListLongQuerySamplesParams struct {
+	InstanceID pgtype.UUID
+	FromTime   pgtype.Timestamptz
+	ToTime     pgtype.Timestamptz
+	SortOrder  string
+	PageOffset int32
+	PageLimit  int32
+}
+
+type ListLongQuerySamplesRow struct {
+	SampledAt             pgtype.Timestamptz
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       int64
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+	OriginalCount         int32
+	Truncated             bool
+}
+
+func (q *Queries) ListLongQuerySamples(ctx context.Context, arg ListLongQuerySamplesParams) ([]ListLongQuerySamplesRow, error) {
+	rows, err := q.db.Query(ctx, listLongQuerySamples,
+		arg.InstanceID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.SortOrder,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLongQuerySamplesRow
+	for rows.Next() {
+		var i ListLongQuerySamplesRow
+		if err := rows.Scan(
+			&i.SampledAt,
+			&i.Pid,
+			&i.Username,
+			&i.DatabaseName,
+			&i.ClientAddress,
+			&i.State,
+			&i.QueryStartedAt,
+			&i.TransactionStartedAt,
+			&i.QueryDurationMs,
+			&i.TransactionDurationMs,
+			&i.WaitEventType,
+			&i.WaitEvent,
+			&i.BlockingPids,
+			&i.OriginalCount,
+			&i.Truncated,
 		); err != nil {
 			return nil, err
 		}

@@ -100,6 +100,18 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		if err := collector.RunOnce(ctx); err != nil {
 			t.Fatalf("collect breaching sample: %v", err)
 		}
+		if cycle == 0 {
+			var result string
+			var code, message sql.NullString
+			if err := pool.QueryRow(ctx, `SELECT last_result, last_error_code, last_error_message
+				FROM instance_collection_task_state WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, pgID).
+				Scan(&result, &code, &message); err != nil {
+				t.Fatalf("read initial activity task result: %v", err)
+			}
+			if result != "SUCCESS" {
+				t.Fatalf("initial activity task result=%s code=%s message=%s", result, code.String, message.String)
+			}
+		}
 		if err := eval.RunOnce(ctx); err != nil {
 			t.Fatalf("evaluate breach: %v", err)
 		}
@@ -256,6 +268,32 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	if points == 0 {
 		t.Fatal("pg.connection.total has no points")
+	}
+	var metricSampledAt, longQuerySampledAt, sessionSampledAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT max(sample.ts) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1 AND series.metric_id = 'pg.query.long_running_count'`, pgID).Scan(&metricSampledAt); err != nil {
+		t.Fatalf("read activity metric snapshot time: %v", err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT max(sampled_at) FROM long_query_sample_snapshot WHERE instance_id = $1", pgID).Scan(&longQuerySampledAt); err != nil {
+		t.Fatalf("read long query snapshot time: %v", err)
+	}
+	var sessionCount int
+	var sessionsTruncated bool
+	if err := pool.QueryRow(ctx, `SELECT sampled_at, original_count, truncated
+		FROM instance_session_snapshot WHERE instance_id = $1`, pgID).Scan(&sessionSampledAt, &sessionCount, &sessionsTruncated); err != nil {
+		t.Fatalf("read latest session snapshot: %v", err)
+	}
+	var storedSessions int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM instance_session_snapshot_entry WHERE instance_id = $1", pgID).Scan(&storedSessions); err != nil {
+		t.Fatalf("count latest session snapshot entries: %v", err)
+	}
+	if !metricSampledAt.Equal(longQuerySampledAt) || !metricSampledAt.Equal(sessionSampledAt) {
+		t.Fatalf("activity snapshot times = metric %s long-query %s sessions %s, want one snapshot",
+			metricSampledAt, longQuerySampledAt, sessionSampledAt)
+	}
+	if storedSessions > sessionSnapshotLimit || sessionCount < storedSessions || sessionsTruncated != (sessionCount > sessionSnapshotLimit) {
+		t.Fatalf("latest session snapshot = stored %d original %d truncated %t", storedSessions, sessionCount, sessionsTruncated)
 	}
 }
 

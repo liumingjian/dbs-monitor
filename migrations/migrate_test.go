@@ -125,6 +125,8 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		"collection_task_config", "instance_collection_config",
 		"instance_collection_task_state", "instance_collection_connection_state",
 		"instance_capability_snapshot",
+		"long_query_sample_snapshot", "long_query_sample",
+		"instance_session_snapshot", "instance_session_snapshot_entry",
 		"alert_rule", "alert_rule_version", "alert_rule_scope_instance",
 		"alert_rule_evaluation_state", "alert_event",
 		"alert_trigger_snapshot", "alert_trigger_snapshot_session",
@@ -136,6 +138,16 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 		if !exists {
 			t.Fatalf("collection plan table %q is missing", table)
 		}
+	}
+	var sqlTextColumns int
+	if err := database.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'public'
+		  AND table_name IN ('long_query_sample', 'instance_session_snapshot_entry')
+		  AND column_name IN ('query', 'sql', 'query_text', 'sql_text')`).Scan(&sqlTextColumns); err != nil {
+		t.Fatalf("inspect activity snapshot columns: %v", err)
+	}
+	if sqlTextColumns != 0 {
+		t.Fatalf("activity snapshot SQL text columns = %d, want 0", sqlTextColumns)
 	}
 	var pauseColumns int
 	if err := database.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns

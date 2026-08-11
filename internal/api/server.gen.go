@@ -606,6 +606,31 @@ type InstanceMetadataInput struct {
 	Port     int    `json:"port"`
 }
 
+// LongQuerySample defines model for LongQuerySample.
+type LongQuerySample struct {
+	BlockingPids          []int32    `json:"blocking_pids"`
+	ClientAddress         *string    `json:"client_address,omitempty"`
+	DatabaseName          *string    `json:"database_name,omitempty"`
+	Pid                   int32      `json:"pid"`
+	QueryDurationMs       int64      `json:"query_duration_ms"`
+	QueryStartedAt        time.Time  `json:"query_started_at"`
+	SampledAt             time.Time  `json:"sampled_at"`
+	SnapshotOriginalCount int        `json:"snapshot_original_count"`
+	SnapshotTruncated     bool       `json:"snapshot_truncated"`
+	State                 *string    `json:"state,omitempty"`
+	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
+	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	WaitEvent             *string    `json:"wait_event,omitempty"`
+	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
+
+// LongQuerySamplePage defines model for LongQuerySamplePage.
+type LongQuerySamplePage struct {
+	Items []LongQuerySample `json:"items"`
+	Total int               `json:"total"`
+}
+
 // MetricSeriesResponse defines model for MetricSeriesResponse.
 type MetricSeriesResponse struct {
 	From    time.Time `json:"from"`
@@ -705,6 +730,15 @@ type UserRoleInput struct {
 // UserStatusInput defines model for UserStatusInput.
 type UserStatusInput struct {
 	Enabled bool `json:"enabled"`
+}
+
+// ListLongQuerySamplesParams defines parameters for ListLongQuerySamples.
+type ListLongQuerySamplesParams struct {
+	From   time.Time `form:"from" json:"from"`
+	To     time.Time `form:"to" json:"to"`
+	Limit  *int      `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int      `form:"offset,omitempty" json:"offset,omitempty"`
+	Sort   *string   `form:"sort,omitempty" json:"sort,omitempty"`
 }
 
 // GetMetricSeriesParams defines parameters for GetMetricSeries.
@@ -849,6 +883,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/instances/{id}/credentials)
 	UpdateInstanceCredential(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/long-query-samples)
+	ListLongQuerySamples(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListLongQuerySamplesParams)
 
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params GetMetricSeriesParams)
@@ -1461,6 +1498,88 @@ func (siw *ServerInterfaceWrapper) UpdateInstanceCredential(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// ListLongQuerySamples operation middleware
+func (siw *ServerInterfaceWrapper) ListLongQuerySamples(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListLongQuerySamplesParams
+
+	// ------------- Required query parameter "from" -------------
+
+	if paramValue := r.URL.Query().Get("from"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "from", r.URL.Query(), &params.From)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	if paramValue := r.URL.Query().Get("to"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "to", r.URL.Query(), &params.To)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLongQuerySamples(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMetricSeries operation middleware
 func (siw *ServerInterfaceWrapper) GetMetricSeries(w http.ResponseWriter, r *http.Request) {
 
@@ -1832,6 +1951,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks", wrapper.ListCollectionTaskStates)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks/{task_id}", wrapper.UpdateCollectionTaskInterval)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/credentials", wrapper.UpdateInstanceCredential)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/long-query-samples", wrapper.ListLongQuerySamples)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
@@ -2453,6 +2573,33 @@ func (response UpdateInstanceCredential400JSONResponse) VisitUpdateInstanceCrede
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListLongQuerySamplesRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params ListLongQuerySamplesParams
+}
+
+type ListLongQuerySamplesResponseObject interface {
+	VisitListLongQuerySamplesResponse(w http.ResponseWriter) error
+}
+
+type ListLongQuerySamples200JSONResponse LongQuerySamplePage
+
+func (response ListLongQuerySamples200JSONResponse) VisitListLongQuerySamplesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListLongQuerySamples400JSONResponse Error
+
+func (response ListLongQuerySamples400JSONResponse) VisitListLongQuerySamplesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetMetricSeriesRequestObject struct {
 	Id     openapi_types.UUID `json:"id"`
 	Params GetMetricSeriesParams
@@ -2787,6 +2934,9 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/instances/{id}/credentials)
 	UpdateInstanceCredential(ctx context.Context, request UpdateInstanceCredentialRequestObject) (UpdateInstanceCredentialResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/long-query-samples)
+	ListLongQuerySamples(ctx context.Context, request ListLongQuerySamplesRequestObject) (ListLongQuerySamplesResponseObject, error)
 
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(ctx context.Context, request GetMetricSeriesRequestObject) (GetMetricSeriesResponseObject, error)
@@ -3547,6 +3697,33 @@ func (sh *strictHandler) UpdateInstanceCredential(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateInstanceCredentialResponseObject); ok {
 		if err := validResponse.VisitUpdateInstanceCredentialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListLongQuerySamples operation middleware
+func (sh *strictHandler) ListLongQuerySamples(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListLongQuerySamplesParams) {
+	var request ListLongQuerySamplesRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListLongQuerySamples(ctx, request.(ListLongQuerySamplesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListLongQuerySamples")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListLongQuerySamplesResponseObject); ok {
+		if err := validResponse.VisitListLongQuerySamplesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

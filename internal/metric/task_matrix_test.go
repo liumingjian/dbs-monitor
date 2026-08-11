@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,12 +13,70 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
 
+func TestPGStatActivityUsesSingleSnapshot(t *testing.T) {
+	task, ok := taskByID(metric.TaskStatActivity)
+	if !ok {
+		t.Fatalf("task %q is missing", metric.TaskStatActivity)
+	}
+	if count := strings.Count(task.SQL, "FROM pg_stat_activity"); count != 1 {
+		t.Fatalf("pg_stat_activity scans = %d, want 1", count)
+	}
+	for _, column := range []string{
+		"snapshot_at", "sessions", "sessions_truncated",
+		"long_query_samples", "long_query_samples_truncated",
+	} {
+		if !strings.Contains(task.SQL, " AS "+column) {
+			t.Errorf("shared snapshot query does not expose %s", column)
+		}
+	}
+	if strings.Contains(task.SQL, "query::text") || strings.Contains(task.SQL, "query AS") {
+		t.Fatal("shared snapshot query selects SQL text")
+	}
+	if !strings.Contains(task.SQL, "LIMIT 100") || !strings.Contains(task.SQL, "LIMIT 500") {
+		t.Fatal("shared snapshot query does not enforce sample and session limits")
+	}
+}
+
 func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 	task, ok := taskByID(metric.TaskStatDatabase)
 	if !ok {
 		t.Fatalf("task %q is missing", metric.TaskStatDatabase)
 	}
-	expectedColumns := taskColumns(task)
+	expected := make([]taskColumnShape, 0, len(task.Yields))
+	for _, name := range taskColumns(task) {
+		expected = append(expected, taskColumnShape{name: name, oid: pgtype.Float8OID})
+	}
+	assertTaskShapeMatrix(t, task, expected)
+}
+
+func TestPGStatActivityShapeMatrix(t *testing.T) {
+	task, ok := taskByID(metric.TaskStatActivity)
+	if !ok {
+		t.Fatalf("task %q is missing", metric.TaskStatActivity)
+	}
+	expected := make([]taskColumnShape, 0, 15)
+	for _, name := range taskColumns(task) {
+		expected = append(expected, taskColumnShape{name: name, oid: pgtype.Float8OID})
+	}
+	expected = append(expected,
+		taskColumnShape{name: "snapshot_at", oid: pgtype.TimestamptzOID},
+		taskColumnShape{name: "sessions", oid: pgtype.JSONBOID},
+		taskColumnShape{name: "session_count", oid: pgtype.Int8OID},
+		taskColumnShape{name: "sessions_truncated", oid: pgtype.BoolOID},
+		taskColumnShape{name: "long_query_samples", oid: pgtype.JSONBOID},
+		taskColumnShape{name: "long_query_sample_count", oid: pgtype.Int8OID},
+		taskColumnShape{name: "long_query_samples_truncated", oid: pgtype.BoolOID},
+	)
+	assertTaskShapeMatrix(t, task, expected)
+}
+
+type taskColumnShape struct {
+	name string
+	oid  uint32
+}
+
+func assertTaskShapeMatrix(t *testing.T, task metric.Task, expected []taskColumnShape) {
+	t.Helper()
 	targets := []struct {
 		version string
 		urlEnv  string
@@ -49,15 +108,22 @@ func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 			}
 			defer rows.Close()
 			fields := rows.FieldDescriptions()
+			if len(fields) != len(expected) {
+				t.Fatalf("column count = %d, want %d", len(fields), len(expected))
+			}
 			columns := make([]string, len(fields))
 			for index, field := range fields {
 				columns[index] = field.Name
-				if field.DataTypeOID != pgtype.Float8OID {
-					t.Errorf("column %s type OID = %d, want float8 (%d)", field.Name, field.DataTypeOID, pgtype.Float8OID)
+				if field.DataTypeOID != expected[index].oid {
+					t.Errorf("column %s type OID = %d, want %d", field.Name, field.DataTypeOID, expected[index].oid)
 				}
 			}
+			expectedColumns := make([]string, len(expected))
+			for index, column := range expected {
+				expectedColumns[index] = column.name
+			}
 			if !slices.Equal(columns, expectedColumns) {
-				t.Fatalf("columns = %v, want Task.Yields columns %v", columns, expectedColumns)
+				t.Fatalf("columns = %v, want task output columns %v", columns, expectedColumns)
 			}
 
 			rowCount := 0
@@ -71,8 +137,10 @@ func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 					t.Fatalf("row width = %d, want %d", len(values), len(expectedColumns))
 				}
 				for index, value := range values {
-					if _, isFloat64 := value.(float64); !isFloat64 {
-						t.Errorf("column %s Go value type = %T, want float64", expectedColumns[index], value)
+					if expected[index].oid == pgtype.Float8OID {
+						if _, isFloat64 := value.(float64); !isFloat64 {
+							t.Errorf("column %s Go value type = %T, want float64", expectedColumns[index], value)
+						}
 					}
 				}
 			}

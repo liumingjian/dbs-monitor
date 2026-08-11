@@ -154,3 +154,30 @@ FROM instance_collection_task_state task
 LEFT JOIN instance_collection_connection_state connection ON connection.instance_id = task.instance_id
 WHERE task.instance_id = $1
 ORDER BY task.task_id;
+
+-- name: CountLongQuerySamples :one
+SELECT count(*)
+FROM long_query_sample
+WHERE instance_id = sqlc.arg(instance_id)
+  AND sampled_at >= sqlc.arg(from_time)
+  AND sampled_at <= sqlc.arg(to_time);
+
+-- name: ListLongQuerySamples :many
+SELECT sample.sampled_at, sample.pid, sample.username, sample.database_name,
+       sample.client_address, sample.state, sample.query_started_at,
+       sample.transaction_started_at, sample.query_duration_ms,
+       sample.transaction_duration_ms, sample.wait_event_type, sample.wait_event,
+       sample.blocking_pids, snapshot.original_count, snapshot.truncated
+FROM long_query_sample sample
+JOIN long_query_sample_snapshot snapshot
+  ON snapshot.instance_id = sample.instance_id AND snapshot.sampled_at = sample.sampled_at
+WHERE sample.instance_id = sqlc.arg(instance_id)
+  AND sample.sampled_at >= sqlc.arg(from_time)
+  AND sample.sampled_at <= sqlc.arg(to_time)
+ORDER BY
+  CASE WHEN sqlc.arg(sort_order)::text = 'sampled_at' THEN sample.sampled_at END ASC,
+  CASE WHEN sqlc.arg(sort_order)::text = '-sampled_at' THEN sample.sampled_at END DESC,
+  CASE WHEN sqlc.arg(sort_order)::text = 'query_started_at' THEN sample.query_started_at END ASC,
+  CASE WHEN sqlc.arg(sort_order)::text = '-query_started_at' THEN sample.query_started_at END DESC,
+  sample.sampled_at DESC, sample.pid
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);

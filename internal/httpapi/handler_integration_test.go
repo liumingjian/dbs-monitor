@@ -411,6 +411,55 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("probed pg_monitor capability = %+v", roleCapability)
 	}
 	assertMetricSeriesHasPoints(t, client, seriesURL)
+	sampledAt := time.Now().UTC().Truncate(time.Second)
+	oldSampledAt := sampledAt.Add(-31 * 24 * time.Hour)
+	for _, capturedAt := range []time.Time{oldSampledAt, sampledAt} {
+		if _, err := pool.Exec(ctx, `INSERT INTO long_query_sample_snapshot
+				(instance_id, sampled_at, original_count, truncated) VALUES ($1, $2, 101, true)`, instanceID, capturedAt); err != nil {
+			t.Fatalf("insert long query snapshot: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO long_query_sample
+				(instance_id, sampled_at, pid, username, database_name, state, query_started_at,
+				 query_duration_ms, wait_event_type, wait_event, blocking_pids)
+				VALUES ($1, $2, 4242, 'operator', 'postgres', 'active', $3, 6000, 'Lock', 'transactionid', '{}')`,
+			instanceID, capturedAt, capturedAt.Add(-6*time.Second)); err != nil {
+			t.Fatalf("insert long query sample: %v", err)
+		}
+	}
+	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, sampledAt); err != nil {
+		t.Fatalf("expire long query samples: %v", err)
+	}
+	var oldSamples int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM long_query_sample WHERE sampled_at = $1", oldSampledAt).Scan(&oldSamples); err != nil {
+		t.Fatalf("count expired long query samples: %v", err)
+	}
+	if oldSamples != 0 {
+		t.Fatalf("expired long query samples = %d, want 0", oldSamples)
+	}
+	longQueriesURL := fmt.Sprintf("%s/api/v1/instances/%s/long-query-samples?from=%s&to=%s",
+		server.URL, instanceID,
+		url.QueryEscape(sampledAt.Add(-time.Minute).Format(time.RFC3339)),
+		url.QueryEscape(sampledAt.Add(time.Minute).Format(time.RFC3339)))
+	longQueriesResponse := getResponse(t, client, longQueriesURL)
+	if longQueriesResponse.StatusCode != http.StatusOK {
+		t.Fatalf("long query samples status = %d, want 200", longQueriesResponse.StatusCode)
+	}
+	var longQueries struct {
+		Total int              `json:"total"`
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(longQueriesResponse.Body).Decode(&longQueries); err != nil {
+		t.Fatalf("decode long query samples: %v", err)
+	}
+	longQueriesResponse.Body.Close()
+	if longQueries.Total != 1 || len(longQueries.Items) != 1 || longQueries.Items[0]["snapshot_truncated"] != true {
+		t.Fatalf("long query samples = %+v, want one truncated snapshot record", longQueries)
+	}
+	for _, forbidden := range []string{"query", "sql", "query_text", "sql_text"} {
+		if _, exists := longQueries.Items[0][forbidden]; exists {
+			t.Fatalf("long query sample exposes %q", forbidden)
+		}
+	}
 	tpsURL := strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1)
 	if _, err := pool.Exec(ctx, `UPDATE instance_collection_task_state
 		SET last_error_code = 'COUNTER_RESET', last_error_message = 'database statistics counters reset'

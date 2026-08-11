@@ -210,6 +210,53 @@ type InstanceCollectionTaskState struct {
 	LastErrorMessage    pgtype.Text
 }
 
+type InstanceSessionSnapshot struct {
+	InstanceID    pgtype.UUID
+	SampledAt     pgtype.Timestamptz
+	OriginalCount int32
+	Truncated     bool
+}
+
+type InstanceSessionSnapshotEntry struct {
+	InstanceID            pgtype.UUID
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+type LongQuerySample struct {
+	InstanceID            pgtype.UUID
+	SampledAt             pgtype.Timestamptz
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       int64
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+type LongQuerySampleSnapshot struct {
+	InstanceID    pgtype.UUID
+	SampledAt     pgtype.Timestamptz
+	OriginalCount int32
+	Truncated     bool
+}
+
 type MetricSample struct {
 	SeriesID int64
 	Ts       pgtype.Timestamptz

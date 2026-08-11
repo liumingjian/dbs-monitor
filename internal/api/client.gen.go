@@ -185,6 +185,9 @@ type ClientInterface interface {
 
 	UpdateInstanceCredential(ctx context.Context, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListLongQuerySamples request
+	ListLongQuerySamples(ctx context.Context, id openapi_types.UUID, params *ListLongQuerySamplesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetMetricSeries request
 	GetMetricSeries(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -633,6 +636,18 @@ func (c *Client) UpdateInstanceCredentialWithBody(ctx context.Context, id openap
 
 func (c *Client) UpdateInstanceCredential(ctx context.Context, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateInstanceCredentialRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListLongQuerySamples(ctx context.Context, id openapi_types.UUID, params *ListLongQuerySamplesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListLongQuerySamplesRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1756,6 +1771,118 @@ func NewUpdateInstanceCredentialRequestWithBody(server string, id openapi_types.
 	return req, nil
 }
 
+// NewListLongQuerySamplesRequest generates requests for ListLongQuerySamples
+func NewListLongQuerySamplesRequest(server string, id openapi_types.UUID, params *ListLongQuerySamplesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/%s/long-query-samples", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMetricSeriesRequest generates requests for GetMetricSeries
 func NewGetMetricSeriesRequest(server string, id openapi_types.UUID, params *GetMetricSeriesParams) (*http.Request, error) {
 	var err error
@@ -2287,6 +2414,9 @@ type ClientWithResponsesInterface interface {
 	UpdateInstanceCredentialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateInstanceCredentialResponse, error)
 
 	UpdateInstanceCredentialWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateInstanceCredentialJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateInstanceCredentialResponse, error)
+
+	// ListLongQuerySamplesWithResponse request
+	ListLongQuerySamplesWithResponse(ctx context.Context, id openapi_types.UUID, params *ListLongQuerySamplesParams, reqEditors ...RequestEditorFn) (*ListLongQuerySamplesResponse, error)
 
 	// GetMetricSeriesWithResponse request
 	GetMetricSeriesWithResponse(ctx context.Context, id openapi_types.UUID, params *GetMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetMetricSeriesResponse, error)
@@ -2894,6 +3024,29 @@ func (r UpdateInstanceCredentialResponse) StatusCode() int {
 	return 0
 }
 
+type ListLongQuerySamplesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LongQuerySamplePage
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ListLongQuerySamplesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListLongQuerySamplesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetMetricSeriesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3404,6 +3557,15 @@ func (c *ClientWithResponses) UpdateInstanceCredentialWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseUpdateInstanceCredentialResponse(rsp)
+}
+
+// ListLongQuerySamplesWithResponse request returning *ListLongQuerySamplesResponse
+func (c *ClientWithResponses) ListLongQuerySamplesWithResponse(ctx context.Context, id openapi_types.UUID, params *ListLongQuerySamplesParams, reqEditors ...RequestEditorFn) (*ListLongQuerySamplesResponse, error) {
+	rsp, err := c.ListLongQuerySamples(ctx, id, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListLongQuerySamplesResponse(rsp)
 }
 
 // GetMetricSeriesWithResponse request returning *GetMetricSeriesResponse
@@ -4283,6 +4445,39 @@ func ParseUpdateInstanceCredentialResponse(rsp *http.Response) (*UpdateInstanceC
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest InstanceCredentialUpdated
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListLongQuerySamplesResponse parses an HTTP response from a ListLongQuerySamplesWithResponse call
+func ParseListLongQuerySamplesResponse(rsp *http.Response) (*ListLongQuerySamplesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListLongQuerySamplesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LongQuerySamplePage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
