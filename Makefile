@@ -14,7 +14,8 @@ REDOCLY := npx --yes @redocly/cli@2.20.3
 OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
 SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
 
-.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix legacy-package-binaries-linux-amd64 legacy-package-binaries-linux-arm64 legacy-package-linux-amd64 legacy-package-linux-arm64
+.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix
+.PHONY: legacy-package-binaries-linux-amd64 legacy-package-binaries-linux-arm64 legacy-package-linux-amd64 legacy-package-linux-arm64
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml

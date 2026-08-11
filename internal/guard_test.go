@@ -90,14 +90,18 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 	if strings.Contains(checkFull, "GOOS=linux") {
 		t.Error("check-full must remain host-neutral; deferred Linux builds cannot gate the v1 release")
 	}
+	if strings.Contains(checkFull, "legacy-package-") {
+		t.Error("check-full must not invoke deferred Linux packaging targets")
+	}
 
 	for _, target := range []string{
-		"legacy-package-binaries-linux-amd64:",
-		"legacy-package-binaries-linux-arm64:",
-		"legacy-package-linux-amd64:",
-		"legacy-package-linux-arm64:",
+		"legacy-package-binaries-linux-amd64",
+		"legacy-package-binaries-linux-arm64",
+		"legacy-package-linux-amd64",
+		"legacy-package-linux-arm64",
 	} {
-		if !strings.Contains(contents, target) {
+		targetDeclaration := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(target) + `:`)
+		if !targetDeclaration.MatchString(contents) {
 			t.Errorf("deferred Linux packaging target must be explicitly marked legacy: missing %q", target)
 		}
 	}
