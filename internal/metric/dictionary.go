@@ -134,6 +134,15 @@ func UnitFor(id MetricID) string {
 	return "count"
 }
 
+func ProducerFor(id MetricID) MetricProducer {
+	for _, item := range Metrics {
+		if item.ID == id {
+			return item.Producer
+		}
+	}
+	return ""
+}
+
 type TaskID string
 
 const (

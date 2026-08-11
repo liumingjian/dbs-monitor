@@ -1,6 +1,14 @@
 package metric
 
-// NonNumericMetricEncodings maps state values stored in metric_sample to float8 codes.
+var AgentStatusEncodings = map[string]float64{
+	AgentStatusOffline:          0,
+	AgentStatusOnline:           1,
+	AgentStatusNotInstalled:     2,
+	AgentStatusPermissionDenied: 3,
+	AgentStatusError:            4,
+}
+
+// NonNumericMetricEncodings maps metric state values to their stable float8 codes.
 var NonNumericMetricEncodings = map[string]map[string]float64{
 	MetricAvailabilityReachable.String(): {
 		"unreachable": 0,
@@ -22,4 +30,5 @@ var NonNumericMetricEncodings = map[string]map[string]float64{
 		"waiting":    7,
 		"restarting": 8,
 	},
+	MetricAgentStatus.String(): AgentStatusEncodings,
 }

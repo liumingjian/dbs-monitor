@@ -662,6 +662,12 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		return nil, err
 	}
 	queries := metric.New(handler.platform)
+	controlPlaneFacts, err := metric.ReadControlPlaneFacts(ctx, handler.platform, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	now := handler.clock.Now().UTC()
+	agentProjection, _ := metric.ProjectControlPlaneMetric(metric.MetricAgentStatus, controlPlaneFacts, now)
 	var capabilityStates map[metric.CapabilityID]metric.CapabilityStatus
 	capabilityStatesLoaded := false
 	for _, metricID := range request.Params.Metric {
@@ -684,6 +690,51 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			continue
 		}
 
+		projected, hasProjection := metric.ProjectControlPlaneMetric(metric.MetricID(metricID), controlPlaneFacts, now)
+		if metric.ProducerFor(metric.MetricID(metricID)) == metric.ProducerControlPlane {
+			if !hasProjection {
+				reason := api.NOSAMPLESYET
+				if controlPlaneFacts.CollectorLastErrorCode != "" {
+					reason = api.COLLECTIONFAILED
+				}
+				entry.Unavailability = nullable.NewNullableWithValue(reason)
+			} else if projected.ObservedAt.Before(request.Params.From) || projected.ObservedAt.After(request.Params.To) {
+				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
+			} else {
+				timestamp, value := float64(projected.ObservedAt.Unix()), projected.Value
+				entry.Series = append(entry.Series, struct {
+					Labels map[string]string `json:"labels"`
+					Points [][]*float64      `json:"points"`
+				}{Labels: projected.Labels, Points: [][]*float64{{&timestamp, &value}}})
+			}
+			result.Metrics = append(result.Metrics, entry)
+			continue
+		}
+
+		if metric.ProducerFor(metric.MetricID(metricID)) == metric.ProducerAgent {
+			agentUnavailable := true
+			switch {
+			case !controlPlaneFacts.AgentExpected:
+				entry.Unavailability = nullable.NewNullableWithValue(api.NOTAPPLICABLEROLE)
+			case !controlPlaneFacts.AgentMetricsEnabled:
+				entry.Unavailability = nullable.NewNullableWithValue(api.FEATUREDISABLED)
+			case agentProjection.State == metric.AgentStatusOffline:
+				entry.Unavailability = nullable.NewNullableWithValue(api.AGENTOFFLINE)
+			case agentProjection.State == metric.AgentStatusPermissionDenied:
+				entry.Unavailability = nullable.NewNullableWithValue(api.PERMISSIONDENIED)
+			case agentProjection.State == metric.AgentStatusError:
+				entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONFAILED)
+			default:
+				agentUnavailable = false
+			}
+			if agentUnavailable {
+				result.Metrics = append(result.Metrics, entry)
+				continue
+			}
+		}
+
+		collectionFailed := false
+		stale := false
 		if strings.HasPrefix(string(metricID), "pg.") {
 			var probeResult pgtype.Text
 			err := handler.platform.QueryRow(ctx, `SELECT last_result FROM instance_collection_task_state
@@ -712,6 +763,12 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 				continue
 			}
 			counterReset, err = handler.metricCounterReset(ctx, instanceID, metric.MetricID(metricID))
+			if err != nil {
+				return nil, err
+			}
+			collectionFailed, stale, err = handler.metricCollectionState(
+				ctx, instanceID, metric.MetricID(metricID), controlPlaneFacts.CollectorLastSuccessAt, now, request.Params.To,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -777,6 +834,10 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		if len(entry.Series) == 0 {
 			if counterReset {
 				entry.Unavailability = nullable.NewNullableWithValue(api.COUNTERRESET)
+			} else if collectionFailed {
+				entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONFAILED)
+			} else if stale {
+				entry.Unavailability = nullable.NewNullableWithValue(api.STALE)
 			} else if len(series) == 0 {
 				entry.Unavailability = nullable.NewNullableWithValue(api.NOSAMPLESYET)
 			} else {
@@ -786,6 +847,48 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		result.Metrics = append(result.Metrics, entry)
 	}
 	return api.GetMetricSeries200JSONResponse(result), nil
+}
+
+func (handler *Handler) metricCollectionState(
+	ctx context.Context,
+	instanceID pgtype.UUID,
+	metricID metric.MetricID,
+	completenessWatermark time.Time,
+	now time.Time,
+	requestedTo time.Time,
+) (bool, bool, error) {
+	task, exists := metric.TaskForMetric(metricID)
+	if !exists {
+		return false, false, nil
+	}
+	var result, code pgtype.Text
+	var intervalSeconds int32
+	err := handler.platform.QueryRow(ctx, `SELECT state.last_result,
+		state.last_error_code,
+		COALESCE(config.interval_seconds, $3)::integer
+		FROM instance_collection_task_state state
+		LEFT JOIN collection_task_config config
+			ON config.instance_id = state.instance_id AND config.task_id = state.task_id
+		WHERE state.instance_id = $1 AND state.task_id = $2`,
+		instanceID, task.ID, int32(task.Interval/time.Second),
+	).Scan(&result, &code, &intervalSeconds)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	failed := false
+	if result.Valid && (!code.Valid || code.String != string(metric.ResetCounter)) {
+		switch api.CollectionTaskResult(result.String) {
+		case api.FAILED, api.TIMEDOUT, api.SKIPPEDBACKPRESSURE, api.BACKOFF:
+			failed = true
+		}
+	}
+	freshness := time.Duration(intervalSeconds) * time.Second * 5 / 2
+	stale := !completenessWatermark.IsZero() && now.Sub(completenessWatermark) > freshness &&
+		!requestedTo.Before(now.Add(-freshness))
+	return failed, stale, nil
 }
 
 func (handler *Handler) metricCounterReset(ctx context.Context, instanceID pgtype.UUID, metricID metric.MetricID) (bool, error) {

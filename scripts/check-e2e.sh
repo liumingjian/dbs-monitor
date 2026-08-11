@@ -57,12 +57,13 @@ instance_id=$(node -e 'process.stdout.write(JSON.stringify({name:"T11 smoke inst
   -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/instances \
   --data-binary @- \
   | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).instance.id))")
-psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d "$database" -v ON_ERROR_STOP=1 <<SQL >/dev/null
-INSERT INTO metric_series (instance_id, metric_id, labels, labels_key, first_seen, last_seen)
-VALUES ('$instance_id', 'pg.connection.total', '{}', '{}', '$now', '$now');
-INSERT INTO metric_sample (series_id, ts, value)
-SELECT series_id, '$now', 42 FROM metric_series WHERE instance_id = '$instance_id' AND metric_id = 'pg.connection.total';
-SQL
+agent_token=$(curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" -b "$cookie_file" \
+  -X POST "https://127.0.0.1:18443/api/v1/instances/$instance_id/agent/registration" \
+  | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).agent_token))")
+E2E_INSTANCE_ID="$instance_id" E2E_NOW="$now" node -e 'process.stdout.write(JSON.stringify({instance_id:process.env.E2E_INSTANCE_ID,agent_version:"2.0.0",timestamp:process.env.E2E_NOW,metrics:[{metric:"host.cpu.usage_percent",value:42}]}))' \
+  | curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" \
+  -H "Authorization: Bearer $agent_token" -H 'Content-Type: application/json' \
+  -X POST https://127.0.0.1:18443/api/agent/v1/report --data-binary @- >/dev/null
 
 cd "$root/web"
 npm run e2e
