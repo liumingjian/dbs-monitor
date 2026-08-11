@@ -137,7 +137,10 @@ func (q *Queries) DisableAgent(ctx context.Context, id pgtype.UUID) (DisableAgen
 
 const getAgentRegistration = `-- name: GetAgentRegistration :one
 SELECT agent_expected, agent_token_issued_at, agent_token_revoked_at,
-       agent_first_registered_at, agent_version
+       agent_first_registered_at, agent_version,
+       (SELECT state.last_report_at
+        FROM instance_collect_state state
+        WHERE state.instance_id = instance.id AND state.source = 'AGENT') AS last_reported_at
 FROM instance
 WHERE id = $1
 `
@@ -148,6 +151,7 @@ type GetAgentRegistrationRow struct {
 	AgentTokenRevokedAt    pgtype.Timestamptz
 	AgentFirstRegisteredAt pgtype.Timestamptz
 	AgentVersion           pgtype.Text
+	LastReportedAt         pgtype.Timestamptz
 }
 
 func (q *Queries) GetAgentRegistration(ctx context.Context, id pgtype.UUID) (GetAgentRegistrationRow, error) {
@@ -159,6 +163,7 @@ func (q *Queries) GetAgentRegistration(ctx context.Context, id pgtype.UUID) (Get
 		&i.AgentTokenRevokedAt,
 		&i.AgentFirstRegisteredAt,
 		&i.AgentVersion,
+		&i.LastReportedAt,
 	)
 	return i, err
 }
@@ -184,6 +189,7 @@ func (q *Queries) GetCollectState(ctx context.Context, instanceID pgtype.UUID) (
 const getInstance = `-- name: GetInstance :one
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
+       config.agent_metrics_enabled,
        config.collection_paused, config.collection_pause_updated_by,
        config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
@@ -200,6 +206,7 @@ type GetInstanceRow struct {
 	Username                 string
 	AgentVersion             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
+	AgentMetricsEnabled      bool
 	CollectionPaused         bool
 	CollectionPauseUpdatedBy pgtype.UUID
 	CollectionPauseUpdatedAt pgtype.Timestamptz
@@ -218,6 +225,7 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 		&i.Username,
 		&i.AgentVersion,
 		&i.CreatedAt,
+		&i.AgentMetricsEnabled,
 		&i.CollectionPaused,
 		&i.CollectionPauseUpdatedBy,
 		&i.CollectionPauseUpdatedAt,
@@ -340,6 +348,7 @@ func (q *Queries) ListCredentialsForKeyRotation(ctx context.Context) ([]ListCred
 const listInstances = `-- name: ListInstances :many
 SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
+       config.agent_metrics_enabled,
        config.collection_paused, config.collection_pause_updated_by,
        config.collection_pause_updated_at, config.collection_pause_reason
 FROM instance
@@ -356,6 +365,7 @@ type ListInstancesRow struct {
 	Username                 string
 	AgentVersion             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
+	AgentMetricsEnabled      bool
 	CollectionPaused         bool
 	CollectionPauseUpdatedBy pgtype.UUID
 	CollectionPauseUpdatedAt pgtype.Timestamptz
@@ -380,6 +390,7 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 			&i.Username,
 			&i.AgentVersion,
 			&i.CreatedAt,
+			&i.AgentMetricsEnabled,
 			&i.CollectionPaused,
 			&i.CollectionPauseUpdatedBy,
 			&i.CollectionPauseUpdatedAt,

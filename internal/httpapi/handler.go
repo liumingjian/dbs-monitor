@@ -160,7 +160,15 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 			return nil, err
 		}
 		response = append(response, toAPIInstance(
-			row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status,
+			row.ID,
+			row.Name,
+			row.Host,
+			row.Port,
+			row.DatabaseName,
+			row.Username,
+			row.AgentVersion,
+			row.AgentMetricsEnabled,
+			status,
 			toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 		))
 	}
@@ -202,7 +210,18 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		return nil, err
 	}
 	return api.CreateInstance201JSONResponse{
-		Instance: toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK, api.CollectionPauseStatus{Paused: false}),
+		Instance: toAPIInstance(
+			row.ID,
+			row.Name,
+			row.Host,
+			row.Port,
+			row.DatabaseName,
+			row.Username,
+			row.AgentVersion,
+			true,
+			api.OK,
+			api.CollectionPauseStatus{Paused: false},
+		),
 	}, nil
 }
 
@@ -216,7 +235,15 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 		return nil, err
 	}
 	return api.GetInstance200JSONResponse(toAPIInstance(
-		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status,
+		row.ID,
+		row.Name,
+		row.Host,
+		row.Port,
+		row.DatabaseName,
+		row.Username,
+		row.AgentVersion,
+		row.AgentMetricsEnabled,
+		status,
 		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 	)), nil
 }
@@ -278,6 +305,10 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 	if err != nil {
 		return nil, err
 	}
+	agentMetricsEnabled, err := metric.New(handler.platform).GetCollectionPlan(ctx, updatedInstance.ID)
+	if err != nil {
+		return nil, err
+	}
 	return api.UpdateInstance200JSONResponse(toAPIInstance(
 		updatedInstance.ID,
 		updatedInstance.Name,
@@ -286,6 +317,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		updatedInstance.DatabaseName,
 		updatedInstance.Username,
 		updatedInstance.AgentVersion,
+		agentMetricsEnabled,
 		status,
 		toAPICollectionPauseStatus(pause.CollectionPaused, pause.CollectionPauseUpdatedBy, pause.CollectionPauseUpdatedAt, pause.CollectionPauseReason),
 	)), nil
@@ -345,10 +377,12 @@ func (handler *Handler) GetAgentRegistration(ctx context.Context, request api.Ge
 	if err != nil {
 		return nil, err
 	}
-	return api.GetAgentRegistration200JSONResponse(handler.agentRegistration(
+	registration := handler.agentRegistration(
 		row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
 		row.AgentFirstRegisteredAt, row.AgentVersion,
-	)), nil
+	)
+	registration.LastReportedAt = timePointer(row.LastReportedAt)
+	return api.GetAgentRegistration200JSONResponse(registration), nil
 }
 
 func (handler *Handler) RegisterAgent(ctx context.Context, request api.RegisterAgentRequestObject) (api.RegisterAgentResponseObject, error) {
@@ -541,9 +575,17 @@ func (handler *Handler) collectionTaskStates(ctx context.Context, instanceID pgt
 			intervalSeconds = configuredInterval
 		}
 		state := api.CollectionTaskState{
-			TaskId:          api.CollectionTaskStateTaskId(task.ID),
-			Kind:            api.CollectionTaskStateKind(task.Kind),
-			IntervalSeconds: intervalSeconds,
+			TaskId:               api.CollectionTaskStateTaskId(task.ID),
+			Kind:                 api.CollectionTaskStateKind(task.Kind),
+			IntervalSeconds:      intervalSeconds,
+			MetricIds:            make([]string, 0, len(task.Yields)),
+			RequiredCapabilities: make([]string, 0, len(task.Requires)),
+		}
+		for _, yield := range task.Yields {
+			state.MetricIds = append(state.MetricIds, string(yield.Metric))
+		}
+		for _, required := range task.Requires {
+			state.RequiredCapabilities = append(state.RequiredCapabilities, string(required))
 		}
 		if persistedState, exists := persistedStates[task.ID]; exists {
 			state.ConsecutiveFailures = int(persistedState.ConsecutiveFailures)
@@ -946,8 +988,27 @@ func SeedAdmin(ctx context.Context, platform *db.Pool, username, password string
 	})
 }
 
-func toAPIInstance(id pgtype.UUID, name, host string, port int32, database, username string, agentVersion pgtype.Text, status api.AlertStatus, pause api.CollectionPauseStatus) api.Instance {
-	result := api.Instance{Id: id.Bytes, Name: name, Host: host, Port: int(port), Database: database, Username: username, AlertStatus: status, CollectionPause: pause}
+func toAPIInstance(
+	id pgtype.UUID,
+	name, host string,
+	port int32,
+	database, username string,
+	agentVersion pgtype.Text,
+	agentMetricsEnabled bool,
+	status api.AlertStatus,
+	pause api.CollectionPauseStatus,
+) api.Instance {
+	result := api.Instance{
+		Id:                  id.Bytes,
+		Name:                name,
+		Host:                host,
+		Port:                int(port),
+		Database:            database,
+		Username:            username,
+		AgentMetricsEnabled: agentMetricsEnabled,
+		AlertStatus:         status,
+		CollectionPause:     pause,
+	}
 	if agentVersion.Valid {
 		result.AgentVersion = &agentVersion.String
 	}

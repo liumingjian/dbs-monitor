@@ -1,4 +1,4 @@
-import { SettingOutlined } from '@ant-design/icons'
+import { DatabaseOutlined, SettingOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Card, Select, Space, Typography } from 'antd'
 import { useRef } from 'react'
@@ -40,7 +40,10 @@ function InstancePage() {
     <Link to="/instances">← 返回实例列表</Link>
     <Space style={{ width: '100%', justifyContent: 'space-between' }}>
       <Typography.Title level={2} style={{ margin: 0 }}>{instance.data?.name ?? '实例详情'}</Typography.Title>
-      <Link to="/instances/$id/settings" params={{ id }}><Button icon={<SettingOutlined />}>接入设置</Button></Link>
+      <Space>
+        <Link to="/instances/$id/collection" params={{ id }}><Button icon={<DatabaseOutlined />}>采集管理</Button></Link>
+        <Link to="/instances/$id/settings" params={{ id }}><Button icon={<SettingOutlined />}>接入设置</Button></Link>
+      </Space>
     </Space>
     <Space wrap>
       <Select<MetricID>

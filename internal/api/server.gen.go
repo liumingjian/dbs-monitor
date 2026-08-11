@@ -300,13 +300,16 @@ type AgentMetricMetric string
 
 // AgentRegistration defines model for AgentRegistration.
 type AgentRegistration struct {
-	AgentExpected     bool                   `json:"agent_expected"`
-	AgentVersion      *string                `json:"agent_version,omitempty"`
-	FirstRegisteredAt *time.Time             `json:"first_registered_at,omitempty"`
-	Installation      AgentInstallation      `json:"installation"`
-	IssuedAt          *time.Time             `json:"issued_at,omitempty"`
-	RevokedAt         *time.Time             `json:"revoked_at,omitempty"`
-	State             AgentRegistrationState `json:"state"`
+	AgentExpected     bool              `json:"agent_expected"`
+	AgentVersion      *string           `json:"agent_version,omitempty"`
+	FirstRegisteredAt *time.Time        `json:"first_registered_at,omitempty"`
+	Installation      AgentInstallation `json:"installation"`
+	IssuedAt          *time.Time        `json:"issued_at,omitempty"`
+
+	// LastReportedAt Latest accepted Agent heartbeat from the collection control plane.
+	LastReportedAt *time.Time             `json:"last_reported_at,omitempty"`
+	RevokedAt      *time.Time             `json:"revoked_at,omitempty"`
+	State          AgentRegistrationState `json:"state"`
 }
 
 // AgentRegistrationState defines model for AgentRegistrationState.
@@ -520,18 +523,24 @@ type CollectionTaskResult string
 
 // CollectionTaskState defines model for CollectionTaskState.
 type CollectionTaskState struct {
-	ConsecutiveFailures int                       `json:"consecutive_failures"`
-	IntervalSeconds     int                       `json:"interval_seconds"`
-	Kind                CollectionTaskStateKind   `json:"kind"`
-	LastDueAt           *time.Time                `json:"last_due_at,omitempty"`
-	LastErrorCode       *string                   `json:"last_error_code,omitempty"`
-	LastErrorMessage    *string                   `json:"last_error_message,omitempty"`
-	LastFinishedAt      *time.Time                `json:"last_finished_at,omitempty"`
-	LastResult          *CollectionTaskResult     `json:"last_result,omitempty"`
-	LastStartedAt       *time.Time                `json:"last_started_at,omitempty"`
-	LastSuccessAt       *time.Time                `json:"last_success_at,omitempty"`
-	NextEligibleAt      *time.Time                `json:"next_eligible_at,omitempty"`
-	TaskId              CollectionTaskStateTaskId `json:"task_id"`
+	ConsecutiveFailures int                     `json:"consecutive_failures"`
+	IntervalSeconds     int                     `json:"interval_seconds"`
+	Kind                CollectionTaskStateKind `json:"kind"`
+	LastDueAt           *time.Time              `json:"last_due_at,omitempty"`
+	LastErrorCode       *string                 `json:"last_error_code,omitempty"`
+	LastErrorMessage    *string                 `json:"last_error_message,omitempty"`
+	LastFinishedAt      *time.Time              `json:"last_finished_at,omitempty"`
+	LastResult          *CollectionTaskResult   `json:"last_result,omitempty"`
+	LastStartedAt       *time.Time              `json:"last_started_at,omitempty"`
+	LastSuccessAt       *time.Time              `json:"last_success_at,omitempty"`
+
+	// MetricIds Metrics produced by this task, derived from the collection task dictionary.
+	MetricIds      []string   `json:"metric_ids"`
+	NextEligibleAt *time.Time `json:"next_eligible_at,omitempty"`
+
+	// RequiredCapabilities Capabilities required by this task, derived from the collection task dictionary.
+	RequiredCapabilities []string                  `json:"required_capabilities"`
+	TaskId               CollectionTaskStateTaskId `json:"task_id"`
 }
 
 // CollectionTaskStateKind defines model for CollectionTaskState.Kind.
@@ -560,6 +569,9 @@ type IgnoreReasonCode string
 
 // Instance defines model for Instance.
 type Instance struct {
+	// AgentMetricsEnabled Current collection setting for Agent-provided metrics.
+	AgentMetricsEnabled bool `json:"agent_metrics_enabled"`
+
 	// AgentVersion Version reported by the Agent, when one has reported.
 	AgentVersion    *string               `json:"agent_version,omitempty"`
 	AlertStatus     AlertStatus           `json:"alert_status"`

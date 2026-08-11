@@ -35,7 +35,7 @@ InstanceCreated:
       $ref: '#/Instance'
 Instance:
   type: object
-  required: [id, name, host, port, database, username, alert_status, collection_pause]
+  required: [id, name, host, port, database, username, alert_status, collection_pause, agent_metrics_enabled]
   properties:
     id: { type: string, format: uuid }
     name: { type: string }
@@ -46,6 +46,9 @@ Instance:
     agent_version:
       type: string
       description: Version reported by the Agent, when one has reported.
+    agent_metrics_enabled:
+      type: boolean
+      description: Current collection setting for Agent-provided metrics.
     alert_status:
       $ref: ../enums.yaml#/AlertStatus
     collection_pause:
