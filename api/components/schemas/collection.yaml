@@ -135,3 +135,34 @@ QueryStatisticsSnapshot:
       type: array
       maxItems: 500
       items: { $ref: '#/QueryStatisticsEntry' }
+SessionSnapshotEntry:
+  type: object
+  required: [pid, blocking_pids]
+  properties:
+    pid: { type: integer, format: int32 }
+    username: { type: string }
+    database_name: { type: string }
+    client_address: { type: string }
+    state: { type: string }
+    query_started_at: { type: string, format: date-time }
+    transaction_started_at: { type: string, format: date-time }
+    query_duration_ms: { type: integer, format: int64, minimum: 0 }
+    transaction_duration_ms: { type: integer, format: int64, minimum: 0 }
+    wait_event_type: { type: string }
+    wait_event: { type: string }
+    blocking_pids:
+      type: array
+      items: { type: integer, format: int32 }
+SessionSnapshot:
+  type: object
+  required: [truncated, items]
+  properties:
+    sampled_at: { type: string, format: date-time }
+    original_count: { type: integer, minimum: 0 }
+    truncated: { type: boolean }
+    unavailability:
+      $ref: ../enums.yaml#/Unavailability
+    items:
+      type: array
+      maxItems: 500
+      items: { $ref: '#/SessionSnapshotEntry' }
