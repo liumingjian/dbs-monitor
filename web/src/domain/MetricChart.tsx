@@ -4,7 +4,6 @@ import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/compon
 import type { EChartsType } from 'echarts/core'
 import { connect, init, use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import type { components } from '../api/schema'
 import { UnavailabilityBlock, type Unavailability } from './UnavailabilityBlock'
 
 use([LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
@@ -32,10 +31,23 @@ export function metricUnavailability(metric: { unavailability: Unavailability | 
 }
 
 export function chartData(points: Point[]): [number, number | null][] {
-  return points.flatMap((point) => typeof point[0] === 'number' ? [[point[0] * 1000, point[1] ?? null] as [number, number | null]] : [])
+  const data: [number, number | null][] = []
+  for (const point of points) {
+    const timestamp = point[0]
+    if (typeof timestamp === 'number') data.push([timestamp * 1000, point[1] ?? null])
+  }
+  return data
 }
 
-export function MetricChart({ label, series, step, unavailability, unavailabilityHref, connectionGroup, loading = false }: MetricChartProps) {
+export function MetricChart({
+  label,
+  series,
+  step,
+  unavailability,
+  unavailabilityHref,
+  connectionGroup,
+  loading = false,
+}: MetricChartProps) {
   if (unavailability) return <UnavailabilityBlock code={unavailability} href={unavailabilityHref} />
   return <ChartCanvas label={label} series={series} step={step} loading={loading} connectionGroup={connectionGroup} />
 }
@@ -113,12 +125,21 @@ function ChartCanvas({ label, series, step, loading, connectionGroup }: {
       <figcaption>实际粒度：{step}</figcaption>
       <details>
         <summary>查看数据表</summary>
-        <table><thead><tr><th>时间</th><th>序列</th><th>值</th></tr></thead><tbody>{tableRows.map((row) => <tr key={row.key}><td>{new Date(row.timestamp).toISOString()}</td><td>{row.name}</td><td>{row.value == null ? '缺数' : `${row.value} ${row.unit}`}</td></tr>)}</tbody></table>
+        <table>
+          <thead>
+            <tr><th>时间</th><th>序列</th><th>值</th></tr>
+          </thead>
+          <tbody>{tableRows.map((row) => (
+            <tr key={row.key}>
+              <td>{new Date(row.timestamp).toISOString()}</td>
+              <td>{row.name}</td>
+              <td>{row.value == null ? '缺数' : `${row.value} ${row.unit}`}</td>
+            </tr>
+          ))}</tbody>
+        </table>
       </details>
     </figure>
   )
 }
 
 const chartColors = ['#1677ff', '#d46b08', '#389e0d', '#c41d7f', '#531dab', '#08979c']
-
-export type MetricResponse = components['schemas']['MetricSeriesResponse']

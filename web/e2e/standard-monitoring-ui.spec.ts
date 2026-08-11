@@ -26,7 +26,7 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
       step: '30s',
       metrics: standardMonitoringMetricIDs.map((metric, index) => ({
         metric,
-        unit: metric.includes('percent') ? '%' : metric.includes('bytes') ? 'bytes' : 'count',
+        unit: unitForMetric(metric),
         unavailability: null,
         series: [{
           labels: {},
@@ -61,12 +61,18 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
   expect(await pageOverflowElements(page)).toEqual([])
 })
 
+function unitForMetric(metric: string): string {
+  if (metric.includes('percent')) return '%'
+  if (metric.includes('bytes')) return 'bytes'
+  return 'count'
+}
+
 async function canvasHasPixels(canvas: Locator): Promise<boolean> {
   return canvas.evaluate((element) => {
-    const target = element as HTMLCanvasElement
-    const context = target.getContext('2d')
-    if (!context || target.width === 0 || target.height === 0) return false
-    const pixels = context.getImageData(0, 0, target.width, target.height).data
+    if (!(element instanceof HTMLCanvasElement)) return false
+    const context = element.getContext('2d')
+    if (!context || element.width === 0 || element.height === 0) return false
+    const pixels = context.getImageData(0, 0, element.width, element.height).data
     for (let index = 3; index < pixels.length; index += 4) {
       if (pixels[index] > 0) return true
     }

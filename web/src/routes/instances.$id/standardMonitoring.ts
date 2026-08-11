@@ -4,17 +4,17 @@ export type StandardMonitoringChart = {
   key: string
   title: string
   description: string
-  metrics: MetricID[]
+  metrics: readonly [MetricID, ...MetricID[]]
   drilldown?: 'long-query-samples'
 }
 
 export type StandardMonitoringGroup = {
   key: 'resource' | 'database' | 'replication'
   title: string
-  charts: StandardMonitoringChart[]
+  charts: readonly StandardMonitoringChart[]
 }
 
-export const standardMonitoringGroups: StandardMonitoringGroup[] = [
+export const standardMonitoringGroups: readonly StandardMonitoringGroup[] = [
   {
     key: 'resource',
     title: '资源指标',
@@ -57,11 +57,11 @@ export const standardMonitoringGroups: StandardMonitoringGroup[] = [
   },
 ]
 
-export const standardMonitoringMetricIDs: MetricID[] = standardMonitoringGroups.flatMap((group) =>
-  group.charts.flatMap((chart) => chart.metrics),
-)
+const standardMonitoringCharts = standardMonitoringGroups.flatMap((group) => group.charts)
 
-export function standardMonitoringChart(metric: MetricID | undefined): StandardMonitoringChart | undefined {
+export const standardMonitoringMetricIDs: MetricID[] = standardMonitoringCharts.flatMap((chart) => chart.metrics)
+
+export function findStandardMonitoringChart(metric: MetricID | undefined): StandardMonitoringChart | undefined {
   if (metric === undefined) return undefined
-  return standardMonitoringGroups.flatMap((group) => group.charts).find((chart) => chart.metrics.includes(metric))
+  return standardMonitoringCharts.find((chart) => chart.metrics.includes(metric))
 }

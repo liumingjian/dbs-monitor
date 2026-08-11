@@ -1,49 +1,53 @@
 import type { MetricID } from './metricOptions'
 import { metricOptions } from './metricOptions'
 
-export type TimeRange = { from: string; to: string; metric?: MetricID }
 export type InvalidTimeRange = { error: string }
 export type MetricStep = 'auto' | '15s' | '1m' | '5m' | 'raw'
 export type ChartColumns = 1 | 2 | 3
 
-export type MonitoringSearch = TimeRange & {
+export type MonitoringSearch = {
+  from: string
+  to: string
+  metric?: MetricID
   step?: MetricStep
   columns?: ChartColumns
   connect?: boolean
 }
 
 export function parseTimeRange(search: Record<string, unknown>): MonitoringSearch | InvalidTimeRange {
-  if (isRFC3339(search.from) && isRFC3339(search.to)) {
-    const from = new Date(search.from)
-    const to = new Date(search.to)
-    if (to <= from) return { error: '结束时间必须晚于开始时间' }
-    if (search.metric !== undefined && !isMetricID(search.metric)) return { error: '指标必须来自指标字典' }
-    if (search.step !== undefined && !isMetricStep(search.step)) return { error: '粒度必须来自支持的选项' }
-    const columns = parseColumns(search.columns)
-    if (search.columns !== undefined && columns === undefined) return { error: '列数必须是 1、2 或 3' }
-    const connect = parseConnect(search.connect)
-    if (search.connect !== undefined && connect === undefined) return { error: '光标联动参数无效' }
-    return {
-      from: from.toISOString(),
-      to: to.toISOString(),
-      ...(search.metric === undefined ? {} : { metric: search.metric }),
-      ...(search.step === undefined ? {} : { step: search.step }),
-      ...(columns === undefined ? {} : { columns }),
-      ...(connect === undefined ? {} : { connect }),
-    }
-  }
-  return { error: '时间范围必须是绝对 RFC3339 时间' }
+  if (!isRFC3339(search.from) || !isRFC3339(search.to)) return { error: '时间范围必须是绝对 RFC3339 时间' }
+
+  const from = new Date(search.from)
+  const to = new Date(search.to)
+  if (to <= from) return { error: '结束时间必须晚于开始时间' }
+
+  const metric = search.metric
+  if (metric !== undefined && !isMetricID(metric)) return { error: '指标必须来自指标字典' }
+
+  const step = search.step
+  if (step !== undefined && !isMetricStep(step)) return { error: '粒度必须来自支持的选项' }
+
+  const columns = parseColumns(search.columns)
+  if (search.columns !== undefined && columns === undefined) return { error: '列数必须是 1、2 或 3' }
+
+  const connect = parseConnect(search.connect)
+  if (search.connect !== undefined && connect === undefined) return { error: '光标联动参数无效' }
+
+  const result: MonitoringSearch = { from: from.toISOString(), to: to.toISOString() }
+  if (metric !== undefined) result.metric = metric
+  if (step !== undefined) result.step = step
+  if (columns !== undefined) result.columns = columns
+  if (connect !== undefined) result.connect = connect
+  return result
 }
 
 export function serializeTimeRange(value: MonitoringSearch): Record<string, string | number | boolean> {
-  return {
-    from: value.from,
-    to: value.to,
-    ...(value.metric === undefined ? {} : { metric: value.metric }),
-    ...(value.step === undefined ? {} : { step: value.step }),
-    ...(value.columns === undefined ? {} : { columns: value.columns }),
-    ...(value.connect === undefined ? {} : { connect: value.connect }),
-  }
+  const result: Record<string, string | number | boolean> = { from: value.from, to: value.to }
+  if (value.metric !== undefined) result.metric = value.metric
+  if (value.step !== undefined) result.step = value.step
+  if (value.columns !== undefined) result.columns = value.columns
+  if (value.connect !== undefined) result.connect = value.connect
+  return result
 }
 
 export function defaultTimeRange(now = new Date()): MonitoringSearch {

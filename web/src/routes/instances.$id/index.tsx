@@ -3,14 +3,15 @@ import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Card, Descriptions, Modal, Segmented, Select, Space, Spin, Switch, Tabs, Typography } from 'antd'
 import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
+import type { components } from '../../api/schema'
 import { Freshness } from '../../domain/Freshness'
-import { MetricChart, metricUnavailability, type MetricChartSeries, type MetricResponse } from '../../domain/MetricChart'
+import { MetricChart, metricUnavailability, type MetricChartSeries } from '../../domain/MetricChart'
 import { TimeRangePicker } from '../../domain/TimeRangePicker'
 import type { Unavailability } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { metricOption, type MetricID } from './metricOptions'
 import {
-  standardMonitoringChart,
+  findStandardMonitoringChart,
   standardMonitoringGroups,
   standardMonitoringMetricIDs,
   type StandardMonitoringChart,
@@ -30,7 +31,9 @@ export const instanceRoute = createRoute({
   component: InstancePage,
 })
 
-type ResponseMetric = MetricResponse['metrics'][number]
+type ResponseMetric = components['schemas']['MetricSeriesResponse']['metrics'][number]
+
+const standardMonitoringPollingOptions = { refetchInterval: pollingIntervals.standardMonitoring }
 
 function InstancePage() {
   const { id } = instanceRoute.useParams()
@@ -50,8 +53,12 @@ function InstancePage() {
 
 function StandardMonitoringPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const navigate = instanceRoute.useNavigate()
-  const pollingOptions = { refetchInterval: pollingIntervals.standardMonitoring }
-  const instance = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } }, pollingOptions)
+  const instance = $api.useQuery(
+    'get',
+    '/api/v1/instances/{id}',
+    { params: { path: { id } } },
+    standardMonitoringPollingOptions,
+  )
 
   const step = search.step ?? 'auto'
   const columns = search.columns ?? 2
@@ -61,8 +68,8 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
       path: { id },
       query: { metric: standardMonitoringMetricIDs, from: search.from, to: search.to, step },
     },
-  }, pollingOptions)
-  const selectedChart = standardMonitoringChart(search.metric)
+  }, standardMonitoringPollingOptions)
+  const selectedChart = findStandardMonitoringChart(search.metric)
 
   function updateSearch(update: Partial<MonitoringSearch>) {
     void navigate({ search: { ...search, ...update } })
@@ -128,7 +135,10 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
         />
         <Switch aria-label="光标联动" checked={connected} onChange={(value) => updateSearch({ connect: value })} />
         <span>光标联动</span>
-        {metrics.dataUpdatedAt > 0 && <Freshness dataUpdatedAt={metrics.dataUpdatedAt} collectionInterval={pollingIntervals.standardMonitoring} />}
+        {metrics.dataUpdatedAt > 0 && <Freshness
+          dataUpdatedAt={metrics.dataUpdatedAt}
+          collectionInterval={standardMonitoringPollingOptions.refetchInterval}
+        />}
       </Space>
     </section>
 
@@ -137,37 +147,39 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
         <Typography.Title id={`${group.key}-heading`} level={3}>{group.title}</Typography.Title>
         <div className="metric-grid" data-columns={columns}>
           {group.charts.map((chart) => {
-            const view = chartView(chart, metrics.data?.metrics)
+            const view = buildChartView(chart, metrics.data?.metrics)
             const primaryMetric = chart.metrics[0]
-            return <Card
-              key={chart.key}
-              className="metric-card"
-              title={chart.title}
-              extra={<Space size="small">
-                {chart.drilldown && <Button
-                  type="link"
-                  size="small"
-                  icon={<ProfileOutlined />}
-                  href={longQuerySamplesHref(id, search)}
-                >查看采样记录</Button>}
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<InfoCircleOutlined />}
-                  onClick={() => updateSearch({ metric: primaryMetric })}
-                >指标详情</Button>
-              </Space>}
-            >
-              <MetricChart
-                label={chart.title}
-                series={view.series}
-                step={metrics.data?.step ?? step}
-                unavailability={view.unavailability}
-                unavailabilityHref={unavailabilityHref(id, primaryMetric, view.unavailability)}
-                connectionGroup={connected ? `standard-monitoring-${id}` : undefined}
-                loading={metrics.isFetching}
-              />
-            </Card>
+            return (
+              <Card
+                key={chart.key}
+                className="metric-card"
+                title={chart.title}
+                extra={<Space size="small">
+                  {chart.drilldown && <Button
+                    type="link"
+                    size="small"
+                    icon={<ProfileOutlined />}
+                    href={longQuerySamplesHref(id, search)}
+                  >查看采样记录</Button>}
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<InfoCircleOutlined />}
+                    onClick={() => updateSearch({ metric: primaryMetric })}
+                  >指标详情</Button>
+                </Space>}
+              >
+                <MetricChart
+                  label={chart.title}
+                  series={view.series}
+                  step={metrics.data?.step ?? step}
+                  unavailability={view.unavailability}
+                  unavailabilityHref={unavailabilityHref(id, primaryMetric, view.unavailability)}
+                  connectionGroup={connected ? `standard-monitoring-${id}` : undefined}
+                  loading={metrics.isFetching}
+                />
+              </Card>
+            )
           })}
         </div>
       </section>
@@ -181,19 +193,27 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
   </Space>
 }
 
-function chartView(chart: StandardMonitoringChart, responseMetrics: ResponseMetric[] | undefined): {
-  series: MetricChartSeries[]
-  unavailability: Unavailability | null
-} {
-  const returned = chart.metrics.map((id) => responseMetrics?.find((metric) => metric.metric === id))
-  const available = returned.filter((metric): metric is ResponseMetric => metric?.unavailability === null)
-  const series = available.flatMap((metric) => metric.series.map((item) => ({
-    name: seriesName(metric.metric as MetricID, item.labels),
-    unit: metric.unit,
-    points: item.points,
-  })))
+function buildChartView(
+  chart: StandardMonitoringChart,
+  responseMetrics: ResponseMetric[] | undefined,
+): { series: MetricChartSeries[]; unavailability: Unavailability | null } {
+  const returned = chart.metrics.map((metricID) => ({
+    metricID,
+    response: responseMetrics?.find((metric) => metric.metric === metricID),
+  }))
+  const series = returned.flatMap(({ metricID, response }) => {
+    if (!response || response.unavailability !== null) return []
+    return response.series.map((item) => ({
+      name: seriesName(metricID, item.labels),
+      unit: response.unit,
+      points: item.points,
+    }))
+  })
   if (series.length > 0) return { series, unavailability: null }
-  return { series: [], unavailability: metricUnavailability(returned.find((metric) => metric !== undefined)) }
+  return {
+    series: [],
+    unavailability: metricUnavailability(returned.find(({ response }) => response !== undefined)?.response),
+  }
 }
 
 function seriesName(metric: MetricID, labels: Record<string, string>): string {

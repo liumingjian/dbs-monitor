@@ -13,19 +13,24 @@ export function TimeRangePicker({ from, to, onChange }: TimeRangePickerProps) {
   const toRef = useRef<HTMLInputElement>(null)
 
   function applyRange() {
-    if (!fromRef.current?.value || !toRef.current?.value) return
+    const fromValue = fromRef.current?.value
+    const toValue = toRef.current?.value
+    if (!fromValue || !toValue) return
+
     onChange({
-      from: new Date(fromRef.current.value).toISOString(),
-      to: new Date(toRef.current.value).toISOString(),
+      from: new Date(fromValue).toISOString(),
+      to: new Date(toValue).toISOString(),
     })
   }
 
-  return <Space wrap>
-    <input key={from} ref={fromRef} type="datetime-local" aria-label="开始时间" defaultValue={toLocalInput(from)} />
-    <span aria-hidden="true">至</span>
-    <input key={to} ref={toRef} type="datetime-local" aria-label="结束时间" defaultValue={toLocalInput(to)} />
-    <Button aria-label="应用时间范围" icon={<ClockCircleOutlined />} onClick={applyRange}>应用时间范围</Button>
-  </Space>
+  return (
+    <Space wrap>
+      <input key={from} ref={fromRef} type="datetime-local" aria-label="开始时间" defaultValue={toLocalInput(from)} />
+      <span aria-hidden="true">至</span>
+      <input key={to} ref={toRef} type="datetime-local" aria-label="结束时间" defaultValue={toLocalInput(to)} />
+      <Button aria-label="应用时间范围" icon={<ClockCircleOutlined />} onClick={applyRange}>应用时间范围</Button>
+    </Space>
+  )
 }
 
 function toLocalInput(value: string): string {
