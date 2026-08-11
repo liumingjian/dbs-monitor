@@ -36,7 +36,7 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
     },
   }))
 
-  await page.goto(`/instances/${instanceID}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&step=auto&columns=3&connect=true`)
+  await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&step=auto&columns=3&connect=true`)
 
   await expect(page.locator('.metric-card')).toHaveCount(22)
   await expect(page.getByRole('figure')).toHaveCount(22)

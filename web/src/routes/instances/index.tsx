@@ -10,6 +10,11 @@ import type { components } from '../../api/schema'
 import { Freshness } from '../../domain/Freshness'
 import { HEALTH_STATUSES, HealthStatus } from '../../domain/HealthStatus'
 import { SuppressionTags } from '../../domain/SuppressionTags'
+import {
+  attributionLabel,
+  dataFreshnessLabel,
+  lastCollectedAtLabel,
+} from '../instanceProjection'
 import { defaultTimeRange } from '../instances.$id/timeRange'
 import { rootRoute } from '../root'
 
@@ -272,23 +277,6 @@ function agentStatusLabel(status: components['schemas']['InstanceAgentStatus']):
   }
 }
 
-function attributionLabel(instance: Instance): string {
-  const attribution = instance.health.attribution
-  if (!attribution) return '无未恢复告警'
-  return attribution.current_value === undefined ? attribution.rule_name : `${attribution.rule_name} (${attribution.current_value})`
-}
-
-function lastCollectedAtLabel(collectedAt: string | undefined): string {
-  return collectedAt ? new Date(collectedAt).toLocaleString() : '尚无成功采集'
-}
-
-function freshnessLabel(seconds: number | undefined): string {
-  if (seconds === undefined) return '未知'
-  if (seconds < 60) return `${seconds} 秒前`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`
-  return `${Math.floor(seconds / 3600)} 小时前`
-}
-
 const instanceColumns: TableColumnsType<Instance> = [
   {
     title: <Tooltip title="最高未恢复告警级别">实例健康</Tooltip>,
@@ -312,13 +300,13 @@ const instanceColumns: TableColumnsType<Instance> = [
   { title: '地址', render: (_, instance) => `${instance.host}:${instance.port}` },
   { title: 'Agent 状态', render: (_, instance) => agentStatusLabel(instance.agent_status) },
   { title: '最近采集时间', render: (_, instance) => lastCollectedAtLabel(instance.last_collected_at) },
-  { title: '数据新鲜度', render: (_, instance) => freshnessLabel(instance.data_freshness_seconds) },
+  { title: '数据新鲜度', render: (_, instance) => dataFreshnessLabel(instance.data_freshness_seconds) },
   {
     title: '操作',
     render: (_, instance) => (
       <Space wrap>
         <Link to="/instances/$id" params={{ id: instance.id }} search={defaultTimeRange()}>
-          <DashboardOutlined /> 监控
+          <DashboardOutlined /> 总览
         </Link>
         <Link to="/instances/$id/settings" params={{ id: instance.id }}>
           <SettingOutlined /> 接入设置

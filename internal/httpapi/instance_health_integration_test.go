@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -137,7 +138,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		t.Fatalf("seed alert facts: %v", err)
 	}
 
-	list := func() []instanceProjectionResponse {
+	listInstances := func() []instanceProjectionResponse {
 		response := getResponse(t, client, server.URL+"/api/v1/instances")
 		defer response.Body.Close()
 		if response.StatusCode != http.StatusOK {
@@ -149,7 +150,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		}
 		return instances
 	}
-	find := func(instances []instanceProjectionResponse, id uuid.UUID) instanceProjectionResponse {
+	findInstance := func(instances []instanceProjectionResponse, id uuid.UUID) instanceProjectionResponse {
 		for _, found := range instances {
 			if found.ID == id {
 				return found
@@ -158,8 +159,20 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		t.Fatalf("instance %s missing from projection", id)
 		return instanceProjectionResponse{}
 	}
+	getInstance := func(id uuid.UUID) instanceProjectionResponse {
+		response := getResponse(t, client, server.URL+"/api/v1/instances/"+id.String())
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("get instance status = %d", response.StatusCode)
+		}
+		var instance instanceProjectionResponse
+		if err := json.NewDecoder(response.Body).Decode(&instance); err != nil {
+			t.Fatalf("decode instance: %v", err)
+		}
+		return instance
+	}
 
-	initial := find(list(), targetID)
+	initial := findInstance(listInstances(), targetID)
 	if initial.Health.Status != "CRITICAL" || initial.Health.Attribution == nil || initial.Health.Attribution.RuleName != "critical later" ||
 		initial.Health.Counts != (projectionCounts{Critical: 1, Warning: 1, Info: 1}) ||
 		!initial.Health.Flags.NoData || !initial.Health.Flags.RecentlyRecovered || initial.Health.Flags.Ignored != 1 ||
@@ -167,7 +180,10 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		initial.DataFreshnessSeconds == nil || *initial.DataFreshnessSeconds < 60 {
 		t.Fatalf("initial target projection = %+v", initial)
 	}
-	if other := find(list(), otherID); other.Health.Status != "UNKNOWN" {
+	if got := getInstance(targetID); !reflect.DeepEqual(got.Health, initial.Health) {
+		t.Fatalf("detail health projection = %+v, want list projection %+v", got.Health, initial.Health)
+	}
+	if other := findInstance(listInstances(), otherID); other.Health.Status != "UNKNOWN" {
 		t.Fatalf("uncollected instance projection = %+v, want UNKNOWN", other)
 	}
 
@@ -175,7 +191,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		WHERE instance_id = $1 AND metric_dimension_key IN ('critical', 'warning')`, targetID, now); err != nil {
 		t.Fatalf("recover alert facts: %v", err)
 	}
-	recovered := find(list(), targetID)
+	recovered := findInstance(listInstances(), targetID)
 	if recovered.Health.Status != "HEALTHY" || recovered.Health.Attribution == nil || recovered.Health.Attribution.RuleName != "info earliest" ||
 		recovered.Health.Counts != (projectionCounts{Info: 1}) || recovered.Health.Flags.Ignored != 1 {
 		t.Fatalf("recovered target projection = %+v", recovered)
@@ -186,7 +202,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		WHERE instance_id = $1`, targetID, userID, now); err != nil {
 		t.Fatalf("pause instance: %v", err)
 	}
-	if paused := find(list(), targetID); paused.Health.Status != "PAUSED" || paused.Health.Counts.Info != 1 {
+	if paused := findInstance(listInstances(), targetID); paused.Health.Status != "PAUSED" || paused.Health.Counts.Info != 1 {
 		t.Fatalf("paused target projection = %+v", paused)
 	}
 }

@@ -10,7 +10,10 @@ test('standard monitoring workbench renders 22 charts and keeps controls in URL 
 
   await expect(page).toHaveURL(/\/instances$/)
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
-  await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '监控' }).click()
+  await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '总览' }).click()
+
+  await expect(page.getByRole('tab', { name: '实例总览' })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('link', { name: '监控与报警' }).click()
 
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.locator('.metric-card')).toHaveCount(22)
@@ -72,7 +75,7 @@ test('standard monitoring workbench renders 22 charts and keeps controls in URL 
   await expect(page).toHaveURL((url) => url.searchParams.get('from') === from && url.searchParams.get('to') === to)
   await expect(cpuChart).toBeVisible()
 
-  await page.goto(`/instances/not-used?from=last-hour&to=bad&step=10m`)
+  await page.goto(`/instances/not-used/monitoring?from=last-hour&to=bad&step=10m`)
   await expect(page.getByText('时间范围必须是绝对 RFC3339 时间')).toBeVisible()
   await expect(page.getByRole('button', { name: '使用最近一小时' })).toBeVisible()
 })

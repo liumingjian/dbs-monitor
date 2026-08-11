@@ -24,6 +24,11 @@ figcaption { color: #52514e; font-size: 13px; }
 .collection-todo-item summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
 .collection-todo-item p { margin: 12px 0 8px; }
 .instance-filter-bar { width: 100%; }
+.overview-status { border-block: 1px solid #d9d8d1; padding: 18px 0; }
+.overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.overview-card { min-width: 0; border-radius: 6px; }
+.overview-card .ant-card-head-title { font-size: 15px; }
+.overview-card[data-overview-module="troubleshooting"] { grid-column: 1 / -1; }
 @media (max-width: 640px) {
   .app-header { padding-inline: 16px; }
   .app-header h3 { display: none; }
@@ -40,6 +45,8 @@ figcaption { color: #52514e; font-size: 13px; }
   .metric-card .ant-card-extra { margin-inline-start: 0; }
   .enhanced-monitoring-controls > .ant-space { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
   .enhanced-monitoring-controls .ant-select { min-width: 0 !important; width: 100%; }
+  .overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .overview-card[data-overview-module="troubleshooting"] { grid-column: auto; }
 }
 
 @media (min-width: 641px) and (max-width: 980px) {
