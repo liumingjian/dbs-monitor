@@ -2,7 +2,7 @@ package alerting
 
 import "testing"
 
-func TestTriggerSnapshotScopeAndSelection(t *testing.T) {
+func TestTriggerSnapshotScopeForMetric(t *testing.T) {
 	tests := []struct {
 		name       string
 		metricID   string
@@ -26,7 +26,9 @@ func TestTriggerSnapshotScopeAndSelection(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestSelectTriggerSessionsKeepsCompleteBlockingChain(t *testing.T) {
 	sessions := make([]TriggerSession, 0, 102)
 	for pid := int32(1); pid <= 99; pid++ {
 		sessions = append(sessions, TriggerSession{PID: pid, DirectMatch: true})

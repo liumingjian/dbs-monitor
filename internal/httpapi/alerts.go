@@ -44,23 +44,29 @@ func (handler *Handler) GetAlertTriggerSnapshot(ctx context.Context, request api
 	response.OriginalMatchCount = int(snapshot.OriginalMatchCount)
 	response.Truncated = snapshot.Truncated
 	response.FailureReason = textPointer(snapshot.FailureReason)
-	if snapshot.Result != "SUCCESS" {
+	if response.Result != api.TriggerSnapshotSuccess {
 		return api.GetAlertTriggerSnapshot200JSONResponse(response), nil
 	}
 
-	rows, err := queries.ListAlertTriggerSnapshotSessions(ctx, snapshot.ID)
+	snapshotSessions, err := queries.ListAlertTriggerSnapshotSessions(ctx, snapshot.ID)
 	if err != nil {
 		return nil, err
 	}
-	response.Sessions = make([]api.AlertTriggerSnapshotSession, 0, len(rows))
-	for _, row := range rows {
+	response.Sessions = make([]api.AlertTriggerSnapshotSession, 0, len(snapshotSessions))
+	for _, session := range snapshotSessions {
 		response.Sessions = append(response.Sessions, api.AlertTriggerSnapshotSession{
-			Pid: row.Pid, BlockingPids: row.BlockingPids,
-			Username: textPointer(row.Username), DatabaseName: textPointer(row.DatabaseName),
-			ClientAddress: textPointer(row.ClientAddress), State: textPointer(row.State),
-			QueryStartedAt: timePointer(row.QueryStartedAt), TransactionStartedAt: timePointer(row.TransactionStartedAt),
-			QueryDurationMs: int64Pointer(row.QueryDurationMs), TransactionDurationMs: int64Pointer(row.TransactionDurationMs),
-			WaitEventType: textPointer(row.WaitEventType), WaitEvent: textPointer(row.WaitEvent),
+			Pid:                   session.Pid,
+			Username:              textPointer(session.Username),
+			DatabaseName:          textPointer(session.DatabaseName),
+			ClientAddress:         textPointer(session.ClientAddress),
+			State:                 textPointer(session.State),
+			QueryStartedAt:        timePointer(session.QueryStartedAt),
+			TransactionStartedAt:  timePointer(session.TransactionStartedAt),
+			QueryDurationMs:       int64Pointer(session.QueryDurationMs),
+			TransactionDurationMs: int64Pointer(session.TransactionDurationMs),
+			WaitEventType:         textPointer(session.WaitEventType),
+			WaitEvent:             textPointer(session.WaitEvent),
+			BlockingPids:          session.BlockingPids,
 		})
 	}
 	return api.GetAlertTriggerSnapshot200JSONResponse(response), nil

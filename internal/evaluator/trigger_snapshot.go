@@ -12,7 +12,13 @@ import (
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
-const triggerSnapshotTimeout = 10 * time.Second
+const (
+	triggerSnapshotTimeout         = 10 * time.Second
+	maxTriggerSnapshotSessions     = 100
+	longTransactionMinimumDuration = 5 * time.Minute
+	triggerSnapshotResultSuccess   = "SUCCESS"
+	triggerSnapshotResultFailed    = "FAILED"
+)
 
 const triggerSnapshotSessionsSQL = `SELECT
     pid AS pid,
@@ -43,12 +49,14 @@ type triggerSnapshotCapture struct {
 	sessions           []alerting.TriggerSession
 }
 
-func (service *Service) captureTriggerSnapshot(ctx context.Context, target alerting.GetEvaluationTargetRow) triggerSnapshotCapture {
-	failed := func(err error) triggerSnapshotCapture {
-		return triggerSnapshotCapture{result: "FAILED", failureReason: pgtype.Text{String: err.Error(), Valid: true}}
-	}
+func (service *Service) captureTriggerSnapshot(
+	ctx context.Context,
+	target alerting.GetEvaluationTargetRow,
+	scope alerting.TriggerSnapshotScope,
+) triggerSnapshotCapture {
 	captureCtx, cancel := context.WithTimeout(ctx, triggerSnapshotTimeout)
 	defer cancel()
+
 	sessions := make([]alerting.TriggerSession, 0)
 	err := service.withSnapshotConnection(captureCtx, target, func(conn *monitorpg.TargetConn) error {
 		var configured string
@@ -78,31 +86,87 @@ func (service *Service) captureTriggerSnapshot(ctx context.Context, target alert
 		return nil
 	})
 	if err != nil {
-		return failed(fmt.Errorf("capture monitored sessions: %w", err))
+		failure := fmt.Errorf("capture monitored sessions: %w", err)
+		return triggerSnapshotCapture{
+			result:        triggerSnapshotResultFailed,
+			failureReason: pgtype.Text{String: failure.Error(), Valid: true},
+		}
 	}
 
-	scope, _ := alerting.TriggerSnapshotScopeForMetric(target.MetricID)
 	sessions = markDirectTriggerSessions(scope, target.MetricID, target.Operator, target.Threshold, sessions)
-	selected, originalMatchCount, truncated := alerting.SelectTriggerSessions(scope, sessions, 100)
+	selected, originalMatchCount, truncated := alerting.SelectTriggerSessions(scope, sessions, maxTriggerSnapshotSessions)
 	return triggerSnapshotCapture{
-		result: "SUCCESS", sessions: selected,
-		originalMatchCount: int32(originalMatchCount), truncated: truncated,
+		result:             triggerSnapshotResultSuccess,
+		originalMatchCount: int32(originalMatchCount),
+		truncated:          truncated,
+		sessions:           selected,
 	}
 }
 
-func markDirectTriggerSessions(scope alerting.TriggerSnapshotScope, metricID, operator string, threshold float64, sessions []alerting.TriggerSession) []alerting.TriggerSession {
+func (service *Service) captureAndPersistTriggerSnapshot(
+	ctx context.Context,
+	queries *alerting.Queries,
+	target alerting.GetEvaluationTargetRow,
+	alertInstanceID pgtype.UUID,
+	capturedAt pgtype.Timestamptz,
+	scope alerting.TriggerSnapshotScope,
+) (pgtype.UUID, error) {
+	capture := service.captureTriggerSnapshot(ctx, target, scope)
+	snapshotID, err := queries.CreateTriggerSnapshot(ctx, alerting.CreateTriggerSnapshotParams{
+		AlertInstanceID:    alertInstanceID,
+		CapturedAt:         capturedAt,
+		Result:             capture.result,
+		OriginalMatchCount: capture.originalMatchCount,
+		Truncated:          capture.truncated,
+		FailureReason:      capture.failureReason,
+	})
+	if err != nil {
+		return pgtype.UUID{}, fmt.Errorf("save trigger snapshot: %w", err)
+	}
+
+	for _, session := range capture.sessions {
+		if err := queries.CreateTriggerSnapshotSession(ctx, alerting.CreateTriggerSnapshotSessionParams{
+			SnapshotID:            snapshotID,
+			Pid:                   session.PID,
+			Username:              session.Username,
+			DatabaseName:          session.DatabaseName,
+			ClientAddress:         session.ClientAddress,
+			State:                 session.State,
+			QueryStartedAt:        session.QueryStartedAt,
+			TransactionStartedAt:  session.TransactionStartedAt,
+			QueryDurationMs:       session.QueryDurationMS,
+			TransactionDurationMs: session.TransactionDurationMS,
+			WaitEventType:         session.WaitEventType,
+			WaitEvent:             session.WaitEvent,
+			BlockingPids:          session.BlockingPIDs,
+		}); err != nil {
+			return pgtype.UUID{}, fmt.Errorf("save trigger snapshot session: %w", err)
+		}
+	}
+	return snapshotID, nil
+}
+
+func markDirectTriggerSessions(
+	scope alerting.TriggerSnapshotScope,
+	metricID string,
+	operator string,
+	threshold float64,
+	sessions []alerting.TriggerSession,
+) []alerting.TriggerSession {
 	if scope == alerting.TriggerSnapshotActiveSessions {
 		active := make([]alerting.TriggerSession, 0, len(sessions))
 		for _, session := range sessions {
-			if session.State.Valid && session.State.String == "active" {
-				session.DirectMatch = true
-				active = append(active, session)
+			if !session.State.Valid || session.State.String != "active" {
+				continue
 			}
+			session.DirectMatch = true
+			active = append(active, session)
 		}
 		sort.SliceStable(active, func(i, j int) bool {
-			left, right := active[i].QueryDurationMS.Int64, active[j].QueryDurationMS.Int64
-			if left != right {
-				return left > right
+			leftDuration := active[i].QueryDurationMS.Int64
+			rightDuration := active[j].QueryDurationMS.Int64
+			if leftDuration != rightDuration {
+				return leftDuration > rightDuration
 			}
 			return active[i].PID < active[j].PID
 		})
@@ -121,7 +185,7 @@ func markDirectTriggerSessions(scope alerting.TriggerSnapshotScope, metricID, op
 					alerting.Compare(float64(session.TransactionDurationMS.Int64)/1000, operator, threshold)
 			} else {
 				session.DirectMatch = session.TransactionDurationMS.Valid &&
-					session.TransactionDurationMS.Int64 > int64(5*time.Minute/time.Millisecond)
+					session.TransactionDurationMS.Int64 > longTransactionMinimumDuration.Milliseconds()
 			}
 		}
 	}

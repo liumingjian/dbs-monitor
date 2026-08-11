@@ -146,10 +146,10 @@ func (service *Service) evaluateRule(
 	firstTriggeredAt := pgtype.Timestamptz{}
 	firstRuleVersion := pgtype.Int4{}
 	var firstRuleSnapshot []byte
-	firstFiring := previousState != alerting.FIRING &&
+	startsFiringLifecycle := previousState != alerting.FIRING &&
 		!(previousState == alerting.NO_DATA && currentSnapshot.StateBeforeNoData == alerting.FIRING) &&
 		nextSnapshot.State == alerting.FIRING
-	if firstFiring {
+	if startsFiringLifecycle {
 		firstTriggeredAt = evaluatedAt
 		firstRuleVersion = pgtype.Int4{Int32: evaluationTarget.Version, Valid: true}
 		firstRuleSnapshot = evaluationTarget.RuleSnapshot
@@ -198,32 +198,23 @@ func (service *Service) evaluateRule(
 	if err != nil {
 		return fmt.Errorf("save alert state: %w", err)
 	}
+
 	var triggerSnapshotID pgtype.UUID
-	_, triggerSnapshotApplicable := alerting.TriggerSnapshotScopeForMetric(evaluationTarget.MetricID)
-	if firstFiring && triggerSnapshotApplicable {
-		capture := service.captureTriggerSnapshot(ctx, evaluationTarget)
-		triggerSnapshotID, err = queries.CreateTriggerSnapshot(ctx, alerting.CreateTriggerSnapshotParams{
-			AlertInstanceID: alertInstanceID, CapturedAt: evaluatedAt,
-			Result: capture.result, OriginalMatchCount: capture.originalMatchCount,
-			Truncated: capture.truncated, FailureReason: capture.failureReason,
-		})
+	triggerSnapshotScope, triggerSnapshotApplicable := alerting.TriggerSnapshotScopeForMetric(evaluationTarget.MetricID)
+	if startsFiringLifecycle && triggerSnapshotApplicable {
+		triggerSnapshotID, err = service.captureAndPersistTriggerSnapshot(
+			ctx,
+			queries,
+			evaluationTarget,
+			alertInstanceID,
+			evaluatedAt,
+			triggerSnapshotScope,
+		)
 		if err != nil {
-			return fmt.Errorf("save trigger snapshot: %w", err)
-		}
-		for _, session := range capture.sessions {
-			if err := queries.CreateTriggerSnapshotSession(ctx, alerting.CreateTriggerSnapshotSessionParams{
-				SnapshotID: triggerSnapshotID, Pid: session.PID,
-				Username: session.Username, DatabaseName: session.DatabaseName,
-				ClientAddress: session.ClientAddress, State: session.State,
-				QueryStartedAt: session.QueryStartedAt, TransactionStartedAt: session.TransactionStartedAt,
-				QueryDurationMs: session.QueryDurationMS, TransactionDurationMs: session.TransactionDurationMS,
-				WaitEventType: session.WaitEventType, WaitEvent: session.WaitEvent,
-				BlockingPids: session.BlockingPIDs,
-			}); err != nil {
-				return fmt.Errorf("save trigger snapshot session: %w", err)
-			}
+			return err
 		}
 	}
+
 	for _, kind := range alerting.StateEvents(previousState, nextSnapshot.State) {
 		if kind == alerting.EventUpdated && !metricResult.currentValue.Valid {
 			continue

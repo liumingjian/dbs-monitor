@@ -206,11 +206,9 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	taskCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	conn, release, err := service.acquireQueryConnection(taskCtx, run.target)
-	if release != nil {
-		defer release()
-	}
 	dialFailure := err != nil
 	if err == nil {
+		defer release()
 		var configured string
 		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', $1, false)",
 			strconv.FormatInt(timeout.Milliseconds(), 10)+"ms").Scan(&configured)
@@ -247,10 +245,8 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 	taskCtx, cancel := context.WithTimeout(ctx, capabilitySnapshotTimeout)
 	defer cancel()
 	conn, release, err := service.acquireQueryConnection(taskCtx, run.target)
-	if release != nil {
-		defer release()
-	}
 	if err == nil {
+		defer release()
 		var configured string
 		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', '10s', false)").Scan(&configured)
 	}
@@ -359,7 +355,10 @@ func (service *Service) queryConnection(ctx context.Context, target instance.Lis
 	return conn, nil
 }
 
-func (service *Service) acquireQueryConnection(ctx context.Context, target instance.ListCollectionTargetsRow) (*monitorpg.TargetConn, func(), error) {
+func (service *Service) acquireQueryConnection(
+	ctx context.Context,
+	target instance.ListCollectionTargetsRow,
+) (*monitorpg.TargetConn, func(), error) {
 	key := uuid.UUID(target.ID.Bytes).String()
 	service.queryConnectionMu.Lock()
 	useLock := service.queryConnectionUseLocks[key]
@@ -384,10 +383,14 @@ func (service *Service) WithTriggerSnapshotConnection(
 	use func(*monitorpg.TargetConn) error,
 ) error {
 	collectionTarget := instance.ListCollectionTargetsRow{
-		ID: target.InstanceID, Host: target.Host, Port: target.Port,
-		DatabaseName: target.DatabaseName, Username: target.Username,
-		PasswordCiphertext: target.PasswordCiphertext, PasswordKeyVersion: target.PasswordKeyVersion,
-		CredentialVersion: target.CredentialVersion,
+		ID:                 target.InstanceID,
+		Host:               target.Host,
+		Port:               target.Port,
+		DatabaseName:       target.DatabaseName,
+		Username:           target.Username,
+		PasswordCiphertext: target.PasswordCiphertext,
+		PasswordKeyVersion: target.PasswordKeyVersion,
+		CredentialVersion:  target.CredentialVersion,
 	}
 	conn, release, err := service.acquireQueryConnection(ctx, collectionTarget)
 	if err != nil {
