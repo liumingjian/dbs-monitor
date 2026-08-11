@@ -154,3 +154,41 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 		t.Error("unqualified Linux package targets make the deferred release path appear active")
 	}
 }
+
+func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
+	root := filepath.Join(internalRoot(t), "..")
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatalf("read Makefile: %v", err)
+	}
+	checkFull := regexp.MustCompile(`(?m)^check-full:[^\n]*\n(?:\t[^\n]*\n)*`).FindString(string(makefile))
+	for _, required := range []string{"$(MAKE) check-pg-matrix", "$(MAKE) check-sqlc-vet"} {
+		if !strings.Contains(checkFull, required) {
+			t.Errorf("check-full is missing %q", required)
+		}
+	}
+
+	config, err := os.ReadFile(filepath.Join(root, "sqlc.yaml"))
+	if err != nil {
+		t.Fatalf("read sqlc config: %v", err)
+	}
+	for value, want := range map[string]int{
+		`uri: ${DATABASE_URL}`: 4,
+		`database: false`:      4,
+		`- sqlc/db-prepare`:    4,
+	} {
+		if got := strings.Count(string(config), value); got != want {
+			t.Errorf("sqlc config contains %q %d times, want %d", value, got, want)
+		}
+	}
+
+	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "check-full.yml"))
+	if err != nil {
+		t.Fatalf("read check-full workflow: %v", err)
+	}
+	for _, required := range []string{"name: check-full", "      - main", "  workflow_dispatch:", "      - run: make check-full"} {
+		if !strings.Contains(string(workflow), required) {
+			t.Errorf("check-full workflow is missing %q", required)
+		}
+	}
+}
