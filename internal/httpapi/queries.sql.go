@@ -104,7 +104,12 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID pgtype.UUID) er
 }
 
 const getAgentTokenHash = `-- name: GetAgentTokenHash :one
-SELECT agent_token_hash FROM instance WHERE id = $1
+SELECT agent_token_hash
+FROM instance
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
 `
 
 func (q *Queries) GetAgentTokenHash(ctx context.Context, id pgtype.UUID) ([]byte, error) {

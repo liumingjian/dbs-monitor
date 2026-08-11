@@ -35,3 +35,37 @@ AgentReport:
       type: array
       description: Unacknowledged samples from the Agent's five-minute in-memory window.
       items: { $ref: '#/AgentSample' }
+AgentRegistrationState:
+  type: string
+  enum: [NEVER_REGISTERED, EXPECTED_ONLINE, REVOKED, DISABLED]
+AgentInstallation:
+  type: object
+  required: [ca_fingerprint_sha256, installer_path, authentication_path, file_mode, restart_command]
+  properties:
+    ca_fingerprint_sha256:
+      type: string
+      description: Lowercase SHA-256 fingerprint of the platform CA certificate in DER form.
+    installer_path: { type: string }
+    authentication_path: { type: string }
+    file_mode: { type: string, enum: ['0600'] }
+    restart_command: { type: string }
+AgentRegistration:
+  type: object
+  required: [state, agent_expected, installation]
+  properties:
+    state: { $ref: '#/AgentRegistrationState' }
+    agent_expected: { type: boolean }
+    issued_at: { type: string, format: date-time }
+    revoked_at: { type: string, format: date-time }
+    first_registered_at: { type: string, format: date-time }
+    agent_version: { type: string }
+    installation: { $ref: '#/AgentInstallation' }
+AgentTokenIssued:
+  type: object
+  required: [agent_token, registration]
+  properties:
+    agent_token:
+      type: string
+      writeOnly: true
+      description: One-time 32-byte base64url Agent token. It cannot be read again.
+    registration: { $ref: '#/AgentRegistration' }

@@ -60,11 +60,13 @@ tar -xf "$pg_archive" -C "$work/source" --strip-components=1
 )
 
 if [ -n "$prebuilt_bin_dir" ]; then
-  if [ ! -x "$prebuilt_bin_dir/dbs-monitor-server" ] || [ ! -x "$prebuilt_bin_dir/dbs-monitor-agent" ]; then
-    echo "PACKAGE_BIN_DIR must contain executable dbs-monitor-server and dbs-monitor-agent" >&2
+  if [ ! -x "$prebuilt_bin_dir/dbs-monitor-server" ] || [ ! -x "$prebuilt_bin_dir/dbs-monitor-agent" ] || \
+     [ ! -x "$prebuilt_bin_dir/dbs-monitor-agent-linux-amd64" ] || [ ! -x "$prebuilt_bin_dir/dbs-monitor-agent-linux-arm64" ]; then
+    echo "PACKAGE_BIN_DIR must contain the server, runtime Agent, and both distribution Agent binaries" >&2
     exit 2
   fi
-  cp "$prebuilt_bin_dir/dbs-monitor-server" "$prebuilt_bin_dir/dbs-monitor-agent" "$work/bundle/bin/"
+  cp "$prebuilt_bin_dir/dbs-monitor-server" "$prebuilt_bin_dir/dbs-monitor-agent" \
+    "$prebuilt_bin_dir/dbs-monitor-agent-linux-amd64" "$prebuilt_bin_dir/dbs-monitor-agent-linux-arm64" "$work/bundle/bin/"
 else
   cd "$root/web"
   npm ci
@@ -72,6 +74,8 @@ else
   cd "$root"
   CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -tags embed_web -trimpath -o "$work/bundle/bin/dbs-monitor-server" ./cmd/monitor-server
   CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath -o "$work/bundle/bin/dbs-monitor-agent" ./cmd/monitor-agent
+  CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$work/bundle/bin/dbs-monitor-agent-linux-amd64" ./cmd/monitor-agent
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o "$work/bundle/bin/dbs-monitor-agent-linux-arm64" ./cmd/monitor-agent
 fi
 cp -a "$work/stage$install_prefix" "$work/bundle/pgsql"
 cp -a packaging/systemd "$work/bundle/systemd"

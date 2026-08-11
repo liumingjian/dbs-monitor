@@ -19,6 +19,9 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 	certificatePath := filepath.Join(directory, "server.crt")
 	keyPath := filepath.Join(directory, "server.key")
 	if certificateMatchesHost(certificatePath, keyPath, publicHost) {
+		if err := ensureCertificateChain(certificatePath, filepath.Join(directory, "ca.crt")); err != nil {
+			return "", "", err
+		}
 		return certificatePath, keyPath, nil
 	}
 	if publicHost == "" {
@@ -68,7 +71,7 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 	if err := writePEM(filepath.Join(directory, "ca.crt"), "CERTIFICATE", caDER, 0644); err != nil {
 		return "", "", err
 	}
-	if err := writePEM(certificatePath, "CERTIFICATE", serverDER, 0644); err != nil {
+	if err := writeCertificateChain(certificatePath, serverDER, caDER); err != nil {
 		return "", "", err
 	}
 	keyDER, err := x509.MarshalPKCS8PrivateKey(serverKey)
@@ -79,6 +82,47 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 		return "", "", err
 	}
 	return certificatePath, keyPath, nil
+}
+
+func ensureCertificateChain(certificatePath, caPath string) error {
+	contents, err := os.ReadFile(certificatePath)
+	if err != nil {
+		return err
+	}
+	_, remainder := pem.Decode(contents)
+	if block, _ := pem.Decode(remainder); block != nil {
+		return nil
+	}
+	ca, err := os.ReadFile(caPath)
+	if err != nil {
+		return fmt.Errorf("read TLS CA for certificate chain: %w", err)
+	}
+	file, err := os.OpenFile(certificatePath, os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if len(contents) > 0 && contents[len(contents)-1] != '\n' {
+		if _, err := file.Write([]byte("\n")); err != nil {
+			return err
+		}
+	}
+	_, err = file.Write(ca)
+	return err
+}
+
+func writeCertificateChain(path string, certificates ...[]byte) error {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	for _, certificate := range certificates {
+		if err := pem.Encode(file, &pem.Block{Type: "CERTIFICATE", Bytes: certificate}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func certificateMatchesHost(certificatePath, keyPath, publicHost string) bool {

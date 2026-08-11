@@ -37,6 +37,14 @@ paths:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1enabled
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
+  /api/v1/instances/{id}/agent/registration:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1registration
+  /api/v1/instances/{id}/agent/token/rotation:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1token~1rotation
+  /api/v1/instances/{id}/agent/token/revocation:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1token~1revocation
+  /api/v1/instances/{id}/agent/disable:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1disable
   /api/v1/me:
     $ref: paths/users.yaml#/~1api~1v1~1me
   /api/v1/users:
@@ -99,6 +107,10 @@ components:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
     AgentReport:
       $ref: components/schemas/agent.yaml#/AgentReport
+    AgentRegistration:
+      $ref: components/schemas/agent.yaml#/AgentRegistration
+    AgentTokenIssued:
+      $ref: components/schemas/agent.yaml#/AgentTokenIssued
     Role:
       $ref: components/schemas/users.yaml#/Role
     User:

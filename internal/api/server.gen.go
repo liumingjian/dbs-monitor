@@ -22,6 +22,11 @@ const (
 	AgentTokenScopes = "agentToken.Scopes"
 )
 
+// Defines values for AgentInstallationFileMode.
+const (
+	N0600 AgentInstallationFileMode = "0600"
+)
+
 // Defines values for AgentMetricMetric.
 const (
 	AgentMetricMetricHostCpuUsagePercent           AgentMetricMetric = "host.cpu.usage_percent"
@@ -31,6 +36,14 @@ const (
 	AgentMetricMetricHostDiskUsagePercent          AgentMetricMetric = "host.disk.usage_percent"
 	AgentMetricMetricHostMemoryUsagePercent        AgentMetricMetric = "host.memory.usage_percent"
 	AgentMetricMetricHostNetworkBytesPerSec        AgentMetricMetric = "host.network.bytes_per_sec"
+)
+
+// Defines values for AgentRegistrationState.
+const (
+	DISABLED        AgentRegistrationState = "DISABLED"
+	EXPECTEDONLINE  AgentRegistrationState = "EXPECTED_ONLINE"
+	NEVERREGISTERED AgentRegistrationState = "NEVER_REGISTERED"
+	REVOKED         AgentRegistrationState = "REVOKED"
 )
 
 // Defines values for AlertAggregation.
@@ -213,6 +226,20 @@ const (
 	Raw  GetMetricSeriesParamsStep = "raw"
 )
 
+// AgentInstallation defines model for AgentInstallation.
+type AgentInstallation struct {
+	AuthenticationPath string `json:"authentication_path"`
+
+	// CaFingerprintSha256 Lowercase SHA-256 fingerprint of the platform CA certificate in DER form.
+	CaFingerprintSha256 string                    `json:"ca_fingerprint_sha256"`
+	FileMode            AgentInstallationFileMode `json:"file_mode"`
+	InstallerPath       string                    `json:"installer_path"`
+	RestartCommand      string                    `json:"restart_command"`
+}
+
+// AgentInstallationFileMode defines model for AgentInstallation.FileMode.
+type AgentInstallationFileMode string
+
 // AgentMetric defines model for AgentMetric.
 type AgentMetric struct {
 	Metric AgentMetricMetric `json:"metric"`
@@ -221,6 +248,20 @@ type AgentMetric struct {
 
 // AgentMetricMetric defines model for AgentMetric.Metric.
 type AgentMetricMetric string
+
+// AgentRegistration defines model for AgentRegistration.
+type AgentRegistration struct {
+	AgentExpected     bool                   `json:"agent_expected"`
+	AgentVersion      *string                `json:"agent_version,omitempty"`
+	FirstRegisteredAt *time.Time             `json:"first_registered_at,omitempty"`
+	Installation      AgentInstallation      `json:"installation"`
+	IssuedAt          *time.Time             `json:"issued_at,omitempty"`
+	RevokedAt         *time.Time             `json:"revoked_at,omitempty"`
+	State             AgentRegistrationState `json:"state"`
+}
+
+// AgentRegistrationState defines model for AgentRegistrationState.
+type AgentRegistrationState string
 
 // AgentReport defines model for AgentReport.
 type AgentReport struct {
@@ -237,6 +278,13 @@ type AgentReport struct {
 type AgentSample struct {
 	Metrics   []AgentMetric `json:"metrics"`
 	Timestamp time.Time     `json:"timestamp"`
+}
+
+// AgentTokenIssued defines model for AgentTokenIssued.
+type AgentTokenIssued struct {
+	// AgentToken One-time 32-byte base64url Agent token. It cannot be read again.
+	AgentToken   *string           `json:"agent_token,omitempty"`
+	Registration AgentRegistration `json:"registration"`
 }
 
 // AlertAggregation defines model for AlertAggregation.
@@ -578,6 +626,21 @@ type ServerInterface interface {
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (POST /api/v1/instances/{id}/agent/disable)
+	DisableAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/agent/registration)
+	GetAgentRegistration(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/instances/{id}/agent/registration)
+	RegisterAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/instances/{id}/agent/token/revocation)
+	RevokeAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/instances/{id}/agent/token/rotation)
+	RotateAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (GET /api/v1/instances/{id}/collection/capabilities)
 	ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
@@ -819,6 +882,131 @@ func (siw *ServerInterfaceWrapper) UpdateInstance(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateInstance(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DisableAgent operation middleware
+func (siw *ServerInterfaceWrapper) DisableAgent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisableAgent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentRegistration operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentRegistration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentRegistration(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegisterAgent operation middleware
+func (siw *ServerInterfaceWrapper) RegisterAgent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterAgent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeAgentToken operation middleware
+func (siw *ServerInterfaceWrapper) RevokeAgentToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeAgentToken(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RotateAgentToken operation middleware
+func (siw *ServerInterfaceWrapper) RotateAgentToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RotateAgentToken(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1293,6 +1481,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}", wrapper.GetInstance)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}", wrapper.UpdateInstance)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/disable", wrapper.DisableAgent)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/agent/registration", wrapper.GetAgentRegistration)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/registration", wrapper.RegisterAgent)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/token/revocation", wrapper.RevokeAgentToken)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/token/rotation", wrapper.RotateAgentToken)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/capabilities", wrapper.ListCapabilitySnapshot)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks", wrapper.ListCollectionTaskStates)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks/{task_id}", wrapper.UpdateCollectionTaskInterval)
@@ -1556,6 +1749,127 @@ type UpdateInstance400JSONResponse Error
 func (response UpdateInstance400JSONResponse) VisitUpdateInstanceResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DisableAgentRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DisableAgentResponseObject interface {
+	VisitDisableAgentResponse(w http.ResponseWriter) error
+}
+
+type DisableAgent200JSONResponse AgentRegistration
+
+func (response DisableAgent200JSONResponse) VisitDisableAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DisableAgent409JSONResponse Error
+
+func (response DisableAgent409JSONResponse) VisitDisableAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAgentRegistrationRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAgentRegistrationResponseObject interface {
+	VisitGetAgentRegistrationResponse(w http.ResponseWriter) error
+}
+
+type GetAgentRegistration200JSONResponse AgentRegistration
+
+func (response GetAgentRegistration200JSONResponse) VisitGetAgentRegistrationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RegisterAgentRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type RegisterAgentResponseObject interface {
+	VisitRegisterAgentResponse(w http.ResponseWriter) error
+}
+
+type RegisterAgent200JSONResponse AgentTokenIssued
+
+func (response RegisterAgent200JSONResponse) VisitRegisterAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RegisterAgent409JSONResponse Error
+
+func (response RegisterAgent409JSONResponse) VisitRegisterAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RevokeAgentTokenRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type RevokeAgentTokenResponseObject interface {
+	VisitRevokeAgentTokenResponse(w http.ResponseWriter) error
+}
+
+type RevokeAgentToken200JSONResponse AgentRegistration
+
+func (response RevokeAgentToken200JSONResponse) VisitRevokeAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RevokeAgentToken409JSONResponse Error
+
+func (response RevokeAgentToken409JSONResponse) VisitRevokeAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RotateAgentTokenRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type RotateAgentTokenResponseObject interface {
+	VisitRotateAgentTokenResponse(w http.ResponseWriter) error
+}
+
+type RotateAgentToken200JSONResponse AgentTokenIssued
+
+func (response RotateAgentToken200JSONResponse) VisitRotateAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RotateAgentToken409JSONResponse Error
+
+func (response RotateAgentToken409JSONResponse) VisitRotateAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1939,6 +2253,21 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(ctx context.Context, request UpdateInstanceRequestObject) (UpdateInstanceResponseObject, error)
 
+	// (POST /api/v1/instances/{id}/agent/disable)
+	DisableAgent(ctx context.Context, request DisableAgentRequestObject) (DisableAgentResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/agent/registration)
+	GetAgentRegistration(ctx context.Context, request GetAgentRegistrationRequestObject) (GetAgentRegistrationResponseObject, error)
+
+	// (POST /api/v1/instances/{id}/agent/registration)
+	RegisterAgent(ctx context.Context, request RegisterAgentRequestObject) (RegisterAgentResponseObject, error)
+
+	// (POST /api/v1/instances/{id}/agent/token/revocation)
+	RevokeAgentToken(ctx context.Context, request RevokeAgentTokenRequestObject) (RevokeAgentTokenResponseObject, error)
+
+	// (POST /api/v1/instances/{id}/agent/token/rotation)
+	RotateAgentToken(ctx context.Context, request RotateAgentTokenRequestObject) (RotateAgentTokenResponseObject, error)
+
 	// (GET /api/v1/instances/{id}/collection/capabilities)
 	ListCapabilitySnapshot(ctx context.Context, request ListCapabilitySnapshotRequestObject) (ListCapabilitySnapshotResponseObject, error)
 
@@ -2293,6 +2622,136 @@ func (sh *strictHandler) UpdateInstance(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateInstanceResponseObject); ok {
 		if err := validResponse.VisitUpdateInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DisableAgent operation middleware
+func (sh *strictHandler) DisableAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DisableAgentRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisableAgent(ctx, request.(DisableAgentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisableAgent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisableAgentResponseObject); ok {
+		if err := validResponse.VisitDisableAgentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAgentRegistration operation middleware
+func (sh *strictHandler) GetAgentRegistration(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAgentRegistrationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAgentRegistration(ctx, request.(GetAgentRegistrationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAgentRegistration")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAgentRegistrationResponseObject); ok {
+		if err := validResponse.VisitGetAgentRegistrationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterAgent operation middleware
+func (sh *strictHandler) RegisterAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RegisterAgentRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterAgent(ctx, request.(RegisterAgentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterAgent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterAgentResponseObject); ok {
+		if err := validResponse.VisitRegisterAgentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeAgentToken operation middleware
+func (sh *strictHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RevokeAgentTokenRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeAgentToken(ctx, request.(RevokeAgentTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeAgentToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeAgentTokenResponseObject); ok {
+		if err := validResponse.VisitRevokeAgentTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RotateAgentToken operation middleware
+func (sh *strictHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RotateAgentTokenRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RotateAgentToken(ctx, request.(RotateAgentTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RotateAgentToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RotateAgentTokenResponseObject); ok {
+		if err := validResponse.VisitRotateAgentTokenResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

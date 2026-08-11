@@ -57,12 +57,16 @@ package-binaries-linux-amd64:
 	mkdir -p dist/bin/linux-amd64
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed_web -trimpath -o dist/bin/linux-amd64/dbs-monitor-server ./cmd/monitor-server
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent ./cmd/monitor-agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent-linux-amd64 ./cmd/monitor-agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent-linux-arm64 ./cmd/monitor-agent
 
 package-binaries-linux-arm64:
 	cd web && npm ci && npm run build
 	mkdir -p dist/bin/linux-arm64
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags embed_web -trimpath -o dist/bin/linux-arm64/dbs-monitor-server ./cmd/monitor-server
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent ./cmd/monitor-agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent-linux-amd64 ./cmd/monitor-agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent-linux-arm64 ./cmd/monitor-agent
 
 package-linux-amd64:
 	TARGET_ARCH=amd64 sh scripts/package-linux.sh

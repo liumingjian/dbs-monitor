@@ -1,7 +1,7 @@
-import { KeyOutlined, SaveOutlined } from '@ant-design/icons'
+import { ApiOutlined, CopyOutlined, KeyOutlined, PoweroffOutlined, SaveOutlined, StopOutlined, SyncOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
-import { Alert, Button, Descriptions, Divider, Form, Input, InputNumber, Modal, Space, Tooltip, Typography } from 'antd'
-import { useEffect, useState } from 'react'
+import { Alert, Button, Descriptions, Divider, Form, Input, InputNumber, Modal, Space, Tag, Tooltip, Typography } from 'antd'
+import { useEffect, useState, type ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import type { components } from '../../api/schema'
@@ -9,6 +9,9 @@ import { rootRoute } from '../root'
 
 type InstanceMetadataInput = components['schemas']['InstanceMetadataInput']
 type InstanceCredentialInput = components['schemas']['InstanceCredentialInput']
+type AgentRegistration = components['schemas']['AgentRegistration']
+type AgentRegistrationState = components['schemas']['AgentRegistrationState']
+type IssuedAgentToken = { instanceId: string; token: string; registration: AgentRegistration }
 
 const passwordMask = '************'
 
@@ -24,9 +27,15 @@ function InstanceSettingsPage() {
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
   const updateMetadataMutation = $api.useMutation('put', '/api/v1/instances/{id}')
   const updateCredentialMutation = $api.useMutation('put', '/api/v1/instances/{id}/credentials')
+  const agentRegistrationQuery = $api.useQuery('get', '/api/v1/instances/{id}/agent/registration', { params: { path: { id } } })
+  const registerAgentMutation = $api.useMutation('post', '/api/v1/instances/{id}/agent/registration')
+  const rotateAgentMutation = $api.useMutation('post', '/api/v1/instances/{id}/agent/token/rotation')
+  const revokeAgentMutation = $api.useMutation('post', '/api/v1/instances/{id}/agent/token/revocation')
+  const disableAgentMutation = $api.useMutation('post', '/api/v1/instances/{id}/agent/disable')
   const [metadataForm] = Form.useForm<InstanceMetadataInput>()
   const [credentialForm] = Form.useForm<InstanceCredentialInput>()
   const [credentialModalOpen, setCredentialModalOpen] = useState(false)
+  const [issuedAgentToken, setIssuedAgentToken] = useState<IssuedAgentToken | null>(null)
   const [actionError, setActionError] = useState('')
   const canEditMetadata = currentUserQuery.data?.role === 'ALERT_ADMIN' || currentUserQuery.data?.role === 'PLATFORM_ADMIN'
   const canEditCredential = currentUserQuery.data?.role === 'PLATFORM_ADMIN'
@@ -69,8 +78,60 @@ function InstanceSettingsPage() {
     setCredentialModalOpen(true)
   }
 
+  function refreshAgent() {
+    void agentRegistrationQuery.refetch()
+  }
+
+  function issueAgentToken() {
+    registerAgentMutation.mutate({ params: { path: { id } } }, {
+      onSuccess: (result) => {
+        if (!result.agent_token) {
+          setActionError('Agent 令牌签发响应无效')
+          return
+        }
+        setIssuedAgentToken({ instanceId: id, token: result.agent_token, registration: result.registration })
+        refreshAgent()
+      },
+      onError: (failure) => setActionError(apiErrorMessage(failure, '登记 Agent 失败')),
+    })
+  }
+
+  function rotateAgentToken() {
+    rotateAgentMutation.mutate({ params: { path: { id } } }, {
+      onSuccess: (result) => {
+        if (!result.agent_token) {
+          setActionError('Agent 令牌轮换响应无效')
+          return
+        }
+        setIssuedAgentToken({ instanceId: id, token: result.agent_token, registration: result.registration })
+        refreshAgent()
+      },
+      onError: (failure) => setActionError(apiErrorMessage(failure, '轮换 Agent 令牌失败')),
+    })
+  }
+
+  function revokeAgentToken() {
+    revokeAgentMutation.mutate({ params: { path: { id } } }, {
+      onSuccess: refreshAgent,
+      onError: (failure) => setActionError(apiErrorMessage(failure, '吊销 Agent 令牌失败')),
+    })
+  }
+
+  function disableAgent() {
+    disableAgentMutation.mutate({ params: { path: { id } } }, {
+      onSuccess: refreshAgent,
+      onError: (failure) => setActionError(apiErrorMessage(failure, '停用 Agent 失败')),
+    })
+  }
+
+  function closeIssuedAgentToken() {
+    setIssuedAgentToken(null)
+    registerAgentMutation.reset()
+    rotateAgentMutation.reset()
+  }
+
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <Link to="/instances">返回实例列表</Link>
       <Typography.Title level={2} style={{ margin: 0 }}>{instanceQuery.data?.name ?? '接入设置'}</Typography.Title>
       {actionError && <Alert type="error" title={actionError} closable onClose={() => setActionError('')} />}
@@ -120,7 +181,17 @@ function InstanceSettingsPage() {
       <Divider />
       <section aria-labelledby="agent-heading">
         <Typography.Title id="agent-heading" level={4}>Agent</Typography.Title>
-        <Typography.Text type="secondary">暂不可用</Typography.Text>
+        {agentRegistrationQuery.data && (
+          <AgentRegistrationPanel
+            registration={agentRegistrationQuery.data}
+            canManage={canEditCredential}
+            pending={registerAgentMutation.isPending || rotateAgentMutation.isPending || revokeAgentMutation.isPending || disableAgentMutation.isPending}
+            onRegister={issueAgentToken}
+            onRotate={rotateAgentToken}
+            onRevoke={revokeAgentToken}
+            onDisable={disableAgent}
+          />
+        )}
       </section>
 
       <Divider />
@@ -140,8 +211,142 @@ function InstanceSettingsPage() {
           <Button type="primary" htmlType="submit" loading={updateCredentialMutation.isPending}>连接测试并更新</Button>
         </Form>
       </Modal>
+      <AgentTokenModal issued={issuedAgentToken} onClose={closeIssuedAgentToken} />
     </Space>
   )
+}
+
+type AgentRegistrationPanelProps = {
+  registration: AgentRegistration
+  canManage: boolean
+  pending: boolean
+  onRegister: () => void
+  onRotate: () => void
+  onRevoke: () => void
+  onDisable: () => void
+}
+
+export function AgentRegistrationPanel({ registration, canManage, pending, onRegister, onRotate, onRevoke, onDisable }: AgentRegistrationPanelProps) {
+  const disabledReason = canManage ? undefined : '需要平台管理员角色'
+  const action = (button: ReactNode) => (
+    <Tooltip title={disabledReason}><span>{button}</span></Tooltip>
+  )
+  return (
+    <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+      <Descriptions size="small" column={1} items={[
+        { key: 'state', label: '登记状态', children: <Tag color={agentStateColor(registration.state)}>{agentStateLabel(registration.state)}</Tag> },
+        { key: 'expected', label: '期待在线', children: registration.agent_expected ? '是' : '否' },
+        { key: 'first', label: '首次登记', children: formatOptionalTime(registration.first_registered_at) },
+        { key: 'issued', label: '最近签发', children: formatOptionalTime(registration.issued_at) },
+        { key: 'revoked', label: '最近吊销', children: formatOptionalTime(registration.revoked_at) },
+      ]} />
+      <Space wrap>
+        {registration.state === 'NEVER_REGISTERED' && action(
+          <Button icon={<ApiOutlined />} disabled={!canManage} loading={pending} onClick={onRegister}>登记</Button>,
+        )}
+        {registration.state === 'EXPECTED_ONLINE' && <>
+          {action(<Button icon={<SyncOutlined />} disabled={!canManage} loading={pending} onClick={onRotate}>轮换</Button>)}
+          {action(<Button danger icon={<StopOutlined />} disabled={!canManage} loading={pending} onClick={onRevoke}>吊销</Button>)}
+          {action(<Button icon={<PoweroffOutlined />} disabled={!canManage} loading={pending} onClick={onDisable}>停用</Button>)}
+        </>}
+        {registration.state === 'REVOKED' && action(
+          <Button icon={<PoweroffOutlined />} disabled={!canManage} loading={pending} onClick={onDisable}>停用</Button>,
+        )}
+        {registration.state === 'DISABLED' && action(
+          <Button icon={<ApiOutlined />} disabled={!canManage} loading={pending} onClick={onRegister}>重新启用</Button>,
+        )}
+      </Space>
+    </Space>
+  )
+}
+
+export function AgentTokenModal({ issued, onClose }: { issued: IssuedAgentToken | null; onClose: () => void }) {
+  const command = issued ? buildAgentInstallCommand(window.location.origin, issued.instanceId, issued.token, issued.registration) : ''
+  function copy(value: string) {
+    void navigator.clipboard.writeText(value)
+  }
+  return (
+    <Modal
+      title="Agent 令牌与安装"
+      open={issued !== null}
+      onCancel={onClose}
+      onOk={onClose}
+      okText="关闭"
+      cancelButtonProps={{ style: { display: 'none' } }}
+      destroyOnHidden
+    >
+      <Alert type="warning" showIcon title="令牌仅显示一次，关闭后不再显示" />
+      <Typography.Text strong>令牌</Typography.Text>
+      <Space.Compact style={{ width: '100%', marginTop: 8, marginBottom: 16 }}>
+        <Input aria-label="Agent 令牌" value={issued?.token ?? ''} readOnly />
+        <Tooltip title="复制令牌">
+          <Button aria-label="复制 Agent 令牌" icon={<CopyOutlined />} onClick={() => copy(issued?.token ?? '')} />
+        </Tooltip>
+      </Space.Compact>
+      <Typography.Text strong>安装命令</Typography.Text>
+      <Space.Compact style={{ width: '100%', marginTop: 8, marginBottom: 16 }}>
+        <Input.TextArea aria-label="Agent 安装命令" value={command} readOnly rows={6} />
+        <Tooltip title="复制安装命令">
+          <Button aria-label="复制 Agent 安装命令" icon={<CopyOutlined />} onClick={() => copy(command)} />
+        </Tooltip>
+      </Space.Compact>
+      <Descriptions size="small" column={1} items={issued ? [
+        { key: 'path', label: '令牌文件', children: issued.registration.installation.authentication_path },
+        { key: 'mode', label: '文件权限', children: issued.registration.installation.file_mode },
+        { key: 'restart', label: '重启命令', children: issued.registration.installation.restart_command },
+      ] : []} />
+    </Modal>
+  )
+}
+
+export function buildAgentInstallCommand(platformOrigin: string, instanceId: string, token: string, registration: AgentRegistration): string {
+  const origin = new URL(platformOrigin)
+  const connectAddress = origin.host
+  const serverName = origin.hostname
+  const fingerprint = registration.installation.ca_fingerprint_sha256
+  const installerURL = `${origin.origin}${registration.installation.installer_path}`
+  return [
+    'work=$(mktemp -d)',
+    'trap \'rm -rf "$work"\' EXIT INT TERM',
+    `openssl s_client -showcerts -connect ${shellQuote(connectAddress)} -servername ${shellQuote(serverName)} </dev/null 2>/dev/null | awk -v directory="$work" '/BEGIN CERTIFICATE/{n++; file=sprintf("%s/cert-%d.pem",directory,n)} file{print > file} /END CERTIFICATE/{file=""}'`,
+    'ca=$(ls "$work"/cert-*.pem | sort -V | tail -n 1)',
+    'actual=$(openssl x509 -in "$ca" -outform DER | sha256sum | cut -d\' \' -f1)',
+    `test "$actual" = ${shellQuote(fingerprint)}`,
+    `curl --fail --silent --show-error --cacert "$ca" ${shellQuote(installerURL)} -o "$work/install.sh"`,
+    `printf '%s\\n' ${shellQuote(token)} | sudo sh "$work/install.sh" ${shellQuote(origin.origin)} ${shellQuote(instanceId)} ${shellQuote(fingerprint)} "$ca"`,
+  ].join('\n')
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`
+}
+
+function agentStateLabel(state: AgentRegistrationState): string {
+  switch (state) {
+    case 'NEVER_REGISTERED': return '从未登记'
+    case 'EXPECTED_ONLINE': return '应在线'
+    case 'REVOKED': return '已吊销'
+    case 'DISABLED': return '已停用'
+    default: return assertNever(state)
+  }
+}
+
+function agentStateColor(state: AgentRegistrationState): string | undefined {
+  switch (state) {
+    case 'NEVER_REGISTERED': return undefined
+    case 'EXPECTED_ONLINE': return 'green'
+    case 'REVOKED': return 'red'
+    case 'DISABLED': return 'default'
+    default: return assertNever(state)
+  }
+}
+
+function formatOptionalTime(value?: string): string {
+  return value ? new Date(value).toLocaleString() : '-'
+}
+
+function assertNever(value: never): never {
+  throw new Error(`unhandled value: ${value}`)
 }
 
 export function CredentialSummary({ username }: { username: string }) {

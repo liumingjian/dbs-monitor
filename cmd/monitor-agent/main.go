@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -20,7 +21,12 @@ var version = "1.0.0"
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	cfg, err := agent.ParseConfig(os.Getenv("SERVER_URL"), os.Getenv("INSTANCE_ID"), os.Getenv("AGENT_TOKEN"), os.Getenv("CA_FILE"))
+	agentToken, err := configuredAgentToken()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	cfg, err := agent.ParseConfig(os.Getenv("SERVER_URL"), os.Getenv("INSTANCE_ID"), agentToken, os.Getenv("CA_FILE"))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -47,6 +53,17 @@ func main() {
 		case <-ticker.C:
 		}
 	}
+}
+
+func configuredAgentToken() (string, error) {
+	if path := os.Getenv("AGENT_TOKEN_FILE"); path != "" {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read Agent token file: %w", err)
+		}
+		return strings.TrimSpace(string(contents)), nil
+	}
+	return os.Getenv("AGENT_TOKEN"), nil
 }
 
 func newClient(cfg agent.Config) (*api.ClientWithResponses, error) {

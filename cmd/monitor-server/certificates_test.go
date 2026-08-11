@@ -41,13 +41,21 @@ func TestEnsureCertificatesCreatesVerifiableSANAndPrivateKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read certificate: %v", err)
 	}
-	block, _ := pem.Decode(certificatePEM)
+	block, chain := pem.Decode(certificatePEM)
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		t.Fatalf("parse certificate: %v", err)
 	}
 	if err := certificate.VerifyHostname("127.0.0.1"); err != nil {
 		t.Fatalf("verify certificate SAN: %v", err)
+	}
+	caBlock, _ := pem.Decode(chain)
+	if caBlock == nil {
+		t.Fatal("server certificate does not include the CA chain")
+	}
+	ca, err := x509.ParseCertificate(caBlock.Bytes)
+	if err != nil || !ca.IsCA {
+		t.Fatalf("server certificate chain CA = %+v, error %v", ca, err)
 	}
 	info, err := os.Stat(keyPath)
 	if err != nil {

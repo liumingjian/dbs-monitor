@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,11 +138,64 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("create response missing instance: %+v", createBody)
 	}
 	instanceID := createBody.Instance.Id.String()
-	agentToken := "integration-agent-token"
-	agentTokenHash := sha256.Sum256([]byte(agentToken))
-	if _, err := pool.Exec(ctx, "UPDATE instance SET agent_token_hash = $2 WHERE id = $1", instanceID, agentTokenHash[:]); err != nil {
-		t.Fatalf("seed explicit Agent token: %v", err)
+	registrationURL := server.URL + "/api/v1/instances/" + instanceID + "/agent/registration"
+	initialRegistration := getResponse(t, client, registrationURL)
+	var initialRegistrationBody api.AgentRegistration
+	if err := json.NewDecoder(initialRegistration.Body).Decode(&initialRegistrationBody); err != nil {
+		t.Fatalf("decode initial Agent registration: %v", err)
 	}
+	initialRegistration.Body.Close()
+	if initialRegistrationBody.State != api.NEVERREGISTERED || initialRegistrationBody.AgentExpected {
+		t.Fatalf("initial Agent registration = %+v, want never registered and not expected", initialRegistrationBody)
+	}
+	registered := requestJSON(t, client, http.MethodPost, registrationURL, nil, "")
+	if registered.StatusCode != http.StatusOK {
+		t.Fatalf("register Agent status = %d, want 200", registered.StatusCode)
+	}
+	var registeredBody api.AgentTokenIssued
+	if err := json.NewDecoder(registered.Body).Decode(&registeredBody); err != nil {
+		t.Fatalf("decode Agent registration response: %v", err)
+	}
+	registered.Body.Close()
+	if registeredBody.AgentToken == nil || registeredBody.Registration.State != api.EXPECTEDONLINE {
+		t.Fatalf("registered Agent response = %+v", registeredBody)
+	}
+	agentToken := *registeredBody.AgentToken
+	decodedToken, err := base64.RawURLEncoding.DecodeString(agentToken)
+	if err != nil || len(decodedToken) != 32 {
+		t.Fatalf("issued Agent token decodes to %d bytes with error %v, want 32 bytes", len(decodedToken), err)
+	}
+	var storedAgentTokenHash []byte
+	if err := pool.QueryRow(ctx, "SELECT agent_token_hash FROM instance WHERE id = $1", instanceID).Scan(&storedAgentTokenHash); err != nil {
+		t.Fatalf("read stored Agent token hash: %v", err)
+	}
+	wantAgentTokenHash := sha256.Sum256([]byte(agentToken))
+	if !bytes.Equal(storedAgentTokenHash, wantAgentTokenHash[:]) || bytes.Contains(storedAgentTokenHash, []byte(agentToken)) {
+		t.Fatal("Agent token was not stored exclusively as its SHA-256 hash")
+	}
+	registrationRead := getResponse(t, client, registrationURL)
+	var registrationReadBody map[string]any
+	if err := json.NewDecoder(registrationRead.Body).Decode(&registrationReadBody); err != nil {
+		t.Fatalf("decode persisted Agent registration: %v", err)
+	}
+	registrationRead.Body.Close()
+	if _, exposed := registrationReadBody["agent_token"]; exposed {
+		t.Fatal("Agent registration read exposed the one-time token")
+	}
+	oldAgentToken := agentToken
+	rotatedAgent := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances/"+instanceID+"/agent/token/rotation", nil, "")
+	if rotatedAgent.StatusCode != http.StatusOK {
+		t.Fatalf("rotate Agent token status = %d, want 200", rotatedAgent.StatusCode)
+	}
+	var rotatedAgentBody api.AgentTokenIssued
+	if err := json.NewDecoder(rotatedAgent.Body).Decode(&rotatedAgentBody); err != nil {
+		t.Fatalf("decode rotated Agent token: %v", err)
+	}
+	rotatedAgent.Body.Close()
+	if rotatedAgentBody.AgentToken == nil || *rotatedAgentBody.AgentToken == oldAgentToken {
+		t.Fatal("Agent token rotation did not issue a distinct token")
+	}
+	agentToken = *rotatedAgentBody.AgentToken
 	var agentMetricsEnabled bool
 	if err := pool.QueryRow(ctx, "SELECT agent_metrics_enabled FROM instance_collection_config WHERE instance_id = $1", instanceID).Scan(&agentMetricsEnabled); err != nil {
 		t.Fatalf("read default agent collection setting: %v", err)
@@ -447,6 +501,11 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("wrong token status = %d, want 401", wrong.StatusCode)
 	}
 	wrong.Body.Close()
+	oldToken := report(time.Now(), "2.4.0", oldAgentToken, nil)
+	if oldToken.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("rotated Agent token status = %d, want old token rejected with 401", oldToken.StatusCode)
+	}
+	oldToken.Body.Close()
 	skewed := report(time.Now().Add(-31*time.Second), "2.4.0", agentToken, nil)
 	if skewed.StatusCode != http.StatusBadRequest {
 		t.Fatalf("skewed timestamp status = %d, want 400", skewed.StatusCode)
@@ -581,6 +640,61 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	if instanceBody.AgentVersion == nil || *instanceBody.AgentVersion != "2.4.0" {
 		t.Fatalf("instance agent_version = %v, want 2.4.0", instanceBody.AgentVersion)
+	}
+
+	revoked := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances/"+instanceID+"/agent/token/revocation", nil, "")
+	var revokedBody api.AgentRegistration
+	if err := json.NewDecoder(revoked.Body).Decode(&revokedBody); err != nil {
+		t.Fatalf("decode revoked Agent registration: %v", err)
+	}
+	revoked.Body.Close()
+	if revoked.StatusCode != http.StatusOK || revokedBody.State != api.REVOKED || !revokedBody.AgentExpected || revokedBody.RevokedAt == nil {
+		t.Fatalf("revoked Agent registration = status %d body %+v", revoked.StatusCode, revokedBody)
+	}
+	revokedReport := report(time.Now(), "2.4.0", agentToken, nil)
+	if revokedReport.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked Agent token report status = %d, want 401", revokedReport.StatusCode)
+	}
+	revokedReport.Body.Close()
+
+	var historicalSampleCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1`, instanceID).Scan(&historicalSampleCount); err != nil {
+		t.Fatalf("count historical Agent samples: %v", err)
+	}
+	disabled := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances/"+instanceID+"/agent/disable", nil, "")
+	var disabledBody api.AgentRegistration
+	if err := json.NewDecoder(disabled.Body).Decode(&disabledBody); err != nil {
+		t.Fatalf("decode disabled Agent registration: %v", err)
+	}
+	disabled.Body.Close()
+	if disabled.StatusCode != http.StatusOK || disabledBody.State != api.DISABLED || disabledBody.AgentExpected {
+		t.Fatalf("disabled Agent registration = status %d body %+v", disabled.StatusCode, disabledBody)
+	}
+	var samplesAfterDisable int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1`, instanceID).Scan(&samplesAfterDisable); err != nil {
+		t.Fatalf("count Agent samples after disable: %v", err)
+	}
+	if samplesAfterDisable != historicalSampleCount {
+		t.Fatalf("Agent samples after disable = %d, want historical %d preserved", samplesAfterDisable, historicalSampleCount)
+	}
+
+	reenabled := requestJSON(t, client, http.MethodPost, registrationURL, nil, "")
+	var reenabledBody api.AgentTokenIssued
+	if err := json.NewDecoder(reenabled.Body).Decode(&reenabledBody); err != nil {
+		t.Fatalf("decode re-enabled Agent registration: %v", err)
+	}
+	reenabled.Body.Close()
+	if reenabled.StatusCode != http.StatusOK || reenabledBody.AgentToken == nil ||
+		reenabledBody.Registration.State != api.EXPECTEDONLINE || *reenabledBody.AgentToken == agentToken {
+		t.Fatalf("re-enabled Agent response = status %d body %+v", reenabled.StatusCode, reenabledBody)
+	}
+	if registeredBody.Registration.FirstRegisteredAt == nil || reenabledBody.Registration.FirstRegisteredAt == nil ||
+		!registeredBody.Registration.FirstRegisteredAt.Equal(*reenabledBody.Registration.FirstRegisteredAt) {
+		t.Fatal("re-enabling Agent did not preserve its first registration time")
 	}
 
 	if _, err := pool.Exec(ctx, "UPDATE instance SET password_key_version = 999 WHERE id = $1", instanceID); err != nil {

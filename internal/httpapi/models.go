@@ -105,18 +105,22 @@ type CollectionTaskConfig struct {
 }
 
 type Instance struct {
-	ID                 pgtype.UUID
-	Name               string
-	Host               string
-	Port               int32
-	DatabaseName       string
-	Username           string
-	AgentTokenHash     []byte
-	CreatedAt          pgtype.Timestamptz
-	AgentVersion       pgtype.Text
-	PasswordCiphertext []byte
-	PasswordKeyVersion int32
-	CredentialVersion  int64
+	ID                     pgtype.UUID
+	Name                   string
+	Host                   string
+	Port                   int32
+	DatabaseName           string
+	Username               string
+	AgentTokenHash         []byte
+	CreatedAt              pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+	PasswordCiphertext     []byte
+	PasswordKeyVersion     int32
+	CredentialVersion      int64
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
 }
 
 type InstanceCapabilitySnapshot struct {

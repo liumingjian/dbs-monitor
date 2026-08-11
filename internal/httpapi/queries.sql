@@ -71,7 +71,12 @@ WHERE id = $1;
 DELETE FROM user_session WHERE user_id = $1;
 
 -- name: GetAgentTokenHash :one
-SELECT agent_token_hash FROM instance WHERE id = $1;
+SELECT agent_token_hash
+FROM instance
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL;
 
 -- name: GetInstanceAlertStatus :one
 SELECT status
