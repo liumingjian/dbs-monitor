@@ -190,7 +190,12 @@ function InstancesPage() {
           存在配置缺失
         </Checkbox>
         <Button icon={<ClearOutlined />} onClick={() => setFilters({})}>清除筛选</Button>
-        {instancesQuery.dataUpdatedAt > 0 && <Freshness dataUpdatedAt={instancesQuery.dataUpdatedAt} collectionInterval={pollingIntervals.instances} />}
+        {instancesQuery.dataUpdatedAt > 0 && (
+          <Freshness
+            dataUpdatedAt={instancesQuery.dataUpdatedAt}
+            collectionInterval={pollingIntervals.instances}
+          />
+        )}
       </Space>
       <Table<Instance>
         loading={instancesQuery.isPending}
