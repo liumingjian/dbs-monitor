@@ -33,9 +33,43 @@ InstanceCreated:
   properties:
     instance:
       $ref: '#/Instance'
+HealthAttribution:
+  type: object
+  required: [rule_name]
+  properties:
+    rule_name: { type: string }
+    current_value: { type: number, format: double }
+HealthAlertCounts:
+  type: object
+  required: [critical, warning, info]
+  properties:
+    critical: { type: integer, minimum: 0 }
+    warning: { type: integer, minimum: 0 }
+    info: { type: integer, minimum: 0 }
+HealthFlags:
+  type: object
+  required: [no_data, in_maintenance, recently_recovered, ignored, configuration_missing]
+  properties:
+    no_data: { type: boolean }
+    in_maintenance: { type: boolean }
+    recently_recovered: { type: boolean }
+    ignored: { type: integer, minimum: 0 }
+    configuration_missing: { type: integer, minimum: 0 }
+InstanceHealth:
+  type: object
+  required: [status, counts, flags]
+  properties:
+    status:
+      $ref: ../enums.yaml#/HealthStatus
+    attribution:
+      $ref: '#/HealthAttribution'
+    counts:
+      $ref: '#/HealthAlertCounts'
+    flags:
+      $ref: '#/HealthFlags'
 Instance:
   type: object
-  required: [id, name, host, port, database, username, alert_status, collection_pause, agent_metrics_enabled]
+  required: [id, name, host, port, database, username, alert_status, health, agent_status, collection_pause, agent_metrics_enabled]
   properties:
     id: { type: string, format: uuid }
     name: { type: string }
@@ -51,5 +85,15 @@ Instance:
       description: Current collection setting for Agent-provided metrics.
     alert_status:
       $ref: ../enums.yaml#/AlertStatus
+    health:
+      $ref: '#/InstanceHealth'
+    agent_status:
+      $ref: ../enums.yaml#/InstanceAgentStatus
+    last_collected_at:
+      type: string
+      format: date-time
+    data_freshness_seconds:
+      type: integer
+      minimum: 0
     collection_pause:
       $ref: collection.yaml#/CollectionPauseStatus

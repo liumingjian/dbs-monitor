@@ -98,6 +98,10 @@ components:
       $ref: components/enums.yaml#/Unavailability
     AlertStatus:
       $ref: components/enums.yaml#/AlertStatus
+    HealthStatus:
+      $ref: components/enums.yaml#/HealthStatus
+    InstanceAgentStatus:
+      $ref: components/enums.yaml#/InstanceAgentStatus
     CapabilityStatus:
       $ref: components/enums.yaml#/CapabilityStatus
     AlertAggregation:
@@ -152,6 +156,14 @@ components:
       $ref: components/schemas/instances.yaml#/InstanceCredentialUpdated
     Instance:
       $ref: components/schemas/instances.yaml#/Instance
+    InstanceHealth:
+      $ref: components/schemas/instances.yaml#/InstanceHealth
+    HealthAttribution:
+      $ref: components/schemas/instances.yaml#/HealthAttribution
+    HealthAlertCounts:
+      $ref: components/schemas/instances.yaml#/HealthAlertCounts
+    HealthFlags:
+      $ref: components/schemas/instances.yaml#/HealthFlags
     InstanceCreated:
       $ref: components/schemas/instances.yaml#/InstanceCreated
     CollectionTaskState:

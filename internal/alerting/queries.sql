@@ -347,3 +347,12 @@ ORDER BY CASE status
     ELSE 1
 END DESC
 LIMIT 1;
+
+-- name: ListInstanceHealthAlerts :many
+SELECT alert.instance_id, alert.status, alert.severity, alert.current_value,
+       COALESCE(alert.first_triggered_at, alert.updated_at) AS first_triggered_at,
+       alert.recovered_at, alert.disposition, rule.name AS rule_name
+FROM alert_instance alert
+JOIN alert_rule rule ON rule.id = alert.rule_id
+WHERE alert.status <> 'RECOVERED' OR alert.recovered_at >= $1
+ORDER BY alert.instance_id, first_triggered_at, alert.id;

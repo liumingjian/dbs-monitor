@@ -1223,6 +1223,34 @@ components:
         - FIRING
         - NO_DATA
         - RECOVERED
+    HealthStatus:
+      type: string
+      enum:
+        - CRITICAL
+        - WARNING
+        - UNKNOWN
+        - HEALTHY
+        - PAUSED
+      x-enum-varnames:
+        - HealthCritical
+        - HealthWarning
+        - HealthUnknown
+        - HealthHealthy
+        - HealthPaused
+    InstanceAgentStatus:
+      type: string
+      enum:
+        - offline
+        - online
+        - not_installed
+        - permission_denied
+        - error
+      x-enum-varnames:
+        - InstanceAgentOffline
+        - InstanceAgentOnline
+        - InstanceAgentNotInstalled
+        - InstanceAgentPermissionDenied
+        - InstanceAgentError
     CapabilityStatus:
       type: string
       enum:
@@ -1807,6 +1835,8 @@ components:
         - database
         - username
         - alert_status
+        - health
+        - agent_status
         - collection_pause
         - agent_metrics_enabled
       properties:
@@ -1831,8 +1861,80 @@ components:
           description: Current collection setting for Agent-provided metrics.
         alert_status:
           $ref: '#/components/schemas/AlertStatus'
+        health:
+          $ref: '#/components/schemas/InstanceHealth'
+        agent_status:
+          $ref: '#/components/schemas/InstanceAgentStatus'
+        last_collected_at:
+          type: string
+          format: date-time
+        data_freshness_seconds:
+          type: integer
+          minimum: 0
         collection_pause:
           $ref: '#/components/schemas/CollectionPauseStatus'
+    InstanceHealth:
+      type: object
+      required:
+        - status
+        - counts
+        - flags
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthStatus'
+        attribution:
+          $ref: '#/components/schemas/HealthAttribution'
+        counts:
+          $ref: '#/components/schemas/HealthAlertCounts'
+        flags:
+          $ref: '#/components/schemas/HealthFlags'
+    HealthAttribution:
+      type: object
+      required:
+        - rule_name
+      properties:
+        rule_name:
+          type: string
+        current_value:
+          type: number
+          format: double
+    HealthAlertCounts:
+      type: object
+      required:
+        - critical
+        - warning
+        - info
+      properties:
+        critical:
+          type: integer
+          minimum: 0
+        warning:
+          type: integer
+          minimum: 0
+        info:
+          type: integer
+          minimum: 0
+    HealthFlags:
+      type: object
+      required:
+        - no_data
+        - in_maintenance
+        - recently_recovered
+        - ignored
+        - configuration_missing
+      properties:
+        no_data:
+          type: boolean
+        in_maintenance:
+          type: boolean
+        recently_recovered:
+          type: boolean
+        ignored:
+          type: integer
+          minimum: 0
+        configuration_missing:
+          type: integer
+          minimum: 0
     InstanceCreated:
       type: object
       required:
