@@ -33,9 +33,10 @@ import (
 )
 
 const (
-	defaultDatabaseURL         = "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable"
-	defaultCredentialDirectory = "/opt/dbs-monitor/etc/credentials"
-	rotateMasterKeyCommand     = "rotate-master-key"
+	defaultDatabaseURL           = "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable"
+	defaultCredentialDirectory   = "/opt/dbs-monitor/etc/credentials"
+	defaultPostgresDataDirectory = "/opt/dbs-monitor/var/lib/postgresql"
+	rotateMasterKeyCommand       = "rotate-master-key"
 )
 
 var version = "1.0.0"
@@ -123,13 +124,18 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("collection scheduler config: %w", err)
 	}
 	collector.SetPlatformHealth(health)
+	diskThresholds, err := diskThresholdsFromEnvironment()
+	if err != nil {
+		return err
+	}
+	if err := collector.SetDiskMonitor(env("PGDATA", defaultPostgresDataDirectory), diskThresholds); err != nil {
+		return fmt.Errorf("disk monitor config: %w", err)
+	}
 	refreshPlatformDatabaseHealth(ctx, platform, health, time.Now().UTC())
 	health.Update(time.Now().UTC(), platformhealth.SourceSnapshot{
 		Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY",
 	})
-	health.Update(time.Now().UTC(), platformhealth.SourceSnapshot{
-		Source: platformhealth.SourceDisk, Status: platformhealth.StatusOK, Code: "DISK_CLASSIFICATION_PENDING",
-	})
+	health.Update(time.Now().UTC(), platformhealth.DiskUnavailableSource(platformhealth.DiskNormal))
 	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
 	if err != nil {
 		return err
@@ -281,4 +287,30 @@ func collectionConfigFromEnvironment() (collect.Config, error) {
 		*setting.target = parsed
 	}
 	return config, nil
+}
+
+func diskThresholdsFromEnvironment() (platformhealth.DiskThresholds, error) {
+	thresholds := platformhealth.DefaultDiskThresholds()
+	for _, setting := range []struct {
+		name   string
+		target *float64
+	}{
+		{name: "DISK_WARNING_PERCENT", target: &thresholds.Warning},
+		{name: "DISK_CRITICAL_PERCENT", target: &thresholds.Critical},
+		{name: "DISK_EMERGENCY_PERCENT", target: &thresholds.Emergency},
+	} {
+		value := os.Getenv(setting.name)
+		if value == "" {
+			continue
+		}
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return platformhealth.DiskThresholds{}, fmt.Errorf("%s must be a number", setting.name)
+		}
+		*setting.target = parsed
+	}
+	if err := thresholds.Validate(); err != nil {
+		return platformhealth.DiskThresholds{}, fmt.Errorf("disk thresholds: %w", err)
+	}
+	return thresholds, nil
 }

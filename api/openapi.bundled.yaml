@@ -2001,6 +2001,32 @@ components:
         prebuild_days_remaining:
           type: integer
           minimum: 0
+        disk_level:
+          type: string
+        disk_usage_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_warning_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_critical_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_emergency_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_hysteresis_points:
+          type: number
+          format: double
+          minimum: 0
     PlatformHealthSnapshot:
       type: object
       required:

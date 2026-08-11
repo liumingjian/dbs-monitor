@@ -32,6 +32,67 @@ func TestAggregateStatusPrecedence(t *testing.T) {
 	}
 }
 
+func TestClassifyDiskLevel(t *testing.T) {
+	thresholds := DefaultDiskThresholds()
+	tests := []struct {
+		name     string
+		usage    float64
+		previous DiskLevel
+		want     DiskLevel
+	}{
+		{name: "below warning", usage: 79.9, previous: DiskNormal, want: DiskNormal},
+		{name: "warning threshold", usage: 80, previous: DiskNormal, want: DiskWarning},
+		{name: "critical threshold", usage: 90, previous: DiskWarning, want: DiskCritical},
+		{name: "emergency threshold", usage: 95, previous: DiskCritical, want: DiskEmergency},
+		{name: "direct emergency jump", usage: 96, previous: DiskNormal, want: DiskEmergency},
+		{name: "emergency held inside hysteresis", usage: 93, previous: DiskEmergency, want: DiskEmergency},
+		{name: "emergency clears below hysteresis", usage: 92.9, previous: DiskEmergency, want: DiskCritical},
+		{name: "critical held inside hysteresis", usage: 88, previous: DiskCritical, want: DiskCritical},
+		{name: "critical clears below hysteresis", usage: 87.9, previous: DiskCritical, want: DiskWarning},
+		{name: "warning held inside hysteresis", usage: 78, previous: DiskWarning, want: DiskWarning},
+		{name: "warning clears below hysteresis", usage: 77.9, previous: DiskWarning, want: DiskNormal},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ClassifyDiskLevel(test.usage, test.previous, thresholds); got != test.want {
+				t.Fatalf("ClassifyDiskLevel(%v, %s) = %s, want %s", test.usage, test.previous, got, test.want)
+			}
+		})
+	}
+}
+
+func TestDiskSourceTransitionsAreVisible(t *testing.T) {
+	var output bytes.Buffer
+	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	store := NewStore("3.0.0", now.Add(-time.Hour), log.New(&output, "", 0))
+	thresholds := DefaultDiskThresholds()
+
+	store.Update(now, DiskSource(80, store.DiskLevel(), thresholds))
+	store.Update(now.Add(time.Minute), DiskSource(90, store.DiskLevel(), thresholds))
+	store.Update(now.Add(2*time.Minute), DiskSource(95, store.DiskLevel(), thresholds))
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("disk journal lines = %d, want one per level transition: %q", len(lines), output.String())
+	}
+	for index, code := range []string{"DISK_WARNING_WATERMARK", "DISK_CRITICAL_WATERMARK", "DISK_EMERGENCY_WATERMARK"} {
+		if !strings.Contains(lines[index], `"source":"DISK"`) || !strings.Contains(lines[index], `"code":"`+code+`"`) {
+			t.Errorf("disk journal line %d = %q, want %s", index, lines[index], code)
+		}
+	}
+
+	disk := store.Source(SourceDisk)
+	if disk.Status != StatusFailed || disk.DiskLevel == nil || *disk.DiskLevel != DiskEmergency ||
+		disk.DiskUsagePercent == nil || *disk.DiskUsagePercent != 95 || !store.RejectSampleWrites() {
+		t.Fatalf("emergency disk source = %+v reject=%t", disk, store.RejectSampleWrites())
+	}
+	store.Update(now.Add(3*time.Minute), DiskUnavailableSource(store.DiskLevel()))
+	if source := store.Source(SourceDisk); source.Status != StatusUnknown || !store.RejectSampleWrites() {
+		t.Fatalf("unavailable disk sample source = %+v reject=%t, want UNKNOWN with emergency rejection latched", source, store.RejectSampleWrites())
+	}
+}
+
 func TestSourceClassifications(t *testing.T) {
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
 	tests := []struct {

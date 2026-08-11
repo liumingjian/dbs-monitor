@@ -103,6 +103,9 @@ LISTEN_ADDR=:8443
 PUBLIC_HOST=$public_host
 CERT_DIR=$install_root/certs
 CREDENTIALS_DIR=$install_root/etc/credentials
+DISK_WARNING_PERCENT=80
+DISK_CRITICAL_PERCENT=90
+DISK_EMERGENCY_PERCENT=95
 EOF
 chmod 0600 "$install_root/etc/dbs-monitor.env"
 chown dbsmon:dbsmon "$install_root/etc/dbs-monitor.env" "$data_dir/postgresql.conf" "$data_dir/pg_hba.conf"

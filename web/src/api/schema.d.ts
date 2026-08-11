@@ -856,6 +856,17 @@ export interface components {
             backoff?: number;
             consecutive_failures?: number;
             prebuild_days_remaining?: number;
+            disk_level?: string;
+            /** Format: double */
+            disk_usage_percent?: number;
+            /** Format: double */
+            disk_warning_percent?: number;
+            /** Format: double */
+            disk_critical_percent?: number;
+            /** Format: double */
+            disk_emergency_percent?: number;
+            /** Format: double */
+            disk_hysteresis_points?: number;
         };
         PlatformHealthSnapshot: {
             status: components["schemas"]["PlatformHealthStatus"];

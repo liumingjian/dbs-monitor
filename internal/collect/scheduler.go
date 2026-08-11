@@ -8,6 +8,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/disk"
+
 	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
@@ -227,24 +229,24 @@ type durationSummary struct {
 }
 
 type centralScheduler struct {
-	service    *Service
-	dispatcher *dispatcher
-	pending    *pendingRuns
-	schedule   map[taskKey]scheduleEntry
-	completed  chan executionOutcome
-	counts     schedulerCounts
-	lastLog    time.Time
+	service       *Service
+	dispatcher    *dispatcher
+	pending       *pendingRuns
+	schedule      map[taskKey]scheduleEntry
+	completed     chan executionOutcome
+	counts        schedulerCounts
+	lastSummaryAt time.Time
 }
 
 func newCentralScheduler(service *Service) *centralScheduler {
 	return &centralScheduler{
-		service:    service,
-		dispatcher: newDispatcher(service.config.ProbeConcurrency, service.config.QueryConcurrency),
-		pending:    newPendingRuns(),
-		schedule:   map[taskKey]scheduleEntry{},
-		completed:  make(chan executionOutcome, service.config.ProbeConcurrency+service.config.QueryConcurrency),
-		counts:     newSchedulerCounts(),
-		lastLog:    service.clock.Now().UTC(),
+		service:       service,
+		dispatcher:    newDispatcher(service.config.ProbeConcurrency, service.config.QueryConcurrency),
+		pending:       newPendingRuns(),
+		schedule:      map[taskKey]scheduleEntry{},
+		completed:     make(chan executionOutcome, service.config.ProbeConcurrency+service.config.QueryConcurrency),
+		counts:        newSchedulerCounts(),
+		lastSummaryAt: service.clock.Now().UTC(),
 	}
 }
 
@@ -391,10 +393,10 @@ func (scheduler *centralScheduler) complete(outcome executionOutcome) {
 }
 
 func (scheduler *centralScheduler) logSummary(ctx context.Context, now time.Time, refreshErr error) {
-	if now.Sub(scheduler.lastLog) < time.Minute {
+	if now.Sub(scheduler.lastSummaryAt) < time.Minute {
 		return
 	}
-	scheduler.lastLog = now
+	scheduler.lastSummaryAt = now
 	var averageDelay time.Duration
 	if scheduler.counts.dispatchDelayCount > 0 {
 		averageDelay = scheduler.counts.dispatchDelayTotal / time.Duration(scheduler.counts.dispatchDelayCount)
@@ -433,6 +435,20 @@ func (scheduler *centralScheduler) publishPlatformHealth(now time.Time, refreshE
 		Backoff: scheduler.counts.backoff, RefreshFailed: refreshErr != nil,
 	}))
 	scheduler.service.health.PublishSummary(now)
+}
+
+func (scheduler *centralScheduler) refreshDiskHealth(now time.Time) {
+	if scheduler.service.health == nil || scheduler.service.diskPath == "" {
+		return
+	}
+	usage, err := disk.Usage(scheduler.service.diskPath)
+	if err != nil {
+		scheduler.service.health.Update(now, platformhealth.DiskUnavailableSource(scheduler.service.health.DiskLevel()))
+		return
+	}
+	scheduler.service.health.Update(now, platformhealth.DiskSource(
+		usage.UsedPercent, scheduler.service.health.DiskLevel(), scheduler.service.diskThresholds,
+	))
 }
 
 func newSchedulerCounts() schedulerCounts {
