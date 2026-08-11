@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { unavailabilityCopy } from './UnavailabilityBlock'
+import { render } from '@testing-library/react'
+import { createElement } from 'react'
+import { UnavailabilityBlock, unavailabilityCopy } from './UnavailabilityBlock'
 
 const codes = [
   'NO_SAMPLES_YET', 'NO_DATA_IN_RANGE', 'STALE', 'COLLECTION_PAUSED',
@@ -14,6 +16,12 @@ describe('unavailability copy', () => {
     expect(copy.title.length).toBeGreaterThan(0)
     expect(copy.description.length).toBeGreaterThan(0)
     expect(copy.action.length).toBeGreaterThan(0)
+  })
+
+  it.each(codes)('renders a destination link for %s', (code) => {
+    const view = render(createElement(UnavailabilityBlock, { code, href: `/next/${code}` }))
+    expect(view.getByRole('link', { name: unavailabilityCopy(code).action }).getAttribute('href')).toBe(`/next/${code}`)
+    view.unmount()
   })
 
   it('never presents collection pause as collection failure or database unreachability', () => {
