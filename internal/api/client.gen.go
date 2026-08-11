@@ -95,6 +95,9 @@ type ClientInterface interface {
 
 	ReportAgentMetrics(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAlertDetail request
+	GetAlertDetail(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAlertDisposition request
 	GetAlertDisposition(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -139,6 +142,12 @@ type ClientInterface interface {
 	UpdateAlertRuleEnabledWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListCurrentAlerts request
+	ListCurrentAlerts(ctx context.Context, params *ListCurrentAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAlertHistory request
+	ListAlertHistory(ctx context.Context, params *ListAlertHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetCertificateDiagnostics request
 	GetCertificateDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -283,6 +292,18 @@ func (c *Client) ReportAgentMetricsWithBody(ctx context.Context, contentType str
 
 func (c *Client) ReportAgentMetrics(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReportAgentMetricsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAlertDetail(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertDetailRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -487,6 +508,30 @@ func (c *Client) UpdateAlertRuleEnabledWithBody(ctx context.Context, id openapi_
 
 func (c *Client) UpdateAlertRuleEnabled(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateAlertRuleEnabledRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCurrentAlerts(ctx context.Context, params *ListCurrentAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCurrentAlertsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListAlertHistory(ctx context.Context, params *ListAlertHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertHistoryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1089,6 +1134,40 @@ func NewReportAgentMetricsRequestWithBody(server string, contentType string, bod
 	return req, nil
 }
 
+// NewGetAlertDetailRequest generates requests for GetAlertDetail
+func NewGetAlertDetailRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-instances/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAlertDispositionRequest generates requests for GetAlertDisposition
 func NewGetAlertDispositionRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -1516,6 +1595,184 @@ func NewUpdateAlertRuleEnabledRequestWithBody(server string, id openapi_types.UU
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListCurrentAlertsRequest generates requests for ListCurrentAlerts
+func NewListCurrentAlertsRequest(server string, params *ListCurrentAlertsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/current")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.InstanceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance_id", runtime.ParamLocationQuery, *params.InstanceId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.IncludePaused != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "include_paused", runtime.ParamLocationQuery, *params.IncludePaused); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAlertHistoryRequest generates requests for ListAlertHistory
+func NewListAlertHistoryRequest(server string, params *ListAlertHistoryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/history")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.InstanceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance_id", runtime.ParamLocationQuery, *params.InstanceId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -3077,6 +3334,9 @@ type ClientWithResponsesInterface interface {
 
 	ReportAgentMetricsWithResponse(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*ReportAgentMetricsResponse, error)
 
+	// GetAlertDetailWithResponse request
+	GetAlertDetailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDetailResponse, error)
+
 	// GetAlertDispositionWithResponse request
 	GetAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDispositionResponse, error)
 
@@ -3121,6 +3381,12 @@ type ClientWithResponsesInterface interface {
 	UpdateAlertRuleEnabledWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error)
 
 	UpdateAlertRuleEnabledWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertRuleEnabledJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertRuleEnabledResponse, error)
+
+	// ListCurrentAlertsWithResponse request
+	ListCurrentAlertsWithResponse(ctx context.Context, params *ListCurrentAlertsParams, reqEditors ...RequestEditorFn) (*ListCurrentAlertsResponse, error)
+
+	// ListAlertHistoryWithResponse request
+	ListAlertHistoryWithResponse(ctx context.Context, params *ListAlertHistoryParams, reqEditors ...RequestEditorFn) (*ListAlertHistoryResponse, error)
 
 	// GetCertificateDiagnosticsWithResponse request
 	GetCertificateDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCertificateDiagnosticsResponse, error)
@@ -3268,6 +3534,29 @@ func (r ReportAgentMetricsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ReportAgentMetricsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAlertDetailResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertDetail
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertDetailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertDetailResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3525,6 +3814,52 @@ func (r UpdateAlertRuleEnabledResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateAlertRuleEnabledResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCurrentAlertsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertObservationPage
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCurrentAlertsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCurrentAlertsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListAlertHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertObservationPage
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertHistoryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4359,6 +4694,15 @@ func (c *ClientWithResponses) ReportAgentMetricsWithResponse(ctx context.Context
 	return ParseReportAgentMetricsResponse(rsp)
 }
 
+// GetAlertDetailWithResponse request returning *GetAlertDetailResponse
+func (c *ClientWithResponses) GetAlertDetailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDetailResponse, error) {
+	rsp, err := c.GetAlertDetail(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertDetailResponse(rsp)
+}
+
 // GetAlertDispositionWithResponse request returning *GetAlertDispositionResponse
 func (c *ClientWithResponses) GetAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDispositionResponse, error) {
 	rsp, err := c.GetAlertDisposition(ctx, id, reqEditors...)
@@ -4504,6 +4848,24 @@ func (c *ClientWithResponses) UpdateAlertRuleEnabledWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParseUpdateAlertRuleEnabledResponse(rsp)
+}
+
+// ListCurrentAlertsWithResponse request returning *ListCurrentAlertsResponse
+func (c *ClientWithResponses) ListCurrentAlertsWithResponse(ctx context.Context, params *ListCurrentAlertsParams, reqEditors ...RequestEditorFn) (*ListCurrentAlertsResponse, error) {
+	rsp, err := c.ListCurrentAlerts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCurrentAlertsResponse(rsp)
+}
+
+// ListAlertHistoryWithResponse request returning *ListAlertHistoryResponse
+func (c *ClientWithResponses) ListAlertHistoryWithResponse(ctx context.Context, params *ListAlertHistoryParams, reqEditors ...RequestEditorFn) (*ListAlertHistoryResponse, error) {
+	rsp, err := c.ListAlertHistory(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertHistoryResponse(rsp)
 }
 
 // GetCertificateDiagnosticsWithResponse request returning *GetCertificateDiagnosticsResponse
@@ -4943,6 +5305,39 @@ func ParseReportAgentMetricsResponse(rsp *http.Response) (*ReportAgentMetricsRes
 	return response, nil
 }
 
+// ParseGetAlertDetailResponse parses an HTTP response from a GetAlertDetailWithResponse call
+func ParseGetAlertDetailResponse(rsp *http.Response) (*GetAlertDetailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertDetailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertDetail
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetAlertDispositionResponse parses an HTTP response from a GetAlertDispositionWithResponse call
 func ParseGetAlertDispositionResponse(rsp *http.Response) (*GetAlertDispositionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -5328,6 +5723,72 @@ func ParseUpdateAlertRuleEnabledResponse(rsp *http.Response) (*UpdateAlertRuleEn
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCurrentAlertsResponse parses an HTTP response from a ListCurrentAlertsWithResponse call
+func ParseListCurrentAlertsResponse(rsp *http.Response) (*ListCurrentAlertsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCurrentAlertsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertObservationPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAlertHistoryResponse parses an HTTP response from a ListAlertHistoryWithResponse call
+func ParseListAlertHistoryResponse(rsp *http.Response) (*ListAlertHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertObservationPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 

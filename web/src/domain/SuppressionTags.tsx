@@ -1,5 +1,6 @@
 import { Tag } from 'antd'
 import type { components } from '../api/schema'
+import { CollectionPausedTag } from './CollectionPausedTag'
 
 type HealthFlags = components['schemas']['HealthFlags']
 export type SuppressionTagValue = 'NO_DATA_MARKER' | 'MAINTENANCE_MARKER' | 'RECENT_RECOVERY_MARKER' | 'IGNORED_MARKER' | 'CONFIGURATION_MISSING_MARKER'
@@ -35,4 +36,37 @@ function tagLabel(tag: SuppressionTagValue, flags: HealthFlags) {
 
 export function SuppressionTags({ flags }: { flags: HealthFlags }) {
   return <span>{SUPPRESSION_TAGS.map((tag) => tagLabel(tag, flags))}</span>
+}
+
+export function AlertSuppressionTags({
+  inMaintenance,
+  disposition,
+  pausedAt,
+  paused = pausedAt !== undefined,
+  now,
+}: {
+  inMaintenance?: boolean | null
+  disposition: components['schemas']['AlertDisposition']
+  paused?: boolean
+  pausedAt?: string
+  now?: Date
+}) {
+  return <span>
+    {inMaintenance === true && <Tag color="processing">维护中</Tag>}
+    {dispositionTag(disposition)}
+    {paused && (pausedAt ? <CollectionPausedTag pausedAt={pausedAt} now={now} /> : <Tag>已暂停</Tag>)}
+  </span>
+}
+
+function dispositionTag(disposition: components['schemas']['AlertDisposition']) {
+  switch (disposition) {
+    case 'NONE':
+      return null
+    case 'ACKED':
+      return <Tag color="processing">已确认</Tag>
+    case 'IGNORED':
+      return <Tag>已忽略</Tag>
+    default:
+      return assertNever(disposition)
+  }
 }

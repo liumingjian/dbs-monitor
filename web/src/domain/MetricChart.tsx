@@ -88,7 +88,7 @@ function ChartCanvas({ label, series, step, loading, connectionGroup }: {
       tooltip: { trigger: 'axis', axisPointer: { type: 'line' }, valueFormatter: (value: unknown) => value == null ? '缺数' : `${value}` },
       xAxis: {
         type: 'time',
-        axisLabel: { formatter: '{HH}:{mm}' },
+        axisLabel: { formatter: '{HH}:{mm}', hideOverlap: true },
         axisLine: { lineStyle: { color: '#c3c2b7' } },
         splitLine: { show: false },
       },

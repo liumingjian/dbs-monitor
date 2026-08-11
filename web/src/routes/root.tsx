@@ -58,6 +58,7 @@ function AuthenticatedHeader() {
     <>
       <Space size="large">
         <Link to="/instances" className="header-link">实例列表</Link>
+        <Link to="/alerts" search={{ tab: 'current', include_paused: false }} className="header-link">全局告警</Link>
         <Link to="/users" className="header-link">用户管理</Link>
         <Dropdown menu={{ items: [{ key: 'password', icon: <LockOutlined />, label: '修改口令', onClick: () => setPasswordOpen(true) }] }}>
           <Button type="text" className="header-user" icon={<UserOutlined />}>

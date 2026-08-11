@@ -95,7 +95,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
         { key: 'monitoring', label: '监控与报警' },
         { key: 'sessions', label: '会话与阻塞', disabled: true },
         { key: 'events', label: '性能事件', disabled: true },
-        { key: 'alerts', label: '告警', disabled: true },
+        { key: 'alerts', label: <Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}>告警</Link> },
         { key: 'collection', label: '采集管理', disabled: true },
       ]}
     />

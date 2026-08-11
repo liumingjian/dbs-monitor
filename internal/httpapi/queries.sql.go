@@ -22,6 +22,34 @@ func (q *Queries) AdminExists(ctx context.Context) (bool, error) {
 	return exists, err
 }
 
+const countAlertObservations = `-- name: CountAlertObservations :one
+SELECT count(*)
+FROM alert_instance alert
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE ($1::boolean = (alert.status = 'RECOVERED'))
+  AND (NOT $2::boolean OR alert.instance_id = $3)
+  AND ($4::boolean OR NOT coalesce(config.collection_paused, false))
+`
+
+type CountAlertObservationsParams struct {
+	Recovered     bool
+	HasInstance   bool
+	InstanceID    pgtype.UUID
+	IncludePaused bool
+}
+
+func (q *Queries) CountAlertObservations(ctx context.Context, arg CountAlertObservationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlertObservations,
+		arg.Recovered,
+		arg.HasInstance,
+		arg.InstanceID,
+		arg.IncludePaused,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countLongQuerySamples = `-- name: CountLongQuerySamples :one
 SELECT count(*)
 FROM long_query_sample
@@ -216,6 +244,78 @@ func (q *Queries) GetAlertInstanceMetricID(ctx context.Context, id pgtype.UUID) 
 	var metric_id string
 	err := row.Scan(&metric_id)
 	return metric_id, err
+}
+
+const getAlertObservation = `-- name: GetAlertObservation :one
+SELECT alert.id, alert.instance_id, identity.name AS instance_name,
+       alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
+       alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
+       alert.severity, alert.disposition,
+       coalesce(config.collection_paused, false) AS paused,
+       config.collection_pause_updated_at AS paused_at,
+       coalesce((SELECT event.current_value FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.kind = 'FIRED'
+                 ORDER BY event.evaluated_at, event.id LIMIT 1), alert.current_value) AS current_value,
+       coalesce((alert.first_rule_snapshot->>'threshold')::double precision,
+                (alert.rule_snapshot->>'threshold')::double precision)::double precision AS threshold,
+       alert.first_triggered_at, alert.updated_at, alert.recovered_at,
+       coalesce(alert.unavailability, (SELECT event.unavailability FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.unavailability IS NOT NULL
+                 ORDER BY event.evaluated_at DESC, event.id DESC LIMIT 1)) AS unavailability
+FROM alert_instance alert
+JOIN instance_identity identity ON identity.id = alert.instance_id
+JOIN alert_rule rule ON rule.id = alert.rule_id
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE alert.id = $1
+`
+
+type GetAlertObservationRow struct {
+	ID               pgtype.UUID
+	InstanceID       pgtype.UUID
+	InstanceName     string
+	RuleID           pgtype.UUID
+	RuleName         string
+	RuleVersion      int32
+	RuleSnapshot     []byte
+	MetricID         string
+	Status           string
+	Severity         string
+	Disposition      string
+	Paused           bool
+	PausedAt         pgtype.Timestamptz
+	CurrentValue     pgtype.Float8
+	Threshold        float64
+	FirstTriggeredAt pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	RecoveredAt      pgtype.Timestamptz
+	Unavailability   pgtype.Text
+}
+
+func (q *Queries) GetAlertObservation(ctx context.Context, id pgtype.UUID) (GetAlertObservationRow, error) {
+	row := q.db.QueryRow(ctx, getAlertObservation, id)
+	var i GetAlertObservationRow
+	err := row.Scan(
+		&i.ID,
+		&i.InstanceID,
+		&i.InstanceName,
+		&i.RuleID,
+		&i.RuleName,
+		&i.RuleVersion,
+		&i.RuleSnapshot,
+		&i.MetricID,
+		&i.Status,
+		&i.Severity,
+		&i.Disposition,
+		&i.Paused,
+		&i.PausedAt,
+		&i.CurrentValue,
+		&i.Threshold,
+		&i.FirstTriggeredAt,
+		&i.UpdatedAt,
+		&i.RecoveredAt,
+		&i.Unavailability,
+	)
+	return i, err
 }
 
 const getAlertTriggerSnapshot = `-- name: GetAlertTriggerSnapshot :one
@@ -452,6 +552,145 @@ func (q *Queries) GetUserPassword(ctx context.Context, id pgtype.UUID) ([]byte, 
 	var password_hash []byte
 	err := row.Scan(&password_hash)
 	return password_hash, err
+}
+
+const listAlertObservations = `-- name: ListAlertObservations :many
+SELECT alert.id, alert.instance_id, identity.name AS instance_name,
+       alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
+       alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
+       alert.severity, alert.disposition,
+       coalesce(config.collection_paused, false) AS paused,
+       config.collection_pause_updated_at AS paused_at,
+       coalesce((SELECT event.current_value FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.kind = 'FIRED'
+                 ORDER BY event.evaluated_at, event.id LIMIT 1), alert.current_value) AS current_value,
+       coalesce((alert.first_rule_snapshot->>'threshold')::double precision,
+                (alert.rule_snapshot->>'threshold')::double precision)::double precision AS threshold,
+       alert.first_triggered_at, alert.updated_at, alert.recovered_at,
+       coalesce(alert.unavailability, (SELECT event.unavailability FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.unavailability IS NOT NULL
+                 ORDER BY event.evaluated_at DESC, event.id DESC LIMIT 1)) AS unavailability
+FROM alert_instance alert
+JOIN instance_identity identity ON identity.id = alert.instance_id
+JOIN alert_rule rule ON rule.id = alert.rule_id
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE ($1::boolean = (alert.status = 'RECOVERED'))
+  AND (NOT $2::boolean OR alert.instance_id = $3)
+  AND ($4::boolean OR NOT coalesce(config.collection_paused, false))
+ORDER BY coalesce(alert.first_triggered_at, alert.updated_at) DESC, alert.id
+LIMIT $6 OFFSET $5
+`
+
+type ListAlertObservationsParams struct {
+	Recovered     bool
+	HasInstance   bool
+	InstanceID    pgtype.UUID
+	IncludePaused bool
+	PageOffset    int32
+	PageLimit     int32
+}
+
+type ListAlertObservationsRow struct {
+	ID               pgtype.UUID
+	InstanceID       pgtype.UUID
+	InstanceName     string
+	RuleID           pgtype.UUID
+	RuleName         string
+	RuleVersion      int32
+	RuleSnapshot     []byte
+	MetricID         string
+	Status           string
+	Severity         string
+	Disposition      string
+	Paused           bool
+	PausedAt         pgtype.Timestamptz
+	CurrentValue     pgtype.Float8
+	Threshold        float64
+	FirstTriggeredAt pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	RecoveredAt      pgtype.Timestamptz
+	Unavailability   pgtype.Text
+}
+
+func (q *Queries) ListAlertObservations(ctx context.Context, arg ListAlertObservationsParams) ([]ListAlertObservationsRow, error) {
+	rows, err := q.db.Query(ctx, listAlertObservations,
+		arg.Recovered,
+		arg.HasInstance,
+		arg.InstanceID,
+		arg.IncludePaused,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertObservationsRow
+	for rows.Next() {
+		var i ListAlertObservationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.RuleID,
+			&i.RuleName,
+			&i.RuleVersion,
+			&i.RuleSnapshot,
+			&i.MetricID,
+			&i.Status,
+			&i.Severity,
+			&i.Disposition,
+			&i.Paused,
+			&i.PausedAt,
+			&i.CurrentValue,
+			&i.Threshold,
+			&i.FirstTriggeredAt,
+			&i.UpdatedAt,
+			&i.RecoveredAt,
+			&i.Unavailability,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlertRuleVersionHistory = `-- name: ListAlertRuleVersionHistory :many
+SELECT DISTINCT ON (rule_version) rule_version, rule_snapshot, evaluated_at
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind NOT IN ('ACKED', 'IGNORED')
+ORDER BY rule_version, evaluated_at
+`
+
+type ListAlertRuleVersionHistoryRow struct {
+	RuleVersion  int32
+	RuleSnapshot []byte
+	EvaluatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) ListAlertRuleVersionHistory(ctx context.Context, alertInstanceID pgtype.UUID) ([]ListAlertRuleVersionHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listAlertRuleVersionHistory, alertInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertRuleVersionHistoryRow
+	for rows.Next() {
+		var i ListAlertRuleVersionHistoryRow
+		if err := rows.Scan(&i.RuleVersion, &i.RuleSnapshot, &i.EvaluatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAlertTriggerSnapshotSessions = `-- name: ListAlertTriggerSnapshotSessions :many

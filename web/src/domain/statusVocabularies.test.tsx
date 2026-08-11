@@ -2,7 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ALERT_STATUSES, AlertStatus } from './AlertStatus'
 import { HEALTH_STATUSES, HealthStatus } from './HealthStatus'
-import { SUPPRESSION_TAGS, SuppressionTags } from './SuppressionTags'
+import { AlertSuppressionTags, SUPPRESSION_TAGS, SuppressionTags } from './SuppressionTags'
 
 afterEach(cleanup)
 
@@ -33,5 +33,17 @@ describe('status vocabularies', () => {
     expect(screen.getByText('维护中')).toBeTruthy()
     expect(screen.getByText('近期恢复')).toBeTruthy()
     expect(screen.queryByText(/已忽略/)).toBeNull()
+  })
+
+  it('renders current-alert markers as independent facts', () => {
+    render(<AlertSuppressionTags
+      inMaintenance
+      disposition="ACKED"
+      pausedAt="2026-08-01T00:00:00Z"
+      now={new Date('2026-08-09T00:00:00Z')}
+    />)
+    expect(screen.getByText('维护中')).toBeTruthy()
+    expect(screen.getByText('已确认')).toBeTruthy()
+    expect(screen.getByText('已暂停 8 天')).toBeTruthy()
   })
 })
