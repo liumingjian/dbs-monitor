@@ -7,7 +7,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
 
-func TestSnapshotForProbeResults(t *testing.T) {
+func TestSnapshotFromProbeResults(t *testing.T) {
 	tests := []struct {
 		name         string
 		results      []probeResult
@@ -41,7 +41,7 @@ func TestSnapshotForProbeResults(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, complete := snapshotForProbeResults(tt.results)
+			got, complete := snapshotFromProbeResults(tt.results)
 			if complete != tt.wantComplete {
 				t.Errorf("complete = %t, want %t", complete, tt.wantComplete)
 			}

@@ -18,18 +18,18 @@ type probeResult struct {
 	err        error
 }
 
-func Probe(probeCtx, persistCtx context.Context, platform *db.Pool, conn *monitorpg.TargetConn, instanceID pgtype.UUID, observedAt time.Time) (bool, error) {
+func ProbeAndStoreSnapshot(targetCtx, platformCtx context.Context, platform *db.Pool, conn *monitorpg.TargetConn, instanceID pgtype.UUID, observedAt time.Time) (bool, error) {
 	results := make([]probeResult, 0, len(metric.Capabilities))
 	for _, declaration := range metric.Capabilities {
 		var present bool
-		err := conn.QueryRow(probeCtx, declaration.Probe).Scan(&present)
+		err := conn.QueryRow(targetCtx, declaration.Probe).Scan(&present)
 		results = append(results, probeResult{capability: declaration, present: present, err: err})
 		if err != nil {
 			break
 		}
 	}
-	states, complete := snapshotForProbeResults(results)
-	if err := storeSnapshot(persistCtx, platform, instanceID, observedAt, states); err != nil {
+	states, complete := snapshotFromProbeResults(results)
+	if err := storeSnapshot(platformCtx, platform, instanceID, observedAt, states); err != nil {
 		return false, err
 	}
 	return complete, nil
@@ -54,7 +54,7 @@ func storeSnapshot(ctx context.Context, platform *db.Pool, instanceID pgtype.UUI
 	return nil
 }
 
-func snapshotForProbeResults(results []probeResult) (map[metric.CapabilityID]metric.CapabilityStatus, bool) {
+func snapshotFromProbeResults(results []probeResult) (map[metric.CapabilityID]metric.CapabilityStatus, bool) {
 	if !completeProbeResults(results) {
 		return metric.UnknownCapabilityStates(), false
 	}

@@ -25,8 +25,9 @@ import (
 )
 
 const (
-	defaultProbeConcurrency = 32
-	defaultQueryConcurrency = 32
+	defaultProbeConcurrency   = 32
+	defaultQueryConcurrency   = 32
+	capabilitySnapshotTimeout = 10 * time.Second
 )
 
 var statActivityMetricIDs = [...]metric.MetricID{
@@ -66,6 +67,12 @@ func (config Config) Validate() error {
 type cachedConnection struct {
 	credentialVersion instance.CredentialVersion
 	conn              *monitorpg.TargetConn
+}
+
+type projectedCapabilitySnapshot struct {
+	states     map[metric.CapabilityID]metric.CapabilityStatus
+	observedAt time.Time
+	exists     bool
 }
 
 type Service struct {
@@ -231,7 +238,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 func (service *Service) executeCapabilitySnapshot(ctx context.Context, run scheduledRun) executionOutcome {
 	startedWall := time.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
-	taskCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	taskCtx, cancel := context.WithTimeout(ctx, capabilitySnapshotTimeout)
 	defer cancel()
 	conn, err := service.queryConnection(taskCtx, run.target)
 	if err == nil {
@@ -247,7 +254,7 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 		outcome.duration = time.Since(startedWall)
 		return outcome
 	}
-	complete, err := capability.Probe(taskCtx, ctx, service.platform, conn, run.target.ID, observedAt)
+	complete, err := capability.ProbeAndStoreSnapshot(taskCtx, ctx, service.platform, conn, run.target.ID, observedAt)
 	if err != nil {
 		outcome.err = err
 	} else if complete {
@@ -258,11 +265,11 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 }
 
 func (service *Service) refreshCapabilitySnapshot(ctx context.Context, target instance.ListCollectionTargetsRow, now time.Time) error {
-	_, observedAt, exists, err := service.capabilitySnapshot(ctx, target.ID, now)
+	snapshot, err := service.loadCapabilitySnapshot(ctx, target.ID, now)
 	if err != nil {
 		return err
 	}
-	if exists && now.Sub(observedAt) <= metric.CapabilitySnapshotTTL {
+	if snapshot.exists && now.Sub(snapshot.observedAt) <= metric.CapabilitySnapshotTTL {
 		return nil
 	}
 	outcome := service.executeCapabilitySnapshot(ctx, newScheduledRun(target, capabilitySnapshotTask, 0, now))
@@ -270,29 +277,33 @@ func (service *Service) refreshCapabilitySnapshot(ctx context.Context, target in
 }
 
 func (service *Service) taskCapabilityBlockReason(ctx context.Context, run scheduledRun) (metric.CapabilityBlockReason, bool, error) {
-	states, _, _, err := service.capabilitySnapshot(ctx, run.target.ID, service.clock.Now().UTC())
+	snapshot, err := service.loadCapabilitySnapshot(ctx, run.target.ID, service.clock.Now().UTC())
 	if err != nil {
 		return "", false, err
 	}
-	reason, blocked := metric.TaskCapabilityBlockReason(run.task, states)
+	reason, blocked := metric.TaskCapabilityBlockReason(run.task, snapshot.states)
 	return reason, blocked, nil
 }
 
-func (service *Service) capabilitySnapshot(ctx context.Context, instanceID pgtype.UUID, now time.Time) (map[metric.CapabilityID]metric.CapabilityStatus, time.Time, bool, error) {
+func (service *Service) loadCapabilitySnapshot(ctx context.Context, instanceID pgtype.UUID, now time.Time) (projectedCapabilitySnapshot, error) {
 	var encoded []byte
 	var observedAt time.Time
 	err := service.platform.QueryRow(ctx, `SELECT states, observed_at FROM instance_capability_snapshot WHERE instance_id = $1`, instanceID).Scan(&encoded, &observedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return metric.ProjectCapabilitySnapshot(nil, time.Time{}, now), time.Time{}, false, nil
+		return projectedCapabilitySnapshot{states: metric.UnknownCapabilityStates()}, nil
 	}
 	if err != nil {
-		return nil, time.Time{}, false, err
+		return projectedCapabilitySnapshot{}, err
 	}
 	states, err := metric.DecodeCapabilitySnapshot(encoded)
 	if err != nil {
-		return nil, time.Time{}, false, fmt.Errorf("decode capability snapshot: %w", err)
+		return projectedCapabilitySnapshot{}, fmt.Errorf("decode capability snapshot: %w", err)
 	}
-	return metric.ProjectCapabilitySnapshot(states, observedAt, now), observedAt.UTC(), true, nil
+	return projectedCapabilitySnapshot{
+		states:     metric.ProjectCapabilitySnapshot(states, observedAt, now),
+		observedAt: observedAt.UTC(),
+		exists:     true,
+	}, nil
 }
 
 func (service *Service) finishFailure(ctx context.Context, run scheduledRun, taskCtx context.Context, connectionFailure bool) (taskResult, error) {

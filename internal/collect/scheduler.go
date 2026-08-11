@@ -21,14 +21,19 @@ const (
 	workCapabilitySnapshot
 )
 
+const (
+	capabilitySnapshotTaskID        metric.TaskID = "capability.snapshot"
+	capabilitySnapshotReservedSlots               = 4
+)
+
 var capabilitySnapshotTask = metric.Task{
-	ID:       metric.TaskID("capability.snapshot"),
+	ID:       capabilitySnapshotTaskID,
 	Kind:     metric.TaskKindSQL,
 	Interval: metric.CapabilitySnapshotTTL,
 }
 
 func isCapabilitySnapshotTask(task metric.Task) bool {
-	return task.ID == capabilitySnapshotTask.ID
+	return task.ID == capabilitySnapshotTaskID
 }
 
 type work struct {
@@ -135,7 +140,7 @@ func (dispatcher *dispatcher) admit(item work) bool {
 		return false
 	}
 	if item.class == workCollectionQuery && dispatcher.capabilitySnapshotWaiting {
-		reserved := min(4, dispatcher.queryLimit)
+		reserved := min(capabilitySnapshotReservedSlots, dispatcher.queryLimit)
 		if dispatcher.activeCollectionQueries >= dispatcher.queryLimit-reserved {
 			return false
 		}

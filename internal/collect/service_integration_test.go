@@ -498,7 +498,7 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	defer timeoutCollector.closeQueryConnections()
 	probeCtx, cancelProbe := context.WithCancel(ctx)
 	cancelProbe()
-	complete, err := capability.Probe(probeCtx, ctx, platform, conn, pgID, base.Add(18*time.Minute))
+	complete, err := capability.ProbeAndStoreSnapshot(probeCtx, ctx, platform, conn, pgID, base.Add(18*time.Minute))
 	if err != nil {
 		t.Fatalf("persist canceled capability probe: %v", err)
 	}
