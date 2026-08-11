@@ -8,10 +8,11 @@ import (
 type EventType string
 
 const (
-	EventFiring   EventType = "FIRING"
-	EventRecovery EventType = "RECOVERY"
-	EventRepeat   EventType = "REPEAT"
-	EventTest     EventType = "TEST"
+	EventFiring              EventType = "FIRING"
+	EventRecovery            EventType = "RECOVERY"
+	EventRepeat              EventType = "REPEAT"
+	EventTest                EventType = "TEST"
+	EventPlatformUnavailable EventType = "PLATFORM_UNAVAILABLE"
 )
 
 const MaxAttempts = 3

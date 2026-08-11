@@ -3,6 +3,7 @@ package platformhealth
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 	"testing"
@@ -221,6 +222,30 @@ func TestPublishSummaryEmitsCertificateLevelChange(t *testing.T) {
 	if len(lines) != 2 || !strings.Contains(lines[0], `"event":"platform_health_change"`) ||
 		!strings.Contains(lines[0], `"source":"TLS_CERTIFICATE"`) || !strings.Contains(lines[0], `"status":"DEGRADED"`) {
 		t.Fatalf("certificate transition journal = %q, want change event followed by summary", output.String())
+	}
+}
+
+func TestStoreObservesNewFailedFactsOnce(t *testing.T) {
+	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	store := NewStore("3.0.0", now.Add(-time.Hour), nil)
+	var failures []FailureFact
+	store.SetFailureObserver(func(failure FailureFact) {
+		failures = append(failures, failure)
+	})
+
+	failed := DatabaseSource(errors.New("unavailable"))
+	store.Update(now, failed)
+	store.Update(now.Add(time.Second), failed)
+	store.PublishSummary(now.Add(2 * time.Second))
+	if len(failures) != 1 || failures[0].Source != SourcePlatformDatabase ||
+		failures[0].Code != "PLATFORM_DATABASE_UNREACHABLE" || !failures[0].ObservedAt.Equal(now) {
+		t.Fatalf("observed failures = %+v, want one platform database failure", failures)
+	}
+
+	store.Update(now.Add(3*time.Second), DatabaseSource(nil))
+	store.Update(now.Add(4*time.Second), failed)
+	if len(failures) != 2 || !failures[1].ObservedAt.Equal(now.Add(4*time.Second)) {
+		t.Fatalf("observed failures after recovery = %+v, want a second transition", failures)
 	}
 }
 

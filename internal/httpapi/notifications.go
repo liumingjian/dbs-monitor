@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/mail"
 	"net/textproto"
 	"net/url"
@@ -16,6 +17,20 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
+
+func (handler *Handler) SetNotificationSnapshotStore(store *notify.ChannelSnapshotStore) {
+	handler.notificationSnapshotStore = store
+}
+
+func (handler *Handler) refreshNotificationSnapshot(ctx context.Context) error {
+	if handler.notificationSnapshotStore == nil {
+		return nil
+	}
+	if err := handler.notificationSnapshotStore.Sync(ctx, handler.platform); err != nil {
+		return fmt.Errorf("refresh notification channel snapshot: %w", err)
+	}
+	return nil
+}
 
 func (handler *Handler) GetSMTPChannel(ctx context.Context, _ api.GetSMTPChannelRequestObject) (api.GetSMTPChannelResponseObject, error) {
 	row, err := notify.New(handler.platform).GetSMTPChannel(ctx)
@@ -85,6 +100,9 @@ func (handler *Handler) UpdateSMTPChannel(ctx context.Context, request api.Updat
 		UpdatedAt:      pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 	})
 	if err != nil {
+		return nil, err
+	}
+	if err := handler.refreshNotificationSnapshot(ctx); err != nil {
 		return nil, err
 	}
 	return api.UpdateSMTPChannel200JSONResponse(toAPISMTPChannel(row)), nil
@@ -228,6 +246,9 @@ func (handler *Handler) CreateWebhookTarget(ctx context.Context, request api.Cre
 	if err != nil {
 		return nil, err
 	}
+	if err := handler.refreshNotificationSnapshot(ctx); err != nil {
+		return nil, err
+	}
 	return api.CreateWebhookTarget201JSONResponse(toAPIWebhookTarget(row)), nil
 }
 
@@ -286,6 +307,9 @@ func (handler *Handler) UpdateWebhookTarget(ctx context.Context, request api.Upd
 	if err != nil {
 		return nil, err
 	}
+	if err := handler.refreshNotificationSnapshot(ctx); err != nil {
+		return nil, err
+	}
 	return api.UpdateWebhookTarget200JSONResponse(toAPIWebhookTarget(row)), nil
 }
 
@@ -296,6 +320,9 @@ func (handler *Handler) DeleteWebhookTarget(ctx context.Context, request api.Del
 	}
 	if deleted == 0 {
 		return api.DeleteWebhookTarget404JSONResponse(errorBody(api.NOTFOUND, "Webhook target not found")), nil
+	}
+	if err := handler.refreshNotificationSnapshot(ctx); err != nil {
+		return nil, err
 	}
 	return api.DeleteWebhookTarget204Response{}, nil
 }
