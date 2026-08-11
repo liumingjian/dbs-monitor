@@ -27,11 +27,17 @@ const (
 	errorCodeConnectionFailed = "CONNECTION_FAILED"
 	errorCodeQueryFailed      = "QUERY_FAILED"
 	errorCodeTimeout          = "TIMEOUT"
+	errorCodeCounterReset     = string(metric.ResetCounter)
 )
 
 type collectedSample struct {
 	metricID metric.MetricID
 	value    float64
+}
+
+type collectedBatch struct {
+	samples      []collectedSample
+	counterReset bool
 }
 
 func (service *Service) ensureTaskStates(ctx context.Context, targetID pgtype.UUID) error {
@@ -181,23 +187,23 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 	return service.withPartitionRepair(ctx, finished, write)
 }
 
-func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, samples []collectedSample, counterReset bool) error {
+func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, batch collectedBatch) error {
 	finished := service.clock.Now().UTC()
 	write := func() error {
 		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 			if err := lockInstance(ctx, tx, run.target.ID); err != nil {
 				return err
 			}
-			for _, sample := range samples {
+			for _, sample := range batch.samples {
 				if err := insertSample(ctx, tx, run.target.ID, sample.metricID, sample.value, finished); err != nil {
 					return err
 				}
 			}
 			lastErrorCode := pgtype.Text{}
 			lastErrorMessage := pgtype.Text{}
-			if counterReset {
-				lastErrorCode = pgtype.Text{String: string(metric.ResetCounter), Valid: true}
-				lastErrorMessage = pgtype.Text{String: collectionErrorMessage(string(metric.ResetCounter)), Valid: true}
+			if batch.counterReset {
+				lastErrorCode = pgtype.Text{String: errorCodeCounterReset, Valid: true}
+				lastErrorMessage = pgtype.Text{String: collectionErrorMessage(errorCodeCounterReset), Valid: true}
 			}
 			_, err := tx.Exec(ctx, `UPDATE instance_collection_task_state SET
 				last_due_at = $3,
@@ -214,8 +220,8 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, sam
 			if err != nil {
 				return err
 			}
-			if counterReset {
-				if err := setSourceFailure(ctx, tx, run.target.ID, string(metric.ResetCounter), collectionErrorMessage(string(metric.ResetCounter))); err != nil {
+			if batch.counterReset {
+				if err := setSourceFailure(ctx, tx, run.target.ID, lastErrorCode.String, lastErrorMessage.String); err != nil {
 					return err
 				}
 			}
@@ -238,14 +244,14 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, sam
 			if !complete {
 				return nil
 			}
-			var resetPending bool
+			var counterResetPending bool
 			if err := tx.QueryRow(ctx, `SELECT EXISTS (
 				SELECT 1 FROM instance_collection_task_state
-				WHERE instance_id = $1 AND last_error_code = 'COUNTER_RESET'
-			)`, run.target.ID).Scan(&resetPending); err != nil {
+				WHERE instance_id = $1 AND last_error_code = $2
+			)`, run.target.ID, errorCodeCounterReset).Scan(&counterResetPending); err != nil {
 				return err
 			}
-			if resetPending {
+			if counterResetPending {
 				_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_success_at)
 					VALUES ($1, 'SERVER_DIRECT', $2)
 					ON CONFLICT (instance_id, source) DO UPDATE SET last_success_at = EXCLUDED.last_success_at`, run.target.ID, finished)
@@ -344,7 +350,7 @@ func collectionErrorMessage(code string) string {
 		return "collection query failed"
 	case errorCodeTimeout:
 		return "collection deadline exceeded"
-	case string(metric.ResetCounter):
+	case errorCodeCounterReset:
 		return "database statistics counters reset"
 	case string(metric.CapabilityBlockPermissionDenied):
 		return "required database role is missing"

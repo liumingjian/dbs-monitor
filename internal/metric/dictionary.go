@@ -277,6 +277,17 @@ FROM pg_stat_statements`,
 	},
 }
 
+func TaskForMetric(metricID MetricID) (Task, bool) {
+	for _, task := range Tasks {
+		for _, yield := range task.Yields {
+			if yield.Metric == metricID {
+				return task, true
+			}
+		}
+	}
+	return Task{}, false
+}
+
 type CapabilityID string
 
 const (

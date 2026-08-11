@@ -3,7 +3,7 @@ package metric_test
 import (
 	"context"
 	"os"
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -20,20 +20,20 @@ func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 	expectedColumns := taskColumns(task)
 	targets := []struct {
 		version string
-		env     string
+		urlEnv  string
 	}{
-		{version: "13", env: "PG13_URL"},
-		{version: "14", env: "PG14_URL"},
-		{version: "15", env: "PG15_URL"},
-		{version: "16", env: "PG16_URL"},
-		{version: "17", env: "PG17_URL"},
+		{version: "13", urlEnv: "PG13_URL"},
+		{version: "14", urlEnv: "PG14_URL"},
+		{version: "15", urlEnv: "PG15_URL"},
+		{version: "16", urlEnv: "PG16_URL"},
+		{version: "17", urlEnv: "PG17_URL"},
 	}
 
 	for _, target := range targets {
 		t.Run("PG"+target.version, func(t *testing.T) {
-			connectionURL := os.Getenv(target.env)
+			connectionURL := os.Getenv(target.urlEnv)
 			if connectionURL == "" {
-				t.Skipf("%s is not set; run make check-pg-matrix", target.env)
+				t.Skipf("%s is not set; run make check-pg-matrix", target.urlEnv)
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
@@ -56,7 +56,7 @@ func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 					t.Errorf("column %s type OID = %d, want float8 (%d)", field.Name, field.DataTypeOID, pgtype.Float8OID)
 				}
 			}
-			if !reflect.DeepEqual(columns, expectedColumns) {
+			if !slices.Equal(columns, expectedColumns) {
 				t.Fatalf("columns = %v, want Task.Yields columns %v", columns, expectedColumns)
 			}
 
@@ -68,10 +68,10 @@ func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 					t.Fatalf("read result row: %v", err)
 				}
 				if len(values) != len(expectedColumns) {
-					t.Errorf("row width = %d, want %d", len(values), len(expectedColumns))
+					t.Fatalf("row width = %d, want %d", len(values), len(expectedColumns))
 				}
 				for index, value := range values {
-					if _, ok := value.(float64); !ok {
+					if _, isFloat64 := value.(float64); !isFloat64 {
 						t.Errorf("column %s Go value type = %T, want float64", expectedColumns[index], value)
 					}
 				}
@@ -88,7 +88,7 @@ func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 
 func taskColumns(task metric.Task) []string {
 	seen := make(map[string]struct{})
-	columns := make([]string, 0)
+	columns := make([]string, 0, len(task.Yields))
 	for _, yield := range task.Yields {
 		for _, column := range yield.Columns {
 			if _, exists := seen[column]; exists {

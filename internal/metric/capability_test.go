@@ -88,6 +88,16 @@ func TestMetricCapabilityBlockReasonUsesProducingTaskRequirements(t *testing.T) 
 	}
 }
 
+func TestTaskForMetric(t *testing.T) {
+	task, exists := TaskForMetric(MetricTPS)
+	if !exists || task.ID != TaskStatDatabase {
+		t.Fatalf("TaskForMetric(%q) = %q, %t; want %q, true", MetricTPS, task.ID, exists, TaskStatDatabase)
+	}
+	if task, exists := TaskForMetric(MetricID("unknown")); exists {
+		t.Fatalf("TaskForMetric(unknown) = %q, true; want no task", task.ID)
+	}
+}
+
 func taskForTest(t *testing.T, id TaskID) Task {
 	t.Helper()
 	for _, task := range Tasks {

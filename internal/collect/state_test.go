@@ -14,6 +14,7 @@ func TestCollectionErrorMessages(t *testing.T) {
 		{code: errorCodeConnectionFailed, want: "target connection failed"},
 		{code: errorCodeQueryFailed, want: "collection query failed"},
 		{code: errorCodeTimeout, want: "collection deadline exceeded"},
+		{code: errorCodeCounterReset, want: "database statistics counters reset"},
 		{code: string(metric.CapabilityBlockPermissionDenied), want: "required database role is missing"},
 		{code: string(metric.CapabilityBlockExtensionMissing), want: "required database extension is missing"},
 		{code: string(metric.CapabilityBlockFeatureDisabled), want: "required database feature is not enabled"},

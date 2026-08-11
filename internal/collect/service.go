@@ -192,10 +192,10 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 			return outcome
 		}
 		latency := float64(time.Since(startedWall).Microseconds()) / 1000
-		outcome.err = service.recordSuccess(ctx, run, []collectedSample{
+		outcome.err = service.recordSuccess(ctx, run, collectedBatch{samples: []collectedSample{
 			{metricID: metric.MetricAvailabilityReachable, value: metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
 			{metricID: metric.MetricProbeLatencyMS, value: latency},
-		}, false)
+		}})
 		outcome.result = resultSuccess
 		outcome.duration = time.Since(startedWall)
 		return outcome
@@ -211,34 +211,9 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', $1, false)",
 			strconv.FormatInt(timeout.Milliseconds(), 10)+"ms").Scan(&configured)
 	}
-	var samples []collectedSample
-	counterReset := false
+	var batch collectedBatch
 	if err == nil {
-		switch run.task.ID {
-		case metric.TaskStatActivity:
-			values := make([]float64, len(statActivityMetricIDs))
-			err = conn.QueryRow(taskCtx, run.task.SQL).Scan(
-				&values[0], &values[1], &values[2], &values[3],
-				&values[4], &values[5], &values[6], &values[7],
-			)
-			if err == nil {
-				samples = make([]collectedSample, len(statActivityMetricIDs))
-				for index, metricID := range statActivityMetricIDs {
-					samples[index] = collectedSample{metricID: metricID, value: values[index]}
-				}
-			}
-		case metric.TaskStatDatabase:
-			observation := statDatabaseSnapshot{observedAt: service.clock.Now().UTC()}
-			err = conn.QueryRow(taskCtx, run.task.SQL).Scan(
-				&observation.counters[0], &observation.counters[1], &observation.counters[2],
-				&observation.counters[3], &observation.counters[4], &observation.counters[5],
-			)
-			if err == nil {
-				samples, counterReset = service.statDatabaseRates.observe(run.key.instanceID, observation)
-			}
-		default:
-			err = fmt.Errorf("unsupported collection task %q", run.task.ID)
-		}
+		batch, err = service.collectQueryTask(taskCtx, conn, run)
 	}
 	if err != nil {
 		connectionFailure := dialFailure || isConnectionFailure(err)
@@ -249,10 +224,43 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		outcome.duration = time.Since(startedWall)
 		return outcome
 	}
-	outcome.err = service.recordSuccess(ctx, run, samples, counterReset)
+	outcome.err = service.recordSuccess(ctx, run, batch)
 	outcome.result = resultSuccess
 	outcome.duration = time.Since(startedWall)
 	return outcome
+}
+
+func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.TargetConn, run scheduledRun) (collectedBatch, error) {
+	switch run.task.ID {
+	case metric.TaskStatActivity:
+		values := make([]float64, len(statActivityMetricIDs))
+		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
+			&values[0], &values[1], &values[2], &values[3],
+			&values[4], &values[5], &values[6], &values[7],
+		); err != nil {
+			return collectedBatch{}, err
+		}
+		samples := make([]collectedSample, len(statActivityMetricIDs))
+		for index, metricID := range statActivityMetricIDs {
+			samples[index] = collectedSample{metricID: metricID, value: values[index]}
+		}
+		return collectedBatch{samples: samples}, nil
+	case metric.TaskStatDatabase:
+		observation := statDatabaseSnapshot{observedAt: service.clock.Now().UTC()}
+		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
+			&observation.counters[statDatabaseXactCommitIndex],
+			&observation.counters[statDatabaseXactRollbackIndex],
+			&observation.counters[statDatabaseTuplesReadIndex],
+			&observation.counters[statDatabaseTuplesWriteIndex],
+			&observation.counters[statDatabaseTempFilesIndex],
+			&observation.counters[statDatabaseTempBytesIndex],
+		); err != nil {
+			return collectedBatch{}, err
+		}
+		return service.statDatabaseRates.observe(run.key.instanceID, observation), nil
+	default:
+		return collectedBatch{}, fmt.Errorf("unsupported collection task %q", run.task.ID)
+	}
 }
 
 func (service *Service) executeCapabilitySnapshot(ctx context.Context, run scheduledRun) executionOutcome {

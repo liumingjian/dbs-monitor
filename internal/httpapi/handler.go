@@ -419,6 +419,7 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		return api.GetMetricSeries400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
 	}
 	result := api.MetricSeriesResponse{From: request.Params.From, To: request.Params.To, Step: step.name}
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
 	queries := metric.New(handler.platform)
 	var capabilityStates map[metric.CapabilityID]metric.CapabilityStatus
 	capabilityStatesLoaded := false
@@ -440,7 +441,7 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		if strings.HasPrefix(string(metricID), "pg.") {
 			var probeResult pgtype.Text
 			err := handler.platform.QueryRow(ctx, `SELECT last_result FROM instance_collection_task_state
-				WHERE instance_id = $1 AND task_id = 'pg.probe'`, pgtype.UUID{Bytes: request.Id, Valid: true}).Scan(&probeResult)
+				WHERE instance_id = $1 AND task_id = 'pg.probe'`, instanceID).Scan(&probeResult)
 			if err == nil && probeResult.Valid {
 				switch api.CollectionTaskResult(probeResult.String) {
 				case api.FAILED, api.TIMEDOUT:
@@ -453,7 +454,7 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 				return nil, err
 			}
 			if !capabilityStatesLoaded {
-				capabilityStates, _, err = handler.currentCapabilitySnapshot(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+				capabilityStates, _, err = handler.currentCapabilitySnapshot(ctx, instanceID)
 				if err != nil {
 					return nil, err
 				}
@@ -464,19 +465,14 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 				result.Metrics = append(result.Metrics, entry)
 				continue
 			}
-			if taskID, exists := producingTaskID(metric.MetricID(metricID)); exists {
-				var code pgtype.Text
-				err := handler.platform.QueryRow(ctx, `SELECT last_error_code FROM instance_collection_task_state
-						WHERE instance_id = $1 AND task_id = $2`, pgtype.UUID{Bytes: request.Id, Valid: true}, taskID).Scan(&code)
-				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-					return nil, err
-				}
-				counterReset = err == nil && code.Valid && code.String == string(metric.ResetCounter)
+			counterReset, err = handler.metricCounterReset(ctx, instanceID, metric.MetricID(metricID))
+			if err != nil {
+				return nil, err
 			}
 		}
 
 		series, err := queries.SeriesForMetric(ctx, metric.SeriesForMetricParams{
-			InstanceID: pgtype.UUID{Bytes: request.Id, Valid: true}, MetricID: string(metricID),
+			InstanceID: instanceID, MetricID: string(metricID),
 		})
 		if err != nil {
 			return nil, err
@@ -546,15 +542,21 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 	return api.GetMetricSeries200JSONResponse(result), nil
 }
 
-func producingTaskID(metricID metric.MetricID) (metric.TaskID, bool) {
-	for _, task := range metric.Tasks {
-		for _, yield := range task.Yields {
-			if yield.Metric == metricID {
-				return task.ID, true
-			}
-		}
+func (handler *Handler) metricCounterReset(ctx context.Context, instanceID pgtype.UUID, metricID metric.MetricID) (bool, error) {
+	task, exists := metric.TaskForMetric(metricID)
+	if !exists {
+		return false, nil
 	}
-	return "", false
+	var code pgtype.Text
+	err := handler.platform.QueryRow(ctx, `SELECT last_error_code FROM instance_collection_task_state
+		WHERE instance_id = $1 AND task_id = $2`, instanceID, task.ID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return code.Valid && code.String == string(metric.ResetCounter), nil
 }
 
 func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.ReportAgentMetricsRequestObject) (api.ReportAgentMetricsResponseObject, error) {

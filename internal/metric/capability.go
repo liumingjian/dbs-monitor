@@ -65,14 +65,11 @@ func CapabilityAffectedMetricCount(capabilityID CapabilityID) int {
 }
 
 func MetricCapabilityBlockReason(metricID MetricID, states map[CapabilityID]CapabilityStatus) (CapabilityBlockReason, bool) {
-	for _, task := range Tasks {
-		for _, yield := range task.Yields {
-			if yield.Metric == metricID {
-				return TaskCapabilityBlockReason(task, states)
-			}
-		}
+	task, exists := TaskForMetric(metricID)
+	if !exists {
+		return "", false
 	}
-	return "", false
+	return TaskCapabilityBlockReason(task, states)
 }
 
 func TaskCapabilityBlockReason(task Task, states map[CapabilityID]CapabilityStatus) (CapabilityBlockReason, bool) {
