@@ -104,7 +104,7 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 		}
 		response = append(response, toAPIInstance(
 			row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status,
-			collectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+			toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 		))
 	}
 	return response, nil
@@ -145,7 +145,7 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		return nil, err
 	}
 	return api.CreateInstance201JSONResponse{
-		Instance: toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK, api.CollectionPauseStatus{}),
+		Instance: toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, api.OK, api.CollectionPauseStatus{Paused: false}),
 	}, nil
 }
 
@@ -160,7 +160,7 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	}
 	return api.GetInstance200JSONResponse(toAPIInstance(
 		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status,
-		collectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 	)), nil
 }
 
@@ -230,7 +230,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		updatedInstance.Username,
 		updatedInstance.AgentVersion,
 		status,
-		collectionPauseStatus(pause.CollectionPaused, pause.CollectionPauseUpdatedBy, pause.CollectionPauseUpdatedAt, pause.CollectionPauseReason),
+		toAPICollectionPauseStatus(pause.CollectionPaused, pause.CollectionPauseUpdatedBy, pause.CollectionPauseUpdatedAt, pause.CollectionPauseReason),
 	)), nil
 }
 

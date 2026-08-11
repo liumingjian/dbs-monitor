@@ -28,6 +28,8 @@ type Snapshot struct {
 	NoDataCount       int
 }
 
+// StepCollection leaves the current snapshot untouched while collection is paused.
+// A nil snapshot remains nil so pausing cannot create an alert instance.
 func StepCollection(current *Snapshot, evaluation Evaluation, paused bool, triggerCount, recoveryCount int) *Snapshot {
 	if paused {
 		return current

@@ -45,25 +45,30 @@ func (service *Service) ensureTaskStates(ctx context.Context, targetID pgtype.UU
 }
 
 func (service *Service) recordStarted(ctx context.Context, run scheduledRun) (bool, error) {
-	started := false
+	recorded := false
 	err := service.platform.InTx(ctx, func(tx pgx.Tx) error {
-		active, err := lockActiveInstance(ctx, tx, run.target.ID)
-		if err != nil || !active {
+		collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
+		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO instance_collection_task_state
+		if !collectionActive {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO instance_collection_task_state
 			(instance_id, task_id, last_due_at, last_started_at)
 			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (instance_id, task_id) DO UPDATE
 			SET last_due_at = EXCLUDED.last_due_at, last_started_at = EXCLUDED.last_started_at`,
-			run.target.ID, run.task.ID, run.dueAt, run.startedAt)
-		started = err == nil
-		return err
+			run.target.ID, run.task.ID, run.dueAt, run.startedAt); err != nil {
+			return err
+		}
+		recorded = true
+		return nil
 	})
 	if err != nil {
 		return false, fmt.Errorf("record collection task start: %w", err)
 	}
-	return started, nil
+	return recorded, nil
 }
 
 func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, result taskResult, nextEligible time.Time) error {
@@ -71,9 +76,12 @@ func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, resul
 	code := string(result)
 	message := collectionErrorMessage(code)
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
-		active, err := lockActiveInstance(ctx, tx, run.target.ID)
-		if err != nil || !active {
+		collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
+		if err != nil {
 			return err
+		}
+		if !collectionActive {
+			return nil
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO instance_collection_task_state
 			(instance_id, task_id, last_due_at, last_finished_at, last_result, next_eligible_at, last_error_code, last_error_message)
@@ -101,9 +109,12 @@ func (service *Service) recordCapabilityBlocked(ctx context.Context, run schedul
 	code := string(reason)
 	message := collectionErrorMessage(code)
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
-		active, err := lockActiveInstance(ctx, tx, run.target.ID)
-		if err != nil || !active {
+		collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
+		if err != nil {
 			return err
+		}
+		if !collectionActive {
+			return nil
 		}
 		_, err = tx.Exec(ctx, `INSERT INTO instance_collection_task_state
 			(instance_id, task_id, last_due_at, last_finished_at, last_result, consecutive_failures,
@@ -130,9 +141,12 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 	message := collectionErrorMessage(code)
 	write := func() error {
 		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
-			active, err := lockActiveInstance(ctx, tx, run.target.ID)
-			if err != nil || !active {
+			collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
+			if err != nil {
 				return err
+			}
+			if !collectionActive {
+				return nil
 			}
 			failures, err := taskFailureCount(ctx, tx, run.target.ID, run.task.ID)
 			if err != nil {
@@ -197,9 +211,12 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, sam
 	finished := service.clock.Now().UTC()
 	write := func() error {
 		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
-			active, err := lockActiveInstance(ctx, tx, run.target.ID)
-			if err != nil || !active {
+			collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
+			if err != nil {
 				return err
+			}
+			if !collectionActive {
+				return nil
 			}
 			for _, sample := range samples {
 				if err := insertSample(ctx, tx, run.target.ID, sample.metricID, sample.value, finished); err != nil {
@@ -298,7 +315,7 @@ func lockInstance(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID) error 
 	return tx.QueryRow(ctx, "SELECT id FROM instance WHERE id = $1 FOR UPDATE", instanceID).Scan(&locked)
 }
 
-func lockActiveInstance(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID) (bool, error) {
+func lockInstanceAndCheckCollectionActive(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID) (bool, error) {
 	if err := lockInstance(ctx, tx, instanceID); err != nil {
 		return false, err
 	}

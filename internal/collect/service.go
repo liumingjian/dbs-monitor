@@ -148,7 +148,7 @@ func (service *Service) RunOnce(ctx context.Context) error {
 }
 
 func (service *Service) executeTask(ctx context.Context, run scheduledRun) executionOutcome {
-	paused, err := service.collectionPaused(ctx, run.target.ID)
+	paused, err := service.isCollectionPaused(ctx, run.target.ID)
 	if err != nil {
 		return executionOutcome{run: run, result: resultFailed, err: err}
 	}
@@ -172,12 +172,12 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 			return outcome
 		}
 	}
-	started, err := service.recordStarted(ctx, run)
+	recorded, err := service.recordStarted(ctx, run)
 	if err != nil {
 		outcome.err = err
 		return outcome
 	}
-	if !started {
+	if !recorded {
 		outcome.result = resultSuccess
 		return outcome
 	}
@@ -247,7 +247,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	return outcome
 }
 
-func (service *Service) collectionPaused(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+func (service *Service) isCollectionPaused(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
 	var paused bool
 	err := service.platform.QueryRow(ctx, `SELECT collection_paused FROM instance_collection_config
 		WHERE instance_id = $1`, instanceID).Scan(&paused)

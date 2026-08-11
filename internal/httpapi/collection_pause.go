@@ -16,7 +16,7 @@ func (handler *Handler) GetCollectionPause(ctx context.Context, request api.GetC
 	if err != nil {
 		return nil, err
 	}
-	return api.GetCollectionPause200JSONResponse(collectionPauseStatus(
+	return api.GetCollectionPause200JSONResponse(toAPICollectionPauseStatus(
 		row.CollectionPaused,
 		row.CollectionPauseUpdatedBy,
 		row.CollectionPauseUpdatedAt,
@@ -29,14 +29,14 @@ func (handler *Handler) UpdateCollectionPause(ctx context.Context, request api.U
 		return nil, errors.New("collection pause body is required")
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
-	actorID := pgtype.UUID{Bytes: authenticatedUserID(ctx), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
 	updatedAt := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
 	reason := pgtype.Text{}
 	if request.Body.Reason != nil {
 		reason = pgtype.Text{String: *request.Body.Reason, Valid: true}
 	}
 
-	var pause GetCollectionPauseRow
+	var status api.CollectionPauseStatus
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := New(tx)
 		updated, err := queries.SetCollectionPause(ctx, SetCollectionPauseParams{
@@ -47,34 +47,45 @@ func (handler *Handler) UpdateCollectionPause(ctx context.Context, request api.U
 			CollectionPauseReason:    reason,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
-			pause, err = queries.GetCollectionPause(ctx, instanceID)
-			return err
+			current, err := queries.GetCollectionPause(ctx, instanceID)
+			if err != nil {
+				return err
+			}
+			status = toAPICollectionPauseStatus(
+				current.CollectionPaused,
+				current.CollectionPauseUpdatedBy,
+				current.CollectionPauseUpdatedAt,
+				current.CollectionPauseReason,
+			)
+			return nil
 		}
 		if err != nil {
 			return err
 		}
-		pause = GetCollectionPauseRow(updated)
+		status = toAPICollectionPauseStatus(
+			updated.CollectionPaused,
+			updated.CollectionPauseUpdatedBy,
+			updated.CollectionPauseUpdatedAt,
+			updated.CollectionPauseReason,
+		)
 		kind := alerting.EventUnfrozen
 		if request.Body.Paused {
 			kind = alerting.EventFrozen
 		}
 		return queries.CreateCollectionPauseEvents(ctx, CreateCollectionPauseEventsParams{
-			InstanceID: instanceID,
-			Kind:       string(kind), EvaluatedAt: updatedAt, ActorID: actorID,
+			InstanceID:  instanceID,
+			Kind:        string(kind),
+			EvaluatedAt: updatedAt,
+			ActorID:     actorID,
 		})
 	})
 	if err != nil {
 		return nil, err
 	}
-	return api.UpdateCollectionPause200JSONResponse(collectionPauseStatus(
-		pause.CollectionPaused,
-		pause.CollectionPauseUpdatedBy,
-		pause.CollectionPauseUpdatedAt,
-		pause.CollectionPauseReason,
-	)), nil
+	return api.UpdateCollectionPause200JSONResponse(status), nil
 }
 
-func collectionPauseStatus(paused bool, updatedBy pgtype.UUID, updatedAt pgtype.Timestamptz, reason pgtype.Text) api.CollectionPauseStatus {
+func toAPICollectionPauseStatus(paused bool, updatedBy pgtype.UUID, updatedAt pgtype.Timestamptz, reason pgtype.Text) api.CollectionPauseStatus {
 	status := api.CollectionPauseStatus{Paused: paused}
 	if updatedBy.Valid {
 		value := uuid.UUID(updatedBy.Bytes)
