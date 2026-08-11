@@ -1431,6 +1431,129 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/maintenance-windows:
+    get:
+      tags:
+        - notification-settings
+      operationId: listMaintenanceWindows
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Non-deleted maintenance windows with status projected at server time.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceWindow'
+    post:
+      tags:
+        - notification-settings
+      operationId: createMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceWindowInput'
+      responses:
+        '201':
+          description: Maintenance window created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+        '400':
+          description: Invalid maintenance window.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/maintenance-windows/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceWindowInput'
+      responses:
+        '200':
+          description: Maintenance window updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+        '400':
+          description: Invalid or already ended maintenance window.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Maintenance window not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Maintenance window deleted while preserving historical references.
+        '404':
+          description: Maintenance window not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/maintenance-windows/{id}/end:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - notification-settings
+      operationId: endMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      responses:
+        '200':
+          description: Active maintenance window ended at server time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+        '400':
+          description: Maintenance window is not active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Maintenance window not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/instances/{id}/performance-events:
     parameters:
       - name: id
@@ -2549,6 +2672,7 @@ components:
         - severity
         - disposition
         - paused
+        - in_maintenance
         - updated_at
         - duration_ms
       properties:
@@ -2586,8 +2710,9 @@ components:
           format: date-time
         in_maintenance:
           type: boolean
-          nullable: true
-          description: Empty until maintenance-window projection is delivered.
+        maintenance_window_id:
+          type: string
+          format: uuid
         current_value:
           type: number
           format: double
@@ -2932,6 +3057,65 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ChannelFailureSummary'
+    MaintenanceWindowStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - SCHEDULED
+        - ENDED
+      x-enum-varnames:
+        - MaintenanceActive
+        - MaintenanceScheduled
+        - MaintenanceEnded
+    MaintenanceWindowInput:
+      type: object
+      required:
+        - instance_ids
+        - starts_at
+        - ends_at
+        - reason
+      properties:
+        instance_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          minLength: 1
+    MaintenanceWindow:
+      allOf:
+        - $ref: '#/components/schemas/MaintenanceWindowInput'
+        - type: object
+          required:
+            - id
+            - created_by
+            - status
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_by:
+              type: string
+              format: uuid
+            status:
+              $ref: '#/components/schemas/MaintenanceWindowStatus'
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
     PerformanceEventType:
       type: string
       enum:
@@ -2958,6 +3142,7 @@ components:
         - alert_status
         - severity
         - disposition
+        - in_maintenance
         - derived_at
         - updated_at
         - duration_ms
@@ -2985,6 +3170,11 @@ components:
           $ref: '#/components/schemas/AlertSeverity'
         disposition:
           $ref: '#/components/schemas/AlertDisposition'
+        in_maintenance:
+          type: boolean
+        maintenance_window_id:
+          type: string
+          format: uuid
         derived_at:
           type: string
           format: date-time

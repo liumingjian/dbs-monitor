@@ -58,25 +58,27 @@ func (handler *Handler) GetAlertDetail(ctx context.Context, request api.GetAlert
 		return nil, err
 	}
 	observation, err := handler.alertObservationResponse(alertObservationProjection{
-		id:               row.ID,
-		instanceID:       row.InstanceID,
-		instanceName:     row.InstanceName,
-		ruleID:           row.RuleID,
-		ruleName:         row.RuleName,
-		ruleVersion:      row.RuleVersion,
-		ruleSnapshot:     row.RuleSnapshot,
-		metricID:         row.MetricID,
-		status:           row.Status,
-		severity:         row.Severity,
-		disposition:      row.Disposition,
-		paused:           row.Paused,
-		pausedAt:         row.PausedAt,
-		currentValue:     row.CurrentValue,
-		threshold:        row.Threshold,
-		firstTriggeredAt: row.FirstTriggeredAt,
-		updatedAt:        row.UpdatedAt,
-		recoveredAt:      row.RecoveredAt,
-		unavailability:   row.Unavailability,
+		id:                  row.ID,
+		instanceID:          row.InstanceID,
+		instanceName:        row.InstanceName,
+		ruleID:              row.RuleID,
+		ruleName:            row.RuleName,
+		ruleVersion:         row.RuleVersion,
+		ruleSnapshot:        row.RuleSnapshot,
+		metricID:            row.MetricID,
+		status:              row.Status,
+		severity:            row.Severity,
+		disposition:         row.Disposition,
+		inMaintenance:       row.InMaintenance,
+		maintenanceWindowID: row.MaintenanceWindowID,
+		paused:              row.Paused,
+		pausedAt:            row.PausedAt,
+		currentValue:        row.CurrentValue,
+		threshold:           row.Threshold,
+		firstTriggeredAt:    row.FirstTriggeredAt,
+		updatedAt:           row.UpdatedAt,
+		recoveredAt:         row.RecoveredAt,
+		unavailability:      row.Unavailability,
 	})
 	if err != nil {
 		return nil, err
@@ -112,6 +114,7 @@ func (handler *Handler) GetAlertDetail(ctx context.Context, request api.GetAlert
 		Paused:              observation.Paused,
 		PausedAt:            observation.PausedAt,
 		InMaintenance:       observation.InMaintenance,
+		MaintenanceWindowId: observation.MaintenanceWindowId,
 		CurrentValue:        observation.CurrentValue,
 		Threshold:           observation.Threshold,
 		FirstTriggeredAt:    observation.FirstTriggeredAt,
@@ -184,25 +187,27 @@ func (handler *Handler) listAlertObservations(ctx context.Context, options alert
 	items := make([]api.AlertObservation, 0, len(rows))
 	for _, row := range rows {
 		item, err := handler.alertObservationResponse(alertObservationProjection{
-			id:               row.ID,
-			instanceID:       row.InstanceID,
-			instanceName:     row.InstanceName,
-			ruleID:           row.RuleID,
-			ruleName:         row.RuleName,
-			ruleVersion:      row.RuleVersion,
-			ruleSnapshot:     row.RuleSnapshot,
-			metricID:         row.MetricID,
-			status:           row.Status,
-			severity:         row.Severity,
-			disposition:      row.Disposition,
-			paused:           row.Paused,
-			pausedAt:         row.PausedAt,
-			currentValue:     row.CurrentValue,
-			threshold:        row.Threshold,
-			firstTriggeredAt: row.FirstTriggeredAt,
-			updatedAt:        row.UpdatedAt,
-			recoveredAt:      row.RecoveredAt,
-			unavailability:   row.Unavailability,
+			id:                  row.ID,
+			instanceID:          row.InstanceID,
+			instanceName:        row.InstanceName,
+			ruleID:              row.RuleID,
+			ruleName:            row.RuleName,
+			ruleVersion:         row.RuleVersion,
+			ruleSnapshot:        row.RuleSnapshot,
+			metricID:            row.MetricID,
+			status:              row.Status,
+			severity:            row.Severity,
+			disposition:         row.Disposition,
+			inMaintenance:       row.InMaintenance,
+			maintenanceWindowID: row.MaintenanceWindowID,
+			paused:              row.Paused,
+			pausedAt:            row.PausedAt,
+			currentValue:        row.CurrentValue,
+			threshold:           row.Threshold,
+			firstTriggeredAt:    row.FirstTriggeredAt,
+			updatedAt:           row.UpdatedAt,
+			recoveredAt:         row.RecoveredAt,
+			unavailability:      row.Unavailability,
 		})
 		if err != nil {
 			return api.AlertObservationPage{}, err
@@ -213,25 +218,27 @@ func (handler *Handler) listAlertObservations(ctx context.Context, options alert
 }
 
 type alertObservationProjection struct {
-	id               pgtype.UUID
-	instanceID       pgtype.UUID
-	instanceName     string
-	ruleID           pgtype.UUID
-	ruleName         string
-	ruleVersion      int32
-	ruleSnapshot     []byte
-	metricID         string
-	status           string
-	severity         string
-	disposition      string
-	paused           bool
-	pausedAt         pgtype.Timestamptz
-	currentValue     pgtype.Float8
-	threshold        float64
-	firstTriggeredAt pgtype.Timestamptz
-	updatedAt        pgtype.Timestamptz
-	recoveredAt      pgtype.Timestamptz
-	unavailability   pgtype.Text
+	id                  pgtype.UUID
+	instanceID          pgtype.UUID
+	instanceName        string
+	ruleID              pgtype.UUID
+	ruleName            string
+	ruleVersion         int32
+	ruleSnapshot        []byte
+	metricID            string
+	status              string
+	severity            string
+	disposition         string
+	inMaintenance       bool
+	maintenanceWindowID pgtype.UUID
+	paused              bool
+	pausedAt            pgtype.Timestamptz
+	currentValue        pgtype.Float8
+	threshold           float64
+	firstTriggeredAt    pgtype.Timestamptz
+	updatedAt           pgtype.Timestamptz
+	recoveredAt         pgtype.Timestamptz
+	unavailability      pgtype.Text
 }
 
 func (handler *Handler) alertObservationResponse(row alertObservationProjection) (api.AlertObservation, error) {
@@ -264,6 +271,7 @@ func (handler *Handler) alertObservationResponse(row alertObservationProjection)
 		Status:           api.AlertStatus(row.status),
 		Severity:         api.AlertSeverity(row.severity),
 		Disposition:      api.AlertDisposition(row.disposition),
+		InMaintenance:    row.inMaintenance,
 		Paused:           row.paused,
 		PausedAt:         timePointer(row.pausedAt),
 		CurrentValue:     floatPointer(row.currentValue),
@@ -272,6 +280,10 @@ func (handler *Handler) alertObservationResponse(row alertObservationProjection)
 		UpdatedAt:        row.updatedAt.Time.UTC(),
 		RecoveredAt:      timePointer(row.recoveredAt),
 		DurationMs:       duration.Milliseconds(),
+	}
+	if row.maintenanceWindowID.Valid {
+		maintenanceWindowID := uuid.UUID(row.maintenanceWindowID.Bytes)
+		response.MaintenanceWindowId = &maintenanceWindowID
 	}
 	if row.unavailability.Valid {
 		value := api.Unavailability(row.unavailability.String)

@@ -171,6 +171,62 @@ ON CONFLICT (singleton) DO UPDATE SET
     updated_at = EXCLUDED.updated_at
 RETURNING *;
 
+-- name: ListMaintenanceWindows :many
+SELECT * FROM maintenance_window
+WHERE deleted_at IS NULL
+ORDER BY starts_at DESC, id;
+
+-- name: GetMaintenanceWindow :one
+SELECT * FROM maintenance_window
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: ListMaintenanceWindowInstances :many
+SELECT instance_id FROM maintenance_window_instance
+WHERE maintenance_window_id = $1
+ORDER BY instance_id;
+
+-- name: ListMaintenanceWindowsForInstance :many
+SELECT maintenance.*
+FROM maintenance_window maintenance
+JOIN maintenance_window_instance scope ON scope.maintenance_window_id = maintenance.id
+WHERE scope.instance_id = $1
+  AND maintenance.deleted_at IS NULL
+ORDER BY maintenance.ends_at, maintenance.id;
+
+-- name: MaintenanceWindowInstanceExists :one
+SELECT EXISTS (SELECT 1 FROM instance WHERE id = $1);
+
+-- name: CreateMaintenanceWindow :one
+INSERT INTO maintenance_window (
+    id, starts_at, ends_at, reason, created_by, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
+RETURNING *;
+
+-- name: UpdateMaintenanceWindow :one
+UPDATE maintenance_window
+SET starts_at = $2, ends_at = $3, reason = $4, updated_at = $5
+WHERE id = $1 AND deleted_at IS NULL AND ends_at > $5
+RETURNING *;
+
+-- name: EndMaintenanceWindow :one
+UPDATE maintenance_window
+SET ends_at = $2, updated_at = $2
+WHERE id = $1 AND deleted_at IS NULL AND starts_at <= $2 AND ends_at > $2
+RETURNING *;
+
+-- name: DeleteMaintenanceWindow :execrows
+UPDATE maintenance_window
+SET deleted_at = $2, updated_at = $2
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: ClearMaintenanceWindowInstances :exec
+DELETE FROM maintenance_window_instance WHERE maintenance_window_id = $1;
+
+-- name: AddMaintenanceWindowInstance :exec
+INSERT INTO maintenance_window_instance (maintenance_window_id, instance_id)
+VALUES ($1, $2);
+
 -- name: EnqueueAlertNotifications :many
 WITH selected_policy AS (
     SELECT policy.*
@@ -232,32 +288,101 @@ FROM (
 ) destination
 RETURNING id;
 
+-- name: DeletePendingNotification :exec
+DELETE FROM notification_delivery WHERE id = $1 AND status = 'PENDING';
+
 -- name: ListRepeatCandidates :many
-SELECT alert.id AS alert_instance_id, alert.disposition,
+SELECT alert.id AS alert_instance_id, alert.instance_id, alert.disposition,
        policy.repeat_interval,
-       latest.created_at AS last_notification_at,
-       latest.payload
+       greatest(
+           coalesce((SELECT max(delivery.created_at) FROM notification_delivery delivery
+                     WHERE delivery.alert_instance_id = alert.id
+                       AND delivery.event_type IN ('FIRING', 'REPEAT')), '-infinity'::timestamptz),
+           coalesce((SELECT max(event.evaluated_at) FROM alert_event event
+                     WHERE event.alert_instance_id = alert.id
+                       AND event.kind = 'MAINTENANCE_SUPPRESSED'), '-infinity'::timestamptz),
+           alert.first_triggered_at
+       )::timestamptz AS last_notification_at,
+       jsonb_build_object(
+           'alert_instance_id', alert.id,
+           'rule_name', coalesce(alert.rule_snapshot->>'name', rule.name),
+           'instance_name', identity.name,
+           'metric_id', alert.metric_id,
+           'severity', alert.severity,
+           'current_value', coalesce(alert.current_value::text, '')
+       ) AS payload
 FROM alert_instance alert
 JOIN alert_rule rule ON rule.id = alert.rule_id
+JOIN instance_identity identity ON identity.id = alert.instance_id
 JOIN notification_policy policy ON policy.id = COALESCE(
     rule.notification_policy_id,
     (SELECT id FROM notification_policy WHERE is_default)
 )
-JOIN LATERAL (
-    SELECT delivery.created_at, delivery.payload
-    FROM notification_delivery delivery
-    WHERE delivery.alert_instance_id = alert.id
-      AND delivery.event_type IN ('FIRING', 'REPEAT')
-    ORDER BY delivery.created_at DESC, delivery.id DESC
-    LIMIT 1
-) latest ON true
 WHERE alert.status = 'FIRING'
+  AND alert.first_triggered_at IS NOT NULL
   AND alert.severity = ANY(policy.severity_filter)
+  AND (
+      EXISTS (
+          SELECT 1 FROM notification_delivery delivery
+          WHERE delivery.alert_instance_id = alert.id
+            AND delivery.event_type IN ('FIRING', 'REPEAT')
+      )
+      OR EXISTS (
+          SELECT 1 FROM alert_event event
+          WHERE event.alert_instance_id = alert.id
+            AND event.kind = 'MAINTENANCE_SUPPRESSED'
+      )
+  )
   AND NOT EXISTS (
       SELECT 1 FROM notification_delivery pending
       WHERE pending.alert_instance_id = alert.id AND pending.status = 'PENDING'
   )
 ORDER BY alert.id;
+
+-- name: GetNotificationAlertInstance :one
+SELECT alert.id, alert.instance_id
+FROM notification_delivery delivery
+JOIN alert_instance alert ON alert.id = delivery.alert_instance_id
+WHERE delivery.id = $1;
+
+-- name: RecordMaintenanceSuppressed :exec
+WITH marked AS (
+    UPDATE alert_instance alert
+    SET in_maintenance = true, maintenance_window_id = $2
+    WHERE alert.id = $1
+    RETURNING alert.*
+)
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, in_maintenance, maintenance_window_id
+)
+SELECT alert.id, alert.rule_id, alert.rule_version, 'MAINTENANCE_SUPPRESSED',
+       alert.status, alert.status, alert.current_value, alert.unavailability,
+       alert.rule_snapshot, $3, true, $2
+FROM marked alert;
+
+-- name: SuppressNotificationForMaintenance :exec
+WITH removed AS (
+    DELETE FROM notification_delivery delivery
+    WHERE delivery.id = $1 AND delivery.status = 'PENDING'
+    RETURNING delivery.alert_instance_id
+), marked AS (
+    UPDATE alert_instance alert
+    SET in_maintenance = true, maintenance_window_id = $2
+    FROM removed
+    WHERE alert.id = removed.alert_instance_id
+    RETURNING alert.*
+)
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, in_maintenance, maintenance_window_id
+)
+SELECT alert.id, alert.rule_id, alert.rule_version, 'MAINTENANCE_SUPPRESSED',
+       alert.status, alert.status, alert.current_value, alert.unavailability,
+       alert.rule_snapshot, $3, true, $2
+FROM marked alert;
 
 -- name: EnqueueTestNotification :one
 INSERT INTO notification_delivery (

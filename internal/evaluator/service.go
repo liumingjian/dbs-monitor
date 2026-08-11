@@ -119,6 +119,12 @@ func (service *Service) evaluateRule(
 	if err != nil {
 		return err
 	}
+	maintenanceWindowID, inMaintenance, err := notify.FindActiveMaintenanceWindow(
+		ctx, notify.New(database), evaluationTarget.InstanceID, now,
+	)
+	if err != nil {
+		return fmt.Errorf("match maintenance window: %w", err)
+	}
 	if metricResult.outcome == alerting.Missing && evaluationTarget.NoDataPolicy == "ignore" {
 		if evaluationTarget.AlertInstanceID.Valid && currentSnapshot.State != alerting.RECOVERED {
 			nextSnapshot := *alerting.StepCollection(
@@ -129,14 +135,16 @@ func (service *Service) evaluateRule(
 				int(evaluationTarget.RecoveryConsecutiveCount),
 			)
 			if err := queries.ResetIgnoredMissingAlert(ctx, alerting.ResetIgnoredMissingAlertParams{
-				ID:            evaluationTarget.AlertInstanceID,
-				RuleVersion:   evaluationTarget.Version,
-				Severity:      evaluationTarget.Severity,
-				RuleSnapshot:  evaluationTarget.RuleSnapshot,
-				BreachCount:   int32(nextSnapshot.BreachCount),
-				RecoveryCount: int32(nextSnapshot.RecoveryCount),
-				NoDataCount:   int32(nextSnapshot.NoDataCount),
-				UpdatedAt:     evaluatedAt,
+				ID:                  evaluationTarget.AlertInstanceID,
+				RuleVersion:         evaluationTarget.Version,
+				Severity:            evaluationTarget.Severity,
+				RuleSnapshot:        evaluationTarget.RuleSnapshot,
+				BreachCount:         int32(nextSnapshot.BreachCount),
+				RecoveryCount:       int32(nextSnapshot.RecoveryCount),
+				NoDataCount:         int32(nextSnapshot.NoDataCount),
+				UpdatedAt:           evaluatedAt,
+				InMaintenance:       inMaintenance,
+				MaintenanceWindowID: maintenanceWindowID,
 			}); err != nil {
 				return fmt.Errorf("reset alert counters for ignored missing data: %w", err)
 			}
@@ -179,38 +187,42 @@ func (service *Service) evaluateRule(
 	var alertInstanceID pgtype.UUID
 	if nextSnapshot.State == alerting.RECOVERED {
 		alertInstanceID, err = queries.RecoverAlertSnapshot(ctx, alerting.RecoverAlertSnapshotParams{
-			ID:            evaluationTarget.AlertInstanceID,
-			MetricID:      evaluationTarget.MetricID,
-			RuleVersion:   evaluationTarget.Version,
-			Severity:      evaluationTarget.Severity,
-			CurrentValue:  metricResult.currentValue,
-			RuleSnapshot:  evaluationTarget.RuleSnapshot,
-			BreachCount:   int32(nextSnapshot.BreachCount),
-			RecoveryCount: int32(nextSnapshot.RecoveryCount),
-			NoDataCount:   int32(nextSnapshot.NoDataCount),
-			UpdatedAt:     recoveredAt,
+			ID:                  evaluationTarget.AlertInstanceID,
+			MetricID:            evaluationTarget.MetricID,
+			RuleVersion:         evaluationTarget.Version,
+			Severity:            evaluationTarget.Severity,
+			CurrentValue:        metricResult.currentValue,
+			RuleSnapshot:        evaluationTarget.RuleSnapshot,
+			BreachCount:         int32(nextSnapshot.BreachCount),
+			RecoveryCount:       int32(nextSnapshot.RecoveryCount),
+			NoDataCount:         int32(nextSnapshot.NoDataCount),
+			UpdatedAt:           recoveredAt,
+			InMaintenance:       inMaintenance,
+			MaintenanceWindowID: maintenanceWindowID,
 		})
 	} else {
 		alertInstanceID, err = queries.SaveAlertSnapshot(ctx, alerting.SaveAlertSnapshotParams{
-			RuleID:             evaluationTarget.RuleID,
-			InstanceID:         evaluationTarget.InstanceID,
-			MetricID:           evaluationTarget.MetricID,
-			MetricDimensionKey: scheduledTarget.MetricDimensionKey,
-			Status:             string(nextSnapshot.State),
-			RuleVersion:        evaluationTarget.Version,
-			Severity:           evaluationTarget.Severity,
-			CurrentValue:       metricResult.currentValue,
-			RuleSnapshot:       evaluationTarget.RuleSnapshot,
-			BreachCount:        int32(nextSnapshot.BreachCount),
-			RecoveryCount:      int32(nextSnapshot.RecoveryCount),
-			NoDataCount:        int32(nextSnapshot.NoDataCount),
-			StateBeforeNoData:  stateBeforeNoData,
-			Unavailability:     metricResult.unavailability,
-			UpdatedAt:          evaluatedAt,
-			FirstTriggeredAt:   firstTriggeredAt,
-			FirstRuleVersion:   firstRuleVersion,
-			FirstRuleSnapshot:  firstRuleSnapshot,
-			RecoveredAt:        recoveredAt,
+			RuleID:              evaluationTarget.RuleID,
+			InstanceID:          evaluationTarget.InstanceID,
+			MetricID:            evaluationTarget.MetricID,
+			MetricDimensionKey:  scheduledTarget.MetricDimensionKey,
+			Status:              string(nextSnapshot.State),
+			RuleVersion:         evaluationTarget.Version,
+			Severity:            evaluationTarget.Severity,
+			CurrentValue:        metricResult.currentValue,
+			RuleSnapshot:        evaluationTarget.RuleSnapshot,
+			BreachCount:         int32(nextSnapshot.BreachCount),
+			RecoveryCount:       int32(nextSnapshot.RecoveryCount),
+			NoDataCount:         int32(nextSnapshot.NoDataCount),
+			StateBeforeNoData:   stateBeforeNoData,
+			Unavailability:      metricResult.unavailability,
+			UpdatedAt:           evaluatedAt,
+			FirstTriggeredAt:    firstTriggeredAt,
+			FirstRuleVersion:    firstRuleVersion,
+			FirstRuleSnapshot:   firstRuleSnapshot,
+			RecoveredAt:         recoveredAt,
+			InMaintenance:       inMaintenance,
+			MaintenanceWindowID: maintenanceWindowID,
 		})
 	}
 	if err != nil {
@@ -251,17 +263,19 @@ func (service *Service) evaluateRule(
 			eventTriggerSnapshotID = triggerSnapshotID
 		}
 		if err := queries.CreateAlertEvent(ctx, alerting.CreateAlertEventParams{
-			AlertInstanceID:   alertInstanceID,
-			RuleID:            evaluationTarget.RuleID,
-			RuleVersion:       evaluationTarget.Version,
-			Kind:              string(kind),
-			FromState:         string(previousState),
-			ToState:           string(nextSnapshot.State),
-			CurrentValue:      metricResult.currentValue,
-			Unavailability:    metricResult.unavailability,
-			RuleSnapshot:      evaluationTarget.RuleSnapshot,
-			EvaluatedAt:       evaluatedAt,
-			TriggerSnapshotID: eventTriggerSnapshotID,
+			AlertInstanceID:     alertInstanceID,
+			RuleID:              evaluationTarget.RuleID,
+			RuleVersion:         evaluationTarget.Version,
+			Kind:                string(kind),
+			FromState:           string(previousState),
+			ToState:             string(nextSnapshot.State),
+			CurrentValue:        metricResult.currentValue,
+			Unavailability:      metricResult.unavailability,
+			RuleSnapshot:        evaluationTarget.RuleSnapshot,
+			EvaluatedAt:         evaluatedAt,
+			TriggerSnapshotID:   eventTriggerSnapshotID,
+			InMaintenance:       inMaintenance,
+			MaintenanceWindowID: maintenanceWindowID,
 		}); err != nil {
 			return fmt.Errorf("save alert event: %w", err)
 		}
@@ -288,7 +302,8 @@ func (service *Service) evaluateRule(
 		if err != nil {
 			return fmt.Errorf("encode notification payload: %w", err)
 		}
-		_, err = notify.New(database).EnqueueAlertNotifications(ctx, notify.EnqueueAlertNotificationsParams{
+		notificationQueries := notify.New(database)
+		notificationIDs, err := notificationQueries.EnqueueAlertNotifications(ctx, notify.EnqueueAlertNotificationsParams{
 			AlertInstanceID: alertInstanceID,
 			EventType:       string(notificationEventType),
 			TemplateID:      pgtype.Text{String: templateID, Valid: true},
@@ -297,6 +312,18 @@ func (service *Service) evaluateRule(
 		})
 		if err != nil {
 			return fmt.Errorf("enqueue alert notification: %w", err)
+		}
+		if inMaintenance && len(notificationIDs) > 0 {
+			for _, notificationID := range notificationIDs {
+				if err := notificationQueries.DeletePendingNotification(ctx, notificationID); err != nil {
+					return fmt.Errorf("discard maintenance-suppressed notification: %w", err)
+				}
+			}
+			if err := notificationQueries.RecordMaintenanceSuppressed(ctx, notify.RecordMaintenanceSuppressedParams{
+				ID: alertInstanceID, MaintenanceWindowID: maintenanceWindowID, EvaluatedAt: evaluatedAt,
+			}); err != nil {
+				return fmt.Errorf("record maintenance suppression: %w", err)
+			}
 		}
 	}
 	if err := queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint); err != nil {

@@ -315,6 +315,142 @@ func TestNotificationRepeatAcknowledgementAndNewLifecycle(t *testing.T) {
 	}
 }
 
+func TestMaintenanceWindowSuppressesWithoutStoppingEvaluationOrReplaying(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	platform, keyring := notificationTestDatabase(t, ctx)
+	defer platform.Close()
+
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	currentClock := &notificationClock{now: now}
+	instanceID := uuid.New()
+	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "unused-test-value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := instance.New(platform).CreateInstance(ctx, instance.CreateInstanceParams{
+		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "maintenance-primary",
+		Host: "127.0.0.1", Port: 5432, DatabaseName: "postgres", Username: "monitor",
+		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	actorID := uuid.New()
+	windowID := uuid.New()
+	ruleID := uuid.New()
+	if _, err := platform.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role, enabled, created_at)
+		VALUES ($1, 'maintenance-admin', decode('00', 'hex'), 'ALERT_ADMIN', true, $2)`, actorID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `UPDATE instance SET agent_expected = true, agent_first_registered_at = $1, agent_token_revoked_at = $1 WHERE id = $2`, now, instanceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `INSERT INTO alert_rule
+		(id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold,
+		 window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy,
+		 enabled, version, scope, evaluation_interval_seconds)
+		VALUES ($1, 'Maintenance tracer', 'agent.status', 'latest', '=', 0, '=', 1,
+			 30, 1, 1, 'critical', 'mark_no_data', true, 1, 'ALL', 5)`, ruleID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `INSERT INTO alert_rule_version (rule_id, version, snapshot)
+		VALUES ($1, 1, '{"name":"Maintenance tracer","metric_id":"agent.status"}')`, ruleID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `INSERT INTO maintenance_window (id, starts_at, ends_at, reason, created_by, created_at, updated_at)
+		VALUES ($1, $2::timestamptz - interval '1 minute', $2::timestamptz + interval '10 minutes', 'planned restart', $3, $2, $2)`, windowID, now, actorID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `INSERT INTO maintenance_window_instance (maintenance_window_id, instance_id) VALUES ($1, $2)`, windowID, instanceID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `UPDATE notification_policy SET repeat_interval = 900 WHERE is_default`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := platform.Exec(ctx, `INSERT INTO smtp_channel
+		(enabled, host, port, from_address, recipient, auth_type, tls_mode, updated_at)
+		VALUES (true, '127.0.0.1', 465, 'monitor@example.com', 'dba@example.com', 'NONE', 'IMPLICIT', $1)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	evaluation := New(platform, currentClock, nil)
+	if err := evaluation.RunOnce(ctx); err != nil {
+		t.Fatalf("evaluate during maintenance: %v", err)
+	}
+	var alertID uuid.UUID
+	var status string
+	var inMaintenance bool
+	var referencedWindow uuid.UUID
+	var deliveryCount, firingEvents, suppressionEvents int
+	if err := platform.QueryRow(ctx, `SELECT alert.id, alert.status, alert.in_maintenance, alert.maintenance_window_id,
+		(SELECT count(*) FROM notification_delivery WHERE alert_instance_id = alert.id),
+		(SELECT count(*) FROM alert_event WHERE alert_instance_id = alert.id AND kind = 'FIRED'
+		 AND in_maintenance AND maintenance_window_id = $3),
+		(SELECT count(*) FROM alert_event WHERE alert_instance_id = alert.id AND kind = 'MAINTENANCE_SUPPRESSED'
+		 AND in_maintenance AND maintenance_window_id = $3)
+		FROM alert_instance alert WHERE alert.rule_id = $1 AND alert.instance_id = $2`, ruleID, instanceID, windowID).
+		Scan(&alertID, &status, &inMaintenance, &referencedWindow, &deliveryCount, &firingEvents, &suppressionEvents); err != nil {
+		t.Fatal(err)
+	}
+	if status != "FIRING" || !inMaintenance || referencedWindow != windowID || deliveryCount != 0 || firingEvents != 1 || suppressionEvents != 1 {
+		t.Fatalf("maintenance evaluation = status %s, marked %t/%s, deliveries %d, fired events %d, suppressions %d",
+			status, inMaintenance, referencedWindow, deliveryCount, firingEvents, suppressionEvents)
+	}
+
+	dispatcher := notify.NewDispatcher(platform)
+	if _, err := platform.Exec(ctx, `INSERT INTO notification_delivery
+		(alert_instance_id, event_type, channel, target, template_id, payload, next_attempt_at, created_at)
+		VALUES ($1, 'FIRING', 'SMTP', 'dba@example.com', 'builtin.notification.firing.v1', '{}'::jsonb, $2, $2)`, alertID, now); err != nil {
+		t.Fatal(err)
+	}
+	if processed, err := dispatcher.DispatchOne(ctx, now, map[string]notify.Channel{}); err != nil || !processed {
+		t.Fatalf("delivery queued before maintenance = %t, %v; want suppressed processing", processed, err)
+	}
+	if err := platform.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM notification_delivery WHERE alert_instance_id = $1),
+		(SELECT count(*) FROM alert_event WHERE alert_instance_id = $1 AND kind = 'MAINTENANCE_SUPPRESSED'
+		 AND maintenance_window_id = $2)`, alertID, windowID).Scan(&deliveryCount, &suppressionEvents); err != nil {
+		t.Fatal(err)
+	}
+	if deliveryCount != 0 || suppressionEvents != 2 {
+		t.Fatalf("dispatch-time maintenance suppression = %d deliveries, %d audit events; want 0, 2", deliveryCount, suppressionEvents)
+	}
+	if count, err := dispatcher.EnqueueDueRepeats(ctx, now.Add(10*time.Minute+time.Second)); err != nil || count != 0 {
+		t.Fatalf("repeat immediately after maintenance = %d, %v; want 0, nil", count, err)
+	}
+	currentClock.now = now.Add(15 * time.Minute)
+	if err := evaluation.RunOnce(ctx); err != nil {
+		t.Fatalf("evaluate after maintenance: %v", err)
+	}
+	if count, err := dispatcher.EnqueueDueRepeats(ctx, currentClock.now); err != nil || count != 1 {
+		t.Fatalf("repeat at next interval = %d, %v; want 1, nil", count, err)
+	}
+
+	address, messages, closeSMTP := startNotificationSMTPReceiver(t, 1)
+	defer closeSMTP()
+	host, portText, err := net.SplitHostPort(address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channel := notify.NewSMTPChannel(notify.SMTPConfig{
+		Host: host, Port: port, From: "monitor@example.com", TLSMode: notify.TLSImplicit, AuthType: notify.AuthNone,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true},
+	})
+	if processed, err := dispatcher.DispatchOne(ctx, currentClock.now, map[string]notify.Channel{notify.SMTPChannelKey: channel}); err != nil || !processed {
+		t.Fatalf("post-maintenance repeat delivery = %t, %v", processed, err)
+	}
+	if message := <-messages; !strings.Contains(message, "Maintenance tracer") {
+		t.Fatalf("post-maintenance repeat missing alert facts:\n%s", message)
+	}
+	if err := platform.QueryRow(ctx, `SELECT in_maintenance FROM alert_instance WHERE id = $1`, alertID).Scan(&inMaintenance); err != nil || inMaintenance {
+		t.Fatalf("alert maintenance marker after evaluation = %t, %v; want false", inMaintenance, err)
+	}
+}
+
 type notificationClock struct{ now time.Time }
 
 func (clock *notificationClock) Now() time.Time { return clock.now }

@@ -89,6 +89,12 @@ paths:
     $ref: paths/notifications.yaml#/~1api~1v1~1notification-policies
   /api/v1/notification-policies/{id}:
     $ref: paths/notifications.yaml#/~1api~1v1~1notification-policies~1{id}
+  /api/v1/maintenance-windows:
+    $ref: paths/notifications.yaml#/~1api~1v1~1maintenance-windows
+  /api/v1/maintenance-windows/{id}:
+    $ref: paths/notifications.yaml#/~1api~1v1~1maintenance-windows~1{id}
+  /api/v1/maintenance-windows/{id}/end:
+    $ref: paths/notifications.yaml#/~1api~1v1~1maintenance-windows~1{id}~1end
   /api/v1/instances/{id}/performance-events:
     $ref: paths/performance-events.yaml#/~1api~1v1~1instances~1{id}~1performance-events
   /api/v1/performance-events/{id}:
@@ -217,6 +223,12 @@ components:
       $ref: components/schemas/notifications.yaml#/ChannelFailureSummary
     ChannelFailureOverview:
       $ref: components/schemas/notifications.yaml#/ChannelFailureOverview
+    MaintenanceWindowStatus:
+      $ref: components/schemas/notifications.yaml#/MaintenanceWindowStatus
+    MaintenanceWindowInput:
+      $ref: components/schemas/notifications.yaml#/MaintenanceWindowInput
+    MaintenanceWindow:
+      $ref: components/schemas/notifications.yaml#/MaintenanceWindow
     PerformanceEventType:
       $ref: components/enums.yaml#/PerformanceEventType
     PerformanceEvent:

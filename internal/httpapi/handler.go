@@ -1188,6 +1188,8 @@ var RequiredRoles = map[string]string{
 	"UpdateNotificationContactGroup": "ALERT_ADMIN", "DeleteNotificationContactGroup": "ALERT_ADMIN",
 	"ListNotificationPolicies": "READONLY", "CreateNotificationPolicy": "ALERT_ADMIN",
 	"UpdateNotificationPolicy": "ALERT_ADMIN", "DeleteNotificationPolicy": "ALERT_ADMIN",
+	"ListMaintenanceWindows": "READONLY", "CreateMaintenanceWindow": "ALERT_ADMIN",
+	"UpdateMaintenanceWindow": "ALERT_ADMIN", "EndMaintenanceWindow": "ALERT_ADMIN", "DeleteMaintenanceWindow": "ALERT_ADMIN",
 	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",

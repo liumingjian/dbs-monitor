@@ -80,6 +80,21 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	currentClock := &snapshotClock{now: now}
+	maintenanceOwnerID := uuid.New()
+	maintenanceWindowID := uuid.New()
+	if _, err := pool.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role, enabled, created_at)
+		VALUES ($1, 'snapshot-maintenance-owner', decode('00', 'hex'), 'ALERT_ADMIN', true, $2)`, maintenanceOwnerID, now); err != nil {
+		t.Fatalf("create maintenance owner: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO maintenance_window
+		(id, starts_at, ends_at, reason, created_by, created_at, updated_at)
+		VALUES ($1, $2, $2::timestamptz + interval '1 minute', 'snapshot maintenance', $3, $2, $2)`, maintenanceWindowID, now, maintenanceOwnerID); err != nil {
+		t.Fatalf("create snapshot maintenance window: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO maintenance_window_instance (maintenance_window_id, instance_id)
+		VALUES ($1, $2)`, maintenanceWindowID, instanceID); err != nil {
+		t.Fatalf("scope snapshot maintenance window: %v", err)
+	}
 	ruleID := uuid.New()
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_rule
 		(id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold,
@@ -248,7 +263,8 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	eventItem := eventPage.Items[0]
 	if eventItem.Id != performanceEventID || eventItem.AlertInstanceId != alertInstanceID ||
 		eventItem.EventType != api.EventLockBlocking || eventItem.AlertStatus != api.FIRING ||
-		eventItem.Disposition != api.AlertDispositionNONE || eventItem.TriggerSnapshotResult != api.TriggerSnapshotSuccess {
+		eventItem.Disposition != api.AlertDispositionNONE || eventItem.TriggerSnapshotResult != api.TriggerSnapshotSuccess ||
+		!eventItem.InMaintenance || eventItem.MaintenanceWindowId == nil || *eventItem.MaintenanceWindowId != maintenanceWindowID {
 		t.Fatalf("derived performance event projection = %+v", eventItem)
 	}
 	for _, contextValue := range []string{"pg.session.blocked_count", "1"} {
@@ -259,7 +275,8 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 
 	eventDetailURL := server.URL + "/api/v1/performance-events/" + performanceEventID.String()
 	eventDetail := readPerformanceEvent(t, client, eventDetailURL)
-	if eventDetail.Id != performanceEventID || eventDetail.SuggestedAction == "" {
+	if eventDetail.Id != performanceEventID || eventDetail.SuggestedAction == "" ||
+		!eventDetail.InMaintenance || eventDetail.MaintenanceWindowId == nil || *eventDetail.MaintenanceWindowId != maintenanceWindowID {
 		t.Fatalf("performance event detail = %+v", eventDetail)
 	}
 	dispositionResponse := snapshotRequestJSON(t, client, http.MethodPut,

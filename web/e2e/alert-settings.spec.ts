@@ -26,6 +26,8 @@ test('keeps all four alert settings pages reachable and read-only controls expli
   await page.route('**/api/v1/notification-contacts', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/notification-contact-groups', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/notification-policies', (route) => route.fulfill({ json: [defaultPolicy] }))
+  await page.route('**/api/v1/maintenance-windows', (route) => route.fulfill({ json: [] }))
+  await page.route('**/api/v1/instances', (route) => route.fulfill({ json: [] }))
 
   await page.goto('/alert-settings/notifications')
   await expect(page.getByRole('tab', { name: '通知渠道' })).toHaveAttribute('aria-selected', 'true')
@@ -47,5 +49,7 @@ test('keeps all four alert settings pages reachable and read-only controls expli
 
   await page.getByRole('link', { name: '维护窗口' }).click()
   await expect(page).toHaveURL(/\/alert-settings\/maintenance-windows$/)
-  await expect(page.getByText('暂无维护窗口')).toBeVisible()
+  await expect(page.getByText('需要告警管理员角色才能管理维护窗口')).toBeVisible()
+  await expect(page.getByRole('button', { name: '新建维护窗口' })).toBeDisabled()
+  await expect(page.getByRole('tab', { name: '生效中 0' })).toBeVisible()
 })

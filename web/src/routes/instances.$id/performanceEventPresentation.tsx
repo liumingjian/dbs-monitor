@@ -26,6 +26,10 @@ export function PerformanceEventSeverityTag({ severity }: { severity: AlertSever
   return <Tag color={presentation.color}>{presentation.label}</Tag>
 }
 
+export function PerformanceEventMaintenanceTag({ inMaintenance }: { inMaintenance: boolean }) {
+  return inMaintenance ? <Tag color="processing">维护中</Tag> : null
+}
+
 export function performanceEventSeverityPresentation(severity: AlertSeverity): SeverityPresentation {
   switch (severity) {
     case 'critical': return { label: '严重', color: 'error' }

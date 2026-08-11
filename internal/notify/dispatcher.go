@@ -43,6 +43,10 @@ func (dispatcher *Dispatcher) EnqueueDueRepeats(ctx context.Context, now time.Ti
 		) {
 			continue
 		}
+		maintenanceWindowID, inMaintenance, err := FindActiveMaintenanceWindow(ctx, dispatcher.queries, candidate.InstanceID, now)
+		if err != nil {
+			return enqueued, fmt.Errorf("match repeat maintenance window: %w", err)
+		}
 		ids, err := dispatcher.queries.EnqueueAlertNotifications(ctx, EnqueueAlertNotificationsParams{
 			AlertInstanceID: candidate.AlertInstanceID,
 			EventType:       string(EventRepeat),
@@ -52,6 +56,20 @@ func (dispatcher *Dispatcher) EnqueueDueRepeats(ctx context.Context, now time.Ti
 		})
 		if err != nil {
 			return enqueued, fmt.Errorf("enqueue repeat notification: %w", err)
+		}
+		if !ShouldDeliver(EventRepeat, SuppressionFacts{Maintenance: inMaintenance}) && len(ids) > 0 {
+			for _, notificationID := range ids {
+				if err := dispatcher.queries.DeletePendingNotification(ctx, notificationID); err != nil {
+					return enqueued, fmt.Errorf("discard maintenance-suppressed repeat: %w", err)
+				}
+			}
+			if err := dispatcher.queries.RecordMaintenanceSuppressed(ctx, RecordMaintenanceSuppressedParams{
+				ID: candidate.AlertInstanceID, MaintenanceWindowID: maintenanceWindowID,
+				EvaluatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			}); err != nil {
+				return enqueued, fmt.Errorf("record repeat maintenance suppression: %w", err)
+			}
+			continue
 		}
 		enqueued += len(ids)
 	}
@@ -65,6 +83,24 @@ func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, ch
 	}
 	if err != nil {
 		return false, fmt.Errorf("claim notification: %w", err)
+	}
+	alert, alertErr := dispatcher.queries.GetNotificationAlertInstance(ctx, delivery.ID)
+	if alertErr == nil {
+		maintenanceWindowID, inMaintenance, matchErr := FindActiveMaintenanceWindow(ctx, dispatcher.queries, alert.InstanceID, now)
+		if matchErr != nil {
+			return true, fmt.Errorf("match delivery maintenance window: %w", matchErr)
+		}
+		if !ShouldDeliver(EventType(delivery.EventType), SuppressionFacts{Maintenance: inMaintenance}) {
+			if err := dispatcher.queries.SuppressNotificationForMaintenance(ctx, SuppressNotificationForMaintenanceParams{
+				ID: delivery.ID, MaintenanceWindowID: maintenanceWindowID,
+				EvaluatedAt: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+			}); err != nil {
+				return true, fmt.Errorf("suppress claimed notification for maintenance: %w", err)
+			}
+			return true, nil
+		}
+	} else if !errors.Is(alertErr, pgx.ErrNoRows) {
+		return true, fmt.Errorf("read notification alert instance: %w", alertErr)
 	}
 	message, deliveryErr := messageForDelivery(delivery)
 	if deliveryErr == nil {

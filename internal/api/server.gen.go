@@ -207,6 +207,13 @@ const (
 	InstanceAgentPermissionDenied InstanceAgentStatus = "permission_denied"
 )
 
+// Defines values for MaintenanceWindowStatus.
+const (
+	MaintenanceActive    MaintenanceWindowStatus = "ACTIVE"
+	MaintenanceEnded     MaintenanceWindowStatus = "ENDED"
+	MaintenanceScheduled MaintenanceWindowStatus = "SCHEDULED"
+)
+
 // Defines values for NoDataPolicy.
 const (
 	Ignore     NoDataPolicy = "ignore"
@@ -427,17 +434,16 @@ type AlertAggregation string
 
 // AlertDetail defines model for AlertDetail.
 type AlertDetail struct {
-	CurrentValue     *float64           `json:"current_value,omitempty"`
-	Disposition      AlertDisposition   `json:"disposition"`
-	DurationMs       int64              `json:"duration_ms"`
-	FirstTriggeredAt *time.Time         `json:"first_triggered_at,omitempty"`
-	Id               openapi_types.UUID `json:"id"`
-
-	// InMaintenance Empty until maintenance-window projection is delivered.
-	InMaintenance nullable.Nullable[bool] `json:"in_maintenance,omitempty"`
-	InstanceId    openapi_types.UUID      `json:"instance_id"`
-	InstanceName  string                  `json:"instance_name"`
-	MetricId      string                  `json:"metric_id"`
+	CurrentValue        *float64            `json:"current_value,omitempty"`
+	Disposition         AlertDisposition    `json:"disposition"`
+	DurationMs          int64               `json:"duration_ms"`
+	FirstTriggeredAt    *time.Time          `json:"first_triggered_at,omitempty"`
+	Id                  openapi_types.UUID  `json:"id"`
+	InMaintenance       bool                `json:"in_maintenance"`
+	InstanceId          openapi_types.UUID  `json:"instance_id"`
+	InstanceName        string              `json:"instance_name"`
+	MaintenanceWindowId *openapi_types.UUID `json:"maintenance_window_id,omitempty"`
+	MetricId            string              `json:"metric_id"`
 
 	// NotificationResults Empty until notification delivery records are produced.
 	NotificationResults []map[string]interface{} `json:"notification_results"`
@@ -502,29 +508,28 @@ type AlertDispositionInput struct {
 
 // AlertObservation defines model for AlertObservation.
 type AlertObservation struct {
-	CurrentValue     *float64           `json:"current_value,omitempty"`
-	Disposition      AlertDisposition   `json:"disposition"`
-	DurationMs       int64              `json:"duration_ms"`
-	FirstTriggeredAt *time.Time         `json:"first_triggered_at,omitempty"`
-	Id               openapi_types.UUID `json:"id"`
-
-	// InMaintenance Empty until maintenance-window projection is delivered.
-	InMaintenance  nullable.Nullable[bool] `json:"in_maintenance,omitempty"`
-	InstanceId     openapi_types.UUID      `json:"instance_id"`
-	InstanceName   string                  `json:"instance_name"`
-	MetricId       string                  `json:"metric_id"`
-	Paused         bool                    `json:"paused"`
-	PausedAt       *time.Time              `json:"paused_at,omitempty"`
-	RecoveredAt    *time.Time              `json:"recovered_at,omitempty"`
-	RuleId         openapi_types.UUID      `json:"rule_id"`
-	RuleName       string                  `json:"rule_name"`
-	RuleSnapshot   map[string]interface{}  `json:"rule_snapshot"`
-	RuleVersion    int                     `json:"rule_version"`
-	Severity       AlertSeverity           `json:"severity"`
-	Status         AlertStatus             `json:"status"`
-	Threshold      *float64                `json:"threshold,omitempty"`
-	Unavailability *Unavailability         `json:"unavailability,omitempty"`
-	UpdatedAt      time.Time               `json:"updated_at"`
+	CurrentValue        *float64               `json:"current_value,omitempty"`
+	Disposition         AlertDisposition       `json:"disposition"`
+	DurationMs          int64                  `json:"duration_ms"`
+	FirstTriggeredAt    *time.Time             `json:"first_triggered_at,omitempty"`
+	Id                  openapi_types.UUID     `json:"id"`
+	InMaintenance       bool                   `json:"in_maintenance"`
+	InstanceId          openapi_types.UUID     `json:"instance_id"`
+	InstanceName        string                 `json:"instance_name"`
+	MaintenanceWindowId *openapi_types.UUID    `json:"maintenance_window_id,omitempty"`
+	MetricId            string                 `json:"metric_id"`
+	Paused              bool                   `json:"paused"`
+	PausedAt            *time.Time             `json:"paused_at,omitempty"`
+	RecoveredAt         *time.Time             `json:"recovered_at,omitempty"`
+	RuleId              openapi_types.UUID     `json:"rule_id"`
+	RuleName            string                 `json:"rule_name"`
+	RuleSnapshot        map[string]interface{} `json:"rule_snapshot"`
+	RuleVersion         int                    `json:"rule_version"`
+	Severity            AlertSeverity          `json:"severity"`
+	Status              AlertStatus            `json:"status"`
+	Threshold           *float64               `json:"threshold,omitempty"`
+	Unavailability      *Unavailability        `json:"unavailability,omitempty"`
+	UpdatedAt           time.Time              `json:"updated_at"`
 }
 
 // AlertObservationPage defines model for AlertObservationPage.
@@ -912,6 +917,30 @@ type LongQuerySamplePage struct {
 	Total int               `json:"total"`
 }
 
+// MaintenanceWindow defines model for MaintenanceWindow.
+type MaintenanceWindow struct {
+	CreatedAt   time.Time               `json:"created_at"`
+	CreatedBy   openapi_types.UUID      `json:"created_by"`
+	EndsAt      time.Time               `json:"ends_at"`
+	Id          openapi_types.UUID      `json:"id"`
+	InstanceIds []openapi_types.UUID    `json:"instance_ids"`
+	Reason      string                  `json:"reason"`
+	StartsAt    time.Time               `json:"starts_at"`
+	Status      MaintenanceWindowStatus `json:"status"`
+	UpdatedAt   time.Time               `json:"updated_at"`
+}
+
+// MaintenanceWindowInput defines model for MaintenanceWindowInput.
+type MaintenanceWindowInput struct {
+	EndsAt      time.Time            `json:"ends_at"`
+	InstanceIds []openapi_types.UUID `json:"instance_ids"`
+	Reason      string               `json:"reason"`
+	StartsAt    time.Time            `json:"starts_at"`
+}
+
+// MaintenanceWindowStatus defines model for MaintenanceWindowStatus.
+type MaintenanceWindowStatus string
+
 // MetricSeriesResponse defines model for MetricSeriesResponse.
 type MetricSeriesResponse struct {
 	From    time.Time `json:"from"`
@@ -1062,7 +1091,9 @@ type PerformanceEvent struct {
 	DurationMs            int64                      `json:"duration_ms"`
 	EventType             PerformanceEventType       `json:"event_type"`
 	Id                    openapi_types.UUID         `json:"id"`
+	InMaintenance         bool                       `json:"in_maintenance"`
 	InstanceId            openapi_types.UUID         `json:"instance_id"`
+	MaintenanceWindowId   *openapi_types.UUID        `json:"maintenance_window_id,omitempty"`
 	MetricId              string                     `json:"metric_id"`
 	RecoveredAt           *time.Time                 `json:"recovered_at,omitempty"`
 	Severity              AlertSeverity              `json:"severity"`
@@ -1360,6 +1391,12 @@ type UpdateInstanceCredentialJSONRequestBody = InstanceCredentialInput
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody CreateSessionJSONBody
 
+// CreateMaintenanceWindowJSONRequestBody defines body for CreateMaintenanceWindow for application/json ContentType.
+type CreateMaintenanceWindowJSONRequestBody = MaintenanceWindowInput
+
+// UpdateMaintenanceWindowJSONRequestBody defines body for UpdateMaintenanceWindow for application/json ContentType.
+type UpdateMaintenanceWindowJSONRequestBody = MaintenanceWindowInput
+
 // UpdateSMTPChannelJSONRequestBody defines body for UpdateSMTPChannel for application/json ContentType.
 type UpdateSMTPChannelJSONRequestBody = SMTPChannelInput
 
@@ -1542,6 +1579,21 @@ type ServerInterface interface {
 
 	// (POST /api/v1/login)
 	CreateSession(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/maintenance-windows)
+	ListMaintenanceWindows(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/maintenance-windows)
+	CreateMaintenanceWindow(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/maintenance-windows/{id})
+	DeleteMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/maintenance-windows/{id})
+	UpdateMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/maintenance-windows/{id}/end)
+	EndMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
@@ -2881,6 +2933,109 @@ func (siw *ServerInterfaceWrapper) CreateSession(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListMaintenanceWindows operation middleware
+func (siw *ServerInterfaceWrapper) ListMaintenanceWindows(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMaintenanceWindows(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) CreateMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateMaintenanceWindow(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMaintenanceWindow(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMaintenanceWindow(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EndMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) EndMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EndMaintenanceWindow(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetCurrentUser operation middleware
 func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
@@ -3596,6 +3751,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/query-stats", wrapper.GetQueryStatisticsSnapshot)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/sessions", wrapper.GetSessionSnapshot)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/maintenance-windows", wrapper.ListMaintenanceWindows)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/maintenance-windows", wrapper.CreateMaintenanceWindow)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/maintenance-windows/{id}", wrapper.DeleteMaintenanceWindow)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/maintenance-windows/{id}", wrapper.UpdateMaintenanceWindow)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/maintenance-windows/{id}/end", wrapper.EndMaintenanceWindow)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/failures", wrapper.GetChannelFailures)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.GetSMTPChannel)
@@ -4722,6 +4882,144 @@ func (response CreateSession401JSONResponse) VisitCreateSessionResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListMaintenanceWindowsRequestObject struct {
+}
+
+type ListMaintenanceWindowsResponseObject interface {
+	VisitListMaintenanceWindowsResponse(w http.ResponseWriter) error
+}
+
+type ListMaintenanceWindows200JSONResponse []MaintenanceWindow
+
+func (response ListMaintenanceWindows200JSONResponse) VisitListMaintenanceWindowsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateMaintenanceWindowRequestObject struct {
+	Body *CreateMaintenanceWindowJSONRequestBody
+}
+
+type CreateMaintenanceWindowResponseObject interface {
+	VisitCreateMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type CreateMaintenanceWindow201JSONResponse MaintenanceWindow
+
+func (response CreateMaintenanceWindow201JSONResponse) VisitCreateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateMaintenanceWindow400JSONResponse Error
+
+func (response CreateMaintenanceWindow400JSONResponse) VisitCreateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteMaintenanceWindowRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteMaintenanceWindowResponseObject interface {
+	VisitDeleteMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type DeleteMaintenanceWindow204Response struct {
+}
+
+func (response DeleteMaintenanceWindow204Response) VisitDeleteMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMaintenanceWindow404JSONResponse Error
+
+func (response DeleteMaintenanceWindow404JSONResponse) VisitDeleteMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateMaintenanceWindowRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateMaintenanceWindowJSONRequestBody
+}
+
+type UpdateMaintenanceWindowResponseObject interface {
+	VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type UpdateMaintenanceWindow200JSONResponse MaintenanceWindow
+
+func (response UpdateMaintenanceWindow200JSONResponse) VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateMaintenanceWindow400JSONResponse Error
+
+func (response UpdateMaintenanceWindow400JSONResponse) VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateMaintenanceWindow404JSONResponse Error
+
+func (response UpdateMaintenanceWindow404JSONResponse) VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type EndMaintenanceWindowRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type EndMaintenanceWindowResponseObject interface {
+	VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type EndMaintenanceWindow200JSONResponse MaintenanceWindow
+
+func (response EndMaintenanceWindow200JSONResponse) VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type EndMaintenanceWindow400JSONResponse Error
+
+func (response EndMaintenanceWindow400JSONResponse) VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type EndMaintenanceWindow404JSONResponse Error
+
+func (response EndMaintenanceWindow404JSONResponse) VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetCurrentUserRequestObject struct {
 }
 
@@ -5627,6 +5925,21 @@ type StrictServerInterface interface {
 
 	// (POST /api/v1/login)
 	CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error)
+
+	// (GET /api/v1/maintenance-windows)
+	ListMaintenanceWindows(ctx context.Context, request ListMaintenanceWindowsRequestObject) (ListMaintenanceWindowsResponseObject, error)
+
+	// (POST /api/v1/maintenance-windows)
+	CreateMaintenanceWindow(ctx context.Context, request CreateMaintenanceWindowRequestObject) (CreateMaintenanceWindowResponseObject, error)
+
+	// (DELETE /api/v1/maintenance-windows/{id})
+	DeleteMaintenanceWindow(ctx context.Context, request DeleteMaintenanceWindowRequestObject) (DeleteMaintenanceWindowResponseObject, error)
+
+	// (PUT /api/v1/maintenance-windows/{id})
+	UpdateMaintenanceWindow(ctx context.Context, request UpdateMaintenanceWindowRequestObject) (UpdateMaintenanceWindowResponseObject, error)
+
+	// (POST /api/v1/maintenance-windows/{id}/end)
+	EndMaintenanceWindow(ctx context.Context, request EndMaintenanceWindowRequestObject) (EndMaintenanceWindowResponseObject, error)
 
 	// (GET /api/v1/me)
 	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
@@ -7001,6 +7314,146 @@ func (sh *strictHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateSessionResponseObject); ok {
 		if err := validResponse.VisitCreateSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListMaintenanceWindows operation middleware
+func (sh *strictHandler) ListMaintenanceWindows(w http.ResponseWriter, r *http.Request) {
+	var request ListMaintenanceWindowsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMaintenanceWindows(ctx, request.(ListMaintenanceWindowsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMaintenanceWindows")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMaintenanceWindowsResponseObject); ok {
+		if err := validResponse.VisitListMaintenanceWindowsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateMaintenanceWindow operation middleware
+func (sh *strictHandler) CreateMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+	var request CreateMaintenanceWindowRequestObject
+
+	var body CreateMaintenanceWindowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateMaintenanceWindow(ctx, request.(CreateMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitCreateMaintenanceWindowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMaintenanceWindow operation middleware
+func (sh *strictHandler) DeleteMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteMaintenanceWindowRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMaintenanceWindow(ctx, request.(DeleteMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitDeleteMaintenanceWindowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMaintenanceWindow operation middleware
+func (sh *strictHandler) UpdateMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateMaintenanceWindowRequestObject
+
+	request.Id = id
+
+	var body UpdateMaintenanceWindowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMaintenanceWindow(ctx, request.(UpdateMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitUpdateMaintenanceWindowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EndMaintenanceWindow operation middleware
+func (sh *strictHandler) EndMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request EndMaintenanceWindowRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EndMaintenanceWindow(ctx, request.(EndMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EndMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EndMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitEndMaintenanceWindowResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

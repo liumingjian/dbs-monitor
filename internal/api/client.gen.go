@@ -254,6 +254,25 @@ type ClientInterface interface {
 
 	CreateSession(ctx context.Context, body CreateSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListMaintenanceWindows request
+	ListMaintenanceWindows(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateMaintenanceWindowWithBody request with any body
+	CreateMaintenanceWindowWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateMaintenanceWindow(ctx context.Context, body CreateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteMaintenanceWindow request
+	DeleteMaintenanceWindow(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMaintenanceWindowWithBody request with any body
+	UpdateMaintenanceWindowWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateMaintenanceWindow(ctx context.Context, id openapi_types.UUID, body UpdateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EndMaintenanceWindow request
+	EndMaintenanceWindow(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetCurrentUser request
 	GetCurrentUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1068,6 +1087,90 @@ func (c *Client) CreateSessionWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) CreateSession(ctx context.Context, body CreateSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateSessionRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListMaintenanceWindows(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListMaintenanceWindowsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateMaintenanceWindowWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMaintenanceWindowRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateMaintenanceWindow(ctx context.Context, body CreateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMaintenanceWindowRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteMaintenanceWindow(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteMaintenanceWindowRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateMaintenanceWindowWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMaintenanceWindowRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateMaintenanceWindow(ctx context.Context, id openapi_types.UUID, body UpdateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMaintenanceWindowRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) EndMaintenanceWindow(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEndMaintenanceWindowRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -3592,6 +3695,188 @@ func NewCreateSessionRequestWithBody(server string, contentType string, body io.
 	return req, nil
 }
 
+// NewListMaintenanceWindowsRequest generates requests for ListMaintenanceWindows
+func NewListMaintenanceWindowsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/maintenance-windows")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateMaintenanceWindowRequest calls the generic CreateMaintenanceWindow builder with application/json body
+func NewCreateMaintenanceWindowRequest(server string, body CreateMaintenanceWindowJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateMaintenanceWindowRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateMaintenanceWindowRequestWithBody generates requests for CreateMaintenanceWindow with any type of body
+func NewCreateMaintenanceWindowRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/maintenance-windows")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteMaintenanceWindowRequest generates requests for DeleteMaintenanceWindow
+func NewDeleteMaintenanceWindowRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/maintenance-windows/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateMaintenanceWindowRequest calls the generic UpdateMaintenanceWindow builder with application/json body
+func NewUpdateMaintenanceWindowRequest(server string, id openapi_types.UUID, body UpdateMaintenanceWindowJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateMaintenanceWindowRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateMaintenanceWindowRequestWithBody generates requests for UpdateMaintenanceWindow with any type of body
+func NewUpdateMaintenanceWindowRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/maintenance-windows/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewEndMaintenanceWindowRequest generates requests for EndMaintenanceWindow
+func NewEndMaintenanceWindowRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/maintenance-windows/%s/end", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetCurrentUserRequest generates requests for GetCurrentUser
 func NewGetCurrentUserRequest(server string) (*http.Request, error) {
 	var err error
@@ -4855,6 +5140,25 @@ type ClientWithResponsesInterface interface {
 
 	CreateSessionWithResponse(ctx context.Context, body CreateSessionJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateSessionResponse, error)
 
+	// ListMaintenanceWindowsWithResponse request
+	ListMaintenanceWindowsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListMaintenanceWindowsResponse, error)
+
+	// CreateMaintenanceWindowWithBodyWithResponse request with any body
+	CreateMaintenanceWindowWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMaintenanceWindowResponse, error)
+
+	CreateMaintenanceWindowWithResponse(ctx context.Context, body CreateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMaintenanceWindowResponse, error)
+
+	// DeleteMaintenanceWindowWithResponse request
+	DeleteMaintenanceWindowWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteMaintenanceWindowResponse, error)
+
+	// UpdateMaintenanceWindowWithBodyWithResponse request with any body
+	UpdateMaintenanceWindowWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMaintenanceWindowResponse, error)
+
+	UpdateMaintenanceWindowWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMaintenanceWindowResponse, error)
+
+	// EndMaintenanceWindowWithResponse request
+	EndMaintenanceWindowWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*EndMaintenanceWindowResponse, error)
+
 	// GetCurrentUserWithResponse request
 	GetCurrentUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentUserResponse, error)
 
@@ -6007,6 +6311,121 @@ func (r CreateSessionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r CreateSessionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListMaintenanceWindowsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]MaintenanceWindow
+}
+
+// Status returns HTTPResponse.Status
+func (r ListMaintenanceWindowsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListMaintenanceWindowsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateMaintenanceWindowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *MaintenanceWindow
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateMaintenanceWindowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateMaintenanceWindowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteMaintenanceWindowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteMaintenanceWindowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteMaintenanceWindowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateMaintenanceWindowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MaintenanceWindow
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateMaintenanceWindowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateMaintenanceWindowResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type EndMaintenanceWindowResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MaintenanceWindow
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r EndMaintenanceWindowResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EndMaintenanceWindowResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7193,6 +7612,67 @@ func (c *ClientWithResponses) CreateSessionWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseCreateSessionResponse(rsp)
+}
+
+// ListMaintenanceWindowsWithResponse request returning *ListMaintenanceWindowsResponse
+func (c *ClientWithResponses) ListMaintenanceWindowsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListMaintenanceWindowsResponse, error) {
+	rsp, err := c.ListMaintenanceWindows(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListMaintenanceWindowsResponse(rsp)
+}
+
+// CreateMaintenanceWindowWithBodyWithResponse request with arbitrary body returning *CreateMaintenanceWindowResponse
+func (c *ClientWithResponses) CreateMaintenanceWindowWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMaintenanceWindowResponse, error) {
+	rsp, err := c.CreateMaintenanceWindowWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMaintenanceWindowResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateMaintenanceWindowWithResponse(ctx context.Context, body CreateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMaintenanceWindowResponse, error) {
+	rsp, err := c.CreateMaintenanceWindow(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMaintenanceWindowResponse(rsp)
+}
+
+// DeleteMaintenanceWindowWithResponse request returning *DeleteMaintenanceWindowResponse
+func (c *ClientWithResponses) DeleteMaintenanceWindowWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteMaintenanceWindowResponse, error) {
+	rsp, err := c.DeleteMaintenanceWindow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteMaintenanceWindowResponse(rsp)
+}
+
+// UpdateMaintenanceWindowWithBodyWithResponse request with arbitrary body returning *UpdateMaintenanceWindowResponse
+func (c *ClientWithResponses) UpdateMaintenanceWindowWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMaintenanceWindowResponse, error) {
+	rsp, err := c.UpdateMaintenanceWindowWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMaintenanceWindowResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateMaintenanceWindowWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateMaintenanceWindowJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMaintenanceWindowResponse, error) {
+	rsp, err := c.UpdateMaintenanceWindow(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMaintenanceWindowResponse(rsp)
+}
+
+// EndMaintenanceWindowWithResponse request returning *EndMaintenanceWindowResponse
+func (c *ClientWithResponses) EndMaintenanceWindowWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*EndMaintenanceWindowResponse, error) {
+	rsp, err := c.EndMaintenanceWindow(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEndMaintenanceWindowResponse(rsp)
 }
 
 // GetCurrentUserWithResponse request returning *GetCurrentUserResponse
@@ -8965,6 +9445,171 @@ func ParseCreateSessionResponse(rsp *http.Response) (*CreateSessionResponse, err
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListMaintenanceWindowsResponse parses an HTTP response from a ListMaintenanceWindowsWithResponse call
+func ParseListMaintenanceWindowsResponse(rsp *http.Response) (*ListMaintenanceWindowsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListMaintenanceWindowsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []MaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateMaintenanceWindowResponse parses an HTTP response from a CreateMaintenanceWindowWithResponse call
+func ParseCreateMaintenanceWindowResponse(rsp *http.Response) (*CreateMaintenanceWindowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateMaintenanceWindowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest MaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteMaintenanceWindowResponse parses an HTTP response from a DeleteMaintenanceWindowWithResponse call
+func ParseDeleteMaintenanceWindowResponse(rsp *http.Response) (*DeleteMaintenanceWindowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteMaintenanceWindowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateMaintenanceWindowResponse parses an HTTP response from a UpdateMaintenanceWindowWithResponse call
+func ParseUpdateMaintenanceWindowResponse(rsp *http.Response) (*UpdateMaintenanceWindowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateMaintenanceWindowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseEndMaintenanceWindowResponse parses an HTTP response from a EndMaintenanceWindowWithResponse call
+func ParseEndMaintenanceWindowResponse(rsp *http.Response) (*EndMaintenanceWindowResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EndMaintenanceWindowResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

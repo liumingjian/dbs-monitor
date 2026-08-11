@@ -20,6 +20,7 @@ import {
 } from './performanceEvents'
 import {
   PerformanceEventSeverityTag,
+  PerformanceEventMaintenanceTag,
   performanceEventDispositionLabel,
   performanceEventDurationLabel,
   performanceEventTimeLabel,
@@ -158,7 +159,7 @@ function eventColumns(search: PerformanceEventSearch): TableColumnsType<Performa
     {
       title: '状态 / 级别',
       width: 150,
-      render: (_, event) => <Space><AlertStatus status={event.alert_status} /><PerformanceEventSeverityTag severity={event.severity} /></Space>,
+      render: (_, event) => <Space><AlertStatus status={event.alert_status} /><PerformanceEventSeverityTag severity={event.severity} /><PerformanceEventMaintenanceTag inMaintenance={event.in_maintenance} /></Space>,
     },
     { title: '事件类型', width: 170, render: (_, event) => performanceEventTypeLabel(event.event_type) },
     { title: '首次发生', width: 190, render: (_, event) => performanceEventTimeLabel(event.derived_at) },
@@ -167,6 +168,7 @@ function eventColumns(search: PerformanceEventSearch): TableColumnsType<Performa
     { title: '触发指标', width: 220, dataIndex: 'metric_id' },
     { title: '触发值 / 阈值', width: 130, render: (_, event) => `${event.trigger_value} / ${event.threshold}` },
     { title: '处置', width: 100, render: (_, event) => performanceEventDispositionLabel(event.disposition) },
+    { title: '维护窗口', width: 150, render: (_, event) => event.maintenance_window_id?.slice(0, 8) ?? '—' },
     { title: '原因摘要', width: 300, dataIndex: 'cause_summary' },
     { title: '建议动作', width: 300, dataIndex: 'suggested_action' },
     {
