@@ -34,7 +34,8 @@ func runMasterKeyRotationCommand(ctx context.Context) error {
 }
 
 func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory string) (credentialRotationResult, error) {
-	keyring, needsReencryption, err := instance.PrepareCredentialKeyRotation(ctx, instance.New(platform), directory)
+	platformQueries := instance.New(platform)
+	keyring, needsReencryption, err := instance.PrepareCredentialKeyRotation(ctx, platformQueries, directory)
 	if err != nil {
 		return credentialRotationResult{}, err
 	}
@@ -42,14 +43,14 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 	var credentialsRotated int64
 	if needsReencryption {
 		if err := platform.InTx(ctx, func(tx pgx.Tx) error {
-			var err error
-			credentialsRotated, err = keyring.ReencryptCredentials(ctx, instance.New(tx))
+			rotated, err := keyring.ReencryptCredentials(ctx, instance.New(tx))
+			credentialsRotated = rotated
 			return err
 		}); err != nil {
 			return credentialRotationResult{}, fmt.Errorf("rotate instance credentials: %w", err)
 		}
 	}
-	if err := keyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err != nil {
+	if err := keyring.RemoveUnreferencedKeys(ctx, platformQueries); err != nil {
 		return credentialRotationResult{}, err
 	}
 	return credentialRotationResult{

@@ -79,12 +79,12 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 			t.Fatalf("insert credential %d: %v", index, err)
 		}
 	}
-	interruptedKey := make([]byte, 32)
-	if _, err := rand.Read(interruptedKey); err != nil {
-		t.Fatalf("generate interrupted key fixture: %v", err)
+	stagedKey := make([]byte, 32)
+	if _, err := rand.Read(stagedKey); err != nil {
+		t.Fatalf("generate staged key fixture: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(credentialDirectory, "master-key-v2"), interruptedKey, 0o600); err != nil {
-		t.Fatalf("write interrupted key fixture: %v", err)
+	if err := os.WriteFile(filepath.Join(credentialDirectory, "master-key-v2"), stagedKey, 0o600); err != nil {
+		t.Fatalf("write staged key fixture: %v", err)
 	}
 
 	result, err := rotateCredentialKeyring(ctx, platform, credentialDirectory)
@@ -95,7 +95,7 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 		t.Fatalf("rotation result = %+v, want version 2 and %d credentials", result, len(credentials))
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
-	assertKeyVersions(t, credentialDirectory, []string{"current", "master-key-v2"})
+	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2"})
 
 	if _, err := pool.Exec(ctx, `CREATE FUNCTION fail_v3_rotation() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN
@@ -112,7 +112,7 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 		t.Fatal("interrupted rotation succeeded")
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
-	assertKeyVersions(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
+	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
 	interruptedKeyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
 	if err != nil {
 		t.Fatalf("open interrupted keyring: %v", err)
@@ -120,7 +120,7 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	if err := interruptedKeyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err == nil || !strings.Contains(err.Error(), "still has 2 database references") {
 		t.Fatalf("cleanup with old-key references error = %v, want reference diagnostic", err)
 	}
-	assertKeyVersions(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
+	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
 
 	if _, err := pool.Exec(ctx, "DROP TRIGGER fail_v3_rotation ON instance; DROP FUNCTION fail_v3_rotation()"); err != nil {
 		t.Fatalf("remove interruption trigger: %v", err)
@@ -133,7 +133,7 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 		t.Fatalf("resumed rotation result = %+v, want version 3 and %d credentials", result, len(credentials))
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 3)
-	assertKeyVersions(t, credentialDirectory, []string{"current", "master-key-v3"})
+	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v3"})
 }
 
 func assertRotatedCredentials(t *testing.T, ctx context.Context, pool *pgxpool.Pool, directory string, credentials []rotationTestCredential, wantVersion int32) {
@@ -162,7 +162,7 @@ func assertRotatedCredentials(t *testing.T, ctx context.Context, pool *pgxpool.P
 	}
 }
 
-func assertKeyVersions(t *testing.T, directory string, want []string) {
+func assertCredentialKeyringFiles(t *testing.T, directory string, want []string) {
 	t.Helper()
 	entries, err := os.ReadDir(directory)
 	if err != nil {

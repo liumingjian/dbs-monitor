@@ -10,7 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -168,7 +168,7 @@ func (keyring *CredentialKeyring) DecryptPassword(instanceID uuid.UUID, envelope
 }
 
 // PrepareCredentialKeyRotation creates or resumes the filesystem side of an offline rotation.
-// The returned boolean is false only when a previous rotation needs key cleanup but no row rewrite.
+// The boolean reports whether the transactional re-encryption phase must run before cleanup.
 func PrepareCredentialKeyRotation(ctx context.Context, queries *Queries, directory string) (*CredentialKeyring, bool, error) {
 	keyring, err := OpenCredentialKeyring(directory, true)
 	if err != nil {
@@ -188,7 +188,8 @@ func PrepareCredentialKeyRotation(ctx context.Context, queries *Queries, directo
 		return nil, false, fmt.Errorf("instance credential key version exhausted")
 	}
 	// Resume an attempt that staged the next key but did not update current.
-	if containsCredentialKeyVersion(versions, nextVersion) {
+	_, nextKeyExists := slices.BinarySearch(versions, nextVersion)
+	if nextKeyExists {
 		if _, err := readCredentialKey(directory, nextVersion, CredentialFaultCurrentKey); err != nil {
 			return nil, false, err
 		}
@@ -257,6 +258,7 @@ func (keyring *CredentialKeyring) RemoveUnreferencedKeys(ctx context.Context, qu
 	if err != nil {
 		return err
 	}
+	// Verify every stale key before deleting any, so a referenced key leaves the keyring untouched.
 	for _, version := range versions {
 		if version == keyring.currentVersion {
 			continue
@@ -375,13 +377,8 @@ func credentialKeyVersions(directory string) ([]int32, error) {
 		}
 		versions = append(versions, version)
 	}
-	sort.Slice(versions, func(i, j int) bool { return versions[i] < versions[j] })
+	slices.Sort(versions)
 	return versions, nil
-}
-
-func containsCredentialKeyVersion(versions []int32, want int32) bool {
-	index := sort.Search(len(versions), func(index int) bool { return versions[index] >= want })
-	return index < len(versions) && versions[index] == want
 }
 
 func readCurrentCredentialKeyVersion(directory string) (int32, error) {
