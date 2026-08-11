@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   eventMonitoringSearch,
   parsePerformanceEventSearch,
+  performanceEventRecoveryFilter,
   serializePerformanceEventSearch,
+  type PerformanceEventSearch,
 } from './performanceEvents'
 
 describe('performance event search', () => {
@@ -10,10 +12,10 @@ describe('performance event search', () => {
     const value = {
       from: '2026-08-11T10:00:00.000Z',
       to: '2026-08-11T11:00:00.000Z',
-      tab: 'disposed' as const,
-      disposition: 'IGNORED' as const,
+      tab: 'disposed',
+      disposition: 'IGNORED',
       page: 3,
-    }
+    } satisfies PerformanceEventSearch
 
     expect(parsePerformanceEventSearch(serializePerformanceEventSearch(value))).toEqual(value)
   })
@@ -42,5 +44,13 @@ describe('performance event search', () => {
       columns: 2,
       connect: true,
     })
+  })
+
+  it.each([
+    ['firing', false],
+    ['recovered', true],
+    ['disposed', undefined],
+  ] as const)('maps the %s tab to its recovery filter', (tab, recovered) => {
+    expect(performanceEventRecoveryFilter(tab)).toBe(recovered)
   })
 })

@@ -173,7 +173,8 @@ test('alert-derived event writes disposition back and preserves trigger evidence
   await expect(page.getByText('被 PID 8110 阻塞')).toBeVisible()
 
   const monitoringHref = await page.getByRole('link', { name: /查看标准监控/ }).getAttribute('href')
-  const monitoring = new URL(monitoringHref!, 'https://example.test')
+  if (monitoringHref === null) throw new Error('standard monitoring link is missing an href')
+  const monitoring = new URL(monitoringHref, 'https://example.test')
   expect(monitoring.searchParams.get('metric')).toBe('pg.lock.waiting_count')
   expect(monitoring.searchParams.get('from')).toBe('2026-08-11T10:15:00.000Z')
   expect(monitoring.searchParams.get('to')).toBe('2026-08-11T10:45:00.000Z')

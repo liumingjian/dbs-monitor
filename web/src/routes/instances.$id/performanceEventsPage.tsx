@@ -1,6 +1,6 @@
 import { FundProjectionScreenOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
-import { Alert, Button, Empty, Segmented, Space, Table, Tabs, Tag, Typography } from 'antd'
+import { Alert, Button, Empty, Segmented, Space, Table, Tabs, Typography } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
@@ -11,10 +11,20 @@ import { Freshness } from '../../domain/Freshness'
 import { TimeRangePicker } from '../../domain/TimeRangePicker'
 import { rootRoute } from '../root'
 import {
+  isPerformanceEventTab,
   parsePerformanceEventSearch,
+  performanceEventRecoveryFilter,
   serializePerformanceEventSearch,
+  type PerformanceEventDisposition,
   type PerformanceEventSearch,
 } from './performanceEvents'
+import {
+  PerformanceEventSeverityTag,
+  performanceEventDispositionLabel,
+  performanceEventDurationLabel,
+  performanceEventTimeLabel,
+  performanceEventTypeLabel,
+} from './performanceEventPresentation'
 import { WorkbenchHeader } from './workbench'
 
 type PerformanceEvent = components['schemas']['PerformanceEvent']
@@ -72,7 +82,7 @@ function PerformanceEventLists({ instanceID, search, onSearchChange }: {
       query: {
         from: search.from,
         to: search.to,
-        recovered: search.tab === 'firing' ? false : search.tab === 'recovered' ? true : undefined,
+        recovered: performanceEventRecoveryFilter(search.tab),
         disposition: search.tab === 'disposed' ? search.disposition : undefined,
         limit: eventPageSize,
         offset,
@@ -82,7 +92,8 @@ function PerformanceEventLists({ instanceID, search, onSearchChange }: {
   }, { refetchInterval: search.tab === 'firing' ? pollingIntervals.firingPerformanceEvents : false })
 
   function changeTab(tab: string) {
-    onSearchChange({ ...search, tab: tab as PerformanceEventSearch['tab'], page: 1 })
+    if (!isPerformanceEventTab(tab)) return
+    onSearchChange({ ...search, tab, page: 1 })
   }
 
   return <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -109,13 +120,13 @@ function PerformanceEventLists({ instanceID, search, onSearchChange }: {
       { key: 'recovered', label: search.tab === 'recovered' ? `已恢复 ${events.data?.total ?? ''}` : '已恢复' },
       { key: 'disposed', label: search.tab === 'disposed' ? `已确认 / 已忽略 ${events.data?.total ?? ''}` : '已确认 / 已忽略' },
     ]} />
-    {search.tab === 'disposed' && <Segmented
+    {search.tab === 'disposed' && <Segmented<PerformanceEventDisposition>
       aria-label="处置状态"
       value={search.disposition}
       options={[{ value: 'ACKED', label: '已确认' }, { value: 'IGNORED', label: '已忽略' }]}
       onChange={(disposition) => onSearchChange({
         ...search,
-        disposition: disposition as PerformanceEventSearch['disposition'],
+        disposition,
         page: 1,
       })}
     />}
@@ -147,15 +158,15 @@ function eventColumns(search: PerformanceEventSearch): TableColumnsType<Performa
     {
       title: '状态 / 级别',
       width: 150,
-      render: (_, event) => <Space><AlertStatus status={event.alert_status} />{severityTag(event.severity)}</Space>,
+      render: (_, event) => <Space><AlertStatus status={event.alert_status} /><PerformanceEventSeverityTag severity={event.severity} /></Space>,
     },
-    { title: '事件类型', width: 170, render: (_, event) => eventTypeLabel(event.event_type) },
-    { title: '首次发生', width: 190, render: (_, event) => optionalTime(event.derived_at) },
-    { title: '最近发生', width: 190, render: (_, event) => optionalTime(event.updated_at) },
-    { title: '持续时间', width: 110, render: (_, event) => durationLabel(event.duration_ms) },
+    { title: '事件类型', width: 170, render: (_, event) => performanceEventTypeLabel(event.event_type) },
+    { title: '首次发生', width: 190, render: (_, event) => performanceEventTimeLabel(event.derived_at) },
+    { title: '最近发生', width: 190, render: (_, event) => performanceEventTimeLabel(event.updated_at) },
+    { title: '持续时间', width: 110, render: (_, event) => performanceEventDurationLabel(event.duration_ms) },
     { title: '触发指标', width: 220, dataIndex: 'metric_id' },
     { title: '触发值 / 阈值', width: 130, render: (_, event) => `${event.trigger_value} / ${event.threshold}` },
-    { title: '处置', width: 100, render: (_, event) => dispositionLabel(event.disposition) },
+    { title: '处置', width: 100, render: (_, event) => performanceEventDispositionLabel(event.disposition) },
     { title: '原因摘要', width: 300, dataIndex: 'cause_summary' },
     { title: '建议动作', width: 300, dataIndex: 'suggested_action' },
     {
@@ -175,51 +186,11 @@ function eventEmptyText(search: PerformanceEventSearch): string {
   switch (search.tab) {
     case 'firing': return '所选时间范围内没有触发中的性能事件'
     case 'recovered': return '所选时间范围内没有已恢复的性能事件'
-    case 'disposed': return search.disposition === 'ACKED' ? '所选时间范围内没有已确认的性能事件' : '所选时间范围内没有已忽略的性能事件'
+    case 'disposed':
+      if (search.disposition === 'ACKED') return '所选时间范围内没有已确认的性能事件'
+      return '所选时间范围内没有已忽略的性能事件'
     default: return assertNever(search.tab)
   }
-}
-
-function eventTypeLabel(eventType: components['schemas']['PerformanceEventType']): string {
-  switch (eventType) {
-    case 'LOCK_BLOCKING': return '锁等待 / 阻塞'
-    case 'LONG_TRANSACTION': return '长事务'
-    case 'IDLE_IN_TRANSACTION': return 'idle in transaction'
-    case 'ACTIVE_SESSIONS_HIGH': return '活跃会话过高'
-    case 'REPLICATION_LAG': return '复制延迟'
-    case 'TEMP_FILES_SURGE': return '临时文件突增'
-    default: return assertNever(eventType)
-  }
-}
-
-function severityTag(severity: components['schemas']['AlertSeverity']) {
-  switch (severity) {
-    case 'critical': return <Tag color="error">严重</Tag>
-    case 'warning': return <Tag color="warning">警告</Tag>
-    case 'info': return <Tag color="processing">Info</Tag>
-    default: return assertNever(severity)
-  }
-}
-
-function dispositionLabel(disposition: components['schemas']['AlertDisposition']): string {
-  switch (disposition) {
-    case 'NONE': return '未处置'
-    case 'ACKED': return '已确认'
-    case 'IGNORED': return '已忽略'
-    default: return assertNever(disposition)
-  }
-}
-
-function optionalTime(value: string): string {
-  return new Date(value).toLocaleString()
-}
-
-function durationLabel(milliseconds: number): string {
-  const minutes = Math.floor(milliseconds / 60_000)
-  if (minutes < 60) return `${minutes} 分钟`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时`
-  return `${Math.floor(hours / 24)} 天`
 }
 
 function assertNever(value: never): never {

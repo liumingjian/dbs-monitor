@@ -1,14 +1,16 @@
+import type { components } from '../../api/schema'
 import type { MonitoringSearch } from './timeRange'
 import { isRFC3339 } from './timeRange'
 import { metricOptions } from './metricOptions'
 
 export type PerformanceEventTab = 'firing' | 'recovered' | 'disposed'
+export type PerformanceEventDisposition = Extract<components['schemas']['AlertDisposition'], 'ACKED' | 'IGNORED'>
 
 export type PerformanceEventSearch = {
   from: string
   to: string
   tab: PerformanceEventTab
-  disposition: 'ACKED' | 'IGNORED'
+  disposition: PerformanceEventDisposition
   page: number
 }
 
@@ -30,8 +32,8 @@ export function parsePerformanceEventSearch(
   if (!isRFC3339(search.from)
     || !isRFC3339(search.to)
     || new Date(search.to) <= new Date(search.from)
-    || (tab !== 'firing' && tab !== 'recovered' && tab !== 'disposed')
-    || (disposition !== 'ACKED' && disposition !== 'IGNORED')
+    || !isPerformanceEventTab(tab)
+    || !isPerformanceEventDisposition(disposition)
     || (search.page !== undefined && page === undefined)) {
     return { error: '性能事件筛选链接无效' }
   }
@@ -74,7 +76,28 @@ export function eventMonitoringSearch(event: EventMonitoringContext): Monitoring
   }
 }
 
+export function performanceEventRecoveryFilter(tab: PerformanceEventTab): boolean | undefined {
+  switch (tab) {
+    case 'firing': return false
+    case 'recovered': return true
+    case 'disposed': return undefined
+    default: return assertNever(tab)
+  }
+}
+
+export function isPerformanceEventTab(value: unknown): value is PerformanceEventTab {
+  return value === 'firing' || value === 'recovered' || value === 'disposed'
+}
+
+function isPerformanceEventDisposition(value: unknown): value is PerformanceEventDisposition {
+  return value === 'ACKED' || value === 'IGNORED'
+}
+
 function parsePage(value: unknown): number | undefined {
   const candidate = typeof value === 'string' ? Number(value) : value
   return typeof candidate === 'number' && Number.isInteger(candidate) && candidate > 0 ? candidate : undefined
+}
+
+function assertNever(value: never): never {
+  throw new Error(`unexpected performance event search value: ${value}`)
 }

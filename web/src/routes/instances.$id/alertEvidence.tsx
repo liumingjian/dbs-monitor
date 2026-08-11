@@ -13,6 +13,11 @@ type AlertDispositionInput = components['schemas']['AlertDispositionInput']
 type AlertTriggerSnapshotResult = components['schemas']['AlertTriggerSnapshotResult']
 type AlertTriggerSnapshotSession = components['schemas']['AlertTriggerSnapshotSession']
 type IgnoreReasonCode = components['schemas']['IgnoreReasonCode']
+type DispositionTarget = Extract<AlertDisposition, 'ACKED' | 'IGNORED'>
+type TriggerSnapshotPresentation = {
+  label: string
+  kind: 'success' | 'error' | 'not-applicable'
+}
 
 type DispositionFormValues = {
   note?: string
@@ -32,14 +37,12 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
   const updateDisposition = $api.useMutation('put', '/api/v1/alert-instances/{id}/disposition')
   const [form] = Form.useForm<DispositionFormValues>()
   const ignoreReason = Form.useWatch('ignore_reason_code', form)
-  const [target, setTarget] = useState<'ACKED' | 'IGNORED' | null>(null)
+  const [target, setTarget] = useState<DispositionTarget | null>(null)
   const [failure, setFailure] = useState('')
   const canManage = currentUser.data?.role === 'ALERT_ADMIN' || currentUser.data?.role === 'PLATFORM_ADMIN'
-  const disabledReason = recovered
-    ? '已恢复告警不能再处置'
-    : canManage ? undefined : '需要告警管理员角色'
+  const disabledReason = dispositionDisabledReason(recovered, canManage)
 
-  function open(next: 'ACKED' | 'IGNORED') {
+  function open(next: DispositionTarget) {
     form.resetFields()
     setFailure('')
     setTarget(next)
@@ -47,13 +50,18 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
 
   function submit(values: DispositionFormValues) {
     if (!target) return
-    const body: AlertDispositionInput = target === 'ACKED'
-      ? { disposition: target, note: optionalTrimmed(values.note) }
-      : {
-          disposition: target,
-          ignore_reason_code: values.ignore_reason_code,
-          ignore_reason_detail: optionalTrimmed(values.ignore_reason_detail),
-        }
+
+    let body: AlertDispositionInput
+    if (target === 'ACKED') {
+      body = { disposition: target, note: optionalTrimmed(values.note) }
+    } else {
+      body = {
+        disposition: target,
+        ignore_reason_code: values.ignore_reason_code,
+        ignore_reason_detail: optionalTrimmed(values.ignore_reason_detail),
+      }
+    }
+
     setFailure('')
     updateDisposition.mutate(
       { params: { path: { id: alertInstanceID } }, body },
@@ -96,7 +104,7 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
         </Form.Item>}
         {target === 'IGNORED' && <>
           <Form.Item name="ignore_reason_code" label="忽略原因" rules={[{ required: true, message: '请选择忽略原因' }]}>
-            <Select options={ignoreReasonCodes.map((code) => ({ value: code, label: ignoreReasonLabel(code) }))} />
+            <Select options={ignoreReasonOptions} />
           </Form.Item>
           {ignoreReason === 'OTHER' && <Form.Item
             name="ignore_reason_detail"
@@ -161,7 +169,7 @@ export function TriggerSnapshotSection({ alertInstanceID, eventEvidence = false 
 function TriggerSnapshotContent({ snapshot }: { snapshot: components['schemas']['AlertTriggerSnapshot'] }) {
   const presentation = triggerSnapshotPresentation(snapshot.result)
   const summary = <Descriptions size="small" bordered column={{ xs: 1, sm: 2, lg: 4 }} items={[
-    { key: 'result', label: '采集结果', children: <Tag color={presentation.kind === 'success' ? 'success' : presentation.kind === 'error' ? 'error' : 'default'}>{presentation.label}</Tag> },
+    { key: 'result', label: '采集结果', children: <Tag color={triggerSnapshotTagColor(presentation.kind)}>{presentation.label}</Tag> },
     { key: 'metric', label: '适用类型 / 指标', children: snapshot.metric_id },
     { key: 'captured', label: '捕获时间', children: optionalTime(snapshot.captured_at) },
     { key: 'matches', label: '原始匹配数', children: String(snapshot.original_match_count) },
@@ -195,10 +203,7 @@ function TriggerSnapshotContent({ snapshot }: { snapshot: components['schemas'][
   }
 }
 
-export function triggerSnapshotPresentation(result: AlertTriggerSnapshotResult): {
-  label: string
-  kind: 'success' | 'error' | 'not-applicable'
-} {
+export function triggerSnapshotPresentation(result: AlertTriggerSnapshotResult): TriggerSnapshotPresentation {
   switch (result) {
     case 'SUCCESS': return { label: '采集成功', kind: 'success' }
     case 'FAILED': return { label: '采集失败', kind: 'error' }
@@ -214,6 +219,11 @@ const ignoreReasonCodes = [
   'IMPACT_ACCEPTABLE',
   'OTHER',
 ] as const satisfies readonly IgnoreReasonCode[]
+
+const ignoreReasonOptions = ignoreReasonCodes.map((code) => ({
+  value: code,
+  label: ignoreReasonLabel(code),
+}))
 
 const dispositionHistoryColumns: TableColumnsType<AlertDispositionEvent> = [
   { title: '动作', width: 90, render: (_, event) => dispositionEventLabel(event.kind) },
@@ -283,6 +293,21 @@ function ignoreReasonLabel(reason: IgnoreReasonCode): string {
     case 'IMPACT_ACCEPTABLE': return '影响可接受'
     case 'OTHER': return '其他'
     default: return assertNever(reason)
+  }
+}
+
+function dispositionDisabledReason(recovered: boolean, canManage: boolean): string | undefined {
+  if (recovered) return '已恢复告警不能再处置'
+  if (!canManage) return '需要告警管理员角色'
+  return undefined
+}
+
+function triggerSnapshotTagColor(kind: TriggerSnapshotPresentation['kind']): 'success' | 'error' | 'default' {
+  switch (kind) {
+    case 'success': return 'success'
+    case 'error': return 'error'
+    case 'not-applicable': return 'default'
+    default: return assertNever(kind)
   }
 }
 
