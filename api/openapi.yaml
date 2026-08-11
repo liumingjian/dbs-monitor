@@ -36,6 +36,8 @@ paths:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks~1{task_id}
   /api/v1/instances/{id}/long-query-samples:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1long-query-samples
+  /api/v1/instances/{id}/query-stats:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1query-stats
   /api/v1/alert-rules:
     $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules
   /api/v1/alert-rules/{id}:
@@ -150,6 +152,10 @@ components:
       $ref: components/schemas/collection.yaml#/LongQuerySample
     LongQuerySamplePage:
       $ref: components/schemas/collection.yaml#/LongQuerySamplePage
+    QueryStatisticsEntry:
+      $ref: components/schemas/collection.yaml#/QueryStatisticsEntry
+    QueryStatisticsSnapshot:
+      $ref: components/schemas/collection.yaml#/QueryStatisticsSnapshot
     CollectionPauseInput:
       $ref: components/schemas/collection.yaml#/CollectionPauseInput
     CollectionPauseStatus:

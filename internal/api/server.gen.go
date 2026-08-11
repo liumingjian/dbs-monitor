@@ -752,6 +752,24 @@ type PlatformHealthSourceSnapshot struct {
 // PlatformHealthStatus defines model for PlatformHealthStatus.
 type PlatformHealthStatus string
 
+// QueryStatisticsEntry defines model for QueryStatisticsEntry.
+type QueryStatisticsEntry struct {
+	Calls       int64 `json:"calls"`
+	DatabaseOid int64 `json:"database_oid"`
+
+	// Queryid Native PostgreSQL query identifier represented as a string to preserve int64 precision.
+	Queryid         string  `json:"queryid"`
+	TotalExecTimeMs float64 `json:"total_exec_time_ms"`
+	UserOid         int64   `json:"user_oid"`
+}
+
+// QueryStatisticsSnapshot defines model for QueryStatisticsSnapshot.
+type QueryStatisticsSnapshot struct {
+	Items          []QueryStatisticsEntry `json:"items"`
+	SampledAt      *time.Time             `json:"sampled_at,omitempty"`
+	Unavailability *Unavailability        `json:"unavailability,omitempty"`
+}
+
 // Role defines model for Role.
 type Role string
 
@@ -961,6 +979,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/instances/{id}/performance-events)
 	ListPerformanceEvents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListPerformanceEventsParams)
+
+	// (GET /api/v1/instances/{id}/query-stats)
+	GetQueryStatisticsSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (POST /api/v1/login)
 	CreateSession(w http.ResponseWriter, r *http.Request)
@@ -1834,6 +1855,31 @@ func (siw *ServerInterfaceWrapper) ListPerformanceEvents(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// GetQueryStatisticsSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetQueryStatisticsSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQueryStatisticsSnapshot(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateSession operation middleware
 func (siw *ServerInterfaceWrapper) CreateSession(w http.ResponseWriter, r *http.Request) {
 
@@ -2152,6 +2198,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/long-query-samples", wrapper.ListLongQuerySamples)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/performance-events", wrapper.ListPerformanceEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/query-stats", wrapper.GetQueryStatisticsSnapshot)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
@@ -2854,6 +2901,23 @@ func (response ListPerformanceEvents400JSONResponse) VisitListPerformanceEventsR
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetQueryStatisticsSnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetQueryStatisticsSnapshotResponseObject interface {
+	VisitGetQueryStatisticsSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetQueryStatisticsSnapshot200JSONResponse QueryStatisticsSnapshot
+
+func (response GetQueryStatisticsSnapshot200JSONResponse) VisitGetQueryStatisticsSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type CreateSessionRequestObject struct {
 	Body *CreateSessionJSONRequestBody
 }
@@ -3196,6 +3260,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/instances/{id}/performance-events)
 	ListPerformanceEvents(ctx context.Context, request ListPerformanceEventsRequestObject) (ListPerformanceEventsResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/query-stats)
+	GetQueryStatisticsSnapshot(ctx context.Context, request GetQueryStatisticsSnapshotRequestObject) (GetQueryStatisticsSnapshotResponseObject, error)
 
 	// (POST /api/v1/login)
 	CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error)
@@ -4037,6 +4104,32 @@ func (sh *strictHandler) ListPerformanceEvents(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListPerformanceEventsResponseObject); ok {
 		if err := validResponse.VisitListPerformanceEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetQueryStatisticsSnapshot operation middleware
+func (sh *strictHandler) GetQueryStatisticsSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetQueryStatisticsSnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetQueryStatisticsSnapshot(ctx, request.(GetQueryStatisticsSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetQueryStatisticsSnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetQueryStatisticsSnapshotResponseObject); ok {
+		if err := validResponse.VisitGetQueryStatisticsSnapshotResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

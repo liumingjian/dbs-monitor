@@ -59,7 +59,7 @@ check-pg-matrix:
 	PG16_URL=postgres://monitored:monitored@localhost:55436/monitored?sslmode=disable \
 	PG17_URL=postgres://monitored:monitored@localhost:55437/monitored?sslmode=disable \
 	PG17_REPLICA_URL=postgres://monitored:monitored@localhost:55438/monitored?sslmode=disable \
-	go test ./internal/metric -run 'TestPG((StatDatabase|StatActivity|Replication|ReplicationSlot|PreparedXacts|Role)ShapeMatrix|ReplicationStandbyView)' -count=1
+	go test ./internal/metric -run 'TestPG((StatDatabase|StatActivity|StatStatements|Replication|ReplicationSlot|PreparedXacts|Role)ShapeMatrix|ReplicationStandbyView)' -count=1
 
 check-snapshot-matrix:
 	docker compose --profile matrix up -d --wait

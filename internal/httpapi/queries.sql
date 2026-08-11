@@ -185,6 +185,20 @@ ORDER BY
   event.derived_at DESC, event.id
 LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
+-- name: GetLatestQueryStatisticsSnapshot :one
+SELECT sampled_at
+FROM query_statistics_snapshot
+WHERE instance_id = $1
+ORDER BY sampled_at DESC
+LIMIT 1;
+
+-- name: ListQueryStatisticsSnapshotEntries :many
+SELECT queryid, database_oid, user_oid, calls, total_exec_time_ms
+FROM query_statistics_snapshot_entry
+WHERE instance_id = sqlc.arg(instance_id)
+  AND sampled_at = sqlc.arg(sampled_at)
+ORDER BY total_exec_time_ms DESC, queryid, database_oid, user_oid;
+
 -- name: GetPerformanceEvent :one
 SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
        alert.instance_id, alert.status AS alert_status, alert.severity,

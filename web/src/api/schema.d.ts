@@ -185,6 +185,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/query-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getQueryStatisticsSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alert-rules": {
         parameters: {
             query?: never;
@@ -818,6 +836,24 @@ export interface components {
             total: number;
             items: components["schemas"]["LongQuerySample"][];
         };
+        QueryStatisticsEntry: {
+            /** @description Native PostgreSQL query identifier represented as a string to preserve int64 precision. */
+            queryid: string;
+            /** Format: int64 */
+            database_oid: number;
+            /** Format: int64 */
+            user_oid: number;
+            /** Format: int64 */
+            calls: number;
+            /** Format: double */
+            total_exec_time_ms: number;
+        };
+        QueryStatisticsSnapshot: {
+            /** Format: date-time */
+            sampled_at?: string;
+            unavailability?: components["schemas"]["Unavailability"];
+            items: components["schemas"]["QueryStatisticsEntry"][];
+        };
         CollectionPauseInput: {
             paused: boolean;
             reason?: string;
@@ -1393,6 +1429,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getQueryStatisticsSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest query statistics snapshot or an explicit unavailability reason */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryStatisticsSnapshot"];
                 };
             };
         };

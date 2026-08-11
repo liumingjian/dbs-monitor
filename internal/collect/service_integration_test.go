@@ -135,8 +135,8 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		WHERE instance_id = $1 AND last_result = 'SUCCESS'`, pgID).Scan(&successfulTasks); err != nil {
 		t.Fatalf("count successful collection tasks: %v", err)
 	}
-	if successfulTasks != 7 {
-		t.Fatalf("successful task count = %d, want 7", successfulTasks)
+	if successfulTasks != 8 {
+		t.Fatalf("successful task count = %d, want 8", successfulTasks)
 	}
 	var samplesBeforeEmergency int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
@@ -369,6 +369,16 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	if storedSessions > sessionSnapshotLimit || sessionCount < storedSessions || sessionsTruncated != (sessionCount > sessionSnapshotLimit) {
 		t.Fatalf("latest session snapshot = stored %d original %d truncated %t", storedSessions, sessionCount, sessionsTruncated)
+	}
+	var queryStatisticsEntries int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM query_statistics_snapshot_entry
+		WHERE instance_id = $1 AND sampled_at = (
+			SELECT max(sampled_at) FROM query_statistics_snapshot WHERE instance_id = $1
+		)`, pgID).Scan(&queryStatisticsEntries); err != nil {
+		t.Fatalf("count query statistics snapshot entries: %v", err)
+	}
+	if queryStatisticsEntries == 0 || queryStatisticsEntries > queryStatisticsSnapshotLimit {
+		t.Fatalf("query statistics snapshot entries = %d, want 1..%d", queryStatisticsEntries, queryStatisticsSnapshotLimit)
 	}
 	assertReplicationSlotSemantics(t, ctx, admin, platform, collector, targets[0], pgID, currentClock)
 }
@@ -611,7 +621,7 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	}
 	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgID, Name: "capability-target", Host: env("PGHOST", "localhost"),
-		Port: int32(envInt("PGPORT", 55432)), DatabaseName: env("PGDATABASE", "dbs_monitor"),
+		Port: int32(envInt("PGPORT", 55432)), DatabaseName: databaseName,
 		Username: roleName, PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create capability target: %v", err)
@@ -629,6 +639,25 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	present := storedCapabilityStates(t, ctx, pool, pgID)
 	if present[metric.CapabilityRolePGMonitor] != metric.CapabilityPresent {
 		t.Fatalf("pg_monitor status = %s, want PRESENT", present[metric.CapabilityRolePGMonitor])
+	}
+	if present[metric.CapabilityExtensionPGStatStatements] != metric.CapabilityMissing {
+		t.Fatalf("pg_stat_statements status = %s, want MISSING", present[metric.CapabilityExtensionPGStatStatements])
+	}
+	var queryStatisticsStarted pgtype.Timestamptz
+	var queryStatisticsError string
+	if err := pool.QueryRow(ctx, `SELECT last_started_at, last_error_code
+		FROM instance_collection_task_state
+		WHERE instance_id = $1 AND task_id = 'pg.stat_statements'`, pgID).Scan(&queryStatisticsStarted, &queryStatisticsError); err != nil {
+		t.Fatalf("read gated query statistics task: %v", err)
+	}
+	var queryStatisticsSnapshots int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM query_statistics_snapshot
+		WHERE instance_id = $1`, pgID).Scan(&queryStatisticsSnapshots); err != nil {
+		t.Fatalf("count gated query statistics snapshots: %v", err)
+	}
+	if queryStatisticsStarted.Valid || queryStatisticsError != "EXTENSION_MISSING" || queryStatisticsSnapshots != 0 {
+		t.Fatalf("gated query statistics start/error/snapshots = %v/%s/%d, want absent/EXTENSION_MISSING/0",
+			queryStatisticsStarted, queryStatisticsError, queryStatisticsSnapshots)
 	}
 	var samplesBefore int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample

@@ -335,8 +335,15 @@ END::text AS role`,
 	{
 		ID: TaskQueryStatistics, Kind: TaskKindSQL, Interval: 5 * time.Minute,
 		Requires: []CapabilityID{CapabilityExtensionPGStatStatements},
-		SQL: `SELECT queryid, dbid, userid, calls, total_exec_time
-FROM pg_stat_statements`,
+		SQL: `SELECT queryid,
+       dbid AS database_oid,
+       userid AS user_oid,
+       sum(calls)::bigint AS calls,
+       sum(total_exec_time)::double precision AS total_exec_time_ms
+FROM pg_stat_statements
+GROUP BY queryid, dbid, userid
+ORDER BY total_exec_time_ms DESC, queryid, dbid, userid
+LIMIT 500`,
 		Yields: nil,
 	},
 }

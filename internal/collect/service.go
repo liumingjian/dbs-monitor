@@ -319,6 +319,12 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 		return service.statDatabaseRates.observe(run.key.instanceID, observation), nil
 	case metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole:
 		return collectDeclaredTask(ctx, conn, run.task)
+	case metric.TaskQueryStatistics:
+		snapshot, err := collectQueryStatistics(ctx, conn, run.task)
+		if err != nil {
+			return collectedBatch{}, err
+		}
+		return collectedBatch{queryStatisticsSnapshot: &snapshot}, nil
 	default:
 		return collectedBatch{}, fmt.Errorf("unsupported collection task %q", run.task.ID)
 	}
@@ -567,7 +573,8 @@ func scheduledTasks() []metric.Task {
 	for _, task := range metric.Tasks {
 		switch task.ID {
 		case metric.TaskProbe, metric.TaskStatDatabase, metric.TaskStatActivity,
-			metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole:
+			metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole,
+			metric.TaskQueryStatistics:
 			tasks = append(tasks, task)
 		}
 	}

@@ -402,9 +402,17 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 			}
 		})
 	}
+	queryStatsURL := fmt.Sprintf("%s/api/v1/instances/%s/query-stats", server.URL, instanceID)
+	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
+		SET states = jsonb_set(states, '{ext.pg_stat_statements}', '"MISSING"')
+		WHERE instance_id = $1`, createBody.Instance.Id); err != nil {
+		t.Fatalf("set missing pg_stat_statements capability: %v", err)
+	}
+	assertQueryStatisticsUnavailability(t, client, queryStatsURL, "EXTENSION_MISSING")
 	if _, err := pool.Exec(ctx, "DELETE FROM instance_capability_snapshot WHERE instance_id = $1", createBody.Instance.Id); err != nil {
 		t.Fatalf("restore absent capability snapshot: %v", err)
 	}
+	assertQueryStatisticsUnavailability(t, client, queryStatsURL, "FEATURE_DISABLED")
 
 	readOnlyToken := "read-only-token"
 	readOnlyHash := sha256.Sum256([]byte(readOnlyToken))
@@ -469,6 +477,27 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if roleCapability.Status != "PRESENT" || roleCapability.ObservedAt == nil {
 		t.Fatalf("probed pg_monitor capability = %+v", roleCapability)
 	}
+	queryStatsResponse := getResponse(t, client, queryStatsURL)
+	if queryStatsResponse.StatusCode != http.StatusOK {
+		t.Fatalf("query statistics status = %d, want 200", queryStatsResponse.StatusCode)
+	}
+	var queryStats struct {
+		SampledAt      *time.Time       `json:"sampled_at"`
+		Unavailability *string          `json:"unavailability"`
+		Items          []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(queryStatsResponse.Body).Decode(&queryStats); err != nil {
+		t.Fatalf("decode query statistics snapshot: %v", err)
+	}
+	queryStatsResponse.Body.Close()
+	if queryStats.SampledAt == nil || queryStats.Unavailability != nil || len(queryStats.Items) == 0 {
+		t.Fatalf("query statistics snapshot = %+v, want available rows", queryStats)
+	}
+	for _, forbidden := range []string{"query", "sql", "query_text", "sql_text"} {
+		if _, exists := queryStats.Items[0][forbidden]; exists {
+			t.Fatalf("query statistics entry exposes %q", forbidden)
+		}
+	}
 	assertMetricSeriesHasPoints(t, client, seriesURL)
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.prepared_xacts.count", 1))
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.role", 1))
@@ -489,8 +518,20 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 			t.Fatalf("insert long query sample: %v", err)
 		}
 	}
+	if _, err := pool.Exec(ctx, `INSERT INTO query_statistics_snapshot
+		(instance_id, sampled_at) VALUES ($1, $2)`, instanceID, oldSampledAt); err != nil {
+		t.Fatalf("insert old query statistics snapshot: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO query_statistics_snapshot_entry
+		(instance_id, sampled_at, queryid, database_oid, user_oid, calls, total_exec_time_ms)
+		VALUES ($1, $2, 58, 1, 1, 1, 1)`, instanceID, oldSampledAt); err != nil {
+		t.Fatalf("insert old query statistics entry: %v", err)
+	}
 	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, sampledAt); err != nil {
 		t.Fatalf("expire long query samples: %v", err)
+	}
+	if err := collect.DropExpiredQueryStatisticsSnapshots(ctx, platform, sampledAt); err != nil {
+		t.Fatalf("expire query statistics snapshots: %v", err)
 	}
 	var oldSamples int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM long_query_sample WHERE sampled_at = $1", oldSampledAt).Scan(&oldSamples); err != nil {
@@ -498,6 +539,14 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	if oldSamples != 0 {
 		t.Fatalf("expired long query samples = %d, want 0", oldSamples)
+	}
+	var oldQueryStatistics int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM query_statistics_snapshot_entry
+		WHERE sampled_at = $1`, oldSampledAt).Scan(&oldQueryStatistics); err != nil {
+		t.Fatalf("count expired query statistics entries: %v", err)
+	}
+	if oldQueryStatistics != 0 {
+		t.Fatalf("expired query statistics entries = %d, want 0", oldQueryStatistics)
 	}
 	longQueriesURL := fmt.Sprintf("%s/api/v1/instances/%s/long-query-samples?from=%s&to=%s",
 		server.URL, instanceID,
@@ -972,6 +1021,26 @@ func assertUnavailability(t *testing.T, client *http.Client, address, want strin
 	}
 	if len(body.Metrics) != 1 || body.Metrics[0].Unavailability == nil || *body.Metrics[0].Unavailability != want {
 		t.Fatalf("unavailability = %+v, want %s", body.Metrics, want)
+	}
+}
+
+func assertQueryStatisticsUnavailability(t *testing.T, client *http.Client, address, want string) {
+	t.Helper()
+	response := getResponse(t, client, address)
+	if response.StatusCode != http.StatusOK {
+		response.Body.Close()
+		t.Fatalf("query statistics status = %d, want 200", response.StatusCode)
+	}
+	defer response.Body.Close()
+	var body struct {
+		Items          []api.QueryStatisticsEntry `json:"items"`
+		Unavailability *string                    `json:"unavailability"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode query statistics unavailability: %v", err)
+	}
+	if len(body.Items) != 0 || body.Unavailability == nil || *body.Unavailability != want {
+		t.Fatalf("query statistics response = %+v, want empty items/%s", body, want)
 	}
 }
 

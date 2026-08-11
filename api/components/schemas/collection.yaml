@@ -113,3 +113,25 @@ LongQuerySamplePage:
     items:
       type: array
       items: { $ref: '#/LongQuerySample' }
+QueryStatisticsEntry:
+  type: object
+  required: [queryid, database_oid, user_oid, calls, total_exec_time_ms]
+  properties:
+    queryid:
+      type: string
+      description: Native PostgreSQL query identifier represented as a string to preserve int64 precision.
+    database_oid: { type: integer, format: int64, minimum: 0 }
+    user_oid: { type: integer, format: int64, minimum: 0 }
+    calls: { type: integer, format: int64, minimum: 0 }
+    total_exec_time_ms: { type: number, format: double, minimum: 0 }
+QueryStatisticsSnapshot:
+  type: object
+  required: [items]
+  properties:
+    sampled_at: { type: string, format: date-time }
+    unavailability:
+      $ref: ../enums.yaml#/Unavailability
+    items:
+      type: array
+      maxItems: 500
+      items: { $ref: '#/QueryStatisticsEntry' }

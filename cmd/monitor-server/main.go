@@ -257,6 +257,14 @@ func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *pla
 				log.Printf("activity snapshot retention failed: %v", err)
 				continue
 			}
+			if err := collect.DropExpiredQueryStatisticsSnapshots(ctx, platform, now); err != nil {
+				consecutiveFailures++
+				health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{
+					ConsecutiveFailures: consecutiveFailures, PrebuildDaysRemaining: 7,
+				}))
+				log.Printf("query statistics snapshot retention failed: %v", err)
+				continue
+			}
 			lastSuccess = now.UTC()
 			consecutiveFailures = 0
 			health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{

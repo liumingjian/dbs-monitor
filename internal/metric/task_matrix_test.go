@@ -37,6 +37,28 @@ func TestPGStatActivityUsesSingleSnapshot(t *testing.T) {
 	}
 }
 
+func TestPGStatStatementsDeclaration(t *testing.T) {
+	task := requiredTask(t, metric.TaskQueryStatistics)
+	if !slices.Equal(task.Requires, []metric.CapabilityID{metric.CapabilityExtensionPGStatStatements}) {
+		t.Fatalf("pg_stat_statements requirements = %v, want ext.pg_stat_statements", task.Requires)
+	}
+	if len(task.Yields) != 0 {
+		t.Fatalf("pg_stat_statements yields %d P0 metrics, want 0", len(task.Yields))
+	}
+	for _, fragment := range []string{
+		"queryid", "dbid AS database_oid", "userid AS user_oid",
+		"sum(calls)::bigint AS calls", "sum(total_exec_time)::double precision AS total_exec_time_ms",
+		"GROUP BY queryid, dbid, userid", "LIMIT 500",
+	} {
+		if !strings.Contains(task.SQL, fragment) {
+			t.Errorf("pg_stat_statements query is missing %q", fragment)
+		}
+	}
+	if strings.Contains(task.SQL, "query::text") || strings.Contains(task.SQL, "query AS") {
+		t.Fatal("pg_stat_statements query selects SQL text")
+	}
+}
+
 func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 	task, ok := taskByID(metric.TaskStatDatabase)
 	if !ok {
@@ -139,6 +161,17 @@ func TestPGPreparedXactsShapeMatrix(t *testing.T) {
 func TestPGRoleShapeMatrix(t *testing.T) {
 	task := requiredTask(t, metric.TaskRole)
 	assertTaskShapeMatrix(t, task, []taskColumnShape{{name: "role", oid: pgtype.TextOID}})
+}
+
+func TestPGStatStatementsShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskQueryStatistics)
+	assertVariableRowsTaskShapeMatrix(t, task, []taskColumnShape{
+		{name: "queryid", oid: pgtype.Int8OID},
+		{name: "database_oid", oid: pgtype.OIDOID},
+		{name: "user_oid", oid: pgtype.OIDOID},
+		{name: "calls", oid: pgtype.Int8OID},
+		{name: "total_exec_time_ms", oid: pgtype.Float8OID},
+	})
 }
 
 type taskColumnShape struct {

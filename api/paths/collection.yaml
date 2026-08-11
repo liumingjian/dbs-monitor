@@ -146,3 +146,19 @@
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/{id}/query-stats:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: getQueryStatisticsSnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Latest query statistics snapshot or an explicit unavailability reason
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/QueryStatisticsSnapshot }

@@ -1,9 +1,12 @@
 x-monitored: &monitored
   profiles: [matrix]
+  command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
   environment:
     POSTGRES_DB: monitored
     POSTGRES_USER: monitored
     POSTGRES_PASSWORD: monitored
+  volumes:
+    - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
   healthcheck:
     test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
     interval: 1s
@@ -13,11 +16,14 @@ x-monitored: &monitored
 services:
   postgres:
     image: postgres:17
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_DB: dbs_monitor
       POSTGRES_USER: dbs_monitor
       POSTGRES_PASSWORD: dbs_monitor
       POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    volumes:
+      - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
     ports:
       - "55432:5432"
     healthcheck:

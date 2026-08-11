@@ -286,6 +286,21 @@ type PerformanceEvent struct {
 	DerivedAt       pgtype.Timestamptz
 }
 
+type QueryStatisticsSnapshot struct {
+	InstanceID pgtype.UUID
+	SampledAt  pgtype.Timestamptz
+}
+
+type QueryStatisticsSnapshotEntry struct {
+	InstanceID      pgtype.UUID
+	SampledAt       pgtype.Timestamptz
+	Queryid         int64
+	DatabaseOid     pgtype.Uint32
+	UserOid         pgtype.Uint32
+	Calls           int64
+	TotalExecTimeMs float64
+}
+
 type UserSession struct {
 	TokenHash []byte
 	UserID    pgtype.UUID

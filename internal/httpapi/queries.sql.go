@@ -321,6 +321,21 @@ func (q *Queries) GetInstanceAlertStatus(ctx context.Context, instanceID pgtype.
 	return status, err
 }
 
+const getLatestQueryStatisticsSnapshot = `-- name: GetLatestQueryStatisticsSnapshot :one
+SELECT sampled_at
+FROM query_statistics_snapshot
+WHERE instance_id = $1
+ORDER BY sampled_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestQueryStatisticsSnapshot(ctx context.Context, instanceID pgtype.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLatestQueryStatisticsSnapshot, instanceID)
+	var sampled_at pgtype.Timestamptz
+	err := row.Scan(&sampled_at)
+	return sampled_at, err
+}
+
 const getPerformanceEvent = `-- name: GetPerformanceEvent :one
 SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
        alert.instance_id, alert.status AS alert_status, alert.severity,
@@ -762,6 +777,53 @@ func (q *Queries) ListPersistedCollectionTaskStates(ctx context.Context, instanc
 			&i.NextEligibleAt,
 			&i.LastErrorCode,
 			&i.LastErrorMessage,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQueryStatisticsSnapshotEntries = `-- name: ListQueryStatisticsSnapshotEntries :many
+SELECT queryid, database_oid, user_oid, calls, total_exec_time_ms
+FROM query_statistics_snapshot_entry
+WHERE instance_id = $1
+  AND sampled_at = $2
+ORDER BY total_exec_time_ms DESC, queryid, database_oid, user_oid
+`
+
+type ListQueryStatisticsSnapshotEntriesParams struct {
+	InstanceID pgtype.UUID
+	SampledAt  pgtype.Timestamptz
+}
+
+type ListQueryStatisticsSnapshotEntriesRow struct {
+	Queryid         int64
+	DatabaseOid     pgtype.Uint32
+	UserOid         pgtype.Uint32
+	Calls           int64
+	TotalExecTimeMs float64
+}
+
+func (q *Queries) ListQueryStatisticsSnapshotEntries(ctx context.Context, arg ListQueryStatisticsSnapshotEntriesParams) ([]ListQueryStatisticsSnapshotEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listQueryStatisticsSnapshotEntries, arg.InstanceID, arg.SampledAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListQueryStatisticsSnapshotEntriesRow
+	for rows.Next() {
+		var i ListQueryStatisticsSnapshotEntriesRow
+		if err := rows.Scan(
+			&i.Queryid,
+			&i.DatabaseOid,
+			&i.UserOid,
+			&i.Calls,
+			&i.TotalExecTimeMs,
 		); err != nil {
 			return nil, err
 		}
