@@ -13,6 +13,8 @@ func TestRollupInstanceHealth(t *testing.T) {
 	value := func(number float64) *float64 { return &number }
 	recoveredRecently := now.Add(-23 * time.Hour)
 	recoveredTooLongAgo := now.Add(-25 * time.Hour)
+	recoveredAtBoundary := now.Add(-RecentRecoveryWindow)
+	recoveredInFuture := now.Add(time.Minute)
 
 	tests := []struct {
 		name  string
@@ -98,6 +100,20 @@ func TestRollupInstanceHealth(t *testing.T) {
 				{RuleName: "old", Severity: SeverityWarning, State: RECOVERED, RecoveredAt: &recoveredTooLongAgo},
 			}},
 			want: HealthRollup{Status: HealthHealthy, Flags: HealthFlags{RecentlyRecovered: true}},
+		},
+		{
+			name: "recent recovery window includes its lower boundary",
+			input: HealthRollupInput{EverCollected: true, Now: now, Alerts: []HealthAlert{
+				{RuleName: "boundary", Severity: SeverityWarning, State: RECOVERED, RecoveredAt: &recoveredAtBoundary},
+			}},
+			want: HealthRollup{Status: HealthHealthy, Flags: HealthFlags{RecentlyRecovered: true}},
+		},
+		{
+			name: "future recovery does not set the recent marker",
+			input: HealthRollupInput{EverCollected: true, Now: now, Alerts: []HealthAlert{
+				{RuleName: "future", Severity: SeverityWarning, State: RECOVERED, RecoveredAt: &recoveredInFuture},
+			}},
+			want: HealthRollup{Status: HealthHealthy},
 		},
 		{
 			name:  "maintenance and configuration missing are orthogonal even when counts are zero",

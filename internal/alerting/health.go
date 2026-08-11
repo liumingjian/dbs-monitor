@@ -2,6 +2,8 @@ package alerting
 
 import "time"
 
+const RecentRecoveryWindow = 24 * time.Hour
+
 type HealthStatus string
 
 const (
@@ -75,10 +77,12 @@ type HealthRollup struct {
 }
 
 func RollupInstanceHealth(input HealthRollupInput) HealthRollup {
-	result := HealthRollup{Flags: HealthFlags{
-		InMaintenance:        input.InMaintenance,
-		ConfigurationMissing: input.ConfigurationMissing,
-	}}
+	result := HealthRollup{
+		Flags: HealthFlags{
+			InMaintenance:        input.InMaintenance,
+			ConfigurationMissing: input.ConfigurationMissing,
+		},
+	}
 	var attributed *HealthAlert
 	for index := range input.Alerts {
 		alert := &input.Alerts[index]
@@ -86,8 +90,7 @@ func RollupInstanceHealth(input HealthRollupInput) HealthRollup {
 			continue
 		}
 		if alert.State == RECOVERED {
-			if alert.RecoveredAt != nil && !alert.RecoveredAt.After(input.Now) &&
-				!alert.RecoveredAt.Before(input.Now.Add(-24*time.Hour)) {
+			if recoveredRecently(alert.RecoveredAt, input.Now) {
 				result.Flags.RecentlyRecovered = true
 			}
 			continue
@@ -111,8 +114,7 @@ func RollupInstanceHealth(input HealthRollupInput) HealthRollup {
 		case SeverityInfo:
 			result.Counts.Info++
 		}
-		if attributed == nil || severityRank(alert.Severity) > severityRank(attributed.Severity) ||
-			severityRank(alert.Severity) == severityRank(attributed.Severity) && alert.FirstTriggeredAt.Before(attributed.FirstTriggeredAt) {
+		if attributed == nil || hasHigherAttributionPriority(alert, attributed) {
 			attributed = alert
 		}
 	}
@@ -133,6 +135,22 @@ func RollupInstanceHealth(input HealthRollupInput) HealthRollup {
 		result.Status = HealthHealthy
 	}
 	return result
+}
+
+func recoveredRecently(recoveredAt *time.Time, now time.Time) bool {
+	if recoveredAt == nil {
+		return false
+	}
+	return !recoveredAt.Before(now.Add(-RecentRecoveryWindow)) && !recoveredAt.After(now)
+}
+
+func hasHigherAttributionPriority(candidate, current *HealthAlert) bool {
+	candidateRank := severityRank(candidate.Severity)
+	currentRank := severityRank(current.Severity)
+	if candidateRank != currentRank {
+		return candidateRank > currentRank
+	}
+	return candidate.FirstTriggeredAt.Before(current.FirstTriggeredAt)
 }
 
 func severityRank(severity Severity) int {

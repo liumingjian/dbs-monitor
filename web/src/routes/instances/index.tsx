@@ -1,6 +1,7 @@
 import { ClearOutlined, DashboardOutlined, PlusOutlined, SettingOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Select, Space, Table, Tooltip, Typography } from 'antd'
+import type { TableColumnsType } from 'antd'
 import { useState } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
@@ -31,44 +32,78 @@ function assertNever(value: never): never {
 
 function healthRank(status: HealthStatusValue): number {
   switch (status) {
-    case 'CRITICAL': return 5
-    case 'WARNING': return 4
-    case 'UNKNOWN': return 3
-    case 'HEALTHY': return 2
-    case 'PAUSED': return 1
-    default: return assertNever(status)
+    case 'CRITICAL':
+      return 5
+    case 'WARNING':
+      return 4
+    case 'UNKNOWN':
+      return 3
+    case 'HEALTHY':
+      return 2
+    case 'PAUSED':
+      return 1
+    default:
+      return assertNever(status)
   }
 }
 
 function hasFlag(instance: Instance, flag: OrthogonalFlag): boolean {
   switch (flag) {
-    case 'NO_DATA': return instance.health.flags.no_data
-    case 'MAINTENANCE': return instance.health.flags.in_maintenance
-    case 'RECENTLY_RECOVERED': return instance.health.flags.recently_recovered
-    case 'IGNORED': return instance.health.flags.ignored > 0
-    case 'CONFIGURATION_MISSING': return instance.health.flags.configuration_missing > 0
-    default: return assertNever(flag)
+    case 'NO_DATA':
+      return instance.health.flags.no_data
+    case 'MAINTENANCE':
+      return instance.health.flags.in_maintenance
+    case 'RECENTLY_RECOVERED':
+      return instance.health.flags.recently_recovered
+    case 'IGNORED':
+      return instance.health.flags.ignored > 0
+    case 'CONFIGURATION_MISSING':
+      return instance.health.flags.configuration_missing > 0
+    default:
+      return assertNever(flag)
   }
 }
 
 function hasSeverity(instance: Instance, severity: AlertSeverity): boolean {
   switch (severity) {
-    case 'critical': return instance.health.counts.critical > 0
-    case 'warning': return instance.health.counts.warning > 0
-    case 'info': return instance.health.counts.info > 0
-    default: return assertNever(severity)
+    case 'critical':
+      return instance.health.counts.critical > 0
+    case 'warning':
+      return instance.health.counts.warning > 0
+    case 'info':
+      return instance.health.counts.info > 0
+    default:
+      return assertNever(severity)
   }
 }
 
 export function filterAndSortInstances(instances: readonly Instance[], filters: InstanceFilters): Instance[] {
   return instances.filter((instance) => {
-    if (filters.statuses?.length && !filters.statuses.includes(instance.health.status)) return false
-    if (filters.flags?.length && !filters.flags.every((flag) => hasFlag(instance, flag))) return false
-    if (filters.alertSeverity && !hasSeverity(instance, filters.alertSeverity)) return false
-    if (filters.hasInfo && instance.health.counts.info === 0) return false
-    if (filters.hasConfigurationMissing && instance.health.flags.configuration_missing === 0) return false
+    if (filters.statuses?.length && !filters.statuses.includes(instance.health.status)) {
+      return false
+    }
+    if (filters.flags?.length && !filters.flags.every((flag) => hasFlag(instance, flag))) {
+      return false
+    }
+    if (filters.alertSeverity && !hasSeverity(instance, filters.alertSeverity)) {
+      return false
+    }
+    if (filters.hasInfo && instance.health.counts.info === 0) {
+      return false
+    }
+    if (filters.hasConfigurationMissing && instance.health.flags.configuration_missing === 0) {
+      return false
+    }
     return true
-  }).sort((left, right) => healthRank(right.health.status) - healthRank(left.health.status) || left.name.localeCompare(right.name))
+  }).sort(compareInstances)
+}
+
+function compareInstances(left: Instance, right: Instance): number {
+  const healthDifference = healthRank(right.health.status) - healthRank(left.health.status)
+  if (healthDifference !== 0) {
+    return healthDifference
+  }
+  return left.name.localeCompare(right.name)
 }
 
 export const instancesRoute = createRoute({
@@ -87,7 +122,7 @@ function InstancesPage() {
   const [createForm] = Form.useForm<InstanceCreateInput>()
   const canCreate = currentUserQuery.data?.role === 'PLATFORM_ADMIN'
   const createDisabledReason = canCreate ? undefined : '需要平台管理员角色'
-  const projectedInstances = filterAndSortInstances(instancesQuery.data ?? [], filters)
+  const visibleInstances = filterAndSortInstances(instancesQuery.data ?? [], filters)
 
   function createInstance(values: InstanceCreateInput) {
     setActionError('')
@@ -121,7 +156,7 @@ function InstancesPage() {
           placeholder="主状态"
           value={filters.statuses ? [...filters.statuses] : undefined}
           style={{ minWidth: 220 }}
-          options={HEALTH_STATUSES.map((value) => ({ value, label: healthLabel(value) }))}
+          options={healthStatusOptions}
           onChange={(statuses) => setFilters((current) => ({ ...current, statuses }))}
         />
         <Select
@@ -139,11 +174,7 @@ function InstancesPage() {
           placeholder="至少一条该级告警"
           value={filters.alertSeverity}
           style={{ minWidth: 190 }}
-          options={[
-            { value: 'critical', label: '严重告警' },
-            { value: 'warning', label: '警告告警' },
-            { value: 'info', label: 'Info 告警' },
-          ]}
+          options={alertSeverityOptions}
           onChange={(alertSeverity) => setFilters((current) => ({ ...current, alertSeverity }))}
         />
         <Checkbox checked={filters.hasInfo === true} onChange={(event) => setFilters((current) => ({ ...current, hasInfo: event.target.checked }))}>
@@ -155,50 +186,13 @@ function InstancesPage() {
         <Button icon={<ClearOutlined />} onClick={() => setFilters({})}>清除筛选</Button>
         {instancesQuery.dataUpdatedAt > 0 && <Freshness dataUpdatedAt={instancesQuery.dataUpdatedAt} collectionInterval={30_000} />}
       </Space>
-      <Table
+      <Table<Instance>
         loading={instancesQuery.isPending}
         rowKey="id"
-        dataSource={projectedInstances}
+        dataSource={visibleInstances}
         pagination={{ pageSize: 50, showSizeChanger: false }}
         scroll={{ x: 1180 }}
-        columns={[
-          {
-            title: <Tooltip title="最高未恢复告警级别">实例健康</Tooltip>,
-            width: 390,
-            render: (_, row) => (
-              <Space direction="vertical" size={4}>
-                <Space>
-                  <HealthStatus status={row.health.status} pausedAt={row.collection_pause.updated_at} />
-                  <Typography.Text strong>{row.name}</Typography.Text>
-                </Space>
-                <Typography.Text type="secondary">{attributionLabel(row)}</Typography.Text>
-                <Space size={4} wrap>
-                  <Typography.Text code>C{row.health.counts.critical}</Typography.Text>
-                  <Typography.Text code>W{row.health.counts.warning}</Typography.Text>
-                  <Typography.Text code>I{row.health.counts.info}</Typography.Text>
-                  <SuppressionTags flags={row.health.flags} />
-                </Space>
-              </Space>
-            ),
-          },
-          { title: '地址', render: (_, row) => `${row.host}:${row.port}` },
-          { title: 'Agent 状态', render: (_, row) => agentStatusLabel(row.agent_status) },
-          { title: '最近采集时间', render: (_, row) => row.last_collected_at ? new Date(row.last_collected_at).toLocaleString() : '尚无成功采集' },
-          { title: '数据新鲜度', render: (_, row) => freshnessLabel(row.data_freshness_seconds) },
-          {
-            title: '操作',
-            render: (_, row) => (
-              <Space wrap>
-                <Link to="/instances/$id" params={{ id: row.id }} search={defaultTimeRange()}>
-                  <DashboardOutlined /> 监控
-                </Link>
-                <Link to="/instances/$id/settings" params={{ id: row.id }}>
-                  <SettingOutlined /> 接入设置
-                </Link>
-              </Space>
-            ),
-          },
-        ]}
+        columns={instanceColumns}
       />
       <Modal title="新建实例" open={createOpen} footer={null} destroyOnHidden onCancel={() => setCreateOpen(false)}>
         <Form<InstanceCreateInput> form={createForm} layout="vertical" onFinish={createInstance}>
@@ -235,25 +229,45 @@ const orthogonalFlagOptions: { value: OrthogonalFlag; label: string }[] = [
   { value: 'CONFIGURATION_MISSING', label: '配置缺失' },
 ]
 
+const healthStatusOptions = HEALTH_STATUSES.map((value) => ({ value, label: healthLabel(value) }))
+
+const alertSeverityOptions: { value: AlertSeverity; label: string }[] = [
+  { value: 'critical', label: '严重告警' },
+  { value: 'warning', label: '警告告警' },
+  { value: 'info', label: 'Info 告警' },
+]
+
 function healthLabel(status: HealthStatusValue): string {
   switch (status) {
-    case 'CRITICAL': return '严重'
-    case 'WARNING': return '警告'
-    case 'UNKNOWN': return '未知'
-    case 'HEALTHY': return '正常'
-    case 'PAUSED': return '已暂停'
-    default: return assertNever(status)
+    case 'CRITICAL':
+      return '严重'
+    case 'WARNING':
+      return '警告'
+    case 'UNKNOWN':
+      return '未知'
+    case 'HEALTHY':
+      return '正常'
+    case 'PAUSED':
+      return '已暂停'
+    default:
+      return assertNever(status)
   }
 }
 
 function agentStatusLabel(status: components['schemas']['InstanceAgentStatus']): string {
   switch (status) {
-    case 'online': return '在线'
-    case 'offline': return '离线'
-    case 'not_installed': return '未安装'
-    case 'permission_denied': return '权限不足'
-    case 'error': return '异常'
-    default: return assertNever(status)
+    case 'online':
+      return '在线'
+    case 'offline':
+      return '离线'
+    case 'not_installed':
+      return '未安装'
+    case 'permission_denied':
+      return '权限不足'
+    case 'error':
+      return '异常'
+    default:
+      return assertNever(status)
   }
 }
 
@@ -263,9 +277,52 @@ function attributionLabel(instance: Instance): string {
   return attribution.current_value === undefined ? attribution.rule_name : `${attribution.rule_name} (${attribution.current_value})`
 }
 
+function lastCollectedAtLabel(collectedAt: string | undefined): string {
+  return collectedAt ? new Date(collectedAt).toLocaleString() : '尚无成功采集'
+}
+
 function freshnessLabel(seconds: number | undefined): string {
   if (seconds === undefined) return '未知'
   if (seconds < 60) return `${seconds} 秒前`
   if (seconds < 3600) return `${Math.floor(seconds / 60)} 分钟前`
   return `${Math.floor(seconds / 3600)} 小时前`
 }
+
+const instanceColumns: TableColumnsType<Instance> = [
+  {
+    title: <Tooltip title="最高未恢复告警级别">实例健康</Tooltip>,
+    width: 390,
+    render: (_, instance) => (
+      <Space direction="vertical" size={4}>
+        <Space>
+          <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
+          <Typography.Text strong>{instance.name}</Typography.Text>
+        </Space>
+        <Typography.Text type="secondary">{attributionLabel(instance)}</Typography.Text>
+        <Space size={4} wrap>
+          <Typography.Text code>C{instance.health.counts.critical}</Typography.Text>
+          <Typography.Text code>W{instance.health.counts.warning}</Typography.Text>
+          <Typography.Text code>I{instance.health.counts.info}</Typography.Text>
+          <SuppressionTags flags={instance.health.flags} />
+        </Space>
+      </Space>
+    ),
+  },
+  { title: '地址', render: (_, instance) => `${instance.host}:${instance.port}` },
+  { title: 'Agent 状态', render: (_, instance) => agentStatusLabel(instance.agent_status) },
+  { title: '最近采集时间', render: (_, instance) => lastCollectedAtLabel(instance.last_collected_at) },
+  { title: '数据新鲜度', render: (_, instance) => freshnessLabel(instance.data_freshness_seconds) },
+  {
+    title: '操作',
+    render: (_, instance) => (
+      <Space wrap>
+        <Link to="/instances/$id" params={{ id: instance.id }} search={defaultTimeRange()}>
+          <DashboardOutlined /> 监控
+        </Link>
+        <Link to="/instances/$id/settings" params={{ id: instance.id }}>
+          <SettingOutlined /> 接入设置
+        </Link>
+      </Space>
+    ),
+  },
+]

@@ -192,22 +192,22 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 		return nil, err
 	}
 	now := handler.clock.Now().UTC()
-	alertRows, err := alerting.New(handler.platform).ListInstanceHealthAlerts(ctx, pgtype.Timestamptz{Time: now.Add(-24 * time.Hour), Valid: true})
+	alertsByInstance, err := handler.loadInstanceHealthAlerts(ctx, now)
 	if err != nil {
 		return nil, err
 	}
-	alertsByInstance := make(map[uuid.UUID][]alerting.ListInstanceHealthAlertsRow)
-	for _, alertRow := range alertRows {
-		id := uuid.UUID(alertRow.InstanceID.Bytes)
-		alertsByInstance[id] = append(alertsByInstance[id], alertRow)
-	}
 	response := make(api.ListInstances200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		projection, err := projectInstanceHealth(instanceProjectionInput{
-			paused: row.CollectionPaused, collectorLastSuccessAt: row.CollectorLastSuccessAt,
-			agentExpected: row.AgentExpected, agentLastReportAt: row.AgentLastReportAt,
-			agentLastErrorCode: row.AgentLastErrorCode, capabilityObservedAt: row.CapabilityObservedAt,
-			capabilityStates: row.CapabilityStates, alerts: alertsByInstance[uuid.UUID(row.ID.Bytes)], now: now,
+		projection, err := projectInstanceHealth(instanceHealthProjectionInput{
+			paused:                 row.CollectionPaused,
+			collectorLastSuccessAt: row.CollectorLastSuccessAt,
+			agentExpected:          row.AgentExpected,
+			agentLastReportAt:      row.AgentLastReportAt,
+			agentLastErrorCode:     row.AgentLastErrorCode,
+			capabilityObservedAt:   row.CapabilityObservedAt,
+			capabilityStates:       row.CapabilityStates,
+			alerts:                 alertsByInstance[uuid.UUID(row.ID.Bytes)],
+			now:                    now,
 		})
 		if err != nil {
 			return nil, err
@@ -273,11 +273,14 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 			row.AgentVersion,
 			true,
 			api.CollectionPauseStatus{Paused: false},
-			instanceProjection{
+			instanceHealthProjection{
 				health: api.InstanceHealth{
-					Status: api.HealthUnknown, Counts: api.HealthAlertCounts{}, Flags: api.HealthFlags{},
+					Status: api.HealthUnknown,
+					Counts: api.HealthAlertCounts{},
+					Flags:  api.HealthFlags{},
 				},
-				alertStatus: api.OK, agentStatus: api.InstanceAgentNotInstalled,
+				alertStatus: api.OK,
+				agentStatus: api.InstanceAgentNotInstalled,
 			},
 		),
 	}, nil
@@ -288,12 +291,15 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	if err != nil {
 		return nil, err
 	}
-	projection, err := handler.projectInstanceHealth(ctx, instanceProjectionInput{
-		instanceID: uuid.UUID(row.ID.Bytes),
-		paused:     row.CollectionPaused, collectorLastSuccessAt: row.CollectorLastSuccessAt,
-		agentExpected: row.AgentExpected, agentLastReportAt: row.AgentLastReportAt,
-		agentLastErrorCode: row.AgentLastErrorCode, capabilityObservedAt: row.CapabilityObservedAt,
-		capabilityStates: row.CapabilityStates,
+	projection, err := handler.loadInstanceHealthProjection(ctx, instanceHealthProjectionInput{
+		instanceID:             uuid.UUID(row.ID.Bytes),
+		paused:                 row.CollectionPaused,
+		collectorLastSuccessAt: row.CollectorLastSuccessAt,
+		agentExpected:          row.AgentExpected,
+		agentLastReportAt:      row.AgentLastReportAt,
+		agentLastErrorCode:     row.AgentLastErrorCode,
+		capabilityObservedAt:   row.CapabilityObservedAt,
+		capabilityStates:       row.CapabilityStates,
 	})
 	if err != nil {
 		return nil, err
@@ -365,12 +371,15 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 	if err != nil {
 		return nil, err
 	}
-	projection, err := handler.projectInstanceHealth(ctx, instanceProjectionInput{
-		instanceID: uuid.UUID(row.ID.Bytes),
-		paused:     row.CollectionPaused, collectorLastSuccessAt: row.CollectorLastSuccessAt,
-		agentExpected: row.AgentExpected, agentLastReportAt: row.AgentLastReportAt,
-		agentLastErrorCode: row.AgentLastErrorCode, capabilityObservedAt: row.CapabilityObservedAt,
-		capabilityStates: row.CapabilityStates,
+	projection, err := handler.loadInstanceHealthProjection(ctx, instanceHealthProjectionInput{
+		instanceID:             uuid.UUID(row.ID.Bytes),
+		paused:                 row.CollectionPaused,
+		collectorLastSuccessAt: row.CollectorLastSuccessAt,
+		agentExpected:          row.AgentExpected,
+		agentLastReportAt:      row.AgentLastReportAt,
+		agentLastErrorCode:     row.AgentLastErrorCode,
+		capabilityObservedAt:   row.CapabilityObservedAt,
+		capabilityStates:       row.CapabilityStates,
 	})
 	if err != nil {
 		return nil, err
@@ -1185,186 +1194,6 @@ func SeedAdmin(ctx context.Context, platform *db.Pool, username, password string
 	return New(platform).CreateAdmin(ctx, CreateAdminParams{
 		ID: pgtype.UUID{Bytes: id, Valid: true}, Username: username, PasswordHash: hash,
 	})
-}
-
-func toAPIInstance(
-	id pgtype.UUID,
-	name, host string,
-	port int32,
-	database, username string,
-	agentVersion pgtype.Text,
-	agentMetricsEnabled bool,
-	pause api.CollectionPauseStatus,
-	projection instanceProjection,
-) api.Instance {
-	result := api.Instance{
-		Id:                   id.Bytes,
-		Name:                 name,
-		Host:                 host,
-		Port:                 int(port),
-		Database:             database,
-		Username:             username,
-		AgentMetricsEnabled:  agentMetricsEnabled,
-		AlertStatus:          projection.alertStatus,
-		Health:               projection.health,
-		AgentStatus:          projection.agentStatus,
-		LastCollectedAt:      projection.lastCollectedAt,
-		DataFreshnessSeconds: projection.dataFreshnessSeconds,
-		CollectionPause:      pause,
-	}
-	if agentVersion.Valid {
-		result.AgentVersion = &agentVersion.String
-	}
-	return result
-}
-
-type instanceProjection struct {
-	health               api.InstanceHealth
-	alertStatus          api.AlertStatus
-	agentStatus          api.InstanceAgentStatus
-	lastCollectedAt      *time.Time
-	dataFreshnessSeconds *int
-}
-
-type instanceProjectionInput struct {
-	instanceID             uuid.UUID
-	paused                 bool
-	collectorLastSuccessAt pgtype.Timestamptz
-	agentExpected          bool
-	agentLastReportAt      pgtype.Timestamptz
-	agentLastErrorCode     pgtype.Text
-	capabilityObservedAt   pgtype.Timestamptz
-	capabilityStates       []byte
-	alerts                 []alerting.ListInstanceHealthAlertsRow
-	now                    time.Time
-}
-
-func (handler *Handler) projectInstanceHealth(ctx context.Context, input instanceProjectionInput) (instanceProjection, error) {
-	now := handler.clock.Now().UTC()
-	input.now = now
-	rows, err := alerting.New(handler.platform).ListInstanceHealthAlerts(ctx, pgtype.Timestamptz{Time: now.Add(-24 * time.Hour), Valid: true})
-	if err != nil {
-		return instanceProjection{}, err
-	}
-	input.alerts = make([]alerting.ListInstanceHealthAlertsRow, 0)
-	for _, row := range rows {
-		if uuid.UUID(row.InstanceID.Bytes) == input.instanceID {
-			input.alerts = append(input.alerts, row)
-		}
-	}
-	return projectInstanceHealth(input)
-}
-
-func projectInstanceHealth(input instanceProjectionInput) (instanceProjection, error) {
-	configurationMissing, err := configurationMissingCount(input.capabilityStates, input.capabilityObservedAt, input.now)
-	if err != nil {
-		return instanceProjection{}, err
-	}
-	healthAlerts := make([]alerting.HealthAlert, 0, len(input.alerts))
-	legacyStatus := api.OK
-	legacyRank := alertStateRank(string(legacyStatus))
-	for _, row := range input.alerts {
-		if alertStateRank(row.Status) > legacyRank {
-			legacyStatus = api.AlertStatus(row.Status)
-			legacyRank = alertStateRank(row.Status)
-		}
-		var currentValue *float64
-		if row.CurrentValue.Valid {
-			value := row.CurrentValue.Float64
-			currentValue = &value
-		}
-		var recoveredAt *time.Time
-		if row.RecoveredAt.Valid {
-			value := row.RecoveredAt.Time.UTC()
-			recoveredAt = &value
-		}
-		healthAlerts = append(healthAlerts, alerting.HealthAlert{
-			RuleName: row.RuleName, Severity: alerting.Severity(row.Severity), State: alerting.State(row.Status),
-			FirstTriggeredAt: row.FirstTriggeredAt.Time.UTC(), CurrentValue: currentValue,
-			RecoveredAt: recoveredAt, Ignored: row.Disposition == "IGNORED",
-		})
-	}
-	rollup := alerting.RollupInstanceHealth(alerting.HealthRollupInput{
-		Paused: input.paused, EverCollected: input.collectorLastSuccessAt.Valid,
-		ConfigurationMissing: configurationMissing, Now: input.now, Alerts: healthAlerts,
-	})
-	projection := instanceProjection{
-		health: api.InstanceHealth{
-			Status: api.HealthStatus(rollup.Status),
-			Counts: api.HealthAlertCounts{
-				Critical: rollup.Counts.Critical, Warning: rollup.Counts.Warning, Info: rollup.Counts.Info,
-			},
-			Flags: api.HealthFlags{
-				NoData: rollup.Flags.NoData, InMaintenance: rollup.Flags.InMaintenance,
-				RecentlyRecovered: rollup.Flags.RecentlyRecovered, Ignored: rollup.Flags.Ignored,
-				ConfigurationMissing: rollup.Flags.ConfigurationMissing,
-			},
-		},
-		alertStatus: legacyStatus,
-		agentStatus: api.InstanceAgentStatus(metric.AgentStatusAt(metric.ControlPlaneFacts{
-			AgentExpected: input.agentExpected, AgentLastReportAt: controlPlaneTime(input.agentLastReportAt),
-			AgentLastErrorCode: controlPlaneText(input.agentLastErrorCode),
-		}, input.now)),
-	}
-	if rollup.Attribution != nil {
-		projection.health.Attribution = &api.HealthAttribution{
-			RuleName: rollup.Attribution.RuleName, CurrentValue: rollup.Attribution.CurrentValue,
-		}
-	}
-	if input.collectorLastSuccessAt.Valid {
-		collectedAt := input.collectorLastSuccessAt.Time.UTC()
-		projection.lastCollectedAt = &collectedAt
-		seconds := max(0, int(input.now.Sub(collectedAt)/time.Second))
-		projection.dataFreshnessSeconds = &seconds
-	}
-	return projection, nil
-}
-
-func configurationMissingCount(encoded []byte, observedAt pgtype.Timestamptz, now time.Time) (int, error) {
-	if !observedAt.Valid || len(encoded) == 0 {
-		return 0, nil
-	}
-	states, err := metric.DecodeCapabilitySnapshot(encoded)
-	if err != nil {
-		return 0, err
-	}
-	states = metric.ProjectCapabilitySnapshot(states, observedAt.Time.UTC(), now)
-	count := 0
-	for _, capability := range metric.Capabilities {
-		if capability.Class == metric.CapabilityClassFixable && states[capability.ID] == metric.CapabilityMissing {
-			count++
-		}
-	}
-	return count, nil
-}
-
-func alertStateRank(state string) int {
-	switch state {
-	case "FIRING":
-		return 5
-	case "NO_DATA":
-		return 4
-	case "PENDING":
-		return 3
-	case "RECOVERED":
-		return 2
-	default:
-		return 1
-	}
-}
-
-func controlPlaneTime(value pgtype.Timestamptz) time.Time {
-	if !value.Valid {
-		return time.Time{}
-	}
-	return value.Time.UTC()
-}
-
-func controlPlaneText(value pgtype.Text) string {
-	if !value.Valid {
-		return ""
-	}
-	return value.String
 }
 
 func metricUnit(metricID string) string {
