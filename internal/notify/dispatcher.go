@@ -27,12 +27,12 @@ func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, ch
 	if err != nil {
 		return false, fmt.Errorf("claim notification: %w", err)
 	}
-	message, err := messageForDelivery(delivery)
-	if err == nil {
-		err = channel.Send(ctx, message)
+	message, deliveryErr := messageForDelivery(delivery)
+	if deliveryErr == nil {
+		deliveryErr = channel.Send(ctx, message)
 	}
 	attemptedAt := pgtype.Timestamptz{Time: now.UTC(), Valid: true}
-	if err == nil {
+	if deliveryErr == nil {
 		if recordErr := dispatcher.queries.RecordNotificationSent(ctx, RecordNotificationSentParams{
 			NotificationID: delivery.ID,
 			EvaluatedAt:    attemptedAt,
@@ -45,17 +45,17 @@ func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, ch
 
 	failureCount := int(delivery.AttemptCount) + 1
 	terminal := failureCount >= MaxAttempts
-	nextAttempt := now.UTC()
+	nextAttemptAt := now.UTC()
 	if !terminal {
-		nextAttempt = nextAttempt.Add(RetryDelay(failureCount))
+		nextAttemptAt = nextAttemptAt.Add(RetryDelay(failureCount))
 	}
 	if recordErr := dispatcher.queries.RecordNotificationFailure(ctx, RecordNotificationFailureParams{
 		NotificationID: delivery.ID,
 		EvaluatedAt:    attemptedAt,
-		FailureReason:  pgtype.Text{String: err.Error(), Valid: true},
+		FailureReason:  pgtype.Text{String: deliveryErr.Error(), Valid: true},
 		RetryCount:     delivery.AttemptCount,
 		Terminal:       terminal,
-		NextAttemptAt:  pgtype.Timestamptz{Time: nextAttempt, Valid: true},
+		NextAttemptAt:  pgtype.Timestamptz{Time: nextAttemptAt, Valid: true},
 	}); recordErr != nil {
 		return true, fmt.Errorf("record notification failure: %w", recordErr)
 	}

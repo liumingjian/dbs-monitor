@@ -26,6 +26,7 @@ const (
 	credentialCurrentVersionFilename      = "current"
 	credentialKeyFilenamePrefix           = "master-key-v"
 	credentialKeyFilenamePattern          = credentialKeyFilenamePrefix + "*"
+	smtpCredentialAAD                     = "smtp-channel:singleton:auth"
 )
 
 type CredentialFaultCode string
@@ -132,7 +133,7 @@ func (keyring *CredentialKeyring) EncryptPassword(instanceID uuid.UUID, password
 }
 
 func (keyring *CredentialKeyring) EncryptSMTPPassword(password string) ([]byte, int32, error) {
-	return keyring.encrypt([]byte(password), []byte("smtp-channel:singleton:auth"), "SMTP credential")
+	return keyring.encrypt([]byte(password), []byte(smtpCredentialAAD), "SMTP credential")
 }
 
 func (keyring *CredentialKeyring) encrypt(plaintext, aad []byte, description string) ([]byte, int32, error) {
@@ -156,7 +157,7 @@ func (keyring *CredentialKeyring) DecryptPassword(instanceID uuid.UUID, envelope
 }
 
 func (keyring *CredentialKeyring) DecryptSMTPPassword(envelope []byte, keyVersion int32) (string, error) {
-	return keyring.decrypt(envelope, keyVersion, []byte("smtp-channel:singleton:auth"))
+	return keyring.decrypt(envelope, keyVersion, []byte(smtpCredentialAAD))
 }
 
 func (keyring *CredentialKeyring) decrypt(envelope []byte, keyVersion int32, aad []byte) (string, error) {

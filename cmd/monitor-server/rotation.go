@@ -46,14 +46,16 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 	var credentialsRotated int64
 	if needsReencryption {
 		if err := platform.InTx(ctx, func(tx pgx.Tx) error {
-			rotated, err := keyring.ReencryptCredentials(ctx, instance.New(tx))
-			credentialsRotated = rotated
+			instanceCredentialsRotated, err := keyring.ReencryptCredentials(ctx, instance.New(tx))
 			if err != nil {
 				return err
 			}
-			rotated, err = reencryptSMTPChannel(ctx, tx, keyring)
-			credentialsRotated += rotated
-			return err
+			smtpCredentialsRotated, err := reencryptSMTPChannel(ctx, tx, keyring)
+			if err != nil {
+				return err
+			}
+			credentialsRotated = instanceCredentialsRotated + smtpCredentialsRotated
+			return nil
 		}); err != nil {
 			return credentialRotationResult{}, fmt.Errorf("rotate credentials: %w", err)
 		}
@@ -79,16 +81,17 @@ func reencryptSMTPChannel(ctx context.Context, tx pgx.Tx, keyring *instance.Cred
 	if channel.AuthKeyVersion.Int32 == keyring.CurrentVersion() {
 		return 0, nil
 	}
-	value, err := keyring.DecryptSMTPPassword(channel.AuthCiphertext, channel.AuthKeyVersion.Int32)
+	password, err := keyring.DecryptSMTPPassword(channel.AuthCiphertext, channel.AuthKeyVersion.Int32)
 	if err != nil {
 		return 0, err
 	}
-	ciphertext, version, err := keyring.EncryptSMTPPassword(value)
+	ciphertext, version, err := keyring.EncryptSMTPPassword(password)
 	if err != nil {
 		return 0, err
 	}
 	if err := queries.UpdateSMTPChannelAuthKey(ctx, notify.UpdateSMTPChannelAuthKeyParams{
-		AuthCiphertext: ciphertext, AuthKeyVersion: pgtype.Int4{Int32: version, Valid: true},
+		AuthCiphertext: ciphertext,
+		AuthKeyVersion: pgtype.Int4{Int32: version, Valid: true},
 	}); err != nil {
 		return 0, fmt.Errorf("update SMTP authentication key version: %w", err)
 	}

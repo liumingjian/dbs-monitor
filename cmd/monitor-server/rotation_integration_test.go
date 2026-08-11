@@ -161,7 +161,8 @@ func assertRotatedSMTPValue(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	}
 	var ciphertext []byte
 	var version int32
-	if err := pool.QueryRow(ctx, "SELECT auth_ciphertext, auth_key_version FROM smtp_channel WHERE singleton").Scan(&ciphertext, &version); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT auth_ciphertext, auth_key_version
+		FROM smtp_channel WHERE singleton`).Scan(&ciphertext, &version); err != nil {
 		t.Fatalf("read SMTP authentication value: %v", err)
 	}
 	if version != wantVersion {

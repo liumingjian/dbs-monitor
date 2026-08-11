@@ -16,8 +16,8 @@ SELECT (SELECT count(*) FROM instance WHERE password_key_version = $1)
      + (SELECT count(*) FROM smtp_channel WHERE auth_key_version = $1)
 `
 
-func (q *Queries) CountCredentialKeyReferences(ctx context.Context, passwordKeyVersion int32) (int32, error) {
-	row := q.db.QueryRow(ctx, countCredentialKeyReferences, passwordKeyVersion)
+func (q *Queries) CountCredentialKeyReferences(ctx context.Context, keyVersion int32) (int32, error) {
+	row := q.db.QueryRow(ctx, countCredentialKeyReferences, keyVersion)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -25,11 +25,12 @@ func (q *Queries) CountCredentialKeyReferences(ctx context.Context, passwordKeyV
 
 const countCredentialsNotUsingKeyVersion = `-- name: CountCredentialsNotUsingKeyVersion :one
 SELECT (SELECT count(*) FROM instance WHERE password_key_version <> $1)
-     + (SELECT count(*) FROM smtp_channel WHERE auth_key_version IS NOT NULL AND auth_key_version <> $1)
+     + (SELECT count(*) FROM smtp_channel
+        WHERE auth_key_version IS NOT NULL AND auth_key_version <> $1)
 `
 
-func (q *Queries) CountCredentialsNotUsingKeyVersion(ctx context.Context, passwordKeyVersion int32) (int32, error) {
-	row := q.db.QueryRow(ctx, countCredentialsNotUsingKeyVersion, passwordKeyVersion)
+func (q *Queries) CountCredentialsNotUsingKeyVersion(ctx context.Context, keyVersion int32) (int32, error) {
+	row := q.db.QueryRow(ctx, countCredentialsNotUsingKeyVersion, keyVersion)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err

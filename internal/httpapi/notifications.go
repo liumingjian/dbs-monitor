@@ -31,7 +31,8 @@ func (handler *Handler) UpdateSMTPChannel(ctx context.Context, request api.Updat
 		return api.UpdateSMTPChannel400JSONResponse(errorBody(api.VALIDATIONFAILED, "SMTP configuration is required")), nil
 	}
 	input := request.Body
-	if !validEmail(string(input.FromAddress)) || !validEmail(string(input.Recipient)) || strings.TrimSpace(input.Host) == "" || input.Port < 1 || input.Port > 65535 {
+	host := strings.TrimSpace(input.Host)
+	if !validEmail(string(input.FromAddress)) || !validEmail(string(input.Recipient)) || host == "" || input.Port < 1 || input.Port > 65535 {
 		return api.UpdateSMTPChannel400JSONResponse(errorBody(api.VALIDATIONFAILED, "host and valid email addresses are required")), nil
 	}
 	if input.AuthType != api.SMTPAuthNone && input.AuthType != api.SMTPAuthPlain && input.AuthType != api.SMTPAuthLogin {
@@ -42,8 +43,9 @@ func (handler *Handler) UpdateSMTPChannel(ctx context.Context, request api.Updat
 	}
 
 	var username pgtype.Text
-	var ciphertext []byte
-	var keyVersion pgtype.Int4
+	var authCiphertext []byte
+	var authKeyVersion pgtype.Int4
+	queries := notify.New(handler.platform)
 	if input.AuthType != api.SMTPAuthNone {
 		if input.Username == nil || strings.TrimSpace(*input.Username) == "" {
 			return api.UpdateSMTPChannel400JSONResponse(errorBody(api.VALIDATIONFAILED, "username is required for SMTP authentication")), nil
@@ -52,31 +54,31 @@ func (handler *Handler) UpdateSMTPChannel(ctx context.Context, request api.Updat
 		if input.Password != nil && *input.Password != "" {
 			var version int32
 			var err error
-			ciphertext, version, err = handler.keyring.EncryptSMTPPassword(*input.Password)
+			authCiphertext, version, err = handler.keyring.EncryptSMTPPassword(*input.Password)
 			if err != nil {
 				return nil, err
 			}
-			keyVersion = pgtype.Int4{Int32: version, Valid: true}
+			authKeyVersion = pgtype.Int4{Int32: version, Valid: true}
 		} else {
-			existing, err := notify.New(handler.platform).GetSMTPChannel(ctx)
-			if err != nil || !existing.AuthKeyVersion.Valid || len(existing.AuthCiphertext) == 0 {
+			existingChannel, err := queries.GetSMTPChannel(ctx)
+			if err != nil || !existingChannel.AuthKeyVersion.Valid || len(existingChannel.AuthCiphertext) == 0 {
 				return api.UpdateSMTPChannel400JSONResponse(errorBody(api.VALIDATIONFAILED, "authentication value is required until it has been configured")), nil
 			}
-			ciphertext = existing.AuthCiphertext
-			keyVersion = existing.AuthKeyVersion
+			authCiphertext = existingChannel.AuthCiphertext
+			authKeyVersion = existingChannel.AuthKeyVersion
 		}
 	}
 
-	row, err := notify.New(handler.platform).UpsertSMTPChannel(ctx, notify.UpsertSMTPChannelParams{
+	row, err := queries.UpsertSMTPChannel(ctx, notify.UpsertSMTPChannelParams{
 		Enabled:        input.Enabled,
-		Host:           strings.TrimSpace(input.Host),
+		Host:           host,
 		Port:           int32(input.Port),
 		FromAddress:    string(input.FromAddress),
 		Recipient:      string(input.Recipient),
 		AuthType:       string(input.AuthType),
 		Username:       username,
-		AuthCiphertext: ciphertext,
-		AuthKeyVersion: keyVersion,
+		AuthCiphertext: authCiphertext,
+		AuthKeyVersion: authKeyVersion,
 		TlsMode:        string(input.TlsMode),
 		UpdatedAt:      pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 	})
@@ -90,11 +92,12 @@ func (handler *Handler) TestSMTPChannel(ctx context.Context, request api.TestSMT
 	if request.Body == nil || !validEmail(string(request.Body.Target)) {
 		return api.TestSMTPChannel400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid test target is required")), nil
 	}
-	channel, err := notify.New(handler.platform).GetSMTPChannel(ctx)
+	queries := notify.New(handler.platform)
+	channel, err := queries.GetSMTPChannel(ctx)
 	if err != nil || !channel.Enabled {
 		return api.TestSMTPChannel400JSONResponse(errorBody(api.VALIDATIONFAILED, "SMTP channel is not enabled")), nil
 	}
-	id, err := notify.New(handler.platform).EnqueueTestNotification(ctx, notify.EnqueueTestNotificationParams{
+	id, err := queries.EnqueueTestNotification(ctx, notify.EnqueueTestNotificationParams{
 		Target:        string(request.Body.Target),
 		NextAttemptAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 	})
@@ -111,45 +114,49 @@ func (handler *Handler) ListAlertNotifications(ctx context.Context, request api.
 	}
 	response := make(api.ListAlertNotifications200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		item := api.NotificationAttempt{
-			Id:           uuid.UUID(row.ID.Bytes),
-			EventType:    api.NotificationAttemptEventType(row.EventType),
-			Channel:      api.NotificationAttemptChannel(row.Channel),
-			Target:       row.Target,
-			Status:       api.NotificationAttemptStatus(row.Status),
-			AttemptCount: int(row.AttemptCount),
-			CreatedAt:    row.CreatedAt.Time,
-		}
-		if row.TemplateID.Valid {
-			item.TemplateId = &row.TemplateID.String
-		}
-		if row.CompletedAt.Valid {
-			item.CompletedAt = &row.CompletedAt.Time
-		}
-		if row.AttemptedAt.Valid {
-			item.AttemptedAt = &row.AttemptedAt.Time
-		}
-		if row.Result.Valid {
-			value := api.NotificationAttemptResult(row.Result.String)
-			item.Result = &value
-		}
-		if row.FailureReason.Valid {
-			item.FailureReason = &row.FailureReason.String
-		}
-		if row.RetryCount.Valid {
-			value := int(row.RetryCount.Int32)
-			item.RetryCount = &value
-		}
-		response = append(response, item)
+		response = append(response, toAPINotificationAttempt(row))
 	}
 	return response, nil
+}
+
+func toAPINotificationAttempt(row notify.ListAlertNotificationAttemptsRow) api.NotificationAttempt {
+	item := api.NotificationAttempt{
+		Id:           uuid.UUID(row.ID.Bytes),
+		EventType:    api.NotificationAttemptEventType(row.EventType),
+		Channel:      api.NotificationAttemptChannel(row.Channel),
+		Target:       row.Target,
+		Status:       api.NotificationAttemptStatus(row.Status),
+		AttemptCount: int(row.AttemptCount),
+		CreatedAt:    row.CreatedAt.Time,
+	}
+	if row.TemplateID.Valid {
+		item.TemplateId = &row.TemplateID.String
+	}
+	if row.CompletedAt.Valid {
+		item.CompletedAt = &row.CompletedAt.Time
+	}
+	if row.AttemptedAt.Valid {
+		item.AttemptedAt = &row.AttemptedAt.Time
+	}
+	if row.Result.Valid {
+		value := api.NotificationAttemptResult(row.Result.String)
+		item.Result = &value
+	}
+	if row.FailureReason.Valid {
+		item.FailureReason = &row.FailureReason.String
+	}
+	if row.RetryCount.Valid {
+		value := int(row.RetryCount.Int32)
+		item.RetryCount = &value
+	}
+	return item
 }
 
 func toAPISMTPChannel(row notify.SmtpChannel) api.SMTPChannel {
 	enabled := row.Enabled
 	host := row.Host
 	port := int(row.Port)
-	from := openapi_types.Email(row.FromAddress)
+	fromAddress := openapi_types.Email(row.FromAddress)
 	recipient := openapi_types.Email(row.Recipient)
 	authType := api.SMTPAuthType(row.AuthType)
 	tlsMode := api.SMTPTransportSecurity(row.TlsMode)
@@ -158,7 +165,7 @@ func toAPISMTPChannel(row notify.SmtpChannel) api.SMTPChannel {
 		Enabled:        &enabled,
 		Host:           &host,
 		Port:           &port,
-		FromAddress:    &from,
+		FromAddress:    &fromAddress,
 		Recipient:      &recipient,
 		AuthType:       &authType,
 		AuthConfigured: len(row.AuthCiphertext) > 0,

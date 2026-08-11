@@ -27,7 +27,10 @@ func TestSMTPChannelDeliversOverTLS(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			port, _ := strconv.Atoi(portText)
+			port, err := strconv.Atoi(portText)
+			if err != nil {
+				t.Fatal(err)
+			}
 			channel := NewSMTPChannel(SMTPConfig{
 				Host: host, Port: port, From: "monitor@example.com", TLSMode: mode, AuthType: AuthNone,
 				TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true}, // Test receiver uses an ephemeral CA.

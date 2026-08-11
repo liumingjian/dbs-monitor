@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
@@ -265,14 +266,14 @@ func (service *Service) evaluateRule(
 		}); err != nil {
 			return fmt.Errorf("save alert event: %w", err)
 		}
-		var notificationEvent notify.EventType
+		var notificationEventType notify.EventType
 		var templateID string
 		switch kind {
 		case alerting.EventFired:
-			notificationEvent = notify.EventFiring
+			notificationEventType = notify.EventFiring
 			templateID = "builtin.smtp.firing.v1"
 		case alerting.EventRecovered:
-			notificationEvent = notify.EventRecovery
+			notificationEventType = notify.EventRecovery
 			templateID = "builtin.smtp.recovery.v1"
 		default:
 			continue
@@ -290,7 +291,7 @@ func (service *Service) evaluateRule(
 		}
 		_, err = notify.New(database).EnqueueAlertNotification(ctx, notify.EnqueueAlertNotificationParams{
 			AlertInstanceID: alertInstanceID,
-			EventType:       string(notificationEvent),
+			EventType:       string(notificationEventType),
 			TemplateID:      pgtype.Text{String: templateID, Valid: true},
 			Payload:         payload,
 			NextAttemptAt:   evaluatedAt,
@@ -309,7 +310,7 @@ func uuidString(value pgtype.UUID) string {
 	if !value.Valid {
 		return ""
 	}
-	return fmt.Sprintf("%x-%x-%x-%x-%x", value.Bytes[0:4], value.Bytes[4:6], value.Bytes[6:8], value.Bytes[8:10], value.Bytes[10:16])
+	return uuid.UUID(value.Bytes).String()
 }
 
 func snapshotFromEvaluationTarget(target alerting.GetEvaluationTargetRow) alerting.Snapshot {

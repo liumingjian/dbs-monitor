@@ -13,8 +13,13 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
 
+const (
+	notificationPollInterval    = 500 * time.Millisecond
+	notificationDeliveryTimeout = 30 * time.Second
+)
+
 func runNotificationDelivery(ctx context.Context, platform *db.Pool, keyring *instance.CredentialKeyring) {
-	ticker := time.NewTicker(500 * time.Millisecond)
+	ticker := time.NewTicker(notificationPollInterval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -28,13 +33,17 @@ func runNotificationDelivery(ctx context.Context, platform *db.Pool, keyring *in
 
 func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instance.CredentialKeyring, now time.Time) {
 	config, err := notify.New(platform).GetSMTPChannel(ctx)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !config.Enabled) {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return
 	}
 	if err != nil {
 		log.Printf("read SMTP notification channel: %v", err)
 		return
 	}
+	if !config.Enabled {
+		return
+	}
+
 	var password string
 	if config.AuthCiphertext != nil {
 		password, err = keyring.DecryptSMTPPassword(config.AuthCiphertext, config.AuthKeyVersion.Int32)
@@ -44,13 +53,17 @@ func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instanc
 		}
 	}
 	channel := notify.NewSMTPChannel(notify.SMTPConfig{
-		Host: config.Host, Port: int(config.Port), From: config.FromAddress,
-		Username: config.Username.String, Password: password,
-		TLSMode: notify.TLSMode(config.TlsMode), AuthType: notify.AuthType(config.AuthType),
+		Host:     config.Host,
+		Port:     int(config.Port),
+		From:     config.FromAddress,
+		Username: config.Username.String,
+		Password: password,
+		TLSMode:  notify.TLSMode(config.TlsMode),
+		AuthType: notify.AuthType(config.AuthType),
 	})
 	dispatcher := notify.NewDispatcher(platform)
 	for {
-		attemptContext, cancel := context.WithTimeout(ctx, 30*time.Second)
+		attemptContext, cancel := context.WithTimeout(ctx, notificationDeliveryTimeout)
 		processed, dispatchErr := dispatcher.DispatchOne(attemptContext, now, channel)
 		cancel()
 		if dispatchErr != nil {

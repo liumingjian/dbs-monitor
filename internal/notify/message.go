@@ -12,9 +12,9 @@ const (
 	EventRecovery EventType = "RECOVERY"
 	EventRepeat   EventType = "REPEAT"
 	EventTest     EventType = "TEST"
-
-	MaxAttempts = 3
 )
+
+const MaxAttempts = 3
 
 type Message struct {
 	To      string
@@ -37,7 +37,6 @@ type SuppressionFacts struct {
 	Paused       bool
 }
 
-// ShouldDeliver is the single decision point extended by maintenance, disposition, and pause tickets.
 func ShouldDeliver(event EventType, facts SuppressionFacts) bool {
 	if facts.Maintenance || facts.Paused {
 		return false

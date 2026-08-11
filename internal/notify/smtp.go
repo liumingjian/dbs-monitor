@@ -66,15 +66,7 @@ func (channel *SMTPChannel) Send(ctx context.Context, message Message) error {
 		}
 	}
 
-	tlsConfig := channel.config.TLSConfig
-	if tlsConfig == nil {
-		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12, ServerName: channel.config.Host}
-	} else {
-		tlsConfig = tlsConfig.Clone()
-		if tlsConfig.ServerName == "" {
-			tlsConfig.ServerName = channel.config.Host
-		}
-	}
+	tlsConfig := channel.tlsConfig()
 	if channel.config.TLSMode == TLSImplicit {
 		tlsConnection := tls.Client(connection, tlsConfig)
 		if err := tlsConnection.HandshakeContext(ctx); err != nil {
@@ -107,21 +99,33 @@ func (channel *SMTPChannel) Send(ctx context.Context, message Message) error {
 	if err := client.Rcpt(message.To); err != nil {
 		return fmt.Errorf("set SMTP recipient: %w", err)
 	}
-	writer, err := client.Data()
+	messageWriter, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("start SMTP message: %w", err)
 	}
-	if _, err := writer.Write(encodeMessage(channel.config.From, message)); err != nil {
-		writer.Close()
+	if _, err := messageWriter.Write(encodeMessage(channel.config.From, message)); err != nil {
+		messageWriter.Close()
 		return fmt.Errorf("write SMTP message: %w", err)
 	}
-	if err := writer.Close(); err != nil {
+	if err := messageWriter.Close(); err != nil {
 		return fmt.Errorf("finish SMTP message: %w", err)
 	}
 	if err := client.Quit(); err != nil {
 		return fmt.Errorf("quit SMTP client: %w", err)
 	}
 	return nil
+}
+
+func (channel *SMTPChannel) tlsConfig() *tls.Config {
+	if channel.config.TLSConfig == nil {
+		return &tls.Config{MinVersion: tls.VersionTLS12, ServerName: channel.config.Host}
+	}
+
+	config := channel.config.TLSConfig.Clone()
+	if config.ServerName == "" {
+		config.ServerName = channel.config.Host
+	}
+	return config
 }
 
 func (channel *SMTPChannel) auth() smtp.Auth {
@@ -136,17 +140,12 @@ func (channel *SMTPChannel) auth() smtp.Auth {
 }
 
 func encodeMessage(from string, message Message) []byte {
-	headers := map[string]string{
-		"From":         (&mail.Address{Address: from}).String(),
-		"To":           (&mail.Address{Address: message.To}).String(),
-		"Subject":      mime.QEncoding.Encode("UTF-8", message.Subject),
-		"MIME-Version": "1.0",
-		"Content-Type": "text/plain; charset=UTF-8",
-	}
 	var builder strings.Builder
-	for _, name := range []string{"From", "To", "Subject", "MIME-Version", "Content-Type"} {
-		fmt.Fprintf(&builder, "%s: %s\r\n", name, headers[name])
-	}
+	fmt.Fprintf(&builder, "From: %s\r\n", (&mail.Address{Address: from}).String())
+	fmt.Fprintf(&builder, "To: %s\r\n", (&mail.Address{Address: message.To}).String())
+	fmt.Fprintf(&builder, "Subject: %s\r\n", mime.QEncoding.Encode("UTF-8", message.Subject))
+	builder.WriteString("MIME-Version: 1.0\r\n")
+	builder.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	builder.WriteString("\r\n")
 	scanner := bufio.NewScanner(strings.NewReader(message.Body))
 	for scanner.Scan() {

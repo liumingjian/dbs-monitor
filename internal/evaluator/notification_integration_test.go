@@ -78,8 +78,14 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 
 	address, messages, closeSMTP := startNotificationSMTPReceiver(t, 2)
 	defer closeSMTP()
-	host, portText, _ := net.SplitHostPort(address)
-	port, _ := strconv.Atoi(portText)
+	host, portText, err := net.SplitHostPort(address)
+	if err != nil {
+		t.Fatalf("parse SMTP receiver address: %v", err)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		t.Fatalf("parse SMTP receiver port: %v", err)
+	}
 	channel := notify.NewSMTPChannel(notify.SMTPConfig{
 		Host: host, Port: port, From: "monitor@example.com", TLSMode: notify.TLSImplicit, AuthType: notify.AuthNone,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true},
@@ -278,7 +284,10 @@ func handleNotificationSMTP(connection net.Conn, messages chan<- string) {
 	defer connection.Close()
 	reader := bufio.NewReader(connection)
 	writer := bufio.NewWriter(connection)
-	reply := func(value string) { _, _ = writer.WriteString(value + "\r\n"); _ = writer.Flush() }
+	reply := func(value string) {
+		_, _ = writer.WriteString(value + "\r\n")
+		_ = writer.Flush()
+	}
 	reply("220 localhost ESMTP")
 	for _, response := range []string{"250 localhost", "250 OK", "250 OK", "354 send data"} {
 		if _, err := reader.ReadString('\n'); err != nil {
@@ -306,7 +315,10 @@ func handleNotificationSMTP(connection net.Conn, messages chan<- string) {
 
 func notificationTLSConfig(t *testing.T) *tls.Config {
 	t.Helper()
-	publicKey, privateKey, _ := ed25519.GenerateKey(rand.Reader)
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate test SMTP key: %v", err)
+	}
 	template := &x509.Certificate{
 		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "localhost"},
 		NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour),
