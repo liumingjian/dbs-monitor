@@ -39,6 +39,7 @@ figcaption { color: #52514e; font-size: 13px; }
 .rule-snapshot-layout { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr); gap: 20px; align-items: start; }
 .rule-snapshot-json { max-height: 360px; overflow: auto; margin: 0; padding: 14px; border: 1px solid #e1e0d9; border-radius: 6px; background: #fff; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .settings-section { border-top: 1px solid #e1e0d9; padding-top: 20px; }
+.settings-section-heading { width: 100%; justify-content: space-between; margin-bottom: 16px; }
 @media (max-width: 640px) {
   .app-header { padding-inline: 16px; }
   .app-header h3 { display: none; }

@@ -43,6 +43,7 @@ type Role = components['schemas']['Role']
 type CollectionTask = components['schemas']['CollectionTaskState']
 type Capability = components['schemas']['CapabilitySnapshotEntry']
 type Instance = components['schemas']['Instance']
+type NotificationPolicy = components['schemas']['NotificationPolicy']
 type CapabilityFit = 'SATISFIED' | 'UNSATISFIED' | 'UNKNOWN'
 
 const alertableMetricOptions = metricOptions.filter(({ id }) => (
@@ -83,6 +84,7 @@ function AlertRulesPage() {
   const tasksQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/tasks', { params: { path: { id } } })
   const capabilitiesQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/capabilities', { params: { path: { id } } })
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
+  const policiesQuery = $api.useQuery('get', '/api/v1/notification-policies')
   const createMutation = $api.useMutation('post', '/api/v1/alert-rules')
   const updateMutation = $api.useMutation('put', '/api/v1/alert-rules/{id}')
   const enableMutation = $api.useMutation('put', '/api/v1/alert-rules/{id}/enabled')
@@ -206,6 +208,7 @@ function AlertRulesPage() {
       open={editorOpen}
       editingRule={editingRule}
       instances={instancesQuery.data ?? []}
+      policies={policiesQuery.data ?? []}
       pending={createMutation.isPending || updateMutation.isPending}
       onCancel={() => setEditorOpen(false)}
       onSubmit={submitRule}
@@ -223,11 +226,12 @@ function AlertRulesPage() {
   </Space>
 }
 
-function RuleEditor({ form, open, editingRule, instances, pending, onCancel, onSubmit }: {
+function RuleEditor({ form, open, editingRule, instances, policies, pending, onCancel, onSubmit }: {
   form: ReturnType<typeof Form.useForm<AlertRuleInput>>[0]
   open: boolean
   editingRule: AlertRule | null
   instances: Instance[]
+  policies: NotificationPolicy[]
   pending: boolean
   onCancel: () => void
   onSubmit: (values: AlertRuleInput) => void
@@ -324,10 +328,17 @@ function RuleEditor({ form, open, editingRule, instances, pending, onCancel, onS
             options={instances.map((instance) => ({ value: instance.id, label: instance.name }))}
           />
         </Form.Item>
-        <Form.Item label="生效通知策略">
-          <Input disabled value={editingRule?.effective_notification_policy_name ?? '默认策略（继承）'} />
+        <Form.Item
+          name="notification_policy_id"
+          label="通知策略"
+          extra={editingRule?.notification_policy_id ? `当前生效：${editingRule.effective_notification_policy_name}` : '当前生效：默认策略（继承）'}
+        >
+          <Select
+            allowClear
+            placeholder="默认策略（继承）"
+            options={policies.filter((policy) => !policy.is_default).map((policy) => ({ value: policy.id, label: policy.name }))}
+          />
         </Form.Item>
-        <Form.Item name="notification_policy_id" hidden><Input /></Form.Item>
         <Form.Item name="enabled" label="启用" valuePropName="checked">
           <Switch disabled={isBuiltin} />
         </Form.Item>

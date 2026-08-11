@@ -310,6 +310,27 @@ type NotificationAttempt struct {
 	RetryCount     int32
 }
 
+type NotificationContact struct {
+	ID         pgtype.UUID
+	Name       string
+	Email      string
+	ExternalID pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type NotificationContactGroup struct {
+	ID        pgtype.UUID
+	Name      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NotificationContactGroupMember struct {
+	GroupID   pgtype.UUID
+	ContactID pgtype.UUID
+}
+
 type NotificationDelivery struct {
 	ID              pgtype.UUID
 	AlertInstanceID pgtype.UUID
@@ -328,12 +349,34 @@ type NotificationDelivery struct {
 }
 
 type NotificationPolicy struct {
-	ID         pgtype.UUID
-	Identifier string
-	Name       string
-	IsDefault  bool
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
+	ID               pgtype.UUID
+	Identifier       string
+	Name             string
+	IsDefault        bool
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	SeverityFilter   []string
+	NotifyOnFire     bool
+	NotifyOnRecovery bool
+	RepeatInterval   int32
+	TemplateID       pgtype.Text
+}
+
+type NotificationPolicyChannel struct {
+	ID              int64
+	PolicyID        pgtype.UUID
+	Channel         string
+	ChannelTargetID pgtype.UUID
+}
+
+type NotificationPolicyContact struct {
+	PolicyID  pgtype.UUID
+	ContactID pgtype.UUID
+}
+
+type NotificationPolicyContactGroup struct {
+	PolicyID pgtype.UUID
+	GroupID  pgtype.UUID
 }
 
 type PerformanceEvent struct {

@@ -80,6 +80,10 @@ func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instanc
 		})
 	}
 	dispatcher := notify.NewDispatcher(platform)
+	if _, err := dispatcher.EnqueueDueRepeats(ctx, now); err != nil {
+		log.Printf("schedule repeat notifications: %v", err)
+		return
+	}
 	for {
 		attemptContext, cancel := context.WithTimeout(ctx, notificationDeliveryTimeout)
 		processed, dispatchErr := dispatcher.DispatchOne(attemptContext, now, channels)

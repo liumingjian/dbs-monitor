@@ -7,6 +7,9 @@ import { alertsRoute } from './routes/alerts'
 import { instanceAlertDetailRoute } from './routes/instances.$id/alerts.$alertId'
 import { instanceAlertsRoute } from './routes/instances.$id/alerts'
 import { notificationSettingsRoute } from './routes/alert-settings/notifications'
+import { contactSettingsRoute } from './routes/alert-settings/contacts'
+import { maintenanceSettingsRoute } from './routes/alert-settings/maintenance'
+import { policySettingsRoute } from './routes/alert-settings/policies'
 import { instanceRoute } from './routes/instances.$id'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
@@ -37,6 +40,9 @@ const routeTree = rootRoute.addChildren([
   queryStatisticsRoute,
   usersRoute,
   notificationSettingsRoute,
+  contactSettingsRoute,
+  policySettingsRoute,
+  maintenanceSettingsRoute,
 ])
 const router = createRouter({ routeTree, defaultPreload: 'intent' })
 const queryClient = new QueryClient()

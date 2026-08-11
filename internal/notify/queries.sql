@@ -9,6 +9,109 @@ UPDATE smtp_channel
 SET auth_ciphertext = $1, auth_key_version = $2
 WHERE singleton;
 
+-- name: ListNotificationContacts :many
+SELECT * FROM notification_contact ORDER BY name, id;
+
+-- name: GetNotificationContact :one
+SELECT * FROM notification_contact WHERE id = $1;
+
+-- name: CreateNotificationContact :one
+INSERT INTO notification_contact (id, name, email, external_id, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $5)
+RETURNING *;
+
+-- name: UpdateNotificationContact :one
+UPDATE notification_contact
+SET name = $2, email = $3, external_id = $4, updated_at = $5
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteNotificationContact :execrows
+DELETE FROM notification_contact WHERE id = $1;
+
+-- name: ListNotificationContactGroups :many
+SELECT * FROM notification_contact_group ORDER BY name, id;
+
+-- name: GetNotificationContactGroup :one
+SELECT * FROM notification_contact_group WHERE id = $1;
+
+-- name: CreateNotificationContactGroup :one
+INSERT INTO notification_contact_group (id, name, created_at, updated_at)
+VALUES ($1, $2, $3, $3)
+RETURNING *;
+
+-- name: UpdateNotificationContactGroup :one
+UPDATE notification_contact_group
+SET name = $2, updated_at = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteNotificationContactGroup :execrows
+DELETE FROM notification_contact_group WHERE id = $1;
+
+-- name: ListNotificationContactGroupMembers :many
+SELECT contact_id FROM notification_contact_group_member
+WHERE group_id = $1 ORDER BY contact_id;
+
+-- name: ClearNotificationContactGroupMembers :exec
+DELETE FROM notification_contact_group_member WHERE group_id = $1;
+
+-- name: AddNotificationContactGroupMember :exec
+INSERT INTO notification_contact_group_member (group_id, contact_id) VALUES ($1, $2);
+
+-- name: ListNotificationPolicies :many
+SELECT * FROM notification_policy ORDER BY is_default DESC, name, id;
+
+-- name: GetNotificationPolicy :one
+SELECT * FROM notification_policy WHERE id = $1;
+
+-- name: CreateNotificationPolicy :one
+INSERT INTO notification_policy (
+    id, identifier, name, is_default, severity_filter, notify_on_fire,
+    notify_on_recovery, repeat_interval, template_id, created_at, updated_at
+)
+VALUES ($1, $2, $3, false, $4, $5, $6, $7, $8, $9, $9)
+RETURNING *;
+
+-- name: UpdateNotificationPolicy :one
+UPDATE notification_policy
+SET name = $2, severity_filter = $3, notify_on_fire = $4,
+    notify_on_recovery = $5, repeat_interval = $6, template_id = $7,
+    updated_at = $8
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteNotificationPolicy :execrows
+DELETE FROM notification_policy WHERE id = $1 AND NOT is_default;
+
+-- name: ListNotificationPolicyContacts :many
+SELECT contact_id FROM notification_policy_contact WHERE policy_id = $1 ORDER BY contact_id;
+
+-- name: ListNotificationPolicyContactGroups :many
+SELECT group_id FROM notification_policy_contact_group WHERE policy_id = $1 ORDER BY group_id;
+
+-- name: ListNotificationPolicyChannels :many
+SELECT channel, channel_target_id FROM notification_policy_channel
+WHERE policy_id = $1 ORDER BY channel, channel_target_id;
+
+-- name: ClearNotificationPolicyContacts :exec
+DELETE FROM notification_policy_contact WHERE policy_id = $1;
+
+-- name: ClearNotificationPolicyContactGroups :exec
+DELETE FROM notification_policy_contact_group WHERE policy_id = $1;
+
+-- name: ClearNotificationPolicyChannels :exec
+DELETE FROM notification_policy_channel WHERE policy_id = $1;
+
+-- name: AddNotificationPolicyContact :exec
+INSERT INTO notification_policy_contact (policy_id, contact_id) VALUES ($1, $2);
+
+-- name: AddNotificationPolicyContactGroup :exec
+INSERT INTO notification_policy_contact_group (policy_id, group_id) VALUES ($1, $2);
+
+-- name: AddNotificationPolicyChannel :exec
+INSERT INTO notification_policy_channel (policy_id, channel, channel_target_id) VALUES ($1, $2, $3);
+
 -- name: ListWebhookTargets :many
 SELECT * FROM webhook_target ORDER BY name, id;
 
@@ -69,6 +172,35 @@ ON CONFLICT (singleton) DO UPDATE SET
 RETURNING *;
 
 -- name: EnqueueAlertNotifications :many
+WITH selected_policy AS (
+    SELECT policy.*
+    FROM alert_instance alert
+    JOIN alert_rule rule ON rule.id = alert.rule_id
+    JOIN notification_policy policy ON policy.id = COALESCE(
+        rule.notification_policy_id,
+        (SELECT id FROM notification_policy WHERE is_default)
+    )
+    WHERE alert.id = $1
+      AND alert.severity = ANY(policy.severity_filter)
+      AND (($2 = 'FIRING' AND policy.notify_on_fire)
+        OR ($2 = 'RECOVERY' AND policy.notify_on_recovery)
+        OR $2 = 'REPEAT')
+), smtp_recipients AS (
+    SELECT contact.email AS target
+    FROM selected_policy policy
+    JOIN notification_policy_channel channel
+      ON channel.policy_id = policy.id AND channel.channel = 'SMTP'
+    JOIN notification_policy_contact selected_contact ON selected_contact.policy_id = policy.id
+    JOIN notification_contact contact ON contact.id = selected_contact.contact_id
+    UNION
+    SELECT contact.email
+    FROM selected_policy policy
+    JOIN notification_policy_channel channel
+      ON channel.policy_id = policy.id AND channel.channel = 'SMTP'
+    JOIN notification_policy_contact_group selected_group ON selected_group.policy_id = policy.id
+    JOIN notification_contact_group_member member ON member.group_id = selected_group.group_id
+    JOIN notification_contact contact ON contact.id = member.contact_id
+)
 INSERT INTO notification_delivery (
     alert_instance_id, event_type, channel, channel_target_id, target, template_id,
     payload, next_attempt_at, created_at
@@ -76,15 +208,56 @@ INSERT INTO notification_delivery (
 SELECT $1, $2, destination.channel, destination.channel_target_id,
        destination.target, $3, $4, $5, $5
 FROM (
-    SELECT 'SMTP'::text AS channel, NULL::uuid AS channel_target_id, smtp.recipient AS target
+    SELECT 'SMTP'::text AS channel, NULL::uuid AS channel_target_id, recipient.target
     FROM smtp_channel smtp
+    CROSS JOIN LATERAL (
+        SELECT target FROM smtp_recipients
+        UNION ALL
+        SELECT smtp.recipient
+        WHERE NOT EXISTS (SELECT 1 FROM smtp_recipients)
+          AND EXISTS (
+              SELECT 1 FROM selected_policy policy
+              JOIN notification_policy_channel channel
+                ON channel.policy_id = policy.id AND channel.channel = 'SMTP'
+          )
+    ) recipient
     WHERE smtp.singleton AND smtp.enabled
     UNION ALL
     SELECT 'WEBHOOK', webhook.id, webhook.url
-    FROM webhook_target webhook
+    FROM selected_policy policy
+    JOIN notification_policy_channel channel
+      ON channel.policy_id = policy.id AND channel.channel = 'WEBHOOK'
+    JOIN webhook_target webhook ON webhook.id = channel.channel_target_id
     WHERE webhook.enabled
 ) destination
 RETURNING id;
+
+-- name: ListRepeatCandidates :many
+SELECT alert.id AS alert_instance_id, alert.disposition,
+       policy.repeat_interval,
+       latest.created_at AS last_notification_at,
+       latest.payload
+FROM alert_instance alert
+JOIN alert_rule rule ON rule.id = alert.rule_id
+JOIN notification_policy policy ON policy.id = COALESCE(
+    rule.notification_policy_id,
+    (SELECT id FROM notification_policy WHERE is_default)
+)
+JOIN LATERAL (
+    SELECT delivery.created_at, delivery.payload
+    FROM notification_delivery delivery
+    WHERE delivery.alert_instance_id = alert.id
+      AND delivery.event_type IN ('FIRING', 'REPEAT')
+    ORDER BY delivery.created_at DESC, delivery.id DESC
+    LIMIT 1
+) latest ON true
+WHERE alert.status = 'FIRING'
+  AND alert.severity = ANY(policy.severity_filter)
+  AND NOT EXISTS (
+      SELECT 1 FROM notification_delivery pending
+      WHERE pending.alert_instance_id = alert.id AND pending.status = 'PENDING'
+  )
+ORDER BY alert.id;
 
 -- name: EnqueueTestNotification :one
 INSERT INTO notification_delivery (

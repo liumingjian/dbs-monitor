@@ -1152,6 +1152,285 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChannelFailureOverview'
+  /api/v1/notification-contacts:
+    get:
+      tags:
+        - notification-settings
+      operationId: listNotificationContacts
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Notification contacts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationContact'
+    post:
+      tags:
+        - notification-settings
+      operationId: createNotificationContact
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactInput'
+      responses:
+        '201':
+          description: Contact created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContact'
+        '400':
+          description: Invalid contact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-contacts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateNotificationContact
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactInput'
+      responses:
+        '200':
+          description: Contact updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContact'
+        '400':
+          description: Invalid contact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contact not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteNotificationContact
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Contact deleted.
+        '404':
+          description: Contact not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-contact-groups:
+    get:
+      tags:
+        - notification-settings
+      operationId: listNotificationContactGroups
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: One-level contact groups.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationContactGroup'
+    post:
+      tags:
+        - notification-settings
+      operationId: createNotificationContactGroup
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactGroupInput'
+      responses:
+        '201':
+          description: Contact group created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContactGroup'
+        '400':
+          description: Invalid contact group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-contact-groups/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateNotificationContactGroup
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactGroupInput'
+      responses:
+        '200':
+          description: Contact group updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContactGroup'
+        '400':
+          description: Invalid contact group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contact group not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteNotificationContactGroup
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Contact group deleted.
+        '404':
+          description: Contact group not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-policies:
+    get:
+      tags:
+        - notification-settings
+      operationId: listNotificationPolicies
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Notification policies, including the single default.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationPolicy'
+    post:
+      tags:
+        - notification-settings
+      operationId: createNotificationPolicy
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPolicyInput'
+      responses:
+        '201':
+          description: Notification policy created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPolicy'
+        '400':
+          description: Invalid notification policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-policies/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateNotificationPolicy
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPolicyInput'
+      responses:
+        '200':
+          description: Notification policy updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPolicy'
+        '400':
+          description: Invalid notification policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Notification policy not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteNotificationPolicy
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Notification policy deleted.
+        '404':
+          description: Notification policy not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The default policy cannot be deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/instances/{id}/performance-events:
     parameters:
       - name: id
@@ -3603,6 +3882,161 @@ components:
         evaluated_at:
           type: string
           format: date-time
+    NotificationContactInput:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        external_id:
+          type: string
+          minLength: 1
+    NotificationContact:
+      allOf:
+        - $ref: '#/components/schemas/NotificationContactInput'
+        - type: object
+          required:
+            - id
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    NotificationContactGroupInput:
+      type: object
+      required:
+        - name
+        - contact_ids
+      properties:
+        name:
+          type: string
+          minLength: 1
+        contact_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    NotificationContactGroup:
+      allOf:
+        - $ref: '#/components/schemas/NotificationContactGroupInput'
+        - type: object
+          required:
+            - id
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    NotificationPolicyChannel:
+      type: object
+      required:
+        - channel
+      properties:
+        channel:
+          type: string
+          enum:
+            - SMTP
+            - WEBHOOK
+          x-enum-varnames:
+            - PolicySMTP
+            - PolicyWebhook
+        target_id:
+          type: string
+          format: uuid
+    NotificationPolicyInput:
+      type: object
+      required:
+        - name
+        - contact_ids
+        - contact_group_ids
+        - channels
+        - severity_filter
+        - notify_on_fire
+        - notify_on_recovery
+        - repeat_interval
+      properties:
+        name:
+          type: string
+          minLength: 1
+        contact_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        contact_group_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        channels:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/NotificationPolicyChannel'
+        severity_filter:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AlertSeverity'
+        notify_on_fire:
+          type: boolean
+          default: true
+        notify_on_recovery:
+          type: boolean
+          default: true
+        repeat_interval:
+          type: integer
+          minimum: 900
+          maximum: 86400
+          default: 3600
+          description: Repeat interval in seconds.
+        template_id:
+          type: string
+    NotificationPolicy:
+      allOf:
+        - $ref: '#/components/schemas/NotificationPolicyInput'
+        - type: object
+          required:
+            - id
+            - is_default
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            is_default:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
     AgentMetric:
       type: object
       required:

@@ -292,6 +292,54 @@ type ClientInterface interface {
 	// TestWebhookTarget request
 	TestWebhookTarget(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListNotificationContactGroups request
+	ListNotificationContactGroups(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateNotificationContactGroupWithBody request with any body
+	CreateNotificationContactGroupWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateNotificationContactGroup(ctx context.Context, body CreateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteNotificationContactGroup request
+	DeleteNotificationContactGroup(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateNotificationContactGroupWithBody request with any body
+	UpdateNotificationContactGroupWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateNotificationContactGroup(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListNotificationContacts request
+	ListNotificationContacts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateNotificationContactWithBody request with any body
+	CreateNotificationContactWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateNotificationContact(ctx context.Context, body CreateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteNotificationContact request
+	DeleteNotificationContact(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateNotificationContactWithBody request with any body
+	UpdateNotificationContactWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateNotificationContact(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListNotificationPolicies request
+	ListNotificationPolicies(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateNotificationPolicyWithBody request with any body
+	CreateNotificationPolicyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateNotificationPolicy(ctx context.Context, body CreateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteNotificationPolicy request
+	DeleteNotificationPolicy(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateNotificationPolicyWithBody request with any body
+	UpdateNotificationPolicyWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateNotificationPolicy(ctx context.Context, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ChangeOwnPasswordWithBody request with any body
 	ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1188,6 +1236,222 @@ func (c *Client) UpdateWebhookTarget(ctx context.Context, id openapi_types.UUID,
 
 func (c *Client) TestWebhookTarget(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTestWebhookTargetRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListNotificationContactGroups(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListNotificationContactGroupsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateNotificationContactGroupWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateNotificationContactGroupRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateNotificationContactGroup(ctx context.Context, body CreateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateNotificationContactGroupRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteNotificationContactGroup(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteNotificationContactGroupRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateNotificationContactGroupWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNotificationContactGroupRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateNotificationContactGroup(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNotificationContactGroupRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListNotificationContacts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListNotificationContactsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateNotificationContactWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateNotificationContactRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateNotificationContact(ctx context.Context, body CreateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateNotificationContactRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteNotificationContact(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteNotificationContactRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateNotificationContactWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNotificationContactRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateNotificationContact(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNotificationContactRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListNotificationPolicies(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListNotificationPoliciesRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateNotificationPolicyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateNotificationPolicyRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateNotificationPolicy(ctx context.Context, body CreateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateNotificationPolicyRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteNotificationPolicy(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteNotificationPolicyRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateNotificationPolicyWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNotificationPolicyRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateNotificationPolicy(ctx context.Context, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateNotificationPolicyRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3671,6 +3935,450 @@ func NewTestWebhookTargetRequest(server string, id openapi_types.UUID) (*http.Re
 	return req, nil
 }
 
+// NewListNotificationContactGroupsRequest generates requests for ListNotificationContactGroups
+func NewListNotificationContactGroupsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contact-groups")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateNotificationContactGroupRequest calls the generic CreateNotificationContactGroup builder with application/json body
+func NewCreateNotificationContactGroupRequest(server string, body CreateNotificationContactGroupJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateNotificationContactGroupRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateNotificationContactGroupRequestWithBody generates requests for CreateNotificationContactGroup with any type of body
+func NewCreateNotificationContactGroupRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contact-groups")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteNotificationContactGroupRequest generates requests for DeleteNotificationContactGroup
+func NewDeleteNotificationContactGroupRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contact-groups/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateNotificationContactGroupRequest calls the generic UpdateNotificationContactGroup builder with application/json body
+func NewUpdateNotificationContactGroupRequest(server string, id openapi_types.UUID, body UpdateNotificationContactGroupJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateNotificationContactGroupRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateNotificationContactGroupRequestWithBody generates requests for UpdateNotificationContactGroup with any type of body
+func NewUpdateNotificationContactGroupRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contact-groups/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListNotificationContactsRequest generates requests for ListNotificationContacts
+func NewListNotificationContactsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contacts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateNotificationContactRequest calls the generic CreateNotificationContact builder with application/json body
+func NewCreateNotificationContactRequest(server string, body CreateNotificationContactJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateNotificationContactRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateNotificationContactRequestWithBody generates requests for CreateNotificationContact with any type of body
+func NewCreateNotificationContactRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contacts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteNotificationContactRequest generates requests for DeleteNotificationContact
+func NewDeleteNotificationContactRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contacts/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateNotificationContactRequest calls the generic UpdateNotificationContact builder with application/json body
+func NewUpdateNotificationContactRequest(server string, id openapi_types.UUID, body UpdateNotificationContactJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateNotificationContactRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateNotificationContactRequestWithBody generates requests for UpdateNotificationContact with any type of body
+func NewUpdateNotificationContactRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-contacts/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListNotificationPoliciesRequest generates requests for ListNotificationPolicies
+func NewListNotificationPoliciesRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-policies")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateNotificationPolicyRequest calls the generic CreateNotificationPolicy builder with application/json body
+func NewCreateNotificationPolicyRequest(server string, body CreateNotificationPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateNotificationPolicyRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateNotificationPolicyRequestWithBody generates requests for CreateNotificationPolicy with any type of body
+func NewCreateNotificationPolicyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-policies")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteNotificationPolicyRequest generates requests for DeleteNotificationPolicy
+func NewDeleteNotificationPolicyRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-policies/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateNotificationPolicyRequest calls the generic UpdateNotificationPolicy builder with application/json body
+func NewUpdateNotificationPolicyRequest(server string, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateNotificationPolicyRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateNotificationPolicyRequestWithBody generates requests for UpdateNotificationPolicy with any type of body
+func NewUpdateNotificationPolicyRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-policies/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewChangeOwnPasswordRequest calls the generic ChangeOwnPassword builder with application/json body
 func NewChangeOwnPasswordRequest(server string, body ChangeOwnPasswordJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4184,6 +4892,54 @@ type ClientWithResponsesInterface interface {
 
 	// TestWebhookTargetWithResponse request
 	TestWebhookTargetWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*TestWebhookTargetResponse, error)
+
+	// ListNotificationContactGroupsWithResponse request
+	ListNotificationContactGroupsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListNotificationContactGroupsResponse, error)
+
+	// CreateNotificationContactGroupWithBodyWithResponse request with any body
+	CreateNotificationContactGroupWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateNotificationContactGroupResponse, error)
+
+	CreateNotificationContactGroupWithResponse(ctx context.Context, body CreateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateNotificationContactGroupResponse, error)
+
+	// DeleteNotificationContactGroupWithResponse request
+	DeleteNotificationContactGroupWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteNotificationContactGroupResponse, error)
+
+	// UpdateNotificationContactGroupWithBodyWithResponse request with any body
+	UpdateNotificationContactGroupWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNotificationContactGroupResponse, error)
+
+	UpdateNotificationContactGroupWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNotificationContactGroupResponse, error)
+
+	// ListNotificationContactsWithResponse request
+	ListNotificationContactsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListNotificationContactsResponse, error)
+
+	// CreateNotificationContactWithBodyWithResponse request with any body
+	CreateNotificationContactWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateNotificationContactResponse, error)
+
+	CreateNotificationContactWithResponse(ctx context.Context, body CreateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateNotificationContactResponse, error)
+
+	// DeleteNotificationContactWithResponse request
+	DeleteNotificationContactWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteNotificationContactResponse, error)
+
+	// UpdateNotificationContactWithBodyWithResponse request with any body
+	UpdateNotificationContactWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNotificationContactResponse, error)
+
+	UpdateNotificationContactWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNotificationContactResponse, error)
+
+	// ListNotificationPoliciesWithResponse request
+	ListNotificationPoliciesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListNotificationPoliciesResponse, error)
+
+	// CreateNotificationPolicyWithBodyWithResponse request with any body
+	CreateNotificationPolicyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateNotificationPolicyResponse, error)
+
+	CreateNotificationPolicyWithResponse(ctx context.Context, body CreateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateNotificationPolicyResponse, error)
+
+	// DeleteNotificationPolicyWithResponse request
+	DeleteNotificationPolicyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteNotificationPolicyResponse, error)
+
+	// UpdateNotificationPolicyWithBodyWithResponse request with any body
+	UpdateNotificationPolicyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNotificationPolicyResponse, error)
+
+	UpdateNotificationPolicyWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNotificationPolicyResponse, error)
 
 	// ChangeOwnPasswordWithBodyWithResponse request with any body
 	ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
@@ -5484,6 +6240,280 @@ func (r TestWebhookTargetResponse) StatusCode() int {
 	return 0
 }
 
+type ListNotificationContactGroupsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]NotificationContactGroup
+}
+
+// Status returns HTTPResponse.Status
+func (r ListNotificationContactGroupsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListNotificationContactGroupsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateNotificationContactGroupResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *NotificationContactGroup
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateNotificationContactGroupResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateNotificationContactGroupResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteNotificationContactGroupResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteNotificationContactGroupResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteNotificationContactGroupResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateNotificationContactGroupResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *NotificationContactGroup
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateNotificationContactGroupResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateNotificationContactGroupResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListNotificationContactsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]NotificationContact
+}
+
+// Status returns HTTPResponse.Status
+func (r ListNotificationContactsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListNotificationContactsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateNotificationContactResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *NotificationContact
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateNotificationContactResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateNotificationContactResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteNotificationContactResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteNotificationContactResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteNotificationContactResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateNotificationContactResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *NotificationContact
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateNotificationContactResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateNotificationContactResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListNotificationPoliciesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]NotificationPolicy
+}
+
+// Status returns HTTPResponse.Status
+func (r ListNotificationPoliciesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListNotificationPoliciesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateNotificationPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *NotificationPolicy
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateNotificationPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateNotificationPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteNotificationPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *Error
+	JSON409      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteNotificationPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteNotificationPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateNotificationPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *NotificationPolicy
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateNotificationPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateNotificationPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ChangeOwnPasswordResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6285,6 +7315,162 @@ func (c *ClientWithResponses) TestWebhookTargetWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseTestWebhookTargetResponse(rsp)
+}
+
+// ListNotificationContactGroupsWithResponse request returning *ListNotificationContactGroupsResponse
+func (c *ClientWithResponses) ListNotificationContactGroupsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListNotificationContactGroupsResponse, error) {
+	rsp, err := c.ListNotificationContactGroups(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListNotificationContactGroupsResponse(rsp)
+}
+
+// CreateNotificationContactGroupWithBodyWithResponse request with arbitrary body returning *CreateNotificationContactGroupResponse
+func (c *ClientWithResponses) CreateNotificationContactGroupWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateNotificationContactGroupResponse, error) {
+	rsp, err := c.CreateNotificationContactGroupWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateNotificationContactGroupResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateNotificationContactGroupWithResponse(ctx context.Context, body CreateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateNotificationContactGroupResponse, error) {
+	rsp, err := c.CreateNotificationContactGroup(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateNotificationContactGroupResponse(rsp)
+}
+
+// DeleteNotificationContactGroupWithResponse request returning *DeleteNotificationContactGroupResponse
+func (c *ClientWithResponses) DeleteNotificationContactGroupWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteNotificationContactGroupResponse, error) {
+	rsp, err := c.DeleteNotificationContactGroup(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteNotificationContactGroupResponse(rsp)
+}
+
+// UpdateNotificationContactGroupWithBodyWithResponse request with arbitrary body returning *UpdateNotificationContactGroupResponse
+func (c *ClientWithResponses) UpdateNotificationContactGroupWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNotificationContactGroupResponse, error) {
+	rsp, err := c.UpdateNotificationContactGroupWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNotificationContactGroupResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateNotificationContactGroupWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactGroupJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNotificationContactGroupResponse, error) {
+	rsp, err := c.UpdateNotificationContactGroup(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNotificationContactGroupResponse(rsp)
+}
+
+// ListNotificationContactsWithResponse request returning *ListNotificationContactsResponse
+func (c *ClientWithResponses) ListNotificationContactsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListNotificationContactsResponse, error) {
+	rsp, err := c.ListNotificationContacts(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListNotificationContactsResponse(rsp)
+}
+
+// CreateNotificationContactWithBodyWithResponse request with arbitrary body returning *CreateNotificationContactResponse
+func (c *ClientWithResponses) CreateNotificationContactWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateNotificationContactResponse, error) {
+	rsp, err := c.CreateNotificationContactWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateNotificationContactResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateNotificationContactWithResponse(ctx context.Context, body CreateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateNotificationContactResponse, error) {
+	rsp, err := c.CreateNotificationContact(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateNotificationContactResponse(rsp)
+}
+
+// DeleteNotificationContactWithResponse request returning *DeleteNotificationContactResponse
+func (c *ClientWithResponses) DeleteNotificationContactWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteNotificationContactResponse, error) {
+	rsp, err := c.DeleteNotificationContact(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteNotificationContactResponse(rsp)
+}
+
+// UpdateNotificationContactWithBodyWithResponse request with arbitrary body returning *UpdateNotificationContactResponse
+func (c *ClientWithResponses) UpdateNotificationContactWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNotificationContactResponse, error) {
+	rsp, err := c.UpdateNotificationContactWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNotificationContactResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateNotificationContactWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateNotificationContactJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNotificationContactResponse, error) {
+	rsp, err := c.UpdateNotificationContact(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNotificationContactResponse(rsp)
+}
+
+// ListNotificationPoliciesWithResponse request returning *ListNotificationPoliciesResponse
+func (c *ClientWithResponses) ListNotificationPoliciesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListNotificationPoliciesResponse, error) {
+	rsp, err := c.ListNotificationPolicies(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListNotificationPoliciesResponse(rsp)
+}
+
+// CreateNotificationPolicyWithBodyWithResponse request with arbitrary body returning *CreateNotificationPolicyResponse
+func (c *ClientWithResponses) CreateNotificationPolicyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateNotificationPolicyResponse, error) {
+	rsp, err := c.CreateNotificationPolicyWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateNotificationPolicyResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateNotificationPolicyWithResponse(ctx context.Context, body CreateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateNotificationPolicyResponse, error) {
+	rsp, err := c.CreateNotificationPolicy(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateNotificationPolicyResponse(rsp)
+}
+
+// DeleteNotificationPolicyWithResponse request returning *DeleteNotificationPolicyResponse
+func (c *ClientWithResponses) DeleteNotificationPolicyWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteNotificationPolicyResponse, error) {
+	rsp, err := c.DeleteNotificationPolicy(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteNotificationPolicyResponse(rsp)
+}
+
+// UpdateNotificationPolicyWithBodyWithResponse request with arbitrary body returning *UpdateNotificationPolicyResponse
+func (c *ClientWithResponses) UpdateNotificationPolicyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNotificationPolicyResponse, error) {
+	rsp, err := c.UpdateNotificationPolicyWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNotificationPolicyResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateNotificationPolicyWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNotificationPolicyResponse, error) {
+	rsp, err := c.UpdateNotificationPolicy(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateNotificationPolicyResponse(rsp)
 }
 
 // ChangeOwnPasswordWithBodyWithResponse request with arbitrary body returning *ChangeOwnPasswordResponse
@@ -8074,6 +9260,388 @@ func ParseTestWebhookTargetResponse(rsp *http.Response) (*TestWebhookTargetRespo
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListNotificationContactGroupsResponse parses an HTTP response from a ListNotificationContactGroupsWithResponse call
+func ParseListNotificationContactGroupsResponse(rsp *http.Response) (*ListNotificationContactGroupsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListNotificationContactGroupsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []NotificationContactGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateNotificationContactGroupResponse parses an HTTP response from a CreateNotificationContactGroupWithResponse call
+func ParseCreateNotificationContactGroupResponse(rsp *http.Response) (*CreateNotificationContactGroupResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateNotificationContactGroupResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest NotificationContactGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteNotificationContactGroupResponse parses an HTTP response from a DeleteNotificationContactGroupWithResponse call
+func ParseDeleteNotificationContactGroupResponse(rsp *http.Response) (*DeleteNotificationContactGroupResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteNotificationContactGroupResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateNotificationContactGroupResponse parses an HTTP response from a UpdateNotificationContactGroupWithResponse call
+func ParseUpdateNotificationContactGroupResponse(rsp *http.Response) (*UpdateNotificationContactGroupResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateNotificationContactGroupResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationContactGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListNotificationContactsResponse parses an HTTP response from a ListNotificationContactsWithResponse call
+func ParseListNotificationContactsResponse(rsp *http.Response) (*ListNotificationContactsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListNotificationContactsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []NotificationContact
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateNotificationContactResponse parses an HTTP response from a CreateNotificationContactWithResponse call
+func ParseCreateNotificationContactResponse(rsp *http.Response) (*CreateNotificationContactResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateNotificationContactResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest NotificationContact
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteNotificationContactResponse parses an HTTP response from a DeleteNotificationContactWithResponse call
+func ParseDeleteNotificationContactResponse(rsp *http.Response) (*DeleteNotificationContactResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteNotificationContactResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateNotificationContactResponse parses an HTTP response from a UpdateNotificationContactWithResponse call
+func ParseUpdateNotificationContactResponse(rsp *http.Response) (*UpdateNotificationContactResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateNotificationContactResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationContact
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListNotificationPoliciesResponse parses an HTTP response from a ListNotificationPoliciesWithResponse call
+func ParseListNotificationPoliciesResponse(rsp *http.Response) (*ListNotificationPoliciesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListNotificationPoliciesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []NotificationPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateNotificationPolicyResponse parses an HTTP response from a CreateNotificationPolicyWithResponse call
+func ParseCreateNotificationPolicyResponse(rsp *http.Response) (*CreateNotificationPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateNotificationPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest NotificationPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteNotificationPolicyResponse parses an HTTP response from a DeleteNotificationPolicyWithResponse call
+func ParseDeleteNotificationPolicyResponse(rsp *http.Response) (*DeleteNotificationPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteNotificationPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateNotificationPolicyResponse parses an HTTP response from a UpdateNotificationPolicyWithResponse call
+func ParseUpdateNotificationPolicyResponse(rsp *http.Response) (*UpdateNotificationPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateNotificationPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Error
