@@ -351,31 +351,18 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if roleCapability.Status != "PRESENT" || roleCapability.ObservedAt == nil {
 		t.Fatalf("probed pg_monitor capability = %+v", roleCapability)
 	}
-	series, err := client.Get(seriesURL)
-	if err != nil {
-		t.Fatalf("get metric series: %v", err)
+	assertMetricSeriesHasPoints(t, client, seriesURL)
+	tpsURL := strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1)
+	if _, err := pool.Exec(ctx, `UPDATE instance_collection_task_state
+		SET last_error_code = 'COUNTER_RESET', last_error_message = 'database statistics counters reset'
+		WHERE instance_id = $1 AND task_id = 'pg.stat_database'`, createBody.Instance.Id); err != nil {
+		t.Fatalf("mark counter reset: %v", err)
 	}
-	var seriesBody struct {
-		Metrics []struct {
-			Series json.RawMessage `json:"series"`
-		} `json:"metrics"`
+	assertUnavailability(t, client, tpsURL, "COUNTER_RESET")
+	if err := collector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect pg_stat_database rate samples: %v", err)
 	}
-	if err := json.NewDecoder(series.Body).Decode(&seriesBody); err != nil {
-		t.Fatalf("decode metric series: %v", err)
-	}
-	series.Body.Close()
-	if len(seriesBody.Metrics) != 1 || string(seriesBody.Metrics[0].Series) == "null" {
-		t.Fatalf("metric API returned null series: %+v", seriesBody)
-	}
-	var returnedSeries []struct {
-		Points [][]*float64 `json:"points"`
-	}
-	if err := json.Unmarshal(seriesBody.Metrics[0].Series, &returnedSeries); err != nil {
-		t.Fatalf("decode returned series: %v", err)
-	}
-	if len(returnedSeries) == 0 || len(returnedSeries[0].Points) == 0 {
-		t.Fatalf("metric API returned no points: %+v", returnedSeries)
-	}
+	assertMetricSeriesHasPoints(t, client, tpsURL)
 	assertStep(t, client, strings.Replace(seriesURL, "step=raw", "step=auto", 1), "15s")
 	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
 		SET states = jsonb_set(states, '{role.pg_monitor}', '"MISSING"')
@@ -650,6 +637,25 @@ func assertStep(t *testing.T, client *http.Client, address, want string) {
 	}
 	if body.Step != want {
 		t.Fatalf("step = %q, want %q", body.Step, want)
+	}
+}
+
+func assertMetricSeriesHasPoints(t *testing.T, client *http.Client, address string) {
+	t.Helper()
+	response := getResponse(t, client, address)
+	defer response.Body.Close()
+	var body struct {
+		Metrics []struct {
+			Series []struct {
+				Points [][]*float64 `json:"points"`
+			} `json:"series"`
+		} `json:"metrics"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode metric series: %v", err)
+	}
+	if len(body.Metrics) != 1 || len(body.Metrics[0].Series) == 0 || len(body.Metrics[0].Series[0].Points) == 0 {
+		t.Fatalf("metric API returned no points: %+v", body)
 	}
 }
 

@@ -14,7 +14,7 @@ REDOCLY := npx --yes @redocly/cli@2.20.3
 OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
 SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
 
-.PHONY: gen dev-up dev-down build check check-full package-binaries-linux-amd64 package-binaries-linux-arm64 package-linux-amd64 package-linux-arm64
+.PHONY: gen dev-up dev-down build check check-full check-pg-matrix package-binaries-linux-amd64 package-binaries-linux-arm64 package-linux-amd64 package-linux-arm64
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml
@@ -51,6 +51,15 @@ check-full: check
 	sh scripts/check-e2e.sh
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build ./...
+
+check-pg-matrix:
+	docker compose --profile matrix up -d --wait monitored-pg13 monitored-pg14 monitored-pg15 monitored-pg16 monitored-pg17
+	PG13_URL=postgres://monitored:monitored@localhost:55433/monitored?sslmode=disable \
+	PG14_URL=postgres://monitored:monitored@localhost:55434/monitored?sslmode=disable \
+	PG15_URL=postgres://monitored:monitored@localhost:55435/monitored?sslmode=disable \
+	PG16_URL=postgres://monitored:monitored@localhost:55436/monitored?sslmode=disable \
+	PG17_URL=postgres://monitored:monitored@localhost:55437/monitored?sslmode=disable \
+	go test ./internal/metric -run TestPGStatDatabaseShapeMatrix -count=1
 
 package-binaries-linux-amd64:
 	cd web && npm ci && npm run build

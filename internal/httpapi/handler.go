@@ -435,6 +435,7 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			Labels map[string]string `json:"labels"`
 			Points [][]*float64      `json:"points"`
 		}{}, Unavailability: nullable.NewNullNullable[api.Unavailability]()}
+		counterReset := false
 
 		if strings.HasPrefix(string(metricID), "pg.") {
 			var probeResult pgtype.Text
@@ -462,6 +463,15 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 				entry.Unavailability = nullable.NewNullableWithValue(api.Unavailability(reason))
 				result.Metrics = append(result.Metrics, entry)
 				continue
+			}
+			if taskID, exists := producingTaskID(metric.MetricID(metricID)); exists {
+				var code pgtype.Text
+				err := handler.platform.QueryRow(ctx, `SELECT last_error_code FROM instance_collection_task_state
+						WHERE instance_id = $1 AND task_id = $2`, pgtype.UUID{Bytes: request.Id, Valid: true}, taskID).Scan(&code)
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					return nil, err
+				}
+				counterReset = err == nil && code.Valid && code.String == string(metric.ResetCounter)
 			}
 		}
 
@@ -523,7 +533,9 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			entry.Series = append(entry.Series, item)
 		}
 		if len(entry.Series) == 0 {
-			if len(series) == 0 {
+			if counterReset {
+				entry.Unavailability = nullable.NewNullableWithValue(api.COUNTERRESET)
+			} else if len(series) == 0 {
 				entry.Unavailability = nullable.NewNullableWithValue(api.NOSAMPLESYET)
 			} else {
 				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
@@ -532,6 +544,17 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		result.Metrics = append(result.Metrics, entry)
 	}
 	return api.GetMetricSeries200JSONResponse(result), nil
+}
+
+func producingTaskID(metricID metric.MetricID) (metric.TaskID, bool) {
+	for _, task := range metric.Tasks {
+		for _, yield := range task.Yields {
+			if yield.Metric == metricID {
+				return task.ID, true
+			}
+		}
+	}
+	return "", false
 }
 
 func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.ReportAgentMetricsRequestObject) (api.ReportAgentMetricsResponseObject, error) {

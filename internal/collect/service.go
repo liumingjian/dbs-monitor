@@ -85,6 +85,7 @@ type Service struct {
 	queryConnectionMu       sync.Mutex
 	queryConnections        map[string]cachedConnection
 	queryConnectionRebuilds int64
+	statDatabaseRates       *statDatabaseRateState
 }
 
 func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Service {
@@ -100,12 +101,13 @@ func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock cloc
 		return nil, err
 	}
 	return &Service{
-		platform:         platform,
-		dialer:           dialer,
-		clock:            currentClock,
-		config:           config,
-		keyring:          keyring,
-		queryConnections: map[string]cachedConnection{},
+		platform:          platform,
+		dialer:            dialer,
+		clock:             currentClock,
+		config:            config,
+		keyring:           keyring,
+		queryConnections:  map[string]cachedConnection{},
+		statDatabaseRates: newStatDatabaseRateState(),
 	}, nil
 }
 
@@ -193,7 +195,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		outcome.err = service.recordSuccess(ctx, run, []collectedSample{
 			{metricID: metric.MetricAvailabilityReachable, value: metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
 			{metricID: metric.MetricProbeLatencyMS, value: latency},
-		})
+		}, false)
 		outcome.result = resultSuccess
 		outcome.duration = time.Since(startedWall)
 		return outcome
@@ -209,12 +211,34 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		err = conn.QueryRow(taskCtx, "SELECT set_config('statement_timeout', $1, false)",
 			strconv.FormatInt(timeout.Milliseconds(), 10)+"ms").Scan(&configured)
 	}
-	values := make([]float64, len(statActivityMetricIDs))
+	var samples []collectedSample
+	counterReset := false
 	if err == nil {
-		err = conn.QueryRow(taskCtx, run.task.SQL).Scan(
-			&values[0], &values[1], &values[2], &values[3],
-			&values[4], &values[5], &values[6], &values[7],
-		)
+		switch run.task.ID {
+		case metric.TaskStatActivity:
+			values := make([]float64, len(statActivityMetricIDs))
+			err = conn.QueryRow(taskCtx, run.task.SQL).Scan(
+				&values[0], &values[1], &values[2], &values[3],
+				&values[4], &values[5], &values[6], &values[7],
+			)
+			if err == nil {
+				samples = make([]collectedSample, len(statActivityMetricIDs))
+				for index, metricID := range statActivityMetricIDs {
+					samples[index] = collectedSample{metricID: metricID, value: values[index]}
+				}
+			}
+		case metric.TaskStatDatabase:
+			observation := statDatabaseSnapshot{observedAt: service.clock.Now().UTC()}
+			err = conn.QueryRow(taskCtx, run.task.SQL).Scan(
+				&observation.counters[0], &observation.counters[1], &observation.counters[2],
+				&observation.counters[3], &observation.counters[4], &observation.counters[5],
+			)
+			if err == nil {
+				samples, counterReset = service.statDatabaseRates.observe(run.key.instanceID, observation)
+			}
+		default:
+			err = fmt.Errorf("unsupported collection task %q", run.task.ID)
+		}
 	}
 	if err != nil {
 		connectionFailure := dialFailure || isConnectionFailure(err)
@@ -225,11 +249,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		outcome.duration = time.Since(startedWall)
 		return outcome
 	}
-	samples := make([]collectedSample, len(statActivityMetricIDs))
-	for index, metricID := range statActivityMetricIDs {
-		samples[index] = collectedSample{metricID: metricID, value: values[index]}
-	}
-	outcome.err = service.recordSuccess(ctx, run, samples)
+	outcome.err = service.recordSuccess(ctx, run, samples, counterReset)
 	outcome.result = resultSuccess
 	outcome.duration = time.Since(startedWall)
 	return outcome
@@ -411,10 +431,10 @@ func (service *Service) taskIntervals(ctx context.Context, targetID pgtype.UUID)
 }
 
 func scheduledTasks() []metric.Task {
-	tasks := make([]metric.Task, 0, 2)
+	tasks := make([]metric.Task, 0, 3)
 	for _, task := range metric.Tasks {
 		switch task.ID {
-		case metric.TaskProbe, metric.TaskStatActivity:
+		case metric.TaskProbe, metric.TaskStatDatabase, metric.TaskStatActivity:
 			tasks = append(tasks, task)
 		}
 	}

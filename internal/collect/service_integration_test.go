@@ -118,8 +118,8 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		WHERE instance_id = $1 AND last_result = 'SUCCESS'`, pgID).Scan(&successfulTasks); err != nil {
 		t.Fatalf("count successful collection tasks: %v", err)
 	}
-	if successfulTasks != 2 {
-		t.Fatalf("successful task count = %d, want 2", successfulTasks)
+	if successfulTasks != 3 {
+		t.Fatalf("successful task count = %d, want 3", successfulTasks)
 	}
 	collector.queryConnectionMu.Lock()
 	cached := collector.queryConnections[instanceID.String()]

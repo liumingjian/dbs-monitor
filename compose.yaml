@@ -1,3 +1,15 @@
+x-monitored: &monitored
+  profiles: [matrix]
+  environment:
+    POSTGRES_DB: monitored
+    POSTGRES_USER: monitored
+    POSTGRES_PASSWORD: monitored
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
+    interval: 1s
+    timeout: 3s
+    retries: 30
+
 services:
   postgres:
     image: postgres:17
@@ -15,30 +27,22 @@ services:
       retries: 30
 
   monitored-pg13:
+    <<: *monitored
     image: postgres:13
-    profiles: [matrix]
-    environment: &monitored-env
-      POSTGRES_DB: monitored
-      POSTGRES_USER: monitored
-      POSTGRES_PASSWORD: monitored
     ports: ["55433:5432"]
   monitored-pg14:
+    <<: *monitored
     image: postgres:14
-    profiles: [matrix]
-    environment: *monitored-env
     ports: ["55434:5432"]
   monitored-pg15:
+    <<: *monitored
     image: postgres:15
-    profiles: [matrix]
-    environment: *monitored-env
     ports: ["55435:5432"]
   monitored-pg16:
+    <<: *monitored
     image: postgres:16
-    profiles: [matrix]
-    environment: *monitored-env
     ports: ["55436:5432"]
   monitored-pg17:
+    <<: *monitored
     image: postgres:17
-    profiles: [matrix]
-    environment: *monitored-env
     ports: ["55437:5432"]
