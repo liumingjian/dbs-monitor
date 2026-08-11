@@ -256,21 +256,21 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 	switch run.task.ID {
 	case metric.TaskStatActivity:
 		values := make([]float64, len(statActivityMetricIDs))
-		var observedAt time.Time
-		var sessionsJSON, longQueriesJSON []byte
-		var sessionCount, longQueryCount int64
-		var sessionsTruncated, longQueriesTruncated bool
+		var sampledAt time.Time
+		var sessionsJSON, longQuerySamplesJSON []byte
+		var sessionCount, longQuerySampleCount int64
+		var sessionsTruncated, longQuerySamplesTruncated bool
 		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
 			&values[0], &values[1], &values[2], &values[3],
 			&values[4], &values[5], &values[6], &values[7],
-			&observedAt, &sessionsJSON, &sessionCount, &sessionsTruncated,
-			&longQueriesJSON, &longQueryCount, &longQueriesTruncated,
+			&sampledAt, &sessionsJSON, &sessionCount, &sessionsTruncated,
+			&longQuerySamplesJSON, &longQuerySampleCount, &longQuerySamplesTruncated,
 		); err != nil {
 			return collectedBatch{}, err
 		}
 		snapshot, err := decodeStatActivitySnapshot(
 			sessionsJSON, sessionCount, sessionsTruncated,
-			longQueriesJSON, longQueryCount, longQueriesTruncated,
+			longQuerySamplesJSON, longQuerySampleCount, longQuerySamplesTruncated,
 		)
 		if err != nil {
 			return collectedBatch{}, err

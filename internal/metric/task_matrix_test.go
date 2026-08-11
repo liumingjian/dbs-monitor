@@ -42,11 +42,7 @@ func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 	if !ok {
 		t.Fatalf("task %q is missing", metric.TaskStatDatabase)
 	}
-	expected := make([]taskColumnShape, 0, len(task.Yields))
-	for _, name := range taskColumns(task) {
-		expected = append(expected, taskColumnShape{name: name, oid: pgtype.Float8OID})
-	}
-	assertTaskShapeMatrix(t, task, expected)
+	assertTaskShapeMatrix(t, task, metricColumnShapes(task))
 }
 
 func TestPGStatActivityShapeMatrix(t *testing.T) {
@@ -54,10 +50,7 @@ func TestPGStatActivityShapeMatrix(t *testing.T) {
 	if !ok {
 		t.Fatalf("task %q is missing", metric.TaskStatActivity)
 	}
-	expected := make([]taskColumnShape, 0, 15)
-	for _, name := range taskColumns(task) {
-		expected = append(expected, taskColumnShape{name: name, oid: pgtype.Float8OID})
-	}
+	expected := metricColumnShapes(task)
 	expected = append(expected,
 		taskColumnShape{name: "snapshot_at", oid: pgtype.TimestamptzOID},
 		taskColumnShape{name: "sessions", oid: pgtype.JSONBOID},
@@ -75,8 +68,21 @@ type taskColumnShape struct {
 	oid  uint32
 }
 
+func metricColumnShapes(task metric.Task) []taskColumnShape {
+	columns := taskColumns(task)
+	shapes := make([]taskColumnShape, 0, len(columns))
+	for _, name := range columns {
+		shapes = append(shapes, taskColumnShape{name: name, oid: pgtype.Float8OID})
+	}
+	return shapes
+}
+
 func assertTaskShapeMatrix(t *testing.T, task metric.Task, expected []taskColumnShape) {
 	t.Helper()
+	expectedColumns := make([]string, len(expected))
+	for index, column := range expected {
+		expectedColumns[index] = column.name
+	}
 	targets := []struct {
 		version string
 		urlEnv  string
@@ -117,10 +123,6 @@ func assertTaskShapeMatrix(t *testing.T, task metric.Task, expected []taskColumn
 				if field.DataTypeOID != expected[index].oid {
 					t.Errorf("column %s type OID = %d, want %d", field.Name, field.DataTypeOID, expected[index].oid)
 				}
-			}
-			expectedColumns := make([]string, len(expected))
-			for index, column := range expected {
-				expectedColumns[index] = column.name
 			}
 			if !slices.Equal(columns, expectedColumns) {
 				t.Fatalf("columns = %v, want task output columns %v", columns, expectedColumns)

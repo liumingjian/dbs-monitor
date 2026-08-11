@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	longQuerySampleLimit = 100
-	sessionSnapshotLimit = 500
-	activityRetention    = 30 * 24 * time.Hour
+	longQuerySampleLimit          = 100
+	sessionSnapshotLimit          = 500
+	statActivitySnapshotRetention = 30 * 24 * time.Hour
 )
 
 type statActivitySession struct {
@@ -34,63 +34,70 @@ type statActivitySession struct {
 }
 
 type statActivitySnapshot struct {
-	sessions             []statActivitySession
-	sessionCount         int64
-	sessionsTruncated    bool
-	longQuerySamples     []statActivitySession
-	longQuerySampleCount int64
-	longQueriesTruncated bool
+	sessions                  []statActivitySession
+	sessionCount              int64
+	sessionsTruncated         bool
+	longQuerySamples          []statActivitySession
+	longQuerySampleCount      int64
+	longQuerySamplesTruncated bool
 }
 
 func decodeStatActivitySnapshot(
 	sessionsJSON []byte,
 	sessionCount int64,
 	sessionsTruncated bool,
-	longQueriesJSON []byte,
-	longQueryCount int64,
-	longQueriesTruncated bool,
+	longQuerySamplesJSON []byte,
+	longQuerySampleCount int64,
+	longQuerySamplesTruncated bool,
 ) (statActivitySnapshot, error) {
-	var sessions, longQueries []statActivitySession
+	var sessions, longQuerySamples []statActivitySession
 	if err := json.Unmarshal(sessionsJSON, &sessions); err != nil {
 		return statActivitySnapshot{}, fmt.Errorf("decode session snapshot: %w", err)
 	}
-	if err := json.Unmarshal(longQueriesJSON, &longQueries); err != nil {
+	if err := json.Unmarshal(longQuerySamplesJSON, &longQuerySamples); err != nil {
 		return statActivitySnapshot{}, fmt.Errorf("decode long query samples: %w", err)
 	}
-	if len(sessions) > sessionSnapshotLimit || len(longQueries) > longQuerySampleLimit {
+	if len(sessions) > sessionSnapshotLimit || len(longQuerySamples) > longQuerySampleLimit {
 		return statActivitySnapshot{}, errors.New("pg_stat_activity snapshot exceeds collection limits")
 	}
-	for _, sample := range longQueries {
+	for _, sample := range longQuerySamples {
 		if sample.QueryStartedAt == nil || sample.QueryDurationMS == nil {
 			return statActivitySnapshot{}, errors.New("long query sample is missing query timing")
 		}
 	}
 	return statActivitySnapshot{
-		sessions:             sessions,
-		sessionCount:         sessionCount,
-		sessionsTruncated:    sessionsTruncated,
-		longQuerySamples:     longQueries,
-		longQuerySampleCount: longQueryCount,
-		longQueriesTruncated: longQueriesTruncated,
+		sessions:                  sessions,
+		sessionCount:              sessionCount,
+		sessionsTruncated:         sessionsTruncated,
+		longQuerySamples:          longQuerySamples,
+		longQuerySampleCount:      longQuerySampleCount,
+		longQuerySamplesTruncated: longQuerySamplesTruncated,
 	}, nil
 }
 
-func persistStatActivitySnapshot(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, observedAt time.Time, snapshot statActivitySnapshot) error {
+func persistStatActivitySnapshot(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, sampledAt time.Time, snapshot statActivitySnapshot) error {
+	if err := persistLongQuerySamples(ctx, tx, instanceID, sampledAt, snapshot); err != nil {
+		return err
+	}
+	return persistLatestSessionSnapshot(ctx, tx, instanceID, sampledAt, snapshot)
+}
+
+func persistLongQuerySamples(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, sampledAt time.Time, snapshot statActivitySnapshot) error {
 	if _, err := tx.Exec(ctx, `INSERT INTO long_query_sample_snapshot
 		(instance_id, sampled_at, original_count, truncated)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (instance_id, sampled_at) DO UPDATE SET
 		original_count = EXCLUDED.original_count, truncated = EXCLUDED.truncated`,
-		instanceID, observedAt, snapshot.longQuerySampleCount, snapshot.longQueriesTruncated); err != nil {
+		instanceID, sampledAt, snapshot.longQuerySampleCount, snapshot.longQuerySamplesTruncated); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, "DELETE FROM long_query_sample WHERE instance_id = $1 AND sampled_at = $2", instanceID, observedAt); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM long_query_sample WHERE instance_id = $1 AND sampled_at = $2", instanceID, sampledAt); err != nil {
 		return err
 	}
 	longQueryRows := make([][]any, 0, len(snapshot.longQuerySamples))
 	for _, sample := range snapshot.longQuerySamples {
 		longQueryRows = append(longQueryRows, []any{
-			instanceID, observedAt, sample.PID, sample.Username, sample.DatabaseName,
+			instanceID, sampledAt, sample.PID, sample.Username, sample.DatabaseName,
 			sample.ClientAddress, sample.State, sample.QueryStartedAt, sample.TransactionStartedAt,
 			sample.QueryDurationMS, sample.TransactionDurationMS, sample.WaitEventType,
 			sample.WaitEvent, sample.BlockingPIDs,
@@ -105,8 +112,11 @@ func persistStatActivitySnapshot(ctx context.Context, tx pgx.Tx, instanceID pgty
 			return err
 		}
 	}
+	return nil
+}
 
-	var accepted time.Time
+func persistLatestSessionSnapshot(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, sampledAt time.Time, snapshot statActivitySnapshot) error {
+	var acceptedSampledAt time.Time
 	err := tx.QueryRow(ctx, `INSERT INTO instance_session_snapshot
 		(instance_id, sampled_at, original_count, truncated)
 		VALUES ($1, $2, $3, $4)
@@ -115,7 +125,7 @@ func persistStatActivitySnapshot(ctx context.Context, tx pgx.Tx, instanceID pgty
 		original_count = EXCLUDED.original_count,
 		truncated = EXCLUDED.truncated
 		WHERE instance_session_snapshot.sampled_at <= EXCLUDED.sampled_at
-		RETURNING sampled_at`, instanceID, observedAt, snapshot.sessionCount, snapshot.sessionsTruncated).Scan(&accepted)
+		RETURNING sampled_at`, instanceID, sampledAt, snapshot.sessionCount, snapshot.sessionsTruncated).Scan(&acceptedSampledAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -148,6 +158,6 @@ func persistStatActivitySnapshot(ctx context.Context, tx pgx.Tx, instanceID pgty
 func DropExpiredStatActivitySnapshots(ctx context.Context, database interface {
 	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }, now time.Time) error {
-	_, err := database.Exec(ctx, "DELETE FROM long_query_sample_snapshot WHERE sampled_at < $1", now.UTC().Add(-activityRetention))
+	_, err := database.Exec(ctx, "DELETE FROM long_query_sample_snapshot WHERE sampled_at < $1", now.UTC().Add(-statActivitySnapshotRetention))
 	return err
 }

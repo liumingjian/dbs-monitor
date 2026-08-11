@@ -11,7 +11,9 @@ func (handler *Handler) ListLongQuerySamples(ctx context.Context, request api.Li
 	if !request.Params.From.Before(request.Params.To) {
 		return api.ListLongQuerySamples400JSONResponse(errorBody(api.VALIDATIONFAILED, "from must be before to")), nil
 	}
-	limit, offset, sortOrder := 50, 0, "-sampled_at"
+	limit := 50
+	offset := 0
+	sortOrder := "-sampled_at"
 	if request.Params.Limit != nil {
 		limit = *request.Params.Limit
 	}
@@ -36,8 +38,12 @@ func (handler *Handler) ListLongQuerySamples(ctx context.Context, request api.Li
 		return nil, err
 	}
 	rows, err := queries.ListLongQuerySamples(ctx, ListLongQuerySamplesParams{
-		InstanceID: filter.InstanceID, FromTime: filter.FromTime, ToTime: filter.ToTime,
-		SortOrder: sortOrder, PageLimit: int32(limit), PageOffset: int32(offset),
+		InstanceID: filter.InstanceID,
+		FromTime:   filter.FromTime,
+		ToTime:     filter.ToTime,
+		SortOrder:  sortOrder,
+		PageLimit:  int32(limit),
+		PageOffset: int32(offset),
 	})
 	if err != nil {
 		return nil, err
