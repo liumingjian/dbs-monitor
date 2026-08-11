@@ -131,6 +131,9 @@ type ClientInterface interface {
 	// DeleteAlertRule request
 	DeleteAlertRule(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetAlertRule request
+	GetAlertRule(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UpdateAlertRuleWithBody request with any body
 	UpdateAlertRuleWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -467,6 +470,18 @@ func (c *Client) CreateAlertRule(ctx context.Context, body CreateAlertRuleJSONRe
 
 func (c *Client) DeleteAlertRule(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewDeleteAlertRuleRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAlertRule(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertRuleRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1588,6 +1603,40 @@ func NewDeleteAlertRuleRequest(server string, id openapi_types.UUID) (*http.Requ
 	}
 
 	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAlertRuleRequest generates requests for GetAlertRule
+func NewGetAlertRuleRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-rules/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -3648,6 +3697,9 @@ type ClientWithResponsesInterface interface {
 	// DeleteAlertRuleWithResponse request
 	DeleteAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteAlertRuleResponse, error)
 
+	// GetAlertRuleWithResponse request
+	GetAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertRuleResponse, error)
+
 	// UpdateAlertRuleWithBodyWithResponse request with any body
 	UpdateAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error)
 
@@ -4061,6 +4113,29 @@ func (r DeleteAlertRuleResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r DeleteAlertRuleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAlertRuleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AlertRule
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertRuleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertRuleResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -5217,6 +5292,15 @@ func (c *ClientWithResponses) DeleteAlertRuleWithResponse(ctx context.Context, i
 	return ParseDeleteAlertRuleResponse(rsp)
 }
 
+// GetAlertRuleWithResponse request returning *GetAlertRuleResponse
+func (c *ClientWithResponses) GetAlertRuleWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertRuleResponse, error) {
+	rsp, err := c.GetAlertRule(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertRuleResponse(rsp)
+}
+
 // UpdateAlertRuleWithBodyWithResponse request with arbitrary body returning *UpdateAlertRuleResponse
 func (c *ClientWithResponses) UpdateAlertRuleWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertRuleResponse, error) {
 	rsp, err := c.UpdateAlertRuleWithBody(ctx, id, contentType, body, reqEditors...)
@@ -6099,6 +6183,39 @@ func ParseDeleteAlertRuleResponse(rsp *http.Response) (*DeleteAlertRuleResponse,
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertRuleResponse parses an HTTP response from a GetAlertRuleWithResponse call
+func ParseGetAlertRuleResponse(rsp *http.Response) (*GetAlertRuleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertRuleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertRule
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

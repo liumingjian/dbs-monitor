@@ -1025,31 +1025,6 @@ type QueryStatisticsSnapshot struct {
 // Role defines model for Role.
 type Role string
 
-// SessionSnapshot defines model for SessionSnapshot.
-type SessionSnapshot struct {
-	Items          []SessionSnapshotEntry `json:"items"`
-	OriginalCount  *int                   `json:"original_count,omitempty"`
-	SampledAt      *time.Time             `json:"sampled_at,omitempty"`
-	Truncated      bool                   `json:"truncated"`
-	Unavailability *Unavailability        `json:"unavailability,omitempty"`
-}
-
-// SessionSnapshotEntry defines model for SessionSnapshotEntry.
-type SessionSnapshotEntry struct {
-	BlockingPids          []int32    `json:"blocking_pids"`
-	ClientAddress         *string    `json:"client_address,omitempty"`
-	DatabaseName          *string    `json:"database_name,omitempty"`
-	Pid                   int32      `json:"pid"`
-	QueryDurationMs       *int64     `json:"query_duration_ms,omitempty"`
-	QueryStartedAt        *time.Time `json:"query_started_at,omitempty"`
-	State                 *string    `json:"state,omitempty"`
-	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
-	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
-	Username              *string    `json:"username,omitempty"`
-	WaitEvent             *string    `json:"wait_event,omitempty"`
-	WaitEventType         *string    `json:"wait_event_type,omitempty"`
-}
-
 // SMTPAuthType defines model for SMTPAuthType.
 type SMTPAuthType string
 
@@ -1090,6 +1065,31 @@ type SMTPTestInput struct {
 
 // SMTPTransportSecurity defines model for SMTPTransportSecurity.
 type SMTPTransportSecurity string
+
+// SessionSnapshot defines model for SessionSnapshot.
+type SessionSnapshot struct {
+	Items          []SessionSnapshotEntry `json:"items"`
+	OriginalCount  *int                   `json:"original_count,omitempty"`
+	SampledAt      *time.Time             `json:"sampled_at,omitempty"`
+	Truncated      bool                   `json:"truncated"`
+	Unavailability *Unavailability        `json:"unavailability,omitempty"`
+}
+
+// SessionSnapshotEntry defines model for SessionSnapshotEntry.
+type SessionSnapshotEntry struct {
+	BlockingPids          []int32    `json:"blocking_pids"`
+	ClientAddress         *string    `json:"client_address,omitempty"`
+	DatabaseName          *string    `json:"database_name,omitempty"`
+	Pid                   int32      `json:"pid"`
+	QueryDurationMs       *int64     `json:"query_duration_ms,omitempty"`
+	QueryStartedAt        *time.Time `json:"query_started_at,omitempty"`
+	State                 *string    `json:"state,omitempty"`
+	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
+	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	WaitEvent             *string    `json:"wait_event,omitempty"`
+	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
 
 // Unavailability defines model for Unavailability.
 type Unavailability string
@@ -1273,6 +1273,9 @@ type ServerInterface interface {
 
 	// (DELETE /api/v1/alert-rules/{id})
 	DeleteAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-rules/{id})
+	GetAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (PUT /api/v1/alert-rules/{id})
 	UpdateAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1647,6 +1650,31 @@ func (siw *ServerInterfaceWrapper) DeleteAlertRule(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.DeleteAlertRule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertRule(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2964,6 +2992,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules", wrapper.ListAlertRules)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.DeleteAlertRule)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.GetAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules/{id}/copies", wrapper.CopyAlertRule)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}/enabled", wrapper.UpdateAlertRuleEnabled)
@@ -3311,6 +3340,32 @@ type DeleteAlertRule409JSONResponse Error
 func (response DeleteAlertRule409JSONResponse) VisitDeleteAlertRuleResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertRuleRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertRuleResponseObject interface {
+	VisitGetAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type GetAlertRule200JSONResponse AlertRule
+
+func (response GetAlertRule200JSONResponse) VisitGetAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertRule404JSONResponse Error
+
+func (response GetAlertRule404JSONResponse) VisitGetAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -4409,6 +4464,9 @@ type StrictServerInterface interface {
 	// (DELETE /api/v1/alert-rules/{id})
 	DeleteAlertRule(ctx context.Context, request DeleteAlertRuleRequestObject) (DeleteAlertRuleResponseObject, error)
 
+	// (GET /api/v1/alert-rules/{id})
+	GetAlertRule(ctx context.Context, request GetAlertRuleRequestObject) (GetAlertRuleResponseObject, error)
+
 	// (PUT /api/v1/alert-rules/{id})
 	UpdateAlertRule(ctx context.Context, request UpdateAlertRuleRequestObject) (UpdateAlertRuleResponseObject, error)
 
@@ -4873,6 +4931,32 @@ func (sh *strictHandler) DeleteAlertRule(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(DeleteAlertRuleResponseObject); ok {
 		if err := validResponse.VisitDeleteAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertRule operation middleware
+func (sh *strictHandler) GetAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertRuleRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertRule(ctx, request.(GetAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertRuleResponseObject); ok {
+		if err := validResponse.VisitGetAlertRuleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

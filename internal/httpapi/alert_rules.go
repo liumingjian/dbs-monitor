@@ -37,6 +37,26 @@ func (handler *Handler) ListAlertRules(ctx context.Context, _ api.ListAlertRules
 	return response, nil
 }
 
+func (handler *Handler) GetAlertRule(ctx context.Context, request api.GetAlertRuleRequestObject) (api.GetAlertRuleResponseObject, error) {
+	queries := alerting.New(handler.platform)
+	rule, err := queries.GetAlertRule(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.GetAlertRule404JSONResponse(errorBody(api.NOTFOUND, "alert rule not found")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	instanceIDs, err := queries.ListAlertRuleScopeInstances(ctx, rule.ID)
+	if err != nil {
+		return nil, err
+	}
+	response, err := toAPIAlertRule(ctx, queries, rule, instanceIDs)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetAlertRule200JSONResponse(response), nil
+}
+
 func (handler *Handler) ListAlertRuleTemplates(ctx context.Context, _ api.ListAlertRuleTemplatesRequestObject) (api.ListAlertRuleTemplatesResponseObject, error) {
 	templates, err := alerting.New(handler.platform).ListAlertRuleTemplates(ctx)
 	if err != nil {

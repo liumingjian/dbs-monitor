@@ -540,6 +540,24 @@ paths:
         schema:
           type: string
           format: uuid
+    get:
+      tags:
+        - alert-rules
+      operationId: getAlertRule
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     put:
       tags:
         - alert-rules

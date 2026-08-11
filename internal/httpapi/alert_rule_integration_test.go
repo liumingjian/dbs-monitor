@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -154,6 +155,15 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		databaseRule.Severity != api.Critical || databaseRule.EffectiveNotificationPolicyName != "默认策略（继承）" ||
 		databaseRule.CurrentAlertCount != 0 || databaseRule.LastTriggeredAt != nil {
 		t.Fatalf("seeded built-in rules = count %d database rule %+v", builtinCount, databaseRule)
+	}
+	detailResponse := getResponse(t, client, server.URL+"/api/v1/alert-rules/"+databaseRule.Id.String())
+	defer detailResponse.Body.Close()
+	var detailedRule api.AlertRule
+	if detailResponse.StatusCode != http.StatusOK || json.NewDecoder(detailResponse.Body).Decode(&detailedRule) != nil {
+		t.Fatalf("get alert rule status = %d", detailResponse.StatusCode)
+	}
+	if !reflect.DeepEqual(detailedRule, databaseRule) {
+		t.Fatalf("alert rule detail = %+v, want %+v", detailedRule, databaseRule)
 	}
 
 	disabledBuiltin := requestJSON(t, client, http.MethodPut,

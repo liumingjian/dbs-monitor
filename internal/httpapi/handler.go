@@ -1163,7 +1163,7 @@ var RequiredRoles = map[string]string{
 	"GetCertificateDiagnostics": "PLATFORM_ADMIN",
 	"GetKeyringDiagnostics":     "PLATFORM_ADMIN",
 	"GetPlatformDiagnostics":    "PLATFORM_ADMIN",
-	"ListAlertRules":            "READONLY", "CreateAlertRule": "ALERT_ADMIN",
+	"ListAlertRules":            "READONLY", "GetAlertRule": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"DeleteAlertRule": "ALERT_ADMIN", "UpdateAlertRule": "ALERT_ADMIN",
 	"UpdateAlertRuleEnabled": "ALERT_ADMIN", "CopyAlertRule": "ALERT_ADMIN",
 	"ListAlertRuleTemplates": "READONLY", "CreateAlertRuleFromTemplate": "ALERT_ADMIN",

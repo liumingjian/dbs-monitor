@@ -37,6 +37,21 @@
       in: path
       required: true
       schema: { type: string, format: uuid }
+  get:
+    tags: [alert-rules]
+    operationId: getAlertRule
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Alert rule
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alert-rules.yaml#/AlertRule }
+      '404':
+        description: Alert rule not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
   put:
     tags: [alert-rules]
     operationId: updateAlertRule

@@ -246,7 +246,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        get: operations["getAlertRule"];
         put: operations["updateAlertRule"];
         post?: never;
         delete: operations["deleteAlertRule"];
@@ -2015,6 +2015,37 @@ export interface operations {
             };
             /** @description Invalid alert rule */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alert rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
