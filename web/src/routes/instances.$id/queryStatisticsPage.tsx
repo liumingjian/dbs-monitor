@@ -36,6 +36,12 @@ function QueryStatisticsPage() {
 function QueryStatisticsRanking({ id, search }: { id: string; search: SessionSearch }) {
   const instance = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } }, pollingOptions)
   const statistics = $api.useQuery('get', '/api/v1/instances/{id}/query-stats', { params: { path: { id } } }, pollingOptions)
+  let statisticsContent = <Alert type="error" showIcon title="无法加载查询统计" />
+  if (statistics.isPending) {
+    statisticsContent = <Spin size="large" />
+  } else if (statistics.data !== undefined) {
+    statisticsContent = <QueryStatisticsContent response={statistics.data} dataUpdatedAt={statistics.dataUpdatedAt} />
+  }
 
   return <Space orientation="vertical" size="large" style={{ width: '100%' }}>
     <SessionWorkbenchHeader id={id} instanceName={instance.data?.name ?? '实例工作台'} search={search} page="query-statistics" />
@@ -45,10 +51,7 @@ function QueryStatisticsRanking({ id, search }: { id: string; search: SessionSea
       title="标识具有时效性"
       description="queryid 可能因统计重置、条目淘汰或 PostgreSQL 版本变化而失效，仅作为数据库侧排查线索。"
     />
-    {statistics.isPending ? <Spin size="large" /> : statistics.data ? <QueryStatisticsContent
-      response={statistics.data}
-      dataUpdatedAt={statistics.dataUpdatedAt}
-    /> : <Alert type="error" showIcon title="无法加载查询统计" />}
+    {statisticsContent}
   </Space>
 }
 
@@ -75,10 +78,6 @@ function QueryStatisticsContent({ response, dataUpdatedAt }: {
     />
   </>
 }
-
-export const queryStatisticsTableFields = [
-  'queryid', 'database_oid', 'user_oid', 'calls', 'total_exec_time_ms',
-] as const satisfies readonly (keyof QueryStatisticsEntry)[]
 
 const queryStatisticsColumns: ColumnsType<QueryStatisticsEntry> = [
   { title: 'queryid', dataIndex: 'queryid', fixed: 'left', width: 220, render: (value: string) => <Typography.Text copyable>{value}</Typography.Text> },

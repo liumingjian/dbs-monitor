@@ -1,6 +1,6 @@
 import { DatabaseOutlined, SettingOutlined } from '@ant-design/icons'
 import { Button, Space, Tabs, Typography } from 'antd'
-import type { SessionSearch } from './sessionSearch'
+import { serializeSessionSearch, type SessionSearch } from './sessionSearch'
 
 type SessionPage = 'current' | 'long-query-samples' | 'query-statistics'
 
@@ -43,15 +43,15 @@ export function SessionWorkbenchHeader({
   </>
 }
 
-export function sessionPageHref(id: string, search: Pick<SessionSearch, 'from' | 'to'> & Partial<SessionSearch>): string {
+export function sessionPageHref(id: string, search: SessionSearch): string {
   return pageHref(id, 'sessions', search)
 }
 
-export function longQuerySamplesPageHref(id: string, search: Pick<SessionSearch, 'from' | 'to'> & Partial<SessionSearch>): string {
+export function longQuerySamplesPageHref(id: string, search: SessionSearch): string {
   return pageHref(id, 'sessions/long-query-samples', search)
 }
 
-export function queryStatisticsPageHref(id: string, search: Pick<SessionSearch, 'from' | 'to'> & Partial<SessionSearch>): string {
+export function queryStatisticsPageHref(id: string, search: SessionSearch): string {
   return pageHref(id, 'sessions/query-statistics', search)
 }
 
@@ -61,10 +61,7 @@ function monitoringHref(id: string, search: SessionSearch): string {
   return `/instances/${encodeURIComponent(id)}?${params.toString()}`
 }
 
-function pageHref(id: string, path: string, search: Pick<SessionSearch, 'from' | 'to'> & Partial<SessionSearch>): string {
-  const params = new URLSearchParams({ from: search.from, to: search.to })
-  if (search.metric !== undefined) params.set('metric', search.metric)
-  if (search.sampled_at !== undefined) params.set('sampled_at', search.sampled_at)
-  if (search.filter !== undefined) params.set('filter', search.filter)
+function pageHref(id: string, path: string, search: SessionSearch): string {
+  const params = new URLSearchParams(serializeSessionSearch(search))
   return `/instances/${encodeURIComponent(id)}/${path}?${params.toString()}`
 }

@@ -2,21 +2,6 @@ import type { components } from '../../api/schema'
 
 export type SessionSnapshotEntry = components['schemas']['SessionSnapshotEntry']
 
-export const sessionTableFields = [
-  'pid',
-  'username',
-  'database_name',
-  'client_address',
-  'state',
-  'query_started_at',
-  'transaction_started_at',
-  'query_duration_ms',
-  'transaction_duration_ms',
-  'wait_event_type',
-  'wait_event',
-  'blocking_pids',
-] as const satisfies readonly (keyof SessionSnapshotEntry)[]
-
 export function groupSessionSnapshot(items: SessionSnapshotEntry[]) {
   return {
     active: items.filter((item) => item.state === 'active'),

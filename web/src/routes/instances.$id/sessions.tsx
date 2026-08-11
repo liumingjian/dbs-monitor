@@ -37,12 +37,16 @@ function SessionSnapshotPage({ id, search }: { id: string; search: SessionSearch
   const instance = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } }, pollingOptions)
   const snapshot = $api.useQuery('get', '/api/v1/instances/{id}/sessions', { params: { path: { id } } }, pollingOptions)
   const [activeView, setActiveView] = useState<SessionView>(initialView(search.filter))
-
-  return <Space orientation="vertical" size="large" style={{ width: '100%' }}>
-    <SessionWorkbenchHeader id={id} instanceName={instance.data?.name ?? '实例工作台'} search={search} page="current" />
-    {snapshot.isPending ? <Spin size="large" /> : snapshot.data?.unavailability !== undefined ? (
-      <UnavailabilityBlock code={snapshot.data.unavailability} href={`/instances/${encodeURIComponent(id)}/collection`} />
-    ) : snapshot.data ? <>
+  let snapshotContent = <Alert type="error" showIcon title="无法加载会话快照" />
+  if (snapshot.isPending) {
+    snapshotContent = <Spin size="large" />
+  } else if (snapshot.data?.unavailability !== undefined) {
+    snapshotContent = <UnavailabilityBlock
+      code={snapshot.data.unavailability}
+      href={`/instances/${encodeURIComponent(id)}/collection`}
+    />
+  } else if (snapshot.data !== undefined) {
+    snapshotContent = <>
       <SessionSnapshotMeta
         sampledAt={snapshot.data.sampled_at}
         dataUpdatedAt={snapshot.dataUpdatedAt}
@@ -56,7 +60,12 @@ function SessionSnapshotPage({ id, search }: { id: string; search: SessionSearch
         description="本次响应达到 500 行服务端上限，阻塞链与会话列表可能不完整。"
       />}
       <SessionViews items={snapshot.data.items} activeView={activeView} onChange={setActiveView} />
-    </> : <Alert type="error" showIcon title="无法加载会话快照" />}
+    </>
+  }
+
+  return <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+    <SessionWorkbenchHeader id={id} instanceName={instance.data?.name ?? '实例工作台'} search={search} page="current" />
+    {snapshotContent}
   </Space>
 }
 
@@ -81,7 +90,9 @@ function SessionViews({ items, activeView, onChange }: {
   onChange: (view: SessionView) => void
 }) {
   const groups = groupSessionSnapshot(items)
-  return <Tabs activeKey={activeView} onChange={(key) => onChange(key as SessionView)} items={[
+  return <Tabs activeKey={activeView} onChange={(key) => {
+    if (isSessionView(key)) onChange(key)
+  }} items={[
     { key: 'active', label: `活跃会话 ${groups.active.length}`, children: <SessionTable items={groups.active} empty="当前快照无活跃会话" /> },
     { key: 'long-transactions', label: `长事务 ${groups.longTransactions.length}`, children: <SessionTable items={groups.longTransactions} empty="当前快照无长事务" /> },
     { key: 'lock-waits', label: `锁等待 ${groups.lockWaits.length}`, children: <SessionTable items={groups.lockWaits} empty="当前快照无锁等待" /> },
@@ -128,6 +139,19 @@ function initialView(filter: SessionFilter | undefined): SessionView {
     case 'blocked': return 'blocking-chains'
     case undefined: return 'active'
     default: return assertNever(filter)
+  }
+}
+
+function isSessionView(value: string): value is SessionView {
+  switch (value) {
+    case 'active':
+    case 'long-transactions':
+    case 'lock-waits':
+    case 'blocking-chains':
+    case 'details':
+      return true
+    default:
+      return false
   }
 }
 

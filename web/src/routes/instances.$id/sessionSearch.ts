@@ -1,5 +1,5 @@
 import type { MetricID } from './metricOptions'
-import { parseTimeRange } from './timeRange'
+import { isRFC3339, parseTimeRange } from './timeRange'
 
 export type SessionFilter = 'active' | 'long_transaction' | 'lock_wait' | 'blocked'
 
@@ -35,10 +35,6 @@ export function serializeSessionSearch(search: SessionSearch): Record<string, st
   if (search.sampled_at !== undefined) result.sampled_at = search.sampled_at
   if (search.filter !== undefined) result.filter = search.filter
   return result
-}
-
-function isRFC3339(value: unknown): value is string {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) && !Number.isNaN(Date.parse(value))
 }
 
 function isSessionFilter(value: unknown): value is SessionFilter {

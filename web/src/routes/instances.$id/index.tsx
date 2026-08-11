@@ -10,6 +10,7 @@ import { TimeRangePicker } from '../../domain/TimeRangePicker'
 import type { Unavailability } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { metricOption, type MetricID } from './metricOptions'
+import { longQuerySamplesPageHref, sessionPageHref } from './sessionLayout'
 import {
   findStandardMonitoringChart,
   standardMonitoringGroups,
@@ -93,7 +94,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
       items={[
         { key: 'overview', label: '实例总览', disabled: true },
         { key: 'monitoring', label: '监控与报警' },
-        { key: 'sessions', label: <a href={sessionsHref(id, search)}>会话与阻塞</a> },
+        { key: 'sessions', label: <a href={sessionPageHref(id, search)}>会话与阻塞</a> },
         { key: 'events', label: '性能事件', disabled: true },
         { key: 'alerts', label: '告警', disabled: true },
         { key: 'collection', label: '采集管理', disabled: true },
@@ -228,19 +229,12 @@ function unavailabilityHref(id: string, metric: MetricID, code: Unavailability |
 }
 
 function longQuerySamplesHref(id: string, search: MonitoringSearch): string {
-  const params = new URLSearchParams({
+  return longQuerySamplesPageHref(id, {
     from: search.from,
     to: search.to,
     metric: 'pg.query.long_running_count',
     sampled_at: search.to,
   })
-  return `/instances/${encodeURIComponent(id)}/sessions/long-query-samples?${params.toString()}`
-}
-
-function sessionsHref(id: string, search: MonitoringSearch): string {
-  const params = new URLSearchParams({ from: search.from, to: search.to })
-  if (search.metric !== undefined) params.set('metric', search.metric)
-  return `/instances/${encodeURIComponent(id)}/sessions?${params.toString()}`
 }
 
 function MetricDetails({ chart, metrics, onClose }: {

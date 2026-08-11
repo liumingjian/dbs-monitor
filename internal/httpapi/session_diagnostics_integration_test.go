@@ -24,11 +24,11 @@ import (
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
-func TestIssue86SessionSnapshotAndQueryStatisticsStates(t *testing.T) {
+func TestSessionSnapshotAndQueryStatisticsStates(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	databaseName := fmt.Sprintf("dbs_monitor_issue86_%d", os.Getpid())
+	databaseName := fmt.Sprintf("dbs_monitor_session_diagnostics_%d", os.Getpid())
 	admin := openSQL(t, env("PGDATABASE", "dbs_monitor"))
 	defer admin.Close()
 	identifier := pgx.Identifier{databaseName}.Sanitize()
@@ -66,7 +66,7 @@ func TestIssue86SessionSnapshotAndQueryStatisticsStates(t *testing.T) {
 	}
 	if _, err := instance.New(platform).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID:                 pgtype.UUID{Bytes: instanceID, Valid: true},
-		Name:               "issue-86-target",
+		Name:               "session-diagnostics-target",
 		Host:               "127.0.0.1",
 		Port:               5432,
 		DatabaseName:       "postgres",
@@ -91,7 +91,7 @@ func TestIssue86SessionSnapshotAndQueryStatisticsStates(t *testing.T) {
 	login.Body.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	seedIssue86SessionSnapshot(t, ctx, pool, instanceID, now)
+	seedSessionSnapshot(t, ctx, pool, instanceID, now)
 	sessionsURL := fmt.Sprintf("%s/api/v1/instances/%s/sessions", server.URL, instanceID)
 	sessionsResponse := getResponse(t, client, sessionsURL)
 	var sessions struct {
@@ -128,16 +128,16 @@ func TestIssue86SessionSnapshotAndQueryStatisticsStates(t *testing.T) {
 	}
 
 	queryStatsURL := fmt.Sprintf("%s/api/v1/instances/%s/query-stats", server.URL, instanceID)
-	setIssue86Capabilities(t, ctx, pool, instanceID, now, "PRESENT", "MISSING")
+	setQueryStatisticsCapabilities(t, ctx, pool, instanceID, now, "PRESENT", "MISSING")
 	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.EXTENSIONMISSING)
-	setIssue86Capabilities(t, ctx, pool, instanceID, now, "MISSING", "PRESENT")
+	setQueryStatisticsCapabilities(t, ctx, pool, instanceID, now, "MISSING", "PRESENT")
 	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.PERMISSIONDENIED)
-	setIssue86Capabilities(t, ctx, pool, instanceID, now, "PRESENT", "PRESENT")
-	setIssue86QueryTaskState(t, ctx, pool, instanceID, "FAILED", "QUERY_FAILED")
+	setQueryStatisticsCapabilities(t, ctx, pool, instanceID, now, "PRESENT", "PRESENT")
+	setQueryStatisticsTaskState(t, ctx, pool, instanceID, "FAILED", "QUERY_FAILED")
 	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.COLLECTIONFAILED)
-	setIssue86QueryTaskState(t, ctx, pool, instanceID, "SUCCESS", "COUNTER_RESET")
+	setQueryStatisticsTaskState(t, ctx, pool, instanceID, "SUCCESS", "COUNTER_RESET")
 	assertQueryStatisticsUnavailability(t, client, queryStatsURL, api.COUNTERRESET)
-	setIssue86QueryTaskState(t, ctx, pool, instanceID, "SUCCESS", "")
+	setQueryStatisticsTaskState(t, ctx, pool, instanceID, "SUCCESS", "")
 	if _, err := pool.Exec(ctx, "INSERT INTO query_statistics_snapshot (instance_id, sampled_at) VALUES ($1, $2)", instanceID, now); err != nil {
 		t.Fatalf("insert empty query statistics snapshot: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestIssue86SessionSnapshotAndQueryStatisticsStates(t *testing.T) {
 	assertNoSQLFields(t, statistics.Items[0])
 }
 
-func seedIssue86SessionSnapshot(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, sampledAt time.Time) {
+func seedSessionSnapshot(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, sampledAt time.Time) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `INSERT INTO instance_session_snapshot
 		(instance_id, sampled_at, original_count, truncated) VALUES ($1, $2, 750, false)`, instanceID, sampledAt); err != nil {
@@ -178,7 +178,7 @@ func seedIssue86SessionSnapshot(t *testing.T, ctx context.Context, pool *pgxpool
 	}
 }
 
-func setIssue86Capabilities(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, observedAt time.Time, role, extension string) {
+func setQueryStatisticsCapabilities(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, observedAt time.Time, role, extension string) {
 	t.Helper()
 	states := fmt.Sprintf(`{"role.pg_monitor":%q,"ext.pg_stat_statements":%q,"topo.has_replication":"NOT_APPLICABLE","topo.has_slot":"NOT_APPLICABLE"}`, role, extension)
 	if _, err := pool.Exec(ctx, `INSERT INTO instance_capability_snapshot (instance_id, observed_at, states)
@@ -188,7 +188,7 @@ func setIssue86Capabilities(t *testing.T, ctx context.Context, pool *pgxpool.Poo
 	}
 }
 
-func setIssue86QueryTaskState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, result, code string) {
+func setQueryStatisticsTaskState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID uuid.UUID, result, code string) {
 	t.Helper()
 	var errorCode any
 	if code != "" {

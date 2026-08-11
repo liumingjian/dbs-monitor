@@ -72,12 +72,6 @@ function LongQuerySamples({ id, search }: { id: string; search: SessionSearch })
   </Space>
 }
 
-export const longQueryTableFields = [
-  'pid', 'sampled_at', 'query_started_at', 'database_name', 'username', 'state',
-  'query_duration_ms', 'transaction_started_at', 'transaction_duration_ms',
-  'wait_event_type', 'wait_event', 'blocking_pids',
-] as const satisfies readonly (keyof LongQuerySample)[]
-
 const longQueryColumns: ColumnsType<LongQuerySample> = [
   { title: 'PID', dataIndex: 'pid', fixed: 'left', width: 90, render: (value: number) => <Typography.Text copyable>{value}</Typography.Text> },
   { title: '采样时间', dataIndex: 'sampled_at', width: 190, render: formatTime },

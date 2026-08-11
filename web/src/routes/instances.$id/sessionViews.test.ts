@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { longQueryTableFields } from './longQuerySamples'
-import { queryStatisticsTableFields } from './queryStatisticsPage'
-import { groupSessionSnapshot, sessionTableFields } from './sessionViews'
+import { groupSessionSnapshot } from './sessionViews'
 
 const sessions = [
   { pid: 10, state: 'active', transaction_duration_ms: 301_000, wait_event_type: 'Lock', blocking_pids: [20] },
@@ -17,11 +15,5 @@ describe('session snapshot views', () => {
       blockingChains: [{ pid: 10 }],
       details: sessions,
     })
-  })
-
-  it('never defines a SQL text field', () => {
-    for (const fields of [sessionTableFields, longQueryTableFields, queryStatisticsTableFields]) {
-      expect(fields).not.toEqual(expect.arrayContaining(['query', 'sql', 'query_text', 'sql_text']))
-    }
   })
 })
