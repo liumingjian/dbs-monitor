@@ -17,9 +17,9 @@ import (
 var errRecoveredAlertDisposition = errors.New("recovered alert instances cannot be disposed")
 
 type dispositionFields struct {
-	note         pgtype.Text
-	reasonCode   pgtype.Text
-	reasonDetail pgtype.Text
+	note               pgtype.Text
+	ignoreReasonCode   pgtype.Text
+	ignoreReasonDetail pgtype.Text
 }
 
 func (handler *Handler) GetAlertDisposition(ctx context.Context, request api.GetAlertDispositionRequestObject) (api.GetAlertDispositionResponseObject, error) {
@@ -46,7 +46,8 @@ func (handler *Handler) UpdateAlertDisposition(ctx context.Context, request api.
 	if request.Body == nil {
 		return api.UpdateAlertDisposition400JSONResponse(dispositionValidationError([]fieldError{{field: "body", message: "is required"}})), nil
 	}
-	fields, fieldErrors := validateDisposition(*request.Body)
+	input := *request.Body
+	fields, fieldErrors := validateDisposition(input)
 	if len(fieldErrors) > 0 {
 		return api.UpdateAlertDisposition400JSONResponse(dispositionValidationError(fieldErrors)), nil
 	}
@@ -54,6 +55,7 @@ func (handler *Handler) UpdateAlertDisposition(ctx context.Context, request api.
 	alertInstanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
 	actorID := databaseUserID(authenticatedUserID(ctx))
 	actedAt := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	disposition := string(input.Disposition)
 	var detail api.AlertDispositionDetail
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := alerting.New(tx)
@@ -66,12 +68,12 @@ func (handler *Handler) UpdateAlertDisposition(ctx context.Context, request api.
 		}
 		updated, err := queries.UpdateAlertDisposition(ctx, alerting.UpdateAlertDispositionParams{
 			ID:                 alertInstanceID,
-			Disposition:        string(request.Body.Disposition),
+			Disposition:        disposition,
 			DispositionBy:      actorID,
 			DispositionAt:      actedAt,
 			DispositionNote:    fields.note,
-			IgnoreReasonCode:   fields.reasonCode,
-			IgnoreReasonDetail: fields.reasonDetail,
+			IgnoreReasonCode:   fields.ignoreReasonCode,
+			IgnoreReasonDetail: fields.ignoreReasonDetail,
 		})
 		if err != nil {
 			return err
@@ -80,7 +82,7 @@ func (handler *Handler) UpdateAlertDisposition(ctx context.Context, request api.
 			AlertInstanceID:    current.ID,
 			RuleID:             current.RuleID,
 			RuleVersion:        current.RuleVersion,
-			Kind:               string(request.Body.Disposition),
+			Kind:               disposition,
 			FromState:          current.Status,
 			ToState:            current.Status,
 			CurrentValue:       current.CurrentValue,
@@ -90,10 +92,10 @@ func (handler *Handler) UpdateAlertDisposition(ctx context.Context, request api.
 			ActorID:            actorID,
 			ActedAt:            actedAt,
 			FromDisposition:    pgtype.Text{String: current.Disposition, Valid: true},
-			ToDisposition:      pgtype.Text{String: string(request.Body.Disposition), Valid: true},
+			ToDisposition:      pgtype.Text{String: disposition, Valid: true},
 			DispositionNote:    fields.note,
-			IgnoreReasonCode:   fields.reasonCode,
-			IgnoreReasonDetail: fields.reasonDetail,
+			IgnoreReasonCode:   fields.ignoreReasonCode,
+			IgnoreReasonDetail: fields.ignoreReasonDetail,
 		}); err != nil {
 			return err
 		}
@@ -114,11 +116,11 @@ func (handler *Handler) UpdateAlertDisposition(ctx context.Context, request api.
 
 func validateDisposition(input api.AlertDispositionInput) (dispositionFields, []fieldError) {
 	fields := dispositionFields{
-		note:         trimmedText(input.Note),
-		reasonDetail: trimmedText(input.IgnoreReasonDetail),
+		note:               trimmedText(input.Note),
+		ignoreReasonDetail: trimmedText(input.IgnoreReasonDetail),
 	}
 	if input.IgnoreReasonCode != nil {
-		fields.reasonCode = pgtype.Text{String: string(*input.IgnoreReasonCode), Valid: true}
+		fields.ignoreReasonCode = pgtype.Text{String: string(*input.IgnoreReasonCode), Valid: true}
 	}
 	switch input.Disposition {
 	case api.AlertDispositionACKED:
@@ -139,7 +141,7 @@ func validateDisposition(input api.AlertDispositionInput) (dispositionFields, []
 		if !validIgnoreReason(*input.IgnoreReasonCode) {
 			return fields, []fieldError{{field: "ignore_reason_code", message: "is not supported"}}
 		}
-		if *input.IgnoreReasonCode == api.OTHER && !fields.reasonDetail.Valid {
+		if *input.IgnoreReasonCode == api.OTHER && !fields.ignoreReasonDetail.Valid {
 			return fields, []fieldError{{field: "ignore_reason_detail", message: "is required for OTHER"}}
 		}
 		return fields, nil
@@ -158,26 +160,18 @@ func validIgnoreReason(reason api.IgnoreReasonCode) bool {
 }
 
 func trimmedText(value *string) pgtype.Text {
-	if value == nil || strings.TrimSpace(*value) == "" {
+	if value == nil {
 		return pgtype.Text{}
 	}
-	return pgtype.Text{String: strings.TrimSpace(*value), Valid: true}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: trimmed, Valid: true}
 }
 
 func dispositionValidationError(fieldErrors []fieldError) api.Error {
-	body := errorBody(api.VALIDATIONFAILED, "alert disposition validation failed")
-	responseErrors := make([]struct {
-		Field   string `json:"field"`
-		Message string `json:"message"`
-	}, 0, len(fieldErrors))
-	for _, item := range fieldErrors {
-		responseErrors = append(responseErrors, struct {
-			Field   string `json:"field"`
-			Message string `json:"message"`
-		}{Field: item.field, Message: item.message})
-	}
-	body.Error.FieldErrors = &responseErrors
-	return body
+	return validationErrorBody("alert disposition validation failed", fieldErrors)
 }
 
 func loadAlertDispositionDetail(ctx context.Context, queries *alerting.Queries, alertInstance alerting.AlertInstance) (api.AlertDispositionDetail, error) {
