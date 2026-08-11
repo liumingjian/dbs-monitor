@@ -10,7 +10,20 @@ import { AlertSettingsHeader } from './header'
 
 type Policy = components['schemas']['NotificationPolicy']
 type PolicyInput = components['schemas']['NotificationPolicyInput']
-type PolicyForm = Omit<PolicyInput, 'channels' | 'repeat_interval'> & { smtp_enabled: boolean; webhook_target_ids: string[]; repeat_minutes: number }
+type PolicyForm = Omit<PolicyInput, 'channels' | 'repeat_interval'> & {
+  smtp_enabled: boolean
+  webhook_target_ids: string[]
+  repeat_minutes: number
+}
+type Feedback = { type: 'success' | 'error'; text: string }
+
+type PoliciesTableProps = {
+  policies: Policy[]
+  loading: boolean
+  canManage: boolean
+  onEdit: (policy: Policy) => void
+  onDelete: (policy: Policy) => void
+}
 
 export const policySettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -30,7 +43,7 @@ function PolicySettingsPage() {
   const [form] = Form.useForm<PolicyForm>()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Policy | null>(null)
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
   const role = currentUserQuery.data?.role
   const canManage = role === 'ALERT_ADMIN' || role === 'PLATFORM_ADMIN'
 
@@ -59,10 +72,13 @@ function PolicySettingsPage() {
   }
 
   function remove(policy: Policy) {
-    deleteMutation.mutate({ params: { path: { id: policy.id } } }, {
-      onSuccess: () => void policiesQuery.refetch(),
-      onError: (error) => setFeedback({ type: 'error', text: apiErrorMessage(error, '删除通知策略失败') }),
-    })
+    deleteMutation.mutate(
+      { params: { path: { id: policy.id } } },
+      {
+        onSuccess: () => void policiesQuery.refetch(),
+        onError: (error) => setFeedback({ type: 'error', text: apiErrorMessage(error, '删除通知策略失败') }),
+      },
+    )
   }
 
   return (
@@ -74,17 +90,13 @@ function PolicySettingsPage() {
         <Typography.Title level={4} style={{ margin: 0 }}>通知策略</Typography.Title>
         <Button type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={() => openEditor()}>新建策略</Button>
       </Space>
-      <Table<Policy> rowKey="id" loading={policiesQuery.isPending} dataSource={policiesQuery.data ?? []} pagination={false} scroll={{ x: 1080 }} columns={[
-        { title: '名称', render: (_, policy) => <Space>{policy.name}{policy.is_default && <Tag color="blue">全局默认</Tag>}</Space> },
-        { title: '级别过滤', render: (_, policy) => policy.severity_filter.join('、') },
-        { title: '触发 / 恢复', render: (_, policy) => `${policy.notify_on_fire ? '开启' : '关闭'} / ${policy.notify_on_recovery ? '开启' : '关闭'}` },
-        { title: '重复间隔', render: (_, policy) => repeatLabel(policy.repeat_interval) },
-        { title: '接收范围', render: (_, policy) => `${policy.contact_ids.length} 联系人 · ${policy.contact_group_ids.length} 组 · ${policy.channels.length} 渠道` },
-        { title: '操作', width: 120, render: (_, policy) => <Space>
-          <Tooltip title="编辑策略"><Button aria-label={`编辑 ${policy.name}`} icon={<EditOutlined />} disabled={!canManage} onClick={() => openEditor(policy)} /></Tooltip>
-          <Popconfirm title="删除此通知策略？" disabled={!canManage || policy.is_default} onConfirm={() => remove(policy)}><Tooltip title={policy.is_default ? '全局默认策略不可删除' : '删除策略'}><span><Button aria-label={`删除 ${policy.name}`} danger icon={<DeleteOutlined />} disabled={!canManage || policy.is_default} /></span></Tooltip></Popconfirm>
-        </Space> },
-      ]} />
+      <PoliciesTable
+        policies={policiesQuery.data ?? []}
+        loading={policiesQuery.isPending}
+        canManage={canManage}
+        onEdit={openEditor}
+        onDelete={remove}
+      />
       <Modal title={editing ? '编辑通知策略' : '新建通知策略'} open={open} width={760} footer={null} destroyOnHidden onCancel={() => setOpen(false)}>
         <Form<PolicyForm> form={form} layout="vertical" onFinish={save}>
           <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true }]}><Input /></Form.Item>
@@ -102,6 +114,57 @@ function PolicySettingsPage() {
         </Form>
       </Modal>
     </Space>
+  )
+}
+
+function PoliciesTable({ policies, loading, canManage, onEdit, onDelete }: PoliciesTableProps) {
+  return (
+    <Table<Policy>
+      rowKey="id"
+      loading={loading}
+      dataSource={policies}
+      pagination={false}
+      scroll={{ x: 1080 }}
+      columns={[
+        {
+          title: '名称',
+          render: (_, policy) => (
+            <Space>
+              {policy.name}
+              {policy.is_default && <Tag color="blue">全局默认</Tag>}
+            </Space>
+          ),
+        },
+        { title: '级别过滤', render: (_, policy) => policy.severity_filter.join('、') },
+        {
+          title: '触发 / 恢复',
+          render: (_, policy) => `${policy.notify_on_fire ? '开启' : '关闭'} / ${policy.notify_on_recovery ? '开启' : '关闭'}`,
+        },
+        { title: '重复间隔', render: (_, policy) => repeatLabel(policy.repeat_interval) },
+        {
+          title: '接收范围',
+          render: (_, policy) => `${policy.contact_ids.length} 联系人 · ${policy.contact_group_ids.length} 组 · ${policy.channels.length} 渠道`,
+        },
+        {
+          title: '操作',
+          width: 120,
+          render: (_, policy) => (
+            <Space>
+              <Tooltip title="编辑策略">
+                <Button aria-label={`编辑 ${policy.name}`} icon={<EditOutlined />} disabled={!canManage} onClick={() => onEdit(policy)} />
+              </Tooltip>
+              <Popconfirm title="删除此通知策略？" disabled={!canManage || policy.is_default} onConfirm={() => onDelete(policy)}>
+                <Tooltip title={policy.is_default ? '全局默认策略不可删除' : '删除策略'}>
+                  <span>
+                    <Button aria-label={`删除 ${policy.name}`} danger icon={<DeleteOutlined />} disabled={!canManage || policy.is_default} />
+                  </span>
+                </Tooltip>
+              </Popconfirm>
+            </Space>
+          ),
+        },
+      ]}
+    />
   )
 }
 

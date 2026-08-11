@@ -12,6 +12,24 @@ type Contact = components['schemas']['NotificationContact']
 type ContactInput = components['schemas']['NotificationContactInput']
 type ContactGroup = components['schemas']['NotificationContactGroup']
 type ContactGroupInput = components['schemas']['NotificationContactGroupInput']
+type Feedback = { type: 'success' | 'error'; text: string }
+
+type ContactsTableProps = {
+  contacts: Contact[]
+  loading: boolean
+  canManage: boolean
+  onEdit: (contact: Contact) => void
+  onDelete: (contact: Contact) => void
+}
+
+type ContactGroupsTableProps = {
+  groups: ContactGroup[]
+  contactNames: Map<string, string>
+  loading: boolean
+  canManage: boolean
+  onEdit: (group: ContactGroup) => void
+  onDelete: (group: ContactGroup) => void
+}
 
 export const contactSettingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -35,7 +53,7 @@ function ContactSettingsPage() {
   const [groupOpen, setGroupOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [editingGroup, setEditingGroup] = useState<ContactGroup | null>(null)
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
   const role = currentUserQuery.data?.role
   const canManage = role === 'ALERT_ADMIN' || role === 'PLATFORM_ADMIN'
 
@@ -63,10 +81,13 @@ function ContactSettingsPage() {
   }
 
   function removeContact(contact: Contact) {
-    deleteContactMutation.mutate({ params: { path: { id: contact.id } } }, {
-      onSuccess: () => void contactsQuery.refetch(),
-      onError: (error) => setFeedback({ type: 'error', text: apiErrorMessage(error, '删除联系人失败') }),
-    })
+    deleteContactMutation.mutate(
+      { params: { path: { id: contact.id } } },
+      {
+        onSuccess: () => void contactsQuery.refetch(),
+        onError: (error) => setFeedback({ type: 'error', text: apiErrorMessage(error, '删除联系人失败') }),
+      },
+    )
   }
 
   function openGroup(group?: ContactGroup) {
@@ -93,13 +114,16 @@ function ContactSettingsPage() {
   }
 
   function removeGroup(group: ContactGroup) {
-    deleteGroupMutation.mutate({ params: { path: { id: group.id } } }, {
-      onSuccess: () => void groupsQuery.refetch(),
-      onError: (error) => setFeedback({ type: 'error', text: apiErrorMessage(error, '删除联系人组失败') }),
-    })
+    deleteGroupMutation.mutate(
+      { params: { path: { id: group.id } } },
+      {
+        onSuccess: () => void groupsQuery.refetch(),
+        onError: (error) => setFeedback({ type: 'error', text: apiErrorMessage(error, '删除联系人组失败') }),
+      },
+    )
   }
 
-  const contactName = new Map((contactsQuery.data ?? []).map((contact) => [contact.id, contact.name]))
+  const contactNames = new Map((contactsQuery.data ?? []).map((contact) => [contact.id, contact.name]))
   return (
     <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <AlertSettingsHeader active="contacts" />
@@ -110,29 +134,27 @@ function ContactSettingsPage() {
           <Typography.Title level={4} style={{ margin: 0 }}>联系人</Typography.Title>
           <Button type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={() => openContact()}>新建联系人</Button>
         </Space>
-        <Table<Contact> rowKey="id" loading={contactsQuery.isPending} dataSource={contactsQuery.data ?? []} pagination={false} columns={[
-          { title: '姓名', dataIndex: 'name' },
-          { title: '邮箱', dataIndex: 'email' },
-          { title: '外部 ID', dataIndex: 'external_id', render: (value?: string) => value ?? '-' },
-          { title: '操作', width: 120, render: (_, contact) => <Space>
-            <Tooltip title="编辑联系人"><Button aria-label={`编辑 ${contact.name}`} icon={<EditOutlined />} disabled={!canManage} onClick={() => openContact(contact)} /></Tooltip>
-            <Popconfirm title="删除此联系人？" disabled={!canManage} onConfirm={() => removeContact(contact)}><Tooltip title="删除联系人"><Button aria-label={`删除 ${contact.name}`} danger icon={<DeleteOutlined />} disabled={!canManage} /></Tooltip></Popconfirm>
-          </Space> },
-        ]} />
+        <ContactsTable
+          contacts={contactsQuery.data ?? []}
+          loading={contactsQuery.isPending}
+          canManage={canManage}
+          onEdit={openContact}
+          onDelete={removeContact}
+        />
       </section>
       <section className="settings-section">
         <Space className="settings-section-heading" wrap>
           <Typography.Title level={4} style={{ margin: 0 }}>联系人组</Typography.Title>
           <Button type="primary" icon={<PlusOutlined />} disabled={!canManage} onClick={() => openGroup()}>新建联系人组</Button>
         </Space>
-        <Table<ContactGroup> rowKey="id" loading={groupsQuery.isPending} dataSource={groupsQuery.data ?? []} pagination={false} columns={[
-          { title: '名称', dataIndex: 'name' },
-          { title: '成员', render: (_, group) => group.contact_ids.map((id) => contactName.get(id) ?? id).join('、') || '-' },
-          { title: '操作', width: 120, render: (_, group) => <Space>
-            <Tooltip title="编辑联系人组"><Button aria-label={`编辑 ${group.name}`} icon={<EditOutlined />} disabled={!canManage} onClick={() => openGroup(group)} /></Tooltip>
-            <Popconfirm title="删除此联系人组？" disabled={!canManage} onConfirm={() => removeGroup(group)}><Tooltip title="删除联系人组"><Button aria-label={`删除 ${group.name}`} danger icon={<DeleteOutlined />} disabled={!canManage} /></Tooltip></Popconfirm>
-          </Space> },
-        ]} />
+        <ContactGroupsTable
+          groups={groupsQuery.data ?? []}
+          contactNames={contactNames}
+          loading={groupsQuery.isPending}
+          canManage={canManage}
+          onEdit={openGroup}
+          onDelete={removeGroup}
+        />
       </section>
       <Modal title={editingContact ? '编辑联系人' : '新建联系人'} open={contactOpen} footer={null} destroyOnHidden onCancel={() => setContactOpen(false)}>
         <Form<ContactInput> form={contactForm} layout="vertical" onFinish={saveContact}>
@@ -150,5 +172,71 @@ function ContactSettingsPage() {
         </Form>
       </Modal>
     </Space>
+  )
+}
+
+function ContactsTable({ contacts, loading, canManage, onEdit, onDelete }: ContactsTableProps) {
+  return (
+    <Table<Contact>
+      rowKey="id"
+      loading={loading}
+      dataSource={contacts}
+      pagination={false}
+      columns={[
+        { title: '姓名', dataIndex: 'name' },
+        { title: '邮箱', dataIndex: 'email' },
+        { title: '外部 ID', dataIndex: 'external_id', render: (value?: string) => value ?? '-' },
+        {
+          title: '操作',
+          width: 120,
+          render: (_, contact) => (
+            <Space>
+              <Tooltip title="编辑联系人">
+                <Button aria-label={`编辑 ${contact.name}`} icon={<EditOutlined />} disabled={!canManage} onClick={() => onEdit(contact)} />
+              </Tooltip>
+              <Popconfirm title="删除此联系人？" disabled={!canManage} onConfirm={() => onDelete(contact)}>
+                <Tooltip title="删除联系人">
+                  <Button aria-label={`删除 ${contact.name}`} danger icon={<DeleteOutlined />} disabled={!canManage} />
+                </Tooltip>
+              </Popconfirm>
+            </Space>
+          ),
+        },
+      ]}
+    />
+  )
+}
+
+function ContactGroupsTable({ groups, contactNames, loading, canManage, onEdit, onDelete }: ContactGroupsTableProps) {
+  return (
+    <Table<ContactGroup>
+      rowKey="id"
+      loading={loading}
+      dataSource={groups}
+      pagination={false}
+      columns={[
+        { title: '名称', dataIndex: 'name' },
+        {
+          title: '成员',
+          render: (_, group) => group.contact_ids.map((id) => contactNames.get(id) ?? id).join('、') || '-',
+        },
+        {
+          title: '操作',
+          width: 120,
+          render: (_, group) => (
+            <Space>
+              <Tooltip title="编辑联系人组">
+                <Button aria-label={`编辑 ${group.name}`} icon={<EditOutlined />} disabled={!canManage} onClick={() => onEdit(group)} />
+              </Tooltip>
+              <Popconfirm title="删除此联系人组？" disabled={!canManage} onConfirm={() => onDelete(group)}>
+                <Tooltip title="删除联系人组">
+                  <Button aria-label={`删除 ${group.name}`} danger icon={<DeleteOutlined />} disabled={!canManage} />
+                </Tooltip>
+              </Popconfirm>
+            </Space>
+          ),
+        },
+      ]}
+    />
   )
 }

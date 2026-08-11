@@ -30,15 +30,16 @@ func (dispatcher *Dispatcher) EnqueueDueRepeats(ctx context.Context, now time.Ti
 	if err != nil {
 		return 0, fmt.Errorf("list repeat candidates: %w", err)
 	}
+	now = now.UTC()
 	enqueued := 0
 	for _, candidate := range candidates {
-		lastNotification := candidate.LastNotificationAt.Time
+		lastNotificationAt := candidate.LastNotificationAt.Time
 		if !NotificationDue(
 			EventRepeat,
-			&lastNotification,
+			&lastNotificationAt,
 			time.Duration(candidate.RepeatInterval)*time.Second,
 			candidate.Disposition,
-			now.UTC(),
+			now,
 		) {
 			continue
 		}
@@ -47,7 +48,7 @@ func (dispatcher *Dispatcher) EnqueueDueRepeats(ctx context.Context, now time.Ti
 			EventType:       string(EventRepeat),
 			TemplateID:      pgtype.Text{String: "builtin.notification.repeat.v1", Valid: true},
 			Payload:         candidate.Payload,
-			NextAttemptAt:   pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+			NextAttemptAt:   pgtype.Timestamptz{Time: now, Valid: true},
 		})
 		if err != nil {
 			return enqueued, fmt.Errorf("enqueue repeat notification: %w", err)

@@ -14,6 +14,11 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
 
+const (
+	minimumNotificationRepeatIntervalSeconds = 900
+	maximumNotificationRepeatIntervalSeconds = 86400
+)
+
 func (handler *Handler) ListNotificationContacts(ctx context.Context, _ api.ListNotificationContactsRequestObject) (api.ListNotificationContactsResponseObject, error) {
 	rows, err := notify.New(handler.platform).ListNotificationContacts(ctx)
 	if err != nil {
@@ -95,7 +100,7 @@ func (handler *Handler) ListNotificationContactGroups(ctx context.Context, _ api
 }
 
 func (handler *Handler) CreateNotificationContactGroup(ctx context.Context, request api.CreateNotificationContactGroupRequestObject) (api.CreateNotificationContactGroupResponseObject, error) {
-	name, contactIDs, ok := notificationContactGroupValues(request.Body)
+	values, ok := notificationContactGroupValues(request.Body)
 	if !ok {
 		return api.CreateNotificationContactGroup400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid group name and unique contacts are required")), nil
 	}
@@ -104,15 +109,19 @@ func (handler *Handler) CreateNotificationContactGroup(ctx context.Context, requ
 	var row notify.NotificationContactGroup
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := notify.New(tx)
-		if err := notificationContactsExist(ctx, queries, contactIDs); err != nil {
+		if err := notificationContactsExist(ctx, queries, values.contactIDs); err != nil {
 			return err
 		}
 		var err error
-		row, err = queries.CreateNotificationContactGroup(ctx, notify.CreateNotificationContactGroupParams{ID: groupID, Name: name, CreatedAt: now})
+		row, err = queries.CreateNotificationContactGroup(ctx, notify.CreateNotificationContactGroupParams{
+			ID:        groupID,
+			Name:      values.name,
+			CreatedAt: now,
+		})
 		if err != nil {
 			return err
 		}
-		return replaceNotificationContactGroupMembers(ctx, queries, groupID, contactIDs)
+		return replaceNotificationContactGroupMembers(ctx, queries, groupID, values.contactIDs)
 	})
 	if errors.Is(err, errNotificationReferenceNotFound) {
 		return api.CreateNotificationContactGroup400JSONResponse(errorBody(api.VALIDATIONFAILED, "contact_ids contains an unknown contact")), nil
@@ -128,7 +137,7 @@ func (handler *Handler) CreateNotificationContactGroup(ctx context.Context, requ
 }
 
 func (handler *Handler) UpdateNotificationContactGroup(ctx context.Context, request api.UpdateNotificationContactGroupRequestObject) (api.UpdateNotificationContactGroupResponseObject, error) {
-	name, contactIDs, ok := notificationContactGroupValues(request.Body)
+	values, ok := notificationContactGroupValues(request.Body)
 	if !ok {
 		return api.UpdateNotificationContactGroup400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid group name and unique contacts are required")), nil
 	}
@@ -136,17 +145,19 @@ func (handler *Handler) UpdateNotificationContactGroup(ctx context.Context, requ
 	var row notify.NotificationContactGroup
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := notify.New(tx)
-		if err := notificationContactsExist(ctx, queries, contactIDs); err != nil {
+		if err := notificationContactsExist(ctx, queries, values.contactIDs); err != nil {
 			return err
 		}
 		var err error
 		row, err = queries.UpdateNotificationContactGroup(ctx, notify.UpdateNotificationContactGroupParams{
-			ID: groupID, Name: name, UpdatedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+			ID:        groupID,
+			Name:      values.name,
+			UpdatedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 		})
 		if err != nil {
 			return err
 		}
-		return replaceNotificationContactGroupMembers(ctx, queries, groupID, contactIDs)
+		return replaceNotificationContactGroupMembers(ctx, queries, groupID, values.contactIDs)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.UpdateNotificationContactGroup404JSONResponse(errorBody(api.NOTFOUND, "notification contact group not found")), nil
@@ -207,10 +218,15 @@ func (handler *Handler) CreateNotificationPolicy(ctx context.Context, request ap
 		}
 		var err error
 		row, err = queries.CreateNotificationPolicy(ctx, notify.CreateNotificationPolicyParams{
-			ID: policyID, Identifier: uuid.UUID(policyID.Bytes).String(), Name: values.name,
-			SeverityFilter: values.severityFilter, NotifyOnFire: request.Body.NotifyOnFire,
-			NotifyOnRecovery: request.Body.NotifyOnRecovery, RepeatInterval: int32(request.Body.RepeatInterval),
-			TemplateID: values.templateID, CreatedAt: now,
+			ID:               policyID,
+			Identifier:       uuid.UUID(policyID.Bytes).String(),
+			Name:             values.name,
+			SeverityFilter:   values.severityFilter,
+			NotifyOnFire:     values.notifyOnFire,
+			NotifyOnRecovery: values.notifyOnRecovery,
+			RepeatInterval:   values.repeatInterval,
+			TemplateID:       values.templateID,
+			CreatedAt:        now,
 		})
 		if err != nil {
 			return err
@@ -244,10 +260,14 @@ func (handler *Handler) UpdateNotificationPolicy(ctx context.Context, request ap
 		}
 		var err error
 		row, err = queries.UpdateNotificationPolicy(ctx, notify.UpdateNotificationPolicyParams{
-			ID: policyID, Name: values.name, SeverityFilter: values.severityFilter,
-			NotifyOnFire: request.Body.NotifyOnFire, NotifyOnRecovery: request.Body.NotifyOnRecovery,
-			RepeatInterval: int32(request.Body.RepeatInterval), TemplateID: values.templateID,
-			UpdatedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+			ID:               policyID,
+			Name:             values.name,
+			SeverityFilter:   values.severityFilter,
+			NotifyOnFire:     values.notifyOnFire,
+			NotifyOnRecovery: values.notifyOnRecovery,
+			RepeatInterval:   values.repeatInterval,
+			TemplateID:       values.templateID,
+			UpdatedAt:        pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 		})
 		if err != nil {
 			return err
@@ -317,29 +337,47 @@ func notificationContactValues(input *api.NotificationContactInput) (notificatio
 	return values, true
 }
 
-func notificationContactGroupValues(input *api.NotificationContactGroupInput) (string, []pgtype.UUID, bool) {
+type notificationContactGroupInputValues struct {
+	name       string
+	contactIDs []pgtype.UUID
+}
+
+func notificationContactGroupValues(input *api.NotificationContactGroupInput) (notificationContactGroupInputValues, bool) {
 	if input == nil {
-		return "", nil, false
+		return notificationContactGroupInputValues{}, false
 	}
-	name := strings.TrimSpace(input.Name)
+	values := notificationContactGroupInputValues{name: strings.TrimSpace(input.Name)}
 	contactIDs, unique := uniqueDatabaseUUIDs(input.ContactIds)
-	return name, contactIDs, name != "" && unique
+	if values.name == "" || !unique {
+		return notificationContactGroupInputValues{}, false
+	}
+	values.contactIDs = contactIDs
+	return values, true
 }
 
 type notificationPolicyInputValues struct {
-	name            string
-	contactIDs      []pgtype.UUID
-	contactGroupIDs []pgtype.UUID
-	channels        []api.NotificationPolicyChannel
-	severityFilter  []string
-	templateID      pgtype.Text
+	name             string
+	contactIDs       []pgtype.UUID
+	contactGroupIDs  []pgtype.UUID
+	channels         []api.NotificationPolicyChannel
+	severityFilter   []string
+	notifyOnFire     bool
+	notifyOnRecovery bool
+	repeatInterval   int32
+	templateID       pgtype.Text
 }
 
 func notificationPolicyValues(input *api.NotificationPolicyInput) (notificationPolicyInputValues, bool) {
-	if input == nil || input.RepeatInterval < 900 || input.RepeatInterval > 86400 || len(input.Channels) == 0 || len(input.SeverityFilter) == 0 {
+	if input == nil || input.RepeatInterval < minimumNotificationRepeatIntervalSeconds || input.RepeatInterval > maximumNotificationRepeatIntervalSeconds {
 		return notificationPolicyInputValues{}, false
 	}
-	values := notificationPolicyInputValues{name: strings.TrimSpace(input.Name), channels: input.Channels}
+	values := notificationPolicyInputValues{
+		name:             strings.TrimSpace(input.Name),
+		channels:         input.Channels,
+		notifyOnFire:     input.NotifyOnFire,
+		notifyOnRecovery: input.NotifyOnRecovery,
+		repeatInterval:   int32(input.RepeatInterval),
+	}
 	var unique bool
 	values.contactIDs, unique = uniqueDatabaseUUIDs(input.ContactIds)
 	if values.name == "" || !unique {
@@ -349,26 +387,9 @@ func notificationPolicyValues(input *api.NotificationPolicyInput) (notificationP
 	if !unique {
 		return notificationPolicyInputValues{}, false
 	}
-	severitySeen := make(map[api.AlertSeverity]bool, len(input.SeverityFilter))
-	for _, severity := range input.SeverityFilter {
-		if severitySeen[severity] || (severity != api.Critical && severity != api.Warning && severity != api.Info) {
-			return notificationPolicyInputValues{}, false
-		}
-		severitySeen[severity] = true
-		values.severityFilter = append(values.severityFilter, string(severity))
-	}
-	channelSeen := make(map[string]bool, len(input.Channels))
-	for _, channel := range input.Channels {
-		key := string(channel.Channel)
-		if channel.TargetId != nil {
-			key += ":" + channel.TargetId.String()
-		}
-		if channelSeen[key] || (channel.Channel == api.PolicySMTP && channel.TargetId != nil) ||
-			(channel.Channel == api.PolicyWebhook && channel.TargetId == nil) ||
-			(channel.Channel != api.PolicySMTP && channel.Channel != api.PolicyWebhook) {
-			return notificationPolicyInputValues{}, false
-		}
-		channelSeen[key] = true
+	values.severityFilter, unique = notificationPolicySeverityFilter(input.SeverityFilter)
+	if !unique || !validNotificationPolicyChannels(input.Channels) {
+		return notificationPolicyInputValues{}, false
 	}
 	if input.TemplateId != nil {
 		templateID := strings.TrimSpace(*input.TemplateId)
@@ -380,13 +401,63 @@ func notificationPolicyValues(input *api.NotificationPolicyInput) (notificationP
 	return values, true
 }
 
+func notificationPolicySeverityFilter(severities []api.AlertSeverity) ([]string, bool) {
+	if len(severities) == 0 {
+		return nil, false
+	}
+	seen := make(map[api.AlertSeverity]bool, len(severities))
+	result := make([]string, 0, len(severities))
+	for _, severity := range severities {
+		if seen[severity] || (severity != api.Critical && severity != api.Warning && severity != api.Info) {
+			return nil, false
+		}
+		seen[severity] = true
+		result = append(result, string(severity))
+	}
+	return result, true
+}
+
+func validNotificationPolicyChannels(channels []api.NotificationPolicyChannel) bool {
+	if len(channels) == 0 {
+		return false
+	}
+	seen := make(map[string]bool, len(channels))
+	for _, channel := range channels {
+		if !validNotificationPolicyChannel(channel) {
+			return false
+		}
+		key := string(channel.Channel)
+		if channel.TargetId != nil {
+			key += ":" + channel.TargetId.String()
+		}
+		if seen[key] {
+			return false
+		}
+		seen[key] = true
+	}
+	return true
+}
+
+func validNotificationPolicyChannel(channel api.NotificationPolicyChannel) bool {
+	switch channel.Channel {
+	case api.PolicySMTP:
+		return channel.TargetId == nil
+	case api.PolicyWebhook:
+		return channel.TargetId != nil
+	default:
+		return false
+	}
+}
+
 var errNotificationReferenceNotFound = errors.New("notification reference not found")
 
 func notificationContactsExist(ctx context.Context, queries *notify.Queries, contactIDs []pgtype.UUID) error {
 	for _, contactID := range contactIDs {
-		if _, err := queries.GetNotificationContact(ctx, contactID); errors.Is(err, pgx.ErrNoRows) {
+		_, err := queries.GetNotificationContact(ctx, contactID)
+		if errors.Is(err, pgx.ErrNoRows) {
 			return errNotificationReferenceNotFound
-		} else if err != nil {
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -398,9 +469,11 @@ func notificationPolicyReferencesExist(ctx context.Context, queries *notify.Quer
 		return err
 	}
 	for _, groupID := range values.contactGroupIDs {
-		if _, err := queries.GetNotificationContactGroup(ctx, groupID); errors.Is(err, pgx.ErrNoRows) {
+		_, err := queries.GetNotificationContactGroup(ctx, groupID)
+		if errors.Is(err, pgx.ErrNoRows) {
 			return errNotificationReferenceNotFound
-		} else if err != nil {
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -408,9 +481,11 @@ func notificationPolicyReferencesExist(ctx context.Context, queries *notify.Quer
 		if channel.Channel != api.PolicyWebhook {
 			continue
 		}
-		if _, err := queries.GetWebhookTarget(ctx, pgtype.UUID{Bytes: *channel.TargetId, Valid: true}); errors.Is(err, pgx.ErrNoRows) {
+		_, err := queries.GetWebhookTarget(ctx, pgtype.UUID{Bytes: *channel.TargetId, Valid: true})
+		if errors.Is(err, pgx.ErrNoRows) {
 			return errNotificationReferenceNotFound
-		} else if err != nil {
+		}
+		if err != nil {
 			return err
 		}
 	}
@@ -440,12 +515,18 @@ func replaceNotificationPolicyAssociations(ctx context.Context, queries *notify.
 		return err
 	}
 	for _, contactID := range values.contactIDs {
-		if err := queries.AddNotificationPolicyContact(ctx, notify.AddNotificationPolicyContactParams{PolicyID: policyID, ContactID: contactID}); err != nil {
+		if err := queries.AddNotificationPolicyContact(ctx, notify.AddNotificationPolicyContactParams{
+			PolicyID:  policyID,
+			ContactID: contactID,
+		}); err != nil {
 			return err
 		}
 	}
 	for _, groupID := range values.contactGroupIDs {
-		if err := queries.AddNotificationPolicyContactGroup(ctx, notify.AddNotificationPolicyContactGroupParams{PolicyID: policyID, GroupID: groupID}); err != nil {
+		if err := queries.AddNotificationPolicyContactGroup(ctx, notify.AddNotificationPolicyContactGroupParams{
+			PolicyID: policyID,
+			GroupID:  groupID,
+		}); err != nil {
 			return err
 		}
 	}
@@ -455,7 +536,9 @@ func replaceNotificationPolicyAssociations(ctx context.Context, queries *notify.
 			targetID = pgtype.UUID{Bytes: *channel.TargetId, Valid: true}
 		}
 		if err := queries.AddNotificationPolicyChannel(ctx, notify.AddNotificationPolicyChannelParams{
-			PolicyID: policyID, Channel: string(channel.Channel), ChannelTargetID: targetID,
+			PolicyID:        policyID,
+			Channel:         string(channel.Channel),
+			ChannelTargetID: targetID,
 		}); err != nil {
 			return err
 		}
@@ -465,8 +548,11 @@ func replaceNotificationPolicyAssociations(ctx context.Context, queries *notify.
 
 func toAPINotificationContact(row notify.NotificationContact) api.NotificationContact {
 	item := api.NotificationContact{
-		Id: uuid.UUID(row.ID.Bytes), Name: row.Name, Email: openapi_types.Email(row.Email),
-		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+		Id:        uuid.UUID(row.ID.Bytes),
+		Name:      row.Name,
+		Email:     openapi_types.Email(row.Email),
+		CreatedAt: row.CreatedAt.Time,
+		UpdatedAt: row.UpdatedAt.Time,
 	}
 	if row.ExternalID.Valid {
 		item.ExternalId = &row.ExternalID.String
@@ -480,8 +566,11 @@ func toAPINotificationContactGroup(ctx context.Context, queries *notify.Queries,
 		return api.NotificationContactGroup{}, err
 	}
 	return api.NotificationContactGroup{
-		Id: uuid.UUID(row.ID.Bytes), Name: row.Name, ContactIds: toOpenAPIUUIDs(contactIDs),
-		CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+		Id:         uuid.UUID(row.ID.Bytes),
+		Name:       row.Name,
+		ContactIds: toOpenAPIUUIDs(contactIDs),
+		CreatedAt:  row.CreatedAt.Time,
+		UpdatedAt:  row.UpdatedAt.Time,
 	}, nil
 }
 
@@ -512,10 +601,18 @@ func toAPINotificationPolicy(ctx context.Context, queries *notify.Queries, row n
 		severityFilter = append(severityFilter, api.AlertSeverity(severity))
 	}
 	item := api.NotificationPolicy{
-		Id: uuid.UUID(row.ID.Bytes), Name: row.Name, IsDefault: row.IsDefault,
-		ContactIds: toOpenAPIUUIDs(contactIDs), ContactGroupIds: toOpenAPIUUIDs(groupIDs), Channels: channels,
-		SeverityFilter: severityFilter, NotifyOnFire: row.NotifyOnFire, NotifyOnRecovery: row.NotifyOnRecovery,
-		RepeatInterval: int(row.RepeatInterval), CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time,
+		Id:               uuid.UUID(row.ID.Bytes),
+		Name:             row.Name,
+		IsDefault:        row.IsDefault,
+		ContactIds:       toOpenAPIUUIDs(contactIDs),
+		ContactGroupIds:  toOpenAPIUUIDs(groupIDs),
+		Channels:         channels,
+		SeverityFilter:   severityFilter,
+		NotifyOnFire:     row.NotifyOnFire,
+		NotifyOnRecovery: row.NotifyOnRecovery,
+		RepeatInterval:   int(row.RepeatInterval),
+		CreatedAt:        row.CreatedAt.Time,
+		UpdatedAt:        row.UpdatedAt.Time,
 	}
 	if row.TemplateID.Valid {
 		item.TemplateId = &row.TemplateID.String
