@@ -113,6 +113,14 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
 	assertKeyVersions(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
+	interruptedKeyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	if err != nil {
+		t.Fatalf("open interrupted keyring: %v", err)
+	}
+	if err := interruptedKeyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err == nil || !strings.Contains(err.Error(), "still has 2 database references") {
+		t.Fatalf("cleanup with old-key references error = %v, want reference diagnostic", err)
+	}
+	assertKeyVersions(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
 
 	if _, err := pool.Exec(ctx, "DROP TRIGGER fail_v3_rotation ON instance; DROP FUNCTION fail_v3_rotation()"); err != nil {
 		t.Fatalf("remove interruption trigger: %v", err)
