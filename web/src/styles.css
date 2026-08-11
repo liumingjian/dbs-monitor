@@ -7,6 +7,7 @@ figcaption { color: #52514e; font-size: 13px; }
 .app-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .header-link { color: rgba(255, 255, 255, 0.82); }
 .header-link:hover { color: #fff; }
+.header-link-label { color: inherit; }
 .header-user { color: rgba(255, 255, 255, 0.9); }
 .workbench-heading { width: 100%; justify-content: space-between; }
 .monitoring-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; padding: 12px 0 18px; border-bottom: 1px solid #e1e0d9; }

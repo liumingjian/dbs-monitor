@@ -17,9 +17,10 @@ const (
 const MaxAttempts = 3
 
 type Message struct {
-	To      string
-	Subject string
-	Body    string
+	EventType EventType
+	To        string
+	Subject   string
+	Body      string
 }
 
 type AlertPayload struct {
@@ -65,13 +66,14 @@ func FormatAlertMessage(event EventType, payload AlertPayload) (Message, bool) {
 当前值：%s
 告警实例：%s
 `, label, payload.RuleName, payload.InstanceName, payload.MetricID, payload.Severity, payload.CurrentValue, payload.AlertInstanceID)
-	return Message{Subject: fmt.Sprintf("[DBS Monitor] %s：%s", label, payload.RuleName), Body: body}, true
+	return Message{EventType: event, Subject: fmt.Sprintf("[DBS Monitor] %s：%s", label, payload.RuleName), Body: body}, true
 }
 
 func FormatTestMessage() Message {
 	return Message{
-		Subject: "[DBS Monitor] SMTP 测试通知",
-		Body:    "这是一封 DBS Monitor SMTP 渠道测试邮件。\n",
+		EventType: EventTest,
+		Subject:   "[DBS Monitor] 渠道测试通知",
+		Body:      "这是一条 DBS Monitor 渠道测试通知。\n",
 	}
 }
 

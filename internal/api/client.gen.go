@@ -254,6 +254,9 @@ type ClientInterface interface {
 	// GetCurrentUser request
 	GetCurrentUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetChannelFailures request
+	GetChannelFailures(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetSMTPChannel request
 	GetSMTPChannel(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -266,6 +269,25 @@ type ClientInterface interface {
 	TestSMTPChannelWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TestSMTPChannel(ctx context.Context, body TestSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListWebhookTargets request
+	ListWebhookTargets(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateWebhookTargetWithBody request with any body
+	CreateWebhookTargetWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateWebhookTarget(ctx context.Context, body CreateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteWebhookTarget request
+	DeleteWebhookTarget(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateWebhookTargetWithBody request with any body
+	UpdateWebhookTargetWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateWebhookTarget(ctx context.Context, id openapi_types.UUID, body UpdateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestWebhookTarget request
+	TestWebhookTarget(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ChangeOwnPasswordWithBody request with any body
 	ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1005,6 +1027,18 @@ func (c *Client) GetCurrentUser(ctx context.Context, reqEditors ...RequestEditor
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetChannelFailures(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetChannelFailuresRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetSMTPChannel(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSMTPChannelRequest(c.Server)
 	if err != nil {
@@ -1055,6 +1089,90 @@ func (c *Client) TestSMTPChannelWithBody(ctx context.Context, contentType string
 
 func (c *Client) TestSMTPChannel(ctx context.Context, body TestSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTestSMTPChannelRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListWebhookTargets(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListWebhookTargetsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateWebhookTargetWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateWebhookTargetRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateWebhookTarget(ctx context.Context, body CreateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateWebhookTargetRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteWebhookTarget(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteWebhookTargetRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateWebhookTargetWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateWebhookTargetRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateWebhookTarget(ctx context.Context, id openapi_types.UUID, body UpdateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateWebhookTargetRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TestWebhookTarget(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestWebhookTargetRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -3188,6 +3306,33 @@ func NewGetCurrentUserRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetChannelFailuresRequest generates requests for GetChannelFailures
+func NewGetChannelFailuresRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/failures")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetSMTPChannelRequest generates requests for GetSMTPChannel
 func NewGetSMTPChannelRequest(server string) (*http.Request, error) {
 	var err error
@@ -3291,6 +3436,188 @@ func NewTestSMTPChannelRequestWithBody(server string, contentType string, body i
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListWebhookTargetsRequest generates requests for ListWebhookTargets
+func NewListWebhookTargetsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/webhooks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateWebhookTargetRequest calls the generic CreateWebhookTarget builder with application/json body
+func NewCreateWebhookTargetRequest(server string, body CreateWebhookTargetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateWebhookTargetRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateWebhookTargetRequestWithBody generates requests for CreateWebhookTarget with any type of body
+func NewCreateWebhookTargetRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/webhooks")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteWebhookTargetRequest generates requests for DeleteWebhookTarget
+func NewDeleteWebhookTargetRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/webhooks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateWebhookTargetRequest calls the generic UpdateWebhookTarget builder with application/json body
+func NewUpdateWebhookTargetRequest(server string, id openapi_types.UUID, body UpdateWebhookTargetJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateWebhookTargetRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewUpdateWebhookTargetRequestWithBody generates requests for UpdateWebhookTarget with any type of body
+func NewUpdateWebhookTargetRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/webhooks/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTestWebhookTargetRequest generates requests for TestWebhookTarget
+func NewTestWebhookTargetRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/webhooks/%s/test", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -3771,6 +4098,9 @@ type ClientWithResponsesInterface interface {
 	// GetCurrentUserWithResponse request
 	GetCurrentUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentUserResponse, error)
 
+	// GetChannelFailuresWithResponse request
+	GetChannelFailuresWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetChannelFailuresResponse, error)
+
 	// GetSMTPChannelWithResponse request
 	GetSMTPChannelWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSMTPChannelResponse, error)
 
@@ -3783,6 +4113,25 @@ type ClientWithResponsesInterface interface {
 	TestSMTPChannelWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestSMTPChannelResponse, error)
 
 	TestSMTPChannelWithResponse(ctx context.Context, body TestSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*TestSMTPChannelResponse, error)
+
+	// ListWebhookTargetsWithResponse request
+	ListWebhookTargetsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListWebhookTargetsResponse, error)
+
+	// CreateWebhookTargetWithBodyWithResponse request with any body
+	CreateWebhookTargetWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWebhookTargetResponse, error)
+
+	CreateWebhookTargetWithResponse(ctx context.Context, body CreateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWebhookTargetResponse, error)
+
+	// DeleteWebhookTargetWithResponse request
+	DeleteWebhookTargetWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteWebhookTargetResponse, error)
+
+	// UpdateWebhookTargetWithBodyWithResponse request with any body
+	UpdateWebhookTargetWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateWebhookTargetResponse, error)
+
+	UpdateWebhookTargetWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateWebhookTargetResponse, error)
+
+	// TestWebhookTargetWithResponse request
+	TestWebhookTargetWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*TestWebhookTargetResponse, error)
 
 	// ChangeOwnPasswordWithBodyWithResponse request with any body
 	ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
@@ -4855,6 +5204,28 @@ func (r GetCurrentUserResponse) StatusCode() int {
 	return 0
 }
 
+type GetChannelFailuresResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ChannelFailureOverview
+}
+
+// Status returns HTTPResponse.Status
+func (r GetChannelFailuresResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetChannelFailuresResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetSMTPChannelResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4917,6 +5288,121 @@ func (r TestSMTPChannelResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r TestSMTPChannelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListWebhookTargetsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]WebhookTarget
+}
+
+// Status returns HTTPResponse.Status
+func (r ListWebhookTargetsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListWebhookTargetsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateWebhookTargetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *WebhookTarget
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateWebhookTargetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateWebhookTargetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteWebhookTargetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteWebhookTargetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteWebhookTargetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateWebhookTargetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *WebhookTarget
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateWebhookTargetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateWebhookTargetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TestWebhookTargetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *NotificationQueued
+	JSON400      *Error
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r TestWebhookTargetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestWebhookTargetResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -5604,6 +6090,15 @@ func (c *ClientWithResponses) GetCurrentUserWithResponse(ctx context.Context, re
 	return ParseGetCurrentUserResponse(rsp)
 }
 
+// GetChannelFailuresWithResponse request returning *GetChannelFailuresResponse
+func (c *ClientWithResponses) GetChannelFailuresWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetChannelFailuresResponse, error) {
+	rsp, err := c.GetChannelFailures(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetChannelFailuresResponse(rsp)
+}
+
 // GetSMTPChannelWithResponse request returning *GetSMTPChannelResponse
 func (c *ClientWithResponses) GetSMTPChannelWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSMTPChannelResponse, error) {
 	rsp, err := c.GetSMTPChannel(ctx, reqEditors...)
@@ -5645,6 +6140,67 @@ func (c *ClientWithResponses) TestSMTPChannelWithResponse(ctx context.Context, b
 		return nil, err
 	}
 	return ParseTestSMTPChannelResponse(rsp)
+}
+
+// ListWebhookTargetsWithResponse request returning *ListWebhookTargetsResponse
+func (c *ClientWithResponses) ListWebhookTargetsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListWebhookTargetsResponse, error) {
+	rsp, err := c.ListWebhookTargets(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListWebhookTargetsResponse(rsp)
+}
+
+// CreateWebhookTargetWithBodyWithResponse request with arbitrary body returning *CreateWebhookTargetResponse
+func (c *ClientWithResponses) CreateWebhookTargetWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateWebhookTargetResponse, error) {
+	rsp, err := c.CreateWebhookTargetWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateWebhookTargetResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateWebhookTargetWithResponse(ctx context.Context, body CreateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateWebhookTargetResponse, error) {
+	rsp, err := c.CreateWebhookTarget(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateWebhookTargetResponse(rsp)
+}
+
+// DeleteWebhookTargetWithResponse request returning *DeleteWebhookTargetResponse
+func (c *ClientWithResponses) DeleteWebhookTargetWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteWebhookTargetResponse, error) {
+	rsp, err := c.DeleteWebhookTarget(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteWebhookTargetResponse(rsp)
+}
+
+// UpdateWebhookTargetWithBodyWithResponse request with arbitrary body returning *UpdateWebhookTargetResponse
+func (c *ClientWithResponses) UpdateWebhookTargetWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateWebhookTargetResponse, error) {
+	rsp, err := c.UpdateWebhookTargetWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateWebhookTargetResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateWebhookTargetWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateWebhookTargetJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateWebhookTargetResponse, error) {
+	rsp, err := c.UpdateWebhookTarget(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateWebhookTargetResponse(rsp)
+}
+
+// TestWebhookTargetWithResponse request returning *TestWebhookTargetResponse
+func (c *ClientWithResponses) TestWebhookTargetWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*TestWebhookTargetResponse, error) {
+	rsp, err := c.TestWebhookTarget(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestWebhookTargetResponse(rsp)
 }
 
 // ChangeOwnPasswordWithBodyWithResponse request with arbitrary body returning *ChangeOwnPasswordResponse
@@ -7138,6 +7694,32 @@ func ParseGetCurrentUserResponse(rsp *http.Response) (*GetCurrentUserResponse, e
 	return response, nil
 }
 
+// ParseGetChannelFailuresResponse parses an HTTP response from a GetChannelFailuresWithResponse call
+func ParseGetChannelFailuresResponse(rsp *http.Response) (*GetChannelFailuresResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetChannelFailuresResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ChannelFailureOverview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetSMTPChannelResponse parses an HTTP response from a GetSMTPChannelWithResponse call
 func ParseGetSMTPChannelResponse(rsp *http.Response) (*GetSMTPChannelResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -7224,6 +7806,171 @@ func ParseTestSMTPChannelResponse(rsp *http.Response) (*TestSMTPChannelResponse,
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListWebhookTargetsResponse parses an HTTP response from a ListWebhookTargetsWithResponse call
+func ParseListWebhookTargetsResponse(rsp *http.Response) (*ListWebhookTargetsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListWebhookTargetsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []WebhookTarget
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateWebhookTargetResponse parses an HTTP response from a CreateWebhookTargetWithResponse call
+func ParseCreateWebhookTargetResponse(rsp *http.Response) (*CreateWebhookTargetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateWebhookTargetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest WebhookTarget
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteWebhookTargetResponse parses an HTTP response from a DeleteWebhookTargetWithResponse call
+func ParseDeleteWebhookTargetResponse(rsp *http.Response) (*DeleteWebhookTargetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteWebhookTargetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateWebhookTargetResponse parses an HTTP response from a UpdateWebhookTargetWithResponse call
+func ParseUpdateWebhookTargetResponse(rsp *http.Response) (*UpdateWebhookTargetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateWebhookTargetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest WebhookTarget
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTestWebhookTargetResponse parses an HTTP response from a TestWebhookTargetWithResponse call
+func ParseTestWebhookTargetResponse(rsp *http.Response) (*TestWebhookTargetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestWebhookTargetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest NotificationQueued
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

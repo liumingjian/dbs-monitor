@@ -14,6 +14,7 @@ import (
 const countCredentialKeyReferences = `-- name: CountCredentialKeyReferences :one
 SELECT (SELECT count(*) FROM instance WHERE password_key_version = $1)
      + (SELECT count(*) FROM smtp_channel WHERE auth_key_version = $1)
+     + (SELECT count(*) FROM webhook_target WHERE signing_key_version = $1)
 `
 
 func (q *Queries) CountCredentialKeyReferences(ctx context.Context, keyVersion int32) (int32, error) {
@@ -27,6 +28,8 @@ const countCredentialsNotUsingKeyVersion = `-- name: CountCredentialsNotUsingKey
 SELECT (SELECT count(*) FROM instance WHERE password_key_version <> $1)
      + (SELECT count(*) FROM smtp_channel
         WHERE auth_key_version IS NOT NULL AND auth_key_version <> $1)
+     + (SELECT count(*) FROM webhook_target
+        WHERE signing_key_version <> $1)
 `
 
 func (q *Queries) CountCredentialsNotUsingKeyVersion(ctx context.Context, keyVersion int32) (int32, error) {

@@ -586,6 +586,32 @@ func (q *Queries) GetUserPassword(ctx context.Context, id pgtype.UUID) ([]byte, 
 	return password_hash, err
 }
 
+const hasQueryStatisticsSnapshot = `-- name: HasQueryStatisticsSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM query_statistics_snapshot WHERE instance_id = $1
+)
+`
+
+func (q *Queries) HasQueryStatisticsSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasQueryStatisticsSnapshot, instanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasSessionSnapshot = `-- name: HasSessionSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM instance_session_snapshot WHERE instance_id = $1
+)
+`
+
+func (q *Queries) HasSessionSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSessionSnapshot, instanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listAlertObservations = `-- name: ListAlertObservations :many
 SELECT alert.id, alert.instance_id, identity.name AS instance_name,
        alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
@@ -723,30 +749,6 @@ func (q *Queries) ListAlertRuleVersionHistory(ctx context.Context, alertInstance
 		return nil, err
 	}
 	return items, nil
-const hasQueryStatisticsSnapshot = `-- name: HasQueryStatisticsSnapshot :one
-SELECT EXISTS (
-    SELECT 1 FROM query_statistics_snapshot WHERE instance_id = $1
-)
-`
-
-func (q *Queries) HasQueryStatisticsSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, hasQueryStatisticsSnapshot, instanceID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
-const hasSessionSnapshot = `-- name: HasSessionSnapshot :one
-SELECT EXISTS (
-    SELECT 1 FROM instance_session_snapshot WHERE instance_id = $1
-)
-`
-
-func (q *Queries) HasSessionSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
-	row := q.db.QueryRow(ctx, hasSessionSnapshot, instanceID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }
 
 const listAlertTriggerSnapshotSessions = `-- name: ListAlertTriggerSnapshotSessions :many

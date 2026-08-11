@@ -112,6 +112,17 @@ func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentia
 		}
 		hasEncryptedCredentials = hasEncryptedCredentials || hasEncryptedSMTP
 	}
+	var hasWebhookTable bool
+	if err := database.QueryRowContext(ctx, "SELECT to_regclass('public.webhook_target') IS NOT NULL").Scan(&hasWebhookTable); err != nil {
+		return fmt.Errorf("inspect Webhook credential schema: %w", err)
+	}
+	if hasWebhookTable {
+		var hasEncryptedWebhook bool
+		if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM webhook_target)").Scan(&hasEncryptedWebhook); err != nil {
+			return fmt.Errorf("inspect encrypted Webhook credentials: %w", err)
+		}
+		hasEncryptedCredentials = hasEncryptedCredentials || hasEncryptedWebhook
+	}
 	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, hasEncryptedCredentials)
 	if err != nil {
 		return err

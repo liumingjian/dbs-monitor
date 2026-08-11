@@ -177,7 +177,9 @@ ORDER BY id;
 -- name: CountCredentialsNotUsingKeyVersion :one
 SELECT (SELECT count(*) FROM instance WHERE password_key_version <> sqlc.arg(key_version))
      + (SELECT count(*) FROM smtp_channel
-        WHERE auth_key_version IS NOT NULL AND auth_key_version <> sqlc.arg(key_version));
+        WHERE auth_key_version IS NOT NULL AND auth_key_version <> sqlc.arg(key_version))
+     + (SELECT count(*) FROM webhook_target
+        WHERE signing_key_version <> sqlc.arg(key_version));
 
 -- name: ListCredentialsForKeyRotation :many
 SELECT id, password_ciphertext, password_key_version
@@ -193,7 +195,8 @@ WHERE id = $1;
 
 -- name: CountCredentialKeyReferences :one
 SELECT (SELECT count(*) FROM instance WHERE password_key_version = sqlc.arg(key_version))
-     + (SELECT count(*) FROM smtp_channel WHERE auth_key_version = sqlc.arg(key_version));
+     + (SELECT count(*) FROM smtp_channel WHERE auth_key_version = sqlc.arg(key_version))
+     + (SELECT count(*) FROM webhook_target WHERE signing_key_version = sqlc.arg(key_version));
 
 -- name: SetCollectSuccess :exec
 INSERT INTO instance_collect_state (instance_id, source, last_success_at)

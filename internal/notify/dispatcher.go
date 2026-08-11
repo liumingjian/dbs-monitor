@@ -15,11 +15,17 @@ type Dispatcher struct {
 	queries *Queries
 }
 
+const SMTPChannelKey = "SMTP"
+
 func NewDispatcher(database DBTX) *Dispatcher {
 	return &Dispatcher{queries: New(database)}
 }
 
-func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, channel Channel) (bool, error) {
+func WebhookChannelKey(targetID pgtype.UUID) string {
+	return "WEBHOOK:" + fmt.Sprintf("%x", targetID.Bytes)
+}
+
+func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, channels map[string]Channel) (bool, error) {
 	delivery, err := dispatcher.queries.ClaimDueNotification(ctx, pgtype.Timestamptz{Time: now.UTC(), Valid: true})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
@@ -29,7 +35,16 @@ func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, ch
 	}
 	message, deliveryErr := messageForDelivery(delivery)
 	if deliveryErr == nil {
-		deliveryErr = channel.Send(ctx, message)
+		key := SMTPChannelKey
+		if delivery.Channel == "WEBHOOK" {
+			key = WebhookChannelKey(delivery.ChannelTargetID)
+		}
+		channel, ok := channels[key]
+		if !ok {
+			deliveryErr = fmt.Errorf("notification channel %s is unavailable", delivery.Channel)
+		} else {
+			deliveryErr = channel.Send(ctx, message)
+		}
 	}
 	attemptedAt := pgtype.Timestamptz{Time: now.UTC(), Valid: true}
 	if deliveryErr == nil {

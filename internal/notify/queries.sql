@@ -9,6 +9,45 @@ UPDATE smtp_channel
 SET auth_ciphertext = $1, auth_key_version = $2
 WHERE singleton;
 
+-- name: ListWebhookTargets :many
+SELECT * FROM webhook_target ORDER BY name, id;
+
+-- name: GetWebhookTarget :one
+SELECT * FROM webhook_target WHERE id = $1;
+
+-- name: ListWebhookTargetsForKeyRotation :many
+SELECT * FROM webhook_target ORDER BY id FOR UPDATE;
+
+-- name: CreateWebhookTarget :one
+INSERT INTO webhook_target (
+    id, name, enabled, url, signing_value_ciphertext,
+    signature_header_ciphertext, signing_key_version, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+RETURNING *;
+
+-- name: UpdateWebhookTarget :one
+UPDATE webhook_target
+SET name = $2,
+    enabled = $3,
+    url = $4,
+    signing_value_ciphertext = $5,
+    signature_header_ciphertext = $6,
+    signing_key_version = $7,
+    updated_at = $8
+WHERE id = $1
+RETURNING *;
+
+-- name: UpdateWebhookTargetSigningKey :exec
+UPDATE webhook_target
+SET signing_value_ciphertext = $2,
+    signature_header_ciphertext = $3,
+    signing_key_version = $4
+WHERE id = $1;
+
+-- name: DeleteWebhookTarget :execrows
+DELETE FROM webhook_target WHERE id = $1;
+
 -- name: UpsertSMTPChannel :one
 INSERT INTO smtp_channel (
     singleton, enabled, host, port, from_address, recipient,
@@ -29,14 +68,22 @@ ON CONFLICT (singleton) DO UPDATE SET
     updated_at = EXCLUDED.updated_at
 RETURNING *;
 
--- name: EnqueueAlertNotification :one
+-- name: EnqueueAlertNotifications :many
 INSERT INTO notification_delivery (
-    alert_instance_id, event_type, channel, target, template_id,
+    alert_instance_id, event_type, channel, channel_target_id, target, template_id,
     payload, next_attempt_at, created_at
 )
-SELECT $1, $2, 'SMTP', smtp.recipient, $3, $4, $5, $5
-FROM smtp_channel smtp
-WHERE smtp.singleton AND smtp.enabled
+SELECT $1, $2, destination.channel, destination.channel_target_id,
+       destination.target, $3, $4, $5, $5
+FROM (
+    SELECT 'SMTP'::text AS channel, NULL::uuid AS channel_target_id, smtp.recipient AS target
+    FROM smtp_channel smtp
+    WHERE smtp.singleton AND smtp.enabled
+    UNION ALL
+    SELECT 'WEBHOOK', webhook.id, webhook.url
+    FROM webhook_target webhook
+    WHERE webhook.enabled
+) destination
 RETURNING id;
 
 -- name: EnqueueTestNotification :one
@@ -44,6 +91,16 @@ INSERT INTO notification_delivery (
     event_type, channel, target, template_id, payload, next_attempt_at, created_at
 )
 VALUES ('TEST', 'SMTP', $1, 'builtin.smtp.test.v1', '{}'::jsonb, $2, $2)
+RETURNING id;
+
+-- name: EnqueueTestWebhookNotification :one
+INSERT INTO notification_delivery (
+    event_type, channel, channel_target_id, target, template_id, payload, next_attempt_at, created_at
+)
+SELECT 'TEST', 'WEBHOOK', webhook.id, webhook.url,
+       'builtin.webhook.test.v1', '{}'::jsonb, $2, $2
+FROM webhook_target webhook
+WHERE webhook.id = $1 AND webhook.enabled
 RETURNING id;
 
 -- name: ClaimDueNotification :one
@@ -120,3 +177,65 @@ FROM notification_delivery delivery
 LEFT JOIN notification_attempt attempt ON attempt.notification_id = delivery.id
 WHERE delivery.alert_instance_id = $1
 ORDER BY delivery.created_at DESC, delivery.id, attempt.retry_count;
+
+-- name: ListActiveChannelFailureSummaries :many
+WITH terminal_failures AS (
+    SELECT delivery.channel, delivery.channel_target_id, delivery.target,
+           delivery.completed_at AS failed_at, attempt.failure_reason,
+           delivery.attempt_count - 1 AS retry_count
+    FROM notification_delivery delivery
+    JOIN notification_attempt attempt
+      ON attempt.notification_id = delivery.id
+     AND attempt.retry_count = delivery.attempt_count - 1
+    WHERE delivery.status = 'FAILED'
+      AND (delivery.channel <> 'WEBHOOK' OR EXISTS (
+          SELECT 1 FROM webhook_target webhook WHERE webhook.id = delivery.channel_target_id
+      ))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM notification_delivery sent
+          WHERE sent.status = 'SENT'
+            AND sent.channel = delivery.channel
+            AND sent.channel_target_id IS NOT DISTINCT FROM delivery.channel_target_id
+            AND sent.completed_at > delivery.completed_at
+      )
+)
+SELECT channel, channel_target_id,
+       ((array_agg(target ORDER BY failed_at DESC))[1])::text AS target,
+       count(*)::integer AS recent_failure_count,
+       ((array_agg(failure_reason ORDER BY failed_at DESC))[1])::text AS last_failure_reason,
+       max(failed_at)::timestamptz AS last_failed_at
+FROM terminal_failures
+GROUP BY channel, channel_target_id
+ORDER BY channel, channel_target_id;
+
+-- name: ListRecentActiveChannelFailures :many
+WITH terminal_failures AS (
+    SELECT delivery.channel, delivery.channel_target_id, delivery.target,
+           delivery.completed_at AS failed_at, attempt.failure_reason,
+           delivery.attempt_count - 1 AS retry_count,
+           row_number() OVER (
+               PARTITION BY delivery.channel, delivery.channel_target_id
+               ORDER BY delivery.completed_at DESC, delivery.id
+           ) AS failure_number
+    FROM notification_delivery delivery
+    JOIN notification_attempt attempt
+      ON attempt.notification_id = delivery.id
+     AND attempt.retry_count = delivery.attempt_count - 1
+    WHERE delivery.status = 'FAILED'
+      AND (delivery.channel <> 'WEBHOOK' OR EXISTS (
+          SELECT 1 FROM webhook_target webhook WHERE webhook.id = delivery.channel_target_id
+      ))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM notification_delivery sent
+          WHERE sent.status = 'SENT'
+            AND sent.channel = delivery.channel
+            AND sent.channel_target_id IS NOT DISTINCT FROM delivery.channel_target_id
+            AND sent.completed_at > delivery.completed_at
+      )
+)
+SELECT channel, channel_target_id, failed_at, target, failure_reason, retry_count
+FROM terminal_failures
+WHERE failure_number <= 20
+ORDER BY channel, channel_target_id, failed_at DESC;

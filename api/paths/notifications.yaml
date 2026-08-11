@@ -50,6 +50,118 @@
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/notification-channels/webhooks:
+  get:
+    tags: [notification-settings]
+    operationId: listWebhookTargets
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Webhook targets without signing material.
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/notifications.yaml#/WebhookTarget }
+  post:
+    tags: [notification-settings]
+    operationId: createWebhookTarget
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/notifications.yaml#/WebhookTargetInput }
+    responses:
+      '201':
+        description: Created Webhook target without signing material.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/WebhookTarget }
+      '400':
+        description: Invalid Webhook target.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/notification-channels/webhooks/{id}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  put:
+    tags: [notification-settings]
+    operationId: updateWebhookTarget
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/notifications.yaml#/WebhookTargetInput }
+    responses:
+      '200':
+        description: Updated Webhook target without signing material.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/WebhookTarget }
+      '400':
+        description: Invalid Webhook target.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: Webhook target not found.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+  delete:
+    tags: [notification-settings]
+    operationId: deleteWebhookTarget
+    x-required-role: ALERT_ADMIN
+    responses:
+      '204': { description: Webhook target deleted. }
+      '404':
+        description: Webhook target not found.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/notification-channels/webhooks/{id}/test:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  post:
+    tags: [notification-settings]
+    operationId: testWebhookTarget
+    x-required-role: ALERT_ADMIN
+    responses:
+      '202':
+        description: Test request was durably queued through the normal delivery path.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/NotificationQueued }
+      '400':
+        description: Webhook target is disabled.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '404':
+        description: Webhook target not found.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/notification-channels/failures:
+  get:
+    tags: [notification-settings]
+    operationId: getChannelFailures
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Uncleared terminal channel failures and up to 20 recent records per target.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/ChannelFailureOverview }
 /api/v1/alert-instances/{id}/notifications:
   parameters:
     - name: id

@@ -1,6 +1,6 @@
 import { LockOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, Outlet, createRootRoute, useLocation } from '@tanstack/react-router'
-import { Button, Dropdown, Form, Input, Layout, Modal, Space, Typography } from 'antd'
+import { Badge, Button, Dropdown, Form, Input, Layout, Modal, Space, Typography } from 'antd'
 import { useState } from 'react'
 import { $api } from '../api/client'
 import { apiErrorMessage } from '../api/errors'
@@ -37,6 +37,12 @@ function RootLayout() {
 
 function AuthenticatedHeader() {
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
+  const failureQuery = $api.useQuery(
+    'get',
+    '/api/v1/notification-channels/failures',
+    {},
+    { refetchInterval: 15_000 },
+  )
   const changePasswordMutation = $api.useMutation('put', '/api/v1/password')
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [error, setError] = useState('')
@@ -60,7 +66,9 @@ function AuthenticatedHeader() {
         <Link to="/instances" className="header-link">实例列表</Link>
         <Link to="/alerts" search={{ tab: 'current', include_paused: false }} className="header-link">全局告警</Link>
         <Link to="/users" className="header-link">用户管理</Link>
-        <Link to="/alert-settings/notifications" className="header-link">告警设置</Link>
+        <Link to="/alert-settings/notifications" className="header-link">
+          <NotificationSettingsLabel hasFailures={failureQuery.data?.has_failures === true} />
+        </Link>
         <Dropdown menu={{ items: [{ key: 'password', icon: <LockOutlined />, label: '修改口令', onClick: () => setPasswordOpen(true) }] }}>
           <Button type="text" className="header-user" icon={<UserOutlined />}>
             {currentUserQuery.data?.username ?? ''}
@@ -75,6 +83,14 @@ function AuthenticatedHeader() {
         onSubmit={changeOwnPassword}
       />
     </>
+  )
+}
+
+export function NotificationSettingsLabel({ hasFailures }: { hasFailures: boolean }) {
+  return (
+    <Badge dot={hasFailures} status="error" offset={[5, 0]}>
+      <span className="header-link-label" title={hasFailures ? '通知渠道存在未清除失败' : undefined}>告警设置</span>
+    </Badge>
   )
 }
 

@@ -69,6 +69,14 @@ paths:
     $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1smtp
   /api/v1/notification-channels/smtp/test:
     $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1smtp~1test
+  /api/v1/notification-channels/webhooks:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1webhooks
+  /api/v1/notification-channels/webhooks/{id}:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1webhooks~1{id}
+  /api/v1/notification-channels/webhooks/{id}/test:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1webhooks~1{id}~1test
+  /api/v1/notification-channels/failures:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1failures
   /api/v1/instances/{id}/performance-events:
     $ref: paths/performance-events.yaml#/~1api~1v1~1instances~1{id}~1performance-events
   /api/v1/performance-events/{id}:
@@ -187,6 +195,16 @@ components:
       $ref: components/schemas/notifications.yaml#/NotificationQueued
     NotificationAttempt:
       $ref: components/schemas/notifications.yaml#/NotificationAttempt
+    WebhookTargetInput:
+      $ref: components/schemas/notifications.yaml#/WebhookTargetInput
+    WebhookTarget:
+      $ref: components/schemas/notifications.yaml#/WebhookTarget
+    ChannelFailureRecord:
+      $ref: components/schemas/notifications.yaml#/ChannelFailureRecord
+    ChannelFailureSummary:
+      $ref: components/schemas/notifications.yaml#/ChannelFailureSummary
+    ChannelFailureOverview:
+      $ref: components/schemas/notifications.yaml#/ChannelFailureOverview
     PerformanceEventType:
       $ref: components/enums.yaml#/PerformanceEventType
     PerformanceEvent:

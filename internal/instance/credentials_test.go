@@ -81,6 +81,35 @@ func TestSMTPPasswordUsesDistinctAuthenticatedPurpose(t *testing.T) {
 	}
 }
 
+func TestWebhookSigningFieldsUseTargetBoundAuthenticatedPurposes(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "credentials")
+	keyring, err := OpenCredentialKeyring(directory, false)
+	if err != nil {
+		t.Fatalf("open new keyring: %v", err)
+	}
+	targetID := uuid.MustParse("00000000-0000-0000-0000-000000000080")
+	valueCiphertext, version, err := keyring.EncryptWebhookSigningValue(targetID, "signing-value")
+	if err != nil {
+		t.Fatalf("encrypt Webhook signing value: %v", err)
+	}
+	headerCiphertext, headerVersion, err := keyring.EncryptWebhookSignatureHeader(targetID, "X-DBS-Signature")
+	if err != nil {
+		t.Fatalf("encrypt Webhook signature header: %v", err)
+	}
+	if got, err := keyring.DecryptWebhookSigningValue(targetID, valueCiphertext, version); err != nil || got != "signing-value" {
+		t.Fatalf("decrypt Webhook signing value = %q, %v", got, err)
+	}
+	if got, err := keyring.DecryptWebhookSignatureHeader(targetID, headerCiphertext, headerVersion); err != nil || got != "X-DBS-Signature" {
+		t.Fatalf("decrypt Webhook signature header = %q, %v", got, err)
+	}
+	if _, err := keyring.DecryptWebhookSigningValue(uuid.New(), valueCiphertext, version); err == nil {
+		t.Fatal("Webhook ciphertext decrypted for another target")
+	}
+	if _, err := keyring.DecryptWebhookSigningValue(targetID, headerCiphertext, headerVersion); err == nil {
+		t.Fatal("Webhook signature header decrypted as a signing value")
+	}
+}
+
 func TestCredentialKeyringGeneratesOnlyOnce(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "credentials")
 	if err := os.MkdirAll(directory, 0o700); err != nil {

@@ -24,7 +24,7 @@ WHERE delivery.id = (
     FOR UPDATE SKIP LOCKED
     LIMIT 1
 )
-RETURNING id, alert_instance_id, event_type, channel, target, template_id, payload, status, attempt_count, next_attempt_at, locked_until, created_at, completed_at
+RETURNING id, alert_instance_id, event_type, channel, target, template_id, payload, status, attempt_count, next_attempt_at, locked_until, created_at, completed_at, channel_target_id
 `
 
 func (q *Queries) ClaimDueNotification(ctx context.Context, claimedAt pgtype.Timestamptz) (NotificationDelivery, error) {
@@ -44,22 +44,89 @@ func (q *Queries) ClaimDueNotification(ctx context.Context, claimedAt pgtype.Tim
 		&i.LockedUntil,
 		&i.CreatedAt,
 		&i.CompletedAt,
+		&i.ChannelTargetID,
 	)
 	return i, err
 }
 
-const enqueueAlertNotification = `-- name: EnqueueAlertNotification :one
+const createWebhookTarget = `-- name: CreateWebhookTarget :one
+INSERT INTO webhook_target (
+    id, name, enabled, url, signing_value_ciphertext,
+    signature_header_ciphertext, signing_key_version, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+RETURNING id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at
+`
+
+type CreateWebhookTargetParams struct {
+	ID                        pgtype.UUID
+	Name                      string
+	Enabled                   bool
+	Url                       string
+	SigningValueCiphertext    []byte
+	SignatureHeaderCiphertext []byte
+	SigningKeyVersion         int32
+	CreatedAt                 pgtype.Timestamptz
+}
+
+func (q *Queries) CreateWebhookTarget(ctx context.Context, arg CreateWebhookTargetParams) (WebhookTarget, error) {
+	row := q.db.QueryRow(ctx, createWebhookTarget,
+		arg.ID,
+		arg.Name,
+		arg.Enabled,
+		arg.Url,
+		arg.SigningValueCiphertext,
+		arg.SignatureHeaderCiphertext,
+		arg.SigningKeyVersion,
+		arg.CreatedAt,
+	)
+	var i WebhookTarget
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Enabled,
+		&i.Url,
+		&i.SigningValueCiphertext,
+		&i.SignatureHeaderCiphertext,
+		&i.SigningKeyVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteWebhookTarget = `-- name: DeleteWebhookTarget :execrows
+DELETE FROM webhook_target WHERE id = $1
+`
+
+func (q *Queries) DeleteWebhookTarget(ctx context.Context, id pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteWebhookTarget, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const enqueueAlertNotifications = `-- name: EnqueueAlertNotifications :many
 INSERT INTO notification_delivery (
-    alert_instance_id, event_type, channel, target, template_id,
+    alert_instance_id, event_type, channel, channel_target_id, target, template_id,
     payload, next_attempt_at, created_at
 )
-SELECT $1, $2, 'SMTP', smtp.recipient, $3, $4, $5, $5
-FROM smtp_channel smtp
-WHERE smtp.singleton AND smtp.enabled
+SELECT $1, $2, destination.channel, destination.channel_target_id,
+       destination.target, $3, $4, $5, $5
+FROM (
+    SELECT 'SMTP'::text AS channel, NULL::uuid AS channel_target_id, smtp.recipient AS target
+    FROM smtp_channel smtp
+    WHERE smtp.singleton AND smtp.enabled
+    UNION ALL
+    SELECT 'WEBHOOK', webhook.id, webhook.url
+    FROM webhook_target webhook
+    WHERE webhook.enabled
+) destination
 RETURNING id
 `
 
-type EnqueueAlertNotificationParams struct {
+type EnqueueAlertNotificationsParams struct {
 	AlertInstanceID pgtype.UUID
 	EventType       string
 	TemplateID      pgtype.Text
@@ -67,17 +134,30 @@ type EnqueueAlertNotificationParams struct {
 	NextAttemptAt   pgtype.Timestamptz
 }
 
-func (q *Queries) EnqueueAlertNotification(ctx context.Context, arg EnqueueAlertNotificationParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, enqueueAlertNotification,
+func (q *Queries) EnqueueAlertNotifications(ctx context.Context, arg EnqueueAlertNotificationsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, enqueueAlertNotifications,
 		arg.AlertInstanceID,
 		arg.EventType,
 		arg.TemplateID,
 		arg.Payload,
 		arg.NextAttemptAt,
 	)
-	var id pgtype.UUID
-	err := row.Scan(&id)
-	return id, err
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const enqueueTestNotification = `-- name: EnqueueTestNotification :one
@@ -95,6 +175,29 @@ type EnqueueTestNotificationParams struct {
 
 func (q *Queries) EnqueueTestNotification(ctx context.Context, arg EnqueueTestNotificationParams) (pgtype.UUID, error) {
 	row := q.db.QueryRow(ctx, enqueueTestNotification, arg.Target, arg.NextAttemptAt)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const enqueueTestWebhookNotification = `-- name: EnqueueTestWebhookNotification :one
+INSERT INTO notification_delivery (
+    event_type, channel, channel_target_id, target, template_id, payload, next_attempt_at, created_at
+)
+SELECT 'TEST', 'WEBHOOK', webhook.id, webhook.url,
+       'builtin.webhook.test.v1', '{}'::jsonb, $2, $2
+FROM webhook_target webhook
+WHERE webhook.id = $1 AND webhook.enabled
+RETURNING id
+`
+
+type EnqueueTestWebhookNotificationParams struct {
+	ID            pgtype.UUID
+	NextAttemptAt pgtype.Timestamptz
+}
+
+func (q *Queries) EnqueueTestWebhookNotification(ctx context.Context, arg EnqueueTestWebhookNotificationParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, enqueueTestWebhookNotification, arg.ID, arg.NextAttemptAt)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -148,6 +251,95 @@ func (q *Queries) GetSMTPChannelForKeyRotation(ctx context.Context) (SmtpChannel
 	return i, err
 }
 
+const getWebhookTarget = `-- name: GetWebhookTarget :one
+SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at FROM webhook_target WHERE id = $1
+`
+
+func (q *Queries) GetWebhookTarget(ctx context.Context, id pgtype.UUID) (WebhookTarget, error) {
+	row := q.db.QueryRow(ctx, getWebhookTarget, id)
+	var i WebhookTarget
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Enabled,
+		&i.Url,
+		&i.SigningValueCiphertext,
+		&i.SignatureHeaderCiphertext,
+		&i.SigningKeyVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listActiveChannelFailureSummaries = `-- name: ListActiveChannelFailureSummaries :many
+WITH terminal_failures AS (
+    SELECT delivery.channel, delivery.channel_target_id, delivery.target,
+           delivery.completed_at AS failed_at, attempt.failure_reason,
+           delivery.attempt_count - 1 AS retry_count
+    FROM notification_delivery delivery
+    JOIN notification_attempt attempt
+      ON attempt.notification_id = delivery.id
+     AND attempt.retry_count = delivery.attempt_count - 1
+    WHERE delivery.status = 'FAILED'
+      AND (delivery.channel <> 'WEBHOOK' OR EXISTS (
+          SELECT 1 FROM webhook_target webhook WHERE webhook.id = delivery.channel_target_id
+      ))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM notification_delivery sent
+          WHERE sent.status = 'SENT'
+            AND sent.channel = delivery.channel
+            AND sent.channel_target_id IS NOT DISTINCT FROM delivery.channel_target_id
+            AND sent.completed_at > delivery.completed_at
+      )
+)
+SELECT channel, channel_target_id,
+       ((array_agg(target ORDER BY failed_at DESC))[1])::text AS target,
+       count(*)::integer AS recent_failure_count,
+       ((array_agg(failure_reason ORDER BY failed_at DESC))[1])::text AS last_failure_reason,
+       max(failed_at)::timestamptz AS last_failed_at
+FROM terminal_failures
+GROUP BY channel, channel_target_id
+ORDER BY channel, channel_target_id
+`
+
+type ListActiveChannelFailureSummariesRow struct {
+	Channel            string
+	ChannelTargetID    pgtype.UUID
+	Target             string
+	RecentFailureCount int32
+	LastFailureReason  string
+	LastFailedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) ListActiveChannelFailureSummaries(ctx context.Context) ([]ListActiveChannelFailureSummariesRow, error) {
+	rows, err := q.db.Query(ctx, listActiveChannelFailureSummaries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveChannelFailureSummariesRow
+	for rows.Next() {
+		var i ListActiveChannelFailureSummariesRow
+		if err := rows.Scan(
+			&i.Channel,
+			&i.ChannelTargetID,
+			&i.Target,
+			&i.RecentFailureCount,
+			&i.LastFailureReason,
+			&i.LastFailedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAlertNotificationAttempts = `-- name: ListAlertNotificationAttempts :many
 SELECT delivery.id, delivery.event_type, delivery.channel, delivery.target,
        delivery.template_id, delivery.status, delivery.attempt_count,
@@ -198,6 +390,142 @@ func (q *Queries) ListAlertNotificationAttempts(ctx context.Context, alertInstan
 			&i.Result,
 			&i.FailureReason,
 			&i.RetryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentActiveChannelFailures = `-- name: ListRecentActiveChannelFailures :many
+WITH terminal_failures AS (
+    SELECT delivery.channel, delivery.channel_target_id, delivery.target,
+           delivery.completed_at AS failed_at, attempt.failure_reason,
+           delivery.attempt_count - 1 AS retry_count,
+           row_number() OVER (
+               PARTITION BY delivery.channel, delivery.channel_target_id
+               ORDER BY delivery.completed_at DESC, delivery.id
+           ) AS failure_number
+    FROM notification_delivery delivery
+    JOIN notification_attempt attempt
+      ON attempt.notification_id = delivery.id
+     AND attempt.retry_count = delivery.attempt_count - 1
+    WHERE delivery.status = 'FAILED'
+      AND (delivery.channel <> 'WEBHOOK' OR EXISTS (
+          SELECT 1 FROM webhook_target webhook WHERE webhook.id = delivery.channel_target_id
+      ))
+      AND NOT EXISTS (
+          SELECT 1
+          FROM notification_delivery sent
+          WHERE sent.status = 'SENT'
+            AND sent.channel = delivery.channel
+            AND sent.channel_target_id IS NOT DISTINCT FROM delivery.channel_target_id
+            AND sent.completed_at > delivery.completed_at
+      )
+)
+SELECT channel, channel_target_id, failed_at, target, failure_reason, retry_count
+FROM terminal_failures
+WHERE failure_number <= 20
+ORDER BY channel, channel_target_id, failed_at DESC
+`
+
+type ListRecentActiveChannelFailuresRow struct {
+	Channel         string
+	ChannelTargetID pgtype.UUID
+	FailedAt        pgtype.Timestamptz
+	Target          string
+	FailureReason   pgtype.Text
+	RetryCount      int32
+}
+
+func (q *Queries) ListRecentActiveChannelFailures(ctx context.Context) ([]ListRecentActiveChannelFailuresRow, error) {
+	rows, err := q.db.Query(ctx, listRecentActiveChannelFailures)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecentActiveChannelFailuresRow
+	for rows.Next() {
+		var i ListRecentActiveChannelFailuresRow
+		if err := rows.Scan(
+			&i.Channel,
+			&i.ChannelTargetID,
+			&i.FailedAt,
+			&i.Target,
+			&i.FailureReason,
+			&i.RetryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWebhookTargets = `-- name: ListWebhookTargets :many
+SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at FROM webhook_target ORDER BY name, id
+`
+
+func (q *Queries) ListWebhookTargets(ctx context.Context) ([]WebhookTarget, error) {
+	rows, err := q.db.Query(ctx, listWebhookTargets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebhookTarget
+	for rows.Next() {
+		var i WebhookTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Enabled,
+			&i.Url,
+			&i.SigningValueCiphertext,
+			&i.SignatureHeaderCiphertext,
+			&i.SigningKeyVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWebhookTargetsForKeyRotation = `-- name: ListWebhookTargetsForKeyRotation :many
+SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at FROM webhook_target ORDER BY id FOR UPDATE
+`
+
+func (q *Queries) ListWebhookTargetsForKeyRotation(ctx context.Context) ([]WebhookTarget, error) {
+	rows, err := q.db.Query(ctx, listWebhookTargetsForKeyRotation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebhookTarget
+	for rows.Next() {
+		var i WebhookTarget
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Enabled,
+			&i.Url,
+			&i.SigningValueCiphertext,
+			&i.SignatureHeaderCiphertext,
+			&i.SigningKeyVersion,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -306,6 +634,81 @@ type UpdateSMTPChannelAuthKeyParams struct {
 
 func (q *Queries) UpdateSMTPChannelAuthKey(ctx context.Context, arg UpdateSMTPChannelAuthKeyParams) error {
 	_, err := q.db.Exec(ctx, updateSMTPChannelAuthKey, arg.AuthCiphertext, arg.AuthKeyVersion)
+	return err
+}
+
+const updateWebhookTarget = `-- name: UpdateWebhookTarget :one
+UPDATE webhook_target
+SET name = $2,
+    enabled = $3,
+    url = $4,
+    signing_value_ciphertext = $5,
+    signature_header_ciphertext = $6,
+    signing_key_version = $7,
+    updated_at = $8
+WHERE id = $1
+RETURNING id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at
+`
+
+type UpdateWebhookTargetParams struct {
+	ID                        pgtype.UUID
+	Name                      string
+	Enabled                   bool
+	Url                       string
+	SigningValueCiphertext    []byte
+	SignatureHeaderCiphertext []byte
+	SigningKeyVersion         int32
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateWebhookTarget(ctx context.Context, arg UpdateWebhookTargetParams) (WebhookTarget, error) {
+	row := q.db.QueryRow(ctx, updateWebhookTarget,
+		arg.ID,
+		arg.Name,
+		arg.Enabled,
+		arg.Url,
+		arg.SigningValueCiphertext,
+		arg.SignatureHeaderCiphertext,
+		arg.SigningKeyVersion,
+		arg.UpdatedAt,
+	)
+	var i WebhookTarget
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Enabled,
+		&i.Url,
+		&i.SigningValueCiphertext,
+		&i.SignatureHeaderCiphertext,
+		&i.SigningKeyVersion,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateWebhookTargetSigningKey = `-- name: UpdateWebhookTargetSigningKey :exec
+UPDATE webhook_target
+SET signing_value_ciphertext = $2,
+    signature_header_ciphertext = $3,
+    signing_key_version = $4
+WHERE id = $1
+`
+
+type UpdateWebhookTargetSigningKeyParams struct {
+	ID                        pgtype.UUID
+	SigningValueCiphertext    []byte
+	SignatureHeaderCiphertext []byte
+	SigningKeyVersion         int32
+}
+
+func (q *Queries) UpdateWebhookTargetSigningKey(ctx context.Context, arg UpdateWebhookTargetSigningKeyParams) error {
+	_, err := q.db.Exec(ctx, updateWebhookTargetSigningKey,
+		arg.ID,
+		arg.SigningValueCiphertext,
+		arg.SignatureHeaderCiphertext,
+		arg.SigningKeyVersion,
+	)
 	return err
 }
 

@@ -136,6 +136,14 @@ func (keyring *CredentialKeyring) EncryptSMTPPassword(password string) ([]byte, 
 	return keyring.encrypt([]byte(password), []byte(smtpCredentialAAD), "SMTP credential")
 }
 
+func (keyring *CredentialKeyring) EncryptWebhookSigningValue(targetID uuid.UUID, value string) ([]byte, int32, error) {
+	return keyring.encrypt([]byte(value), webhookCredentialAAD(targetID, "signing-value"), "Webhook signing value")
+}
+
+func (keyring *CredentialKeyring) EncryptWebhookSignatureHeader(targetID uuid.UUID, header string) ([]byte, int32, error) {
+	return keyring.encrypt([]byte(header), webhookCredentialAAD(targetID, "signature-header"), "Webhook signature header")
+}
+
 func (keyring *CredentialKeyring) encrypt(plaintext, aad []byte, description string) ([]byte, int32, error) {
 	gcm, err := credentialGCM(keyring.currentKey)
 	if err != nil {
@@ -158,6 +166,14 @@ func (keyring *CredentialKeyring) DecryptPassword(instanceID uuid.UUID, envelope
 
 func (keyring *CredentialKeyring) DecryptSMTPPassword(envelope []byte, keyVersion int32) (string, error) {
 	return keyring.decrypt(envelope, keyVersion, []byte(smtpCredentialAAD))
+}
+
+func (keyring *CredentialKeyring) DecryptWebhookSigningValue(targetID uuid.UUID, envelope []byte, keyVersion int32) (string, error) {
+	return keyring.decrypt(envelope, keyVersion, webhookCredentialAAD(targetID, "signing-value"))
+}
+
+func (keyring *CredentialKeyring) DecryptWebhookSignatureHeader(targetID uuid.UUID, envelope []byte, keyVersion int32) (string, error) {
+	return keyring.decrypt(envelope, keyVersion, webhookCredentialAAD(targetID, "signature-header"))
 }
 
 func (keyring *CredentialKeyring) decrypt(envelope []byte, keyVersion int32, aad []byte) (string, error) {
@@ -494,4 +510,8 @@ func credentialGCM(key []byte) (cipher.AEAD, error) {
 
 func credentialAAD(instanceID uuid.UUID) []byte {
 	return []byte("dbs-monitor:instance:" + instanceID.String() + ":pg-password:v1")
+}
+
+func webhookCredentialAAD(targetID uuid.UUID, field string) []byte {
+	return []byte("dbs-monitor:webhook:" + targetID.String() + ":" + field + ":v1")
 }

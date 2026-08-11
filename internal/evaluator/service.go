@@ -3,7 +3,6 @@ package evaluator
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -271,10 +270,10 @@ func (service *Service) evaluateRule(
 		switch kind {
 		case alerting.EventFired:
 			notificationEventType = notify.EventFiring
-			templateID = "builtin.smtp.firing.v1"
+			templateID = "builtin.notification.firing.v1"
 		case alerting.EventRecovered:
 			notificationEventType = notify.EventRecovery
-			templateID = "builtin.smtp.recovery.v1"
+			templateID = "builtin.notification.recovery.v1"
 		default:
 			continue
 		}
@@ -289,14 +288,14 @@ func (service *Service) evaluateRule(
 		if err != nil {
 			return fmt.Errorf("encode notification payload: %w", err)
 		}
-		_, err = notify.New(database).EnqueueAlertNotification(ctx, notify.EnqueueAlertNotificationParams{
+		_, err = notify.New(database).EnqueueAlertNotifications(ctx, notify.EnqueueAlertNotificationsParams{
 			AlertInstanceID: alertInstanceID,
 			EventType:       string(notificationEventType),
 			TemplateID:      pgtype.Text{String: templateID, Valid: true},
 			Payload:         payload,
 			NextAttemptAt:   evaluatedAt,
 		})
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		if err != nil {
 			return fmt.Errorf("enqueue alert notification: %w", err)
 		}
 	}
