@@ -86,7 +86,9 @@ VALUES ($1, $2, $3, $4);
 
 -- name: ListEvaluationTargets :many
 SELECT rule.id AS rule_id,
+       rule.name AS rule_name,
        instance.id AS instance_id,
+       instance.name AS instance_name,
        COALESCE(metric_dimension.metric_dimension_key, '{}') AS metric_dimension_key
 FROM alert_rule rule
 CROSS JOIN instance

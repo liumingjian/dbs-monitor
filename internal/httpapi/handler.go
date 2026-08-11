@@ -1170,6 +1170,8 @@ var RequiredRoles = map[string]string{
 	"GetAlertDisposition": "READONLY", "UpdateAlertDisposition": "ALERT_ADMIN",
 	"GetAlertDetail": "READONLY", "GetAlertTriggerSnapshot": "READONLY",
 	"ListCurrentAlerts": "READONLY", "ListAlertHistory": "READONLY",
+	"ListAlertNotifications": "READONLY",
+	"GetSMTPChannel": "READONLY", "UpdateSMTPChannel": "ALERT_ADMIN", "TestSMTPChannel": "ALERT_ADMIN",
 	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",

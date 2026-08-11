@@ -1,0 +1,70 @@
+/api/v1/notification-channels/smtp:
+  get:
+    tags: [notification-settings]
+    operationId: getSMTPChannel
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Singleton SMTP channel; an unconfigured channel is a value.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/SMTPChannel }
+  put:
+    tags: [notification-settings]
+    operationId: updateSMTPChannel
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/notifications.yaml#/SMTPChannelInput }
+    responses:
+      '200':
+        description: Updated SMTP channel without authentication material.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/SMTPChannel }
+      '400':
+        description: Invalid SMTP configuration.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/notification-channels/smtp/test:
+  post:
+    tags: [notification-settings]
+    operationId: testSMTPChannel
+    x-required-role: ALERT_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/notifications.yaml#/SMTPTestInput }
+    responses:
+      '202':
+        description: Test delivery was durably queued through the normal delivery path.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/NotificationQueued }
+      '400':
+        description: SMTP is not configured or the target is invalid.
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/alert-instances/{id}/notifications:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [alerts]
+    operationId: listAlertNotifications
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Notification delivery and attempt records for one alert instance.
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/notifications.yaml#/NotificationAttempt }

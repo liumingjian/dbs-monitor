@@ -15,6 +15,7 @@ tags:
   - name: collection
   - name: users
   - name: diagnostics
+  - name: notification-settings
 paths:
   /api/v1/login:
     post:
@@ -909,6 +910,90 @@ paths:
                 $ref: '#/components/schemas/AlertTriggerSnapshot'
         '404':
           description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}/notifications:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: listAlertNotifications
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Notification delivery and attempt records for one alert instance.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationAttempt'
+  /api/v1/notification-channels/smtp:
+    get:
+      tags:
+        - notification-settings
+      operationId: getSMTPChannel
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Singleton SMTP channel; an unconfigured channel is a value.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMTPChannel'
+    put:
+      tags:
+        - notification-settings
+      operationId: updateSMTPChannel
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SMTPChannelInput'
+      responses:
+        '200':
+          description: Updated SMTP channel without authentication material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMTPChannel'
+        '400':
+          description: Invalid SMTP configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-channels/smtp/test:
+    post:
+      tags:
+        - notification-settings
+      operationId: testSMTPChannel
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SMTPTestInput'
+      responses:
+        '202':
+          description: Test delivery was durably queued through the normal delivery path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationQueued'
+        '400':
+          description: SMTP is not configured or the target is invalid.
           content:
             application/json:
               schema:
@@ -2115,6 +2200,179 @@ components:
               items:
                 type: object
                 additionalProperties: true
+    SMTPAuthType:
+      type: string
+      enum:
+        - NONE
+        - PLAIN
+        - LOGIN
+      x-enum-varnames:
+        - SMTPAuthNone
+        - SMTPAuthPlain
+        - SMTPAuthLogin
+    SMTPTransportSecurity:
+      type: string
+      enum:
+        - STARTTLS
+        - IMPLICIT
+      x-enum-varnames:
+        - SMTPStartTLS
+        - SMTPImplicitTLS
+    SMTPChannelInput:
+      type: object
+      required:
+        - enabled
+        - host
+        - port
+        - from_address
+        - recipient
+        - auth_type
+        - tls_mode
+      properties:
+        enabled:
+          type: boolean
+        host:
+          type: string
+          minLength: 1
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        from_address:
+          type: string
+          format: email
+        recipient:
+          type: string
+          format: email
+        auth_type:
+          $ref: '#/components/schemas/SMTPAuthType'
+        username:
+          type: string
+        password:
+          type: string
+          description: Omit to retain the existing encrypted value.
+        tls_mode:
+          $ref: '#/components/schemas/SMTPTransportSecurity'
+    SMTPChannel:
+      type: object
+      required:
+        - configured
+        - auth_configured
+      properties:
+        configured:
+          type: boolean
+        enabled:
+          type: boolean
+        host:
+          type: string
+        port:
+          type: integer
+        from_address:
+          type: string
+          format: email
+        recipient:
+          type: string
+          format: email
+        auth_type:
+          $ref: '#/components/schemas/SMTPAuthType'
+        username:
+          type: string
+        auth_configured:
+          type: boolean
+        tls_mode:
+          $ref: '#/components/schemas/SMTPTransportSecurity'
+        updated_at:
+          type: string
+          format: date-time
+    SMTPTestInput:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          type: string
+          format: email
+    NotificationQueued:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+    NotificationAttempt:
+      type: object
+      required:
+        - id
+        - event_type
+        - channel
+        - target
+        - status
+        - attempt_count
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum:
+            - FIRING
+            - RECOVERY
+            - REPEAT
+            - TEST
+          x-enum-varnames:
+            - NotificationFiring
+            - NotificationRecovery
+            - NotificationRepeat
+            - NotificationTest
+        channel:
+          type: string
+          enum:
+            - SMTP
+          x-enum-varnames:
+            - NotificationSMTP
+        target:
+          type: string
+        template_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - PENDING
+            - SENT
+            - FAILED
+          x-enum-varnames:
+            - NotificationPending
+            - NotificationSent
+            - NotificationFailed
+        attempt_count:
+          type: integer
+          minimum: 0
+          maximum: 3
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        attempted_at:
+          type: string
+          format: date-time
+        result:
+          type: string
+          enum:
+            - SENT
+            - FAILED
+          x-enum-varnames:
+            - NotificationAttemptSent
+            - NotificationAttemptFailed
+        failure_reason:
+          type: string
+        retry_count:
+          type: integer
+          minimum: 0
+          maximum: 2
     PerformanceEventType:
       type: string
       enum:

@@ -15,6 +15,7 @@ tags:
   - name: collection
   - name: users
   - name: diagnostics
+  - name: notification-settings
 paths:
   /api/v1/login:
     $ref: paths/auth.yaml#/~1api~1v1~1login
@@ -62,6 +63,12 @@ paths:
     $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}
   /api/v1/alert-instances/{id}/trigger-snapshot:
     $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1trigger-snapshot
+  /api/v1/alert-instances/{id}/notifications:
+    $ref: paths/notifications.yaml#/~1api~1v1~1alert-instances~1{id}~1notifications
+  /api/v1/notification-channels/smtp:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1smtp
+  /api/v1/notification-channels/smtp/test:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1smtp~1test
   /api/v1/instances/{id}/performance-events:
     $ref: paths/performance-events.yaml#/~1api~1v1~1instances~1{id}~1performance-events
   /api/v1/performance-events/{id}:
@@ -166,6 +173,20 @@ components:
       $ref: components/schemas/alerts.yaml#/AlertObservationPage
     AlertDetail:
       $ref: components/schemas/alerts.yaml#/AlertDetail
+    SMTPAuthType:
+      $ref: components/schemas/notifications.yaml#/SMTPAuthType
+    SMTPTransportSecurity:
+      $ref: components/schemas/notifications.yaml#/SMTPTransportSecurity
+    SMTPChannelInput:
+      $ref: components/schemas/notifications.yaml#/SMTPChannelInput
+    SMTPChannel:
+      $ref: components/schemas/notifications.yaml#/SMTPChannel
+    SMTPTestInput:
+      $ref: components/schemas/notifications.yaml#/SMTPTestInput
+    NotificationQueued:
+      $ref: components/schemas/notifications.yaml#/NotificationQueued
+    NotificationAttempt:
+      $ref: components/schemas/notifications.yaml#/NotificationAttempt
     PerformanceEventType:
       $ref: components/enums.yaml#/PerformanceEventType
     PerformanceEvent:

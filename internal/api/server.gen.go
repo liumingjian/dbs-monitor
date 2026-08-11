@@ -207,6 +207,32 @@ const (
 	MarkNoData NoDataPolicy = "mark_no_data"
 )
 
+// Defines values for NotificationAttemptChannel.
+const (
+	NotificationSMTP NotificationAttemptChannel = "SMTP"
+)
+
+// Defines values for NotificationAttemptEventType.
+const (
+	NotificationFiring   NotificationAttemptEventType = "FIRING"
+	NotificationRecovery NotificationAttemptEventType = "RECOVERY"
+	NotificationRepeat   NotificationAttemptEventType = "REPEAT"
+	NotificationTest     NotificationAttemptEventType = "TEST"
+)
+
+// Defines values for NotificationAttemptResult.
+const (
+	NotificationAttemptFailed NotificationAttemptResult = "FAILED"
+	NotificationAttemptSent   NotificationAttemptResult = "SENT"
+)
+
+// Defines values for NotificationAttemptStatus.
+const (
+	NotificationFailed  NotificationAttemptStatus = "FAILED"
+	NotificationPending NotificationAttemptStatus = "PENDING"
+	NotificationSent    NotificationAttemptStatus = "SENT"
+)
+
 // Defines values for PerformanceEventType.
 const (
 	EventActiveSessionsHigh PerformanceEventType = "ACTIVE_SESSIONS_HIGH"
@@ -242,6 +268,19 @@ const (
 	ALERTADMIN    Role = "ALERT_ADMIN"
 	PLATFORMADMIN Role = "PLATFORM_ADMIN"
 	READONLY      Role = "READONLY"
+)
+
+// Defines values for SMTPAuthType.
+const (
+	SMTPAuthLogin SMTPAuthType = "LOGIN"
+	SMTPAuthNone  SMTPAuthType = "NONE"
+	SMTPAuthPlain SMTPAuthType = "PLAIN"
+)
+
+// Defines values for SMTPTransportSecurity.
+const (
+	SMTPImplicitTLS SMTPTransportSecurity = "IMPLICIT"
+	SMTPStartTLS    SMTPTransportSecurity = "STARTTLS"
 )
 
 // Defines values for Unavailability.
@@ -849,6 +888,40 @@ type MetricSeriesResponse struct {
 // NoDataPolicy defines model for NoDataPolicy.
 type NoDataPolicy string
 
+// NotificationAttempt defines model for NotificationAttempt.
+type NotificationAttempt struct {
+	AttemptCount  int                          `json:"attempt_count"`
+	AttemptedAt   *time.Time                   `json:"attempted_at,omitempty"`
+	Channel       NotificationAttemptChannel   `json:"channel"`
+	CompletedAt   *time.Time                   `json:"completed_at,omitempty"`
+	CreatedAt     time.Time                    `json:"created_at"`
+	EventType     NotificationAttemptEventType `json:"event_type"`
+	FailureReason *string                      `json:"failure_reason,omitempty"`
+	Id            openapi_types.UUID           `json:"id"`
+	Result        *NotificationAttemptResult   `json:"result,omitempty"`
+	RetryCount    *int                         `json:"retry_count,omitempty"`
+	Status        NotificationAttemptStatus    `json:"status"`
+	Target        string                       `json:"target"`
+	TemplateId    *string                      `json:"template_id,omitempty"`
+}
+
+// NotificationAttemptChannel defines model for NotificationAttempt.Channel.
+type NotificationAttemptChannel string
+
+// NotificationAttemptEventType defines model for NotificationAttempt.EventType.
+type NotificationAttemptEventType string
+
+// NotificationAttemptResult defines model for NotificationAttempt.Result.
+type NotificationAttemptResult string
+
+// NotificationAttemptStatus defines model for NotificationAttempt.Status.
+type NotificationAttemptStatus string
+
+// NotificationQueued defines model for NotificationQueued.
+type NotificationQueued struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
 // PasswordChangeInput defines model for PasswordChangeInput.
 type PasswordChangeInput struct {
 	NewPassword string `json:"new_password"`
@@ -974,6 +1047,47 @@ type SessionSnapshotEntry struct {
 	WaitEvent             *string    `json:"wait_event,omitempty"`
 	WaitEventType         *string    `json:"wait_event_type,omitempty"`
 }
+
+// SMTPAuthType defines model for SMTPAuthType.
+type SMTPAuthType string
+
+// SMTPChannel defines model for SMTPChannel.
+type SMTPChannel struct {
+	AuthConfigured bool                   `json:"auth_configured"`
+	AuthType       *SMTPAuthType          `json:"auth_type,omitempty"`
+	Configured     bool                   `json:"configured"`
+	Enabled        *bool                  `json:"enabled,omitempty"`
+	FromAddress    *openapi_types.Email   `json:"from_address,omitempty"`
+	Host           *string                `json:"host,omitempty"`
+	Port           *int                   `json:"port,omitempty"`
+	Recipient      *openapi_types.Email   `json:"recipient,omitempty"`
+	TlsMode        *SMTPTransportSecurity `json:"tls_mode,omitempty"`
+	UpdatedAt      *time.Time             `json:"updated_at,omitempty"`
+	Username       *string                `json:"username,omitempty"`
+}
+
+// SMTPChannelInput defines model for SMTPChannelInput.
+type SMTPChannelInput struct {
+	AuthType    SMTPAuthType        `json:"auth_type"`
+	Enabled     bool                `json:"enabled"`
+	FromAddress openapi_types.Email `json:"from_address"`
+	Host        string              `json:"host"`
+
+	// Password Omit to retain the existing encrypted value.
+	Password  *string               `json:"password,omitempty"`
+	Port      int                   `json:"port"`
+	Recipient openapi_types.Email   `json:"recipient"`
+	TlsMode   SMTPTransportSecurity `json:"tls_mode"`
+	Username  *string               `json:"username,omitempty"`
+}
+
+// SMTPTestInput defines model for SMTPTestInput.
+type SMTPTestInput struct {
+	Target openapi_types.Email `json:"target"`
+}
+
+// SMTPTransportSecurity defines model for SMTPTransportSecurity.
+type SMTPTransportSecurity string
 
 // Unavailability defines model for Unavailability.
 type Unavailability string
@@ -1104,6 +1218,12 @@ type UpdateInstanceCredentialJSONRequestBody = InstanceCredentialInput
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody CreateSessionJSONBody
 
+// UpdateSMTPChannelJSONRequestBody defines body for UpdateSMTPChannel for application/json ContentType.
+type UpdateSMTPChannelJSONRequestBody = SMTPChannelInput
+
+// TestSMTPChannelJSONRequestBody defines body for TestSMTPChannel for application/json ContentType.
+type TestSMTPChannelJSONRequestBody = SMTPTestInput
+
 // ChangeOwnPasswordJSONRequestBody defines body for ChangeOwnPassword for application/json ContentType.
 type ChangeOwnPasswordJSONRequestBody = PasswordChangeInput
 
@@ -1130,6 +1250,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/alert-instances/{id}/disposition)
 	UpdateAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-instances/{id}/notifications)
+	ListAlertNotifications(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
 	GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1254,6 +1377,15 @@ type ServerInterface interface {
 	// (GET /api/v1/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
 
+	// (GET /api/v1/notification-channels/smtp)
+	GetSMTPChannel(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/v1/notification-channels/smtp)
+	UpdateSMTPChannel(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-channels/smtp/test)
+	TestSMTPChannel(w http.ResponseWriter, r *http.Request)
+
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 
@@ -1371,6 +1503,31 @@ func (siw *ServerInterfaceWrapper) UpdateAlertDisposition(w http.ResponseWriter,
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateAlertDisposition(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertNotifications operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertNotifications(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertNotifications(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2490,6 +2647,48 @@ func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetSMTPChannel operation middleware
+func (siw *ServerInterfaceWrapper) GetSMTPChannel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSMTPChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSMTPChannel operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSMTPChannel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSMTPChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestSMTPChannel operation middleware
+func (siw *ServerInterfaceWrapper) TestSMTPChannel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestSMTPChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangeOwnPassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
@@ -2756,6 +2955,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}", wrapper.GetAlertDetail)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.GetAlertDisposition)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.UpdateAlertDisposition)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/notifications", wrapper.ListAlertNotifications)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/trigger-snapshot", wrapper.GetAlertTriggerSnapshot)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rule-templates", wrapper.ListAlertRuleTemplates)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rule-templates/{id}/alert-rules", wrapper.CreateAlertRuleFromTemplate)
@@ -2797,6 +2997,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/sessions", wrapper.GetSessionSnapshot)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.GetSMTPChannel)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.UpdateSMTPChannel)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/smtp/test", wrapper.TestSMTPChannel)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
@@ -2935,6 +3138,23 @@ type UpdateAlertDisposition409JSONResponse Error
 func (response UpdateAlertDisposition409JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertNotificationsRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListAlertNotificationsResponseObject interface {
+	VisitListAlertNotificationsResponse(w http.ResponseWriter) error
+}
+
+type ListAlertNotifications200JSONResponse []NotificationAttempt
+
+func (response ListAlertNotifications200JSONResponse) VisitListAlertNotificationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -3874,6 +4094,74 @@ func (response GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetSMTPChannelRequestObject struct {
+}
+
+type GetSMTPChannelResponseObject interface {
+	VisitGetSMTPChannelResponse(w http.ResponseWriter) error
+}
+
+type GetSMTPChannel200JSONResponse SMTPChannel
+
+func (response GetSMTPChannel200JSONResponse) VisitGetSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateSMTPChannelRequestObject struct {
+	Body *UpdateSMTPChannelJSONRequestBody
+}
+
+type UpdateSMTPChannelResponseObject interface {
+	VisitUpdateSMTPChannelResponse(w http.ResponseWriter) error
+}
+
+type UpdateSMTPChannel200JSONResponse SMTPChannel
+
+func (response UpdateSMTPChannel200JSONResponse) VisitUpdateSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateSMTPChannel400JSONResponse Error
+
+func (response UpdateSMTPChannel400JSONResponse) VisitUpdateSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestSMTPChannelRequestObject struct {
+	Body *TestSMTPChannelJSONRequestBody
+}
+
+type TestSMTPChannelResponseObject interface {
+	VisitTestSMTPChannelResponse(w http.ResponseWriter) error
+}
+
+type TestSMTPChannel202JSONResponse NotificationQueued
+
+func (response TestSMTPChannel202JSONResponse) VisitTestSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestSMTPChannel400JSONResponse Error
+
+func (response TestSMTPChannel400JSONResponse) VisitTestSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ChangeOwnPasswordRequestObject struct {
 	Body *ChangeOwnPasswordJSONRequestBody
 }
@@ -4098,6 +4386,9 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/alert-instances/{id}/disposition)
 	UpdateAlertDisposition(ctx context.Context, request UpdateAlertDispositionRequestObject) (UpdateAlertDispositionResponseObject, error)
 
+	// (GET /api/v1/alert-instances/{id}/notifications)
+	ListAlertNotifications(ctx context.Context, request ListAlertNotificationsRequestObject) (ListAlertNotificationsResponseObject, error)
+
 	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
 	GetAlertTriggerSnapshot(ctx context.Context, request GetAlertTriggerSnapshotRequestObject) (GetAlertTriggerSnapshotResponseObject, error)
 
@@ -4220,6 +4511,15 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/me)
 	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
+
+	// (GET /api/v1/notification-channels/smtp)
+	GetSMTPChannel(ctx context.Context, request GetSMTPChannelRequestObject) (GetSMTPChannelResponseObject, error)
+
+	// (PUT /api/v1/notification-channels/smtp)
+	UpdateSMTPChannel(ctx context.Context, request UpdateSMTPChannelRequestObject) (UpdateSMTPChannelResponseObject, error)
+
+	// (POST /api/v1/notification-channels/smtp/test)
+	TestSMTPChannel(ctx context.Context, request TestSMTPChannelRequestObject) (TestSMTPChannelResponseObject, error)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
@@ -4381,6 +4681,32 @@ func (sh *strictHandler) UpdateAlertDisposition(w http.ResponseWriter, r *http.R
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateAlertDispositionResponseObject); ok {
 		if err := validResponse.VisitUpdateAlertDispositionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertNotifications operation middleware
+func (sh *strictHandler) ListAlertNotifications(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListAlertNotificationsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertNotifications(ctx, request.(ListAlertNotificationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertNotifications")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertNotificationsResponseObject); ok {
+		if err := validResponse.VisitListAlertNotificationsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -5500,6 +5826,92 @@ func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCurrentUserResponseObject); ok {
 		if err := validResponse.VisitGetCurrentUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSMTPChannel operation middleware
+func (sh *strictHandler) GetSMTPChannel(w http.ResponseWriter, r *http.Request) {
+	var request GetSMTPChannelRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSMTPChannel(ctx, request.(GetSMTPChannelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSMTPChannel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSMTPChannelResponseObject); ok {
+		if err := validResponse.VisitGetSMTPChannelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSMTPChannel operation middleware
+func (sh *strictHandler) UpdateSMTPChannel(w http.ResponseWriter, r *http.Request) {
+	var request UpdateSMTPChannelRequestObject
+
+	var body UpdateSMTPChannelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSMTPChannel(ctx, request.(UpdateSMTPChannelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSMTPChannel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSMTPChannelResponseObject); ok {
+		if err := validResponse.VisitUpdateSMTPChannelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestSMTPChannel operation middleware
+func (sh *strictHandler) TestSMTPChannel(w http.ResponseWriter, r *http.Request) {
+	var request TestSMTPChannelRequestObject
+
+	var body TestSMTPChannelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestSMTPChannel(ctx, request.(TestSMTPChannelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestSMTPChannel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestSMTPChannelResponseObject); ok {
+		if err := validResponse.VisitTestSMTPChannelResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

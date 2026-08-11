@@ -6,6 +6,7 @@ import ReactDOM from 'react-dom/client'
 import { alertsRoute } from './routes/alerts'
 import { instanceAlertDetailRoute } from './routes/instances.$id/alerts.$alertId'
 import { instanceAlertsRoute } from './routes/instances.$id/alerts'
+import { notificationSettingsRoute } from './routes/alert-settings/notifications'
 import { instanceRoute } from './routes/instances.$id'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
@@ -33,6 +34,7 @@ const routeTree = rootRoute.addChildren([
   longQuerySamplesRoute,
   queryStatisticsRoute,
   usersRoute,
+  notificationSettingsRoute,
 ])
 const router = createRouter({ routeTree, defaultPreload: 'intent' })
 const queryClient = new QueryClient()

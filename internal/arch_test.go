@@ -24,6 +24,7 @@ var packageLayers = map[string]int{
 	"internal/httpapi":        2,
 	"internal/instance":       1,
 	"internal/metric":         1,
+	"internal/notify":         1,
 	"internal/pgconn":         0,
 	"internal/platformhealth": 1,
 }
@@ -115,11 +116,17 @@ func checkPackage(t *testing.T, path, packageName string, layer int) {
 			if shortName == "api" && strings.HasSuffix(file.Name(), ".gen.go") {
 				return true
 			}
-			if (shortName == "alerting" || shortName == "httpapi" || shortName == "instance" || shortName == "metric") && typeSpec.Name.Name == "DBTX" {
-				return true
+			if typeSpec.Name.Name == "DBTX" {
+				switch shortName {
+				case "alerting", "httpapi", "instance", "metric", "notify":
+					return true
+				}
 			}
 			qualified := shortName + "." + typeSpec.Name.Name
-			if qualified != "db.DBTX" && qualified != "clock.Clock" && qualified != "pgconn.Dialer" && qualified != "collect.Collector" {
+			switch qualified {
+			case "db.DBTX", "clock.Clock", "pgconn.Dialer", "collect.Collector", "notify.Channel":
+				return true
+			default:
 				t.Errorf("interface %s is not in the T11 interface whitelist", qualified)
 			}
 			return true

@@ -160,6 +160,7 @@ func run(ctx context.Context) error {
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform, health)
 	go runAlertHistoryMaintenance(ctx, platform)
+	go runNotificationDelivery(ctx, platform, keyring)
 	go func() {
 		timer := time.NewTimer(time.Second)
 		defer timer.Stop()
