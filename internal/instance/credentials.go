@@ -128,22 +128,38 @@ func initializeCredentialKeyring(directory string, hasEncryptedCredentials bool)
 }
 
 func (keyring *CredentialKeyring) EncryptPassword(instanceID uuid.UUID, password string) ([]byte, int32, error) {
+	return keyring.encrypt([]byte(password), credentialAAD(instanceID), "instance credential")
+}
+
+func (keyring *CredentialKeyring) EncryptSMTPPassword(password string) ([]byte, int32, error) {
+	return keyring.encrypt([]byte(password), []byte("smtp-channel:singleton:auth"), "SMTP credential")
+}
+
+func (keyring *CredentialKeyring) encrypt(plaintext, aad []byte, description string) ([]byte, int32, error) {
 	gcm, err := credentialGCM(keyring.currentKey)
 	if err != nil {
 		return nil, 0, err
 	}
 	nonce := make([]byte, credentialNonceSize)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return nil, 0, fmt.Errorf("generate instance credential nonce: %w", err)
+		return nil, 0, fmt.Errorf("generate %s nonce: %w", description, err)
 	}
 	envelope := make([]byte, credentialEnvelopeHeaderSize)
 	envelope[0] = credentialEnvelopeVersion
 	copy(envelope[1:], nonce)
-	envelope = gcm.Seal(envelope, nonce, []byte(password), credentialAAD(instanceID))
+	envelope = gcm.Seal(envelope, nonce, plaintext, aad)
 	return envelope, keyring.currentVersion, nil
 }
 
 func (keyring *CredentialKeyring) DecryptPassword(instanceID uuid.UUID, envelope []byte, keyVersion int32) (string, error) {
+	return keyring.decrypt(envelope, keyVersion, credentialAAD(instanceID))
+}
+
+func (keyring *CredentialKeyring) DecryptSMTPPassword(envelope []byte, keyVersion int32) (string, error) {
+	return keyring.decrypt(envelope, keyVersion, []byte("smtp-channel:singleton:auth"))
+}
+
+func (keyring *CredentialKeyring) decrypt(envelope []byte, keyVersion int32, aad []byte) (string, error) {
 	key := keyring.currentKey
 	if keyVersion != keyring.currentVersion {
 		var err error
@@ -160,7 +176,7 @@ func (keyring *CredentialKeyring) DecryptPassword(instanceID uuid.UUID, envelope
 		return "", &CredentialFault{Code: CredentialFaultAuthentication}
 	}
 	nonce := envelope[1:credentialEnvelopeHeaderSize]
-	plaintext, err := gcm.Open(nil, nonce, envelope[credentialEnvelopeHeaderSize:], credentialAAD(instanceID))
+	plaintext, err := gcm.Open(nil, nonce, envelope[credentialEnvelopeHeaderSize:], aad)
 	if err != nil {
 		return "", &CredentialFault{Code: CredentialFaultAuthentication}
 	}

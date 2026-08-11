@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
 
 type credentialRotationResult struct {
@@ -29,7 +32,7 @@ func runMasterKeyRotationCommand(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	log.Printf("rotated %d instance credentials to master key v%d", result.CredentialsRotated, result.KeyVersion)
+	log.Printf("rotated %d credentials to master key v%d", result.CredentialsRotated, result.KeyVersion)
 	return nil
 }
 
@@ -45,9 +48,14 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 		if err := platform.InTx(ctx, func(tx pgx.Tx) error {
 			rotated, err := keyring.ReencryptCredentials(ctx, instance.New(tx))
 			credentialsRotated = rotated
+			if err != nil {
+				return err
+			}
+			rotated, err = reencryptSMTPChannel(ctx, tx, keyring)
+			credentialsRotated += rotated
 			return err
 		}); err != nil {
-			return credentialRotationResult{}, fmt.Errorf("rotate instance credentials: %w", err)
+			return credentialRotationResult{}, fmt.Errorf("rotate credentials: %w", err)
 		}
 	}
 	if err := keyring.RemoveUnreferencedKeys(ctx, platformQueries); err != nil {
@@ -57,4 +65,32 @@ func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory s
 		KeyVersion:         keyring.CurrentVersion(),
 		CredentialsRotated: credentialsRotated,
 	}, nil
+}
+
+func reencryptSMTPChannel(ctx context.Context, tx pgx.Tx, keyring *instance.CredentialKeyring) (int64, error) {
+	queries := notify.New(tx)
+	channel, err := queries.GetSMTPChannelForKeyRotation(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read SMTP authentication for key rotation: %w", err)
+	}
+	if channel.AuthKeyVersion.Int32 == keyring.CurrentVersion() {
+		return 0, nil
+	}
+	value, err := keyring.DecryptSMTPPassword(channel.AuthCiphertext, channel.AuthKeyVersion.Int32)
+	if err != nil {
+		return 0, err
+	}
+	ciphertext, version, err := keyring.EncryptSMTPPassword(value)
+	if err != nil {
+		return 0, err
+	}
+	if err := queries.UpdateSMTPChannelAuthKey(ctx, notify.UpdateSMTPChannelAuthKeyParams{
+		AuthCiphertext: ciphertext, AuthKeyVersion: pgtype.Int4{Int32: version, Valid: true},
+	}); err != nil {
+		return 0, fmt.Errorf("update SMTP authentication key version: %w", err)
+	}
+	return 1, nil
 }

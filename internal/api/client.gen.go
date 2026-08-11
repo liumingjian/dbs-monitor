@@ -103,6 +103,9 @@ type ClientInterface interface {
 
 	UpdateAlertDisposition(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListAlertNotifications request
+	ListAlertNotifications(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAlertTriggerSnapshot request
 	GetAlertTriggerSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -239,6 +242,19 @@ type ClientInterface interface {
 	// GetCurrentUser request
 	GetCurrentUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetSMTPChannel request
+	GetSMTPChannel(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateSMTPChannelWithBody request with any body
+	UpdateSMTPChannelWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateSMTPChannel(ctx context.Context, body UpdateSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TestSMTPChannelWithBody request with any body
+	TestSMTPChannelWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TestSMTPChannel(ctx context.Context, body TestSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ChangeOwnPasswordWithBody request with any body
 	ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -319,6 +335,18 @@ func (c *Client) UpdateAlertDispositionWithBody(ctx context.Context, id openapi_
 
 func (c *Client) UpdateAlertDisposition(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateAlertDispositionRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListAlertNotifications(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertNotificationsRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -917,6 +945,66 @@ func (c *Client) GetCurrentUser(ctx context.Context, reqEditors ...RequestEditor
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetSMTPChannel(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSMTPChannelRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateSMTPChannelWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSMTPChannelRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UpdateSMTPChannel(ctx context.Context, body UpdateSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateSMTPChannelRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TestSMTPChannelWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestSMTPChannelRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TestSMTPChannel(ctx context.Context, body TestSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTestSMTPChannelRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewChangeOwnPasswordRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -1166,6 +1254,40 @@ func NewUpdateAlertDispositionRequestWithBody(server string, id openapi_types.UU
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListAlertNotificationsRequest generates requests for ListAlertNotifications
+func NewListAlertNotificationsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-instances/%s/notifications", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -2760,6 +2882,113 @@ func NewGetCurrentUserRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetSMTPChannelRequest generates requests for GetSMTPChannel
+func NewGetSMTPChannelRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/smtp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateSMTPChannelRequest calls the generic UpdateSMTPChannel builder with application/json body
+func NewUpdateSMTPChannelRequest(server string, body UpdateSMTPChannelJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateSMTPChannelRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewUpdateSMTPChannelRequestWithBody generates requests for UpdateSMTPChannel with any type of body
+func NewUpdateSMTPChannelRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/smtp")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTestSMTPChannelRequest calls the generic TestSMTPChannel builder with application/json body
+func NewTestSMTPChannelRequest(server string, body TestSMTPChannelJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTestSMTPChannelRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewTestSMTPChannelRequestWithBody generates requests for TestSMTPChannel with any type of body
+func NewTestSMTPChannelRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-channels/smtp/test")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewChangeOwnPasswordRequest calls the generic ChangeOwnPassword builder with application/json body
 func NewChangeOwnPasswordRequest(server string, body ChangeOwnPasswordJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -3085,6 +3314,9 @@ type ClientWithResponsesInterface interface {
 
 	UpdateAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertDispositionResponse, error)
 
+	// ListAlertNotificationsWithResponse request
+	ListAlertNotificationsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListAlertNotificationsResponse, error)
+
 	// GetAlertTriggerSnapshotWithResponse request
 	GetAlertTriggerSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertTriggerSnapshotResponse, error)
 
@@ -3221,6 +3453,19 @@ type ClientWithResponsesInterface interface {
 	// GetCurrentUserWithResponse request
 	GetCurrentUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentUserResponse, error)
 
+	// GetSMTPChannelWithResponse request
+	GetSMTPChannelWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSMTPChannelResponse, error)
+
+	// UpdateSMTPChannelWithBodyWithResponse request with any body
+	UpdateSMTPChannelWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSMTPChannelResponse, error)
+
+	UpdateSMTPChannelWithResponse(ctx context.Context, body UpdateSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSMTPChannelResponse, error)
+
+	// TestSMTPChannelWithBodyWithResponse request with any body
+	TestSMTPChannelWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestSMTPChannelResponse, error)
+
+	TestSMTPChannelWithResponse(ctx context.Context, body TestSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*TestSMTPChannelResponse, error)
+
 	// ChangeOwnPasswordWithBodyWithResponse request with any body
 	ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
 
@@ -3316,6 +3561,28 @@ func (r UpdateAlertDispositionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateAlertDispositionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListAlertNotificationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]NotificationAttempt
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertNotificationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertNotificationsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4179,6 +4446,74 @@ func (r GetCurrentUserResponse) StatusCode() int {
 	return 0
 }
 
+type GetSMTPChannelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SMTPChannel
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSMTPChannelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSMTPChannelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UpdateSMTPChannelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SMTPChannel
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateSMTPChannelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateSMTPChannelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TestSMTPChannelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON202      *NotificationQueued
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r TestSMTPChannelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TestSMTPChannelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ChangeOwnPasswordResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4383,6 +4718,15 @@ func (c *ClientWithResponses) UpdateAlertDispositionWithResponse(ctx context.Con
 		return nil, err
 	}
 	return ParseUpdateAlertDispositionResponse(rsp)
+}
+
+// ListAlertNotificationsWithResponse request returning *ListAlertNotificationsResponse
+func (c *ClientWithResponses) ListAlertNotificationsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListAlertNotificationsResponse, error) {
+	rsp, err := c.ListAlertNotifications(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertNotificationsResponse(rsp)
 }
 
 // GetAlertTriggerSnapshotWithResponse request returning *GetAlertTriggerSnapshotResponse
@@ -4815,6 +5159,49 @@ func (c *ClientWithResponses) GetCurrentUserWithResponse(ctx context.Context, re
 	return ParseGetCurrentUserResponse(rsp)
 }
 
+// GetSMTPChannelWithResponse request returning *GetSMTPChannelResponse
+func (c *ClientWithResponses) GetSMTPChannelWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSMTPChannelResponse, error) {
+	rsp, err := c.GetSMTPChannel(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSMTPChannelResponse(rsp)
+}
+
+// UpdateSMTPChannelWithBodyWithResponse request with arbitrary body returning *UpdateSMTPChannelResponse
+func (c *ClientWithResponses) UpdateSMTPChannelWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateSMTPChannelResponse, error) {
+	rsp, err := c.UpdateSMTPChannelWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSMTPChannelResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateSMTPChannelWithResponse(ctx context.Context, body UpdateSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateSMTPChannelResponse, error) {
+	rsp, err := c.UpdateSMTPChannel(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateSMTPChannelResponse(rsp)
+}
+
+// TestSMTPChannelWithBodyWithResponse request with arbitrary body returning *TestSMTPChannelResponse
+func (c *ClientWithResponses) TestSMTPChannelWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TestSMTPChannelResponse, error) {
+	rsp, err := c.TestSMTPChannelWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestSMTPChannelResponse(rsp)
+}
+
+func (c *ClientWithResponses) TestSMTPChannelWithResponse(ctx context.Context, body TestSMTPChannelJSONRequestBody, reqEditors ...RequestEditorFn) (*TestSMTPChannelResponse, error) {
+	rsp, err := c.TestSMTPChannel(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTestSMTPChannelResponse(rsp)
+}
+
 // ChangeOwnPasswordWithBodyWithResponse request with arbitrary body returning *ChangeOwnPasswordResponse
 func (c *ClientWithResponses) ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error) {
 	rsp, err := c.ChangeOwnPasswordWithBody(ctx, contentType, body, reqEditors...)
@@ -5017,6 +5404,32 @@ func ParseUpdateAlertDispositionResponse(rsp *http.Response) (*UpdateAlertDispos
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAlertNotificationsResponse parses an HTTP response from a ListAlertNotificationsWithResponse call
+func ParseListAlertNotificationsResponse(rsp *http.Response) (*ListAlertNotificationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertNotificationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []NotificationAttempt
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 
@@ -6149,6 +6562,98 @@ func ParseGetCurrentUserResponse(rsp *http.Response) (*GetCurrentUserResponse, e
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSMTPChannelResponse parses an HTTP response from a GetSMTPChannelWithResponse call
+func ParseGetSMTPChannelResponse(rsp *http.Response) (*GetSMTPChannelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSMTPChannelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SMTPChannel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateSMTPChannelResponse parses an HTTP response from a UpdateSMTPChannelWithResponse call
+func ParseUpdateSMTPChannelResponse(rsp *http.Response) (*UpdateSMTPChannelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateSMTPChannelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SMTPChannel
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTestSMTPChannelResponse parses an HTTP response from a TestSMTPChannelWithResponse call
+func ParseTestSMTPChannelResponse(rsp *http.Response) (*TestSMTPChannelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TestSMTPChannelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest NotificationQueued
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 

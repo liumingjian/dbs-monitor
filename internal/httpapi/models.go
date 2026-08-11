@@ -301,6 +301,31 @@ type MetricSeries struct {
 	LastSeen   pgtype.Timestamptz
 }
 
+type NotificationAttempt struct {
+	ID             int64
+	NotificationID pgtype.UUID
+	AttemptedAt    pgtype.Timestamptz
+	Result         string
+	FailureReason  pgtype.Text
+	RetryCount     int32
+}
+
+type NotificationDelivery struct {
+	ID              pgtype.UUID
+	AlertInstanceID pgtype.UUID
+	EventType       string
+	Channel         string
+	Target          string
+	TemplateID      pgtype.Text
+	Payload         []byte
+	Status          string
+	AttemptCount    int32
+	NextAttemptAt   pgtype.Timestamptz
+	LockedUntil     pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	CompletedAt     pgtype.Timestamptz
+}
+
 type NotificationPolicy struct {
 	ID         pgtype.UUID
 	Identifier string
@@ -330,6 +355,21 @@ type QueryStatisticsSnapshotEntry struct {
 	UserOid         pgtype.Uint32
 	Calls           int64
 	TotalExecTimeMs float64
+}
+
+type SmtpChannel struct {
+	Singleton      bool
+	Enabled        bool
+	Host           string
+	Port           int32
+	FromAddress    string
+	Recipient      string
+	AuthType       string
+	Username       pgtype.Text
+	AuthCiphertext []byte
+	AuthKeyVersion pgtype.Int4
+	TlsMode        string
+	UpdatedAt      pgtype.Timestamptz
 }
 
 type UserSession struct {

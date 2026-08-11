@@ -24,6 +24,7 @@ var packageLayers = map[string]int{
 	"internal/httpapi":        2,
 	"internal/instance":       1,
 	"internal/metric":         1,
+	"internal/notify":         1,
 	"internal/pgconn":         0,
 	"internal/platformhealth": 1,
 }
@@ -115,11 +116,12 @@ func checkPackage(t *testing.T, path, packageName string, layer int) {
 			if shortName == "api" && strings.HasSuffix(file.Name(), ".gen.go") {
 				return true
 			}
-			if (shortName == "alerting" || shortName == "httpapi" || shortName == "instance" || shortName == "metric") && typeSpec.Name.Name == "DBTX" {
+			if (shortName == "alerting" || shortName == "httpapi" || shortName == "instance" || shortName == "metric" || shortName == "notify") && typeSpec.Name.Name == "DBTX" {
 				return true
 			}
 			qualified := shortName + "." + typeSpec.Name.Name
-			if qualified != "db.DBTX" && qualified != "clock.Clock" && qualified != "pgconn.Dialer" && qualified != "collect.Collector" {
+			// notify.Channel is the pre-authorized SMTP/Webhook delivery seam; issue 79 lands SMTP and issue 80 adds Webhook.
+			if qualified != "db.DBTX" && qualified != "clock.Clock" && qualified != "pgconn.Dialer" && qualified != "collect.Collector" && qualified != "notify.Channel" {
 				t.Errorf("interface %s is not in the T11 interface whitelist", qualified)
 			}
 			return true

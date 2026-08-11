@@ -82,6 +82,17 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 			t.Fatalf("insert credential %d: %v", index, err)
 		}
 	}
+	smtpCiphertext, smtpVersion, err := keyring.EncryptSMTPPassword("smtp-rotation-value")
+	if err != nil {
+		t.Fatalf("encrypt SMTP authentication value: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO smtp_channel
+		(enabled, host, port, from_address, recipient, auth_type, username,
+		 auth_ciphertext, auth_key_version, tls_mode, updated_at)
+		VALUES (true, 'smtp.example.com', 465, 'monitor@example.com', 'dba@example.com',
+		 'PLAIN', 'monitor', $1, $2, 'IMPLICIT', now())`, smtpCiphertext, smtpVersion); err != nil {
+		t.Fatalf("insert SMTP authentication value: %v", err)
+	}
 	stagedKey := make([]byte, 32)
 	if _, err := rand.Read(stagedKey); err != nil {
 		t.Fatalf("generate staged key fixture: %v", err)
@@ -94,10 +105,11 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rotate to v2: %v", err)
 	}
-	if result.KeyVersion != 2 || result.CredentialsRotated != int64(len(credentials)) {
-		t.Fatalf("rotation result = %+v, want version 2 and %d credentials", result, len(credentials))
+	if result.KeyVersion != 2 || result.CredentialsRotated != int64(len(credentials)+1) {
+		t.Fatalf("rotation result = %+v, want version 2 and %d credentials", result, len(credentials)+1)
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
+	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 2)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2"})
 
 	if _, err := pool.Exec(ctx, `CREATE FUNCTION fail_v3_rotation() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -115,12 +127,13 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 		t.Fatal("interrupted rotation succeeded")
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 2)
+	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 2)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
 	interruptedKeyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
 	if err != nil {
 		t.Fatalf("open interrupted keyring: %v", err)
 	}
-	if err := interruptedKeyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err == nil || !strings.Contains(err.Error(), "still has 2 database references") {
+	if err := interruptedKeyring.RemoveUnreferencedKeys(ctx, instance.New(platform)); err == nil || !strings.Contains(err.Error(), "still has 3 database references") {
 		t.Fatalf("cleanup with old-key references error = %v, want reference diagnostic", err)
 	}
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v2", "master-key-v3"})
@@ -132,11 +145,32 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resume rotation to v3: %v", err)
 	}
-	if result.KeyVersion != 3 || result.CredentialsRotated != int64(len(credentials)) {
-		t.Fatalf("resumed rotation result = %+v, want version 3 and %d credentials", result, len(credentials))
+	if result.KeyVersion != 3 || result.CredentialsRotated != int64(len(credentials)+1) {
+		t.Fatalf("resumed rotation result = %+v, want version 3 and %d credentials", result, len(credentials)+1)
 	}
 	assertRotatedCredentials(t, ctx, pool, credentialDirectory, credentials, 3)
+	assertRotatedSMTPValue(t, ctx, pool, credentialDirectory, 3)
 	assertCredentialKeyringFiles(t, credentialDirectory, []string{"current", "master-key-v3"})
+}
+
+func assertRotatedSMTPValue(t *testing.T, ctx context.Context, pool *pgxpool.Pool, directory string, wantVersion int32) {
+	t.Helper()
+	keyring, err := instance.OpenCredentialKeyring(directory, true)
+	if err != nil {
+		t.Fatalf("reopen keyring for SMTP: %v", err)
+	}
+	var ciphertext []byte
+	var version int32
+	if err := pool.QueryRow(ctx, "SELECT auth_ciphertext, auth_key_version FROM smtp_channel WHERE singleton").Scan(&ciphertext, &version); err != nil {
+		t.Fatalf("read SMTP authentication value: %v", err)
+	}
+	if version != wantVersion {
+		t.Fatalf("SMTP authentication key version = %d, want %d", version, wantVersion)
+	}
+	value, err := keyring.DecryptSMTPPassword(ciphertext, version)
+	if err != nil || value != "smtp-rotation-value" {
+		t.Fatalf("decrypt SMTP authentication value = %q, %v", value, err)
+	}
 }
 
 func assertRotatedCredentials(t *testing.T, ctx context.Context, pool *pgxpool.Pool, directory string, credentials []rotationTestCredential, wantVersion int32) {

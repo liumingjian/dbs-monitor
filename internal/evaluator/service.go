@@ -2,6 +2,8 @@ package evaluator
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
@@ -262,11 +265,51 @@ func (service *Service) evaluateRule(
 		}); err != nil {
 			return fmt.Errorf("save alert event: %w", err)
 		}
+		var notificationEvent notify.EventType
+		var templateID string
+		switch kind {
+		case alerting.EventFired:
+			notificationEvent = notify.EventFiring
+			templateID = "builtin.smtp.firing.v1"
+		case alerting.EventRecovered:
+			notificationEvent = notify.EventRecovery
+			templateID = "builtin.smtp.recovery.v1"
+		default:
+			continue
+		}
+		payload, err := json.Marshal(notify.AlertPayload{
+			AlertInstanceID: uuidString(alertInstanceID),
+			RuleName:        scheduledTarget.RuleName,
+			InstanceName:    scheduledTarget.InstanceName,
+			MetricID:        evaluationTarget.MetricID,
+			Severity:        evaluationTarget.Severity,
+			CurrentValue:    fmt.Sprint(metricResult.currentValue.Float64),
+		})
+		if err != nil {
+			return fmt.Errorf("encode notification payload: %w", err)
+		}
+		_, err = notify.New(database).EnqueueAlertNotification(ctx, notify.EnqueueAlertNotificationParams{
+			AlertInstanceID: alertInstanceID,
+			EventType:       string(notificationEvent),
+			TemplateID:      pgtype.Text{String: templateID, Valid: true},
+			Payload:         payload,
+			NextAttemptAt:   evaluatedAt,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("enqueue alert notification: %w", err)
+		}
 	}
 	if err := queries.MarkAlertRuleEvaluated(ctx, evaluationCheckpoint); err != nil {
 		return fmt.Errorf("mark alert rule evaluated: %w", err)
 	}
 	return nil
+}
+
+func uuidString(value pgtype.UUID) string {
+	if !value.Valid {
+		return ""
+	}
+	return fmt.Sprintf("%x-%x-%x-%x-%x", value.Bytes[0:4], value.Bytes[4:6], value.Bytes[6:8], value.Bytes[8:10], value.Bytes[10:16])
 }
 
 func snapshotFromEvaluationTarget(target alerting.GetEvaluationTargetRow) alerting.Snapshot {

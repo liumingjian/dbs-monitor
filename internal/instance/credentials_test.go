@@ -63,6 +63,24 @@ func TestCredentialKeyringRoundTripAndNonceIsolation(t *testing.T) {
 	}
 }
 
+func TestSMTPPasswordUsesDistinctAuthenticatedPurpose(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "credentials")
+	keyring, err := OpenCredentialKeyring(directory, false)
+	if err != nil {
+		t.Fatalf("open new keyring: %v", err)
+	}
+	ciphertext, version, err := keyring.EncryptSMTPPassword("smtp-auth-value")
+	if err != nil {
+		t.Fatalf("encrypt SMTP password: %v", err)
+	}
+	if got, err := keyring.DecryptSMTPPassword(ciphertext, version); err != nil || got != "smtp-auth-value" {
+		t.Fatalf("decrypt SMTP password = %q, %v", got, err)
+	}
+	if _, err := keyring.DecryptPassword(uuid.New(), ciphertext, version); err == nil {
+		t.Fatal("SMTP ciphertext decrypted as an instance password")
+	}
+}
+
 func TestCredentialKeyringGeneratesOnlyOnce(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "credentials")
 	if err := os.MkdirAll(directory, 0o700); err != nil {

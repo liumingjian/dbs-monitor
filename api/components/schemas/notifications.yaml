@@ -1,0 +1,77 @@
+SMTPAuthType:
+  type: string
+  enum: [NONE, PLAIN, LOGIN]
+  x-enum-varnames: [SMTPAuthNone, SMTPAuthPlain, SMTPAuthLogin]
+SMTPTransportSecurity:
+  type: string
+  enum: [STARTTLS, IMPLICIT]
+  x-enum-varnames: [SMTPStartTLS, SMTPImplicitTLS]
+SMTPChannelInput:
+  type: object
+  required: [enabled, host, port, from_address, recipient, auth_type, tls_mode]
+  properties:
+    enabled: { type: boolean }
+    host: { type: string, minLength: 1 }
+    port: { type: integer, minimum: 1, maximum: 65535 }
+    from_address: { type: string, format: email }
+    recipient: { type: string, format: email }
+    auth_type: { $ref: '#/SMTPAuthType' }
+    username: { type: string }
+    password:
+      type: string
+      description: Omit to retain the existing encrypted value.
+    tls_mode: { $ref: '#/SMTPTransportSecurity' }
+SMTPChannel:
+  type: object
+  required: [configured, auth_configured]
+  properties:
+    configured: { type: boolean }
+    enabled: { type: boolean }
+    host: { type: string }
+    port: { type: integer }
+    from_address: { type: string, format: email }
+    recipient: { type: string, format: email }
+    auth_type: { $ref: '#/SMTPAuthType' }
+    username: { type: string }
+    auth_configured: { type: boolean }
+    tls_mode: { $ref: '#/SMTPTransportSecurity' }
+    updated_at: { type: string, format: date-time }
+SMTPTestInput:
+  type: object
+  required: [target]
+  properties:
+    target: { type: string, format: email }
+NotificationQueued:
+  type: object
+  required: [id]
+  properties:
+    id: { type: string, format: uuid }
+NotificationAttempt:
+  type: object
+  required: [id, event_type, channel, target, status, attempt_count, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    event_type:
+      type: string
+      enum: [FIRING, RECOVERY, REPEAT, TEST]
+      x-enum-varnames: [NotificationFiring, NotificationRecovery, NotificationRepeat, NotificationTest]
+    channel:
+      type: string
+      enum: [SMTP]
+      x-enum-varnames: [NotificationSMTP]
+    target: { type: string }
+    template_id: { type: string }
+    status:
+      type: string
+      enum: [PENDING, SENT, FAILED]
+      x-enum-varnames: [NotificationPending, NotificationSent, NotificationFailed]
+    attempt_count: { type: integer, minimum: 0, maximum: 3 }
+    created_at: { type: string, format: date-time }
+    completed_at: { type: string, format: date-time }
+    attempted_at: { type: string, format: date-time }
+    result:
+      type: string
+      enum: [SENT, FAILED]
+      x-enum-varnames: [NotificationAttemptSent, NotificationAttemptFailed]
+    failure_reason: { type: string }
+    retry_count: { type: integer, minimum: 0, maximum: 2 }

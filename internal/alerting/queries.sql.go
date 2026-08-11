@@ -918,7 +918,9 @@ func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 
 const listEvaluationTargets = `-- name: ListEvaluationTargets :many
 SELECT rule.id AS rule_id,
+       rule.name AS rule_name,
        instance.id AS instance_id,
+       instance.name AS instance_name,
        COALESCE(metric_dimension.metric_dimension_key, '{}') AS metric_dimension_key
 FROM alert_rule rule
 CROSS JOIN instance
@@ -955,7 +957,9 @@ ORDER BY instance.id, rule.id, COALESCE(metric_dimension.metric_dimension_key, '
 
 type ListEvaluationTargetsRow struct {
 	RuleID             pgtype.UUID
+	RuleName           string
 	InstanceID         pgtype.UUID
+	InstanceName       string
 	MetricDimensionKey string
 }
 
@@ -968,7 +972,13 @@ func (q *Queries) ListEvaluationTargets(ctx context.Context, evaluatedAt pgtype.
 	var items []ListEvaluationTargetsRow
 	for rows.Next() {
 		var i ListEvaluationTargetsRow
-		if err := rows.Scan(&i.RuleID, &i.InstanceID, &i.MetricDimensionKey); err != nil {
+		if err := rows.Scan(
+			&i.RuleID,
+			&i.RuleName,
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.MetricDimensionKey,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

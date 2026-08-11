@@ -193,7 +193,7 @@ func TestSQLCVetCoversAllQuerySets(t *testing.T) {
 		t.Fatalf("read sqlc config: %v", err)
 	}
 
-	const querySetCount = 4
+	const querySetCount = 5
 	contents := string(config)
 	for _, required := range []string{`uri: ${DATABASE_URL}`, `database: false`, `- sqlc/db-prepare`} {
 		if got := strings.Count(contents, required); got != querySetCount {

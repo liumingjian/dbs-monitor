@@ -101,6 +101,17 @@ func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentia
 	if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NOT NULL)").Scan(&hasEncryptedCredentials); err != nil {
 		return fmt.Errorf("inspect encrypted instance credentials: %w", err)
 	}
+	var hasSMTPTable bool
+	if err := database.QueryRowContext(ctx, "SELECT to_regclass('public.smtp_channel') IS NOT NULL").Scan(&hasSMTPTable); err != nil {
+		return fmt.Errorf("inspect SMTP credential schema: %w", err)
+	}
+	if hasSMTPTable {
+		var hasEncryptedSMTP bool
+		if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM smtp_channel WHERE auth_ciphertext IS NOT NULL)").Scan(&hasEncryptedSMTP); err != nil {
+			return fmt.Errorf("inspect encrypted SMTP credential: %w", err)
+		}
+		hasEncryptedCredentials = hasEncryptedCredentials || hasEncryptedSMTP
+	}
 	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, hasEncryptedCredentials)
 	if err != nil {
 		return err

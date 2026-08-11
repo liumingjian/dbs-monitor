@@ -3,6 +3,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { ConfigProvider } from 'antd'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { notificationSettingsRoute } from './routes/alert-settings/notifications'
 import { instanceRoute } from './routes/instances.$id'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { instanceSettingsRoute } from './routes/instances.$id/settings'
@@ -19,6 +20,7 @@ const routeTree = rootRoute.addChildren([
   collectionManagementRoute,
   instanceSettingsRoute,
   usersRoute,
+  notificationSettingsRoute,
 ])
 const router = createRouter({ routeTree, defaultPreload: 'intent' })
 const queryClient = new QueryClient()

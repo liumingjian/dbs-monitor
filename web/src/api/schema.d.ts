@@ -343,6 +343,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alert-instances/{id}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listAlertNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/smtp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSMTPChannel"];
+        put: operations["updateSMTPChannel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/smtp/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["testSMTPChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/performance-events": {
         parameters: {
             query: {
@@ -893,6 +943,71 @@ export interface components {
             truncated: boolean;
             failure_reason?: string;
             sessions: components["schemas"]["AlertTriggerSnapshotSession"][];
+        };
+        /** @enum {string} */
+        SMTPAuthType: "NONE" | "PLAIN" | "LOGIN";
+        /** @enum {string} */
+        SMTPTransportSecurity: "STARTTLS" | "IMPLICIT";
+        SMTPChannelInput: {
+            enabled: boolean;
+            host: string;
+            port: number;
+            /** Format: email */
+            from_address: string;
+            /** Format: email */
+            recipient: string;
+            auth_type: components["schemas"]["SMTPAuthType"];
+            username?: string;
+            /** @description Omit to retain the existing encrypted value. */
+            password?: string;
+            tls_mode: components["schemas"]["SMTPTransportSecurity"];
+        };
+        SMTPChannel: {
+            configured: boolean;
+            enabled?: boolean;
+            host?: string;
+            port?: number;
+            /** Format: email */
+            from_address?: string;
+            /** Format: email */
+            recipient?: string;
+            auth_type?: components["schemas"]["SMTPAuthType"];
+            username?: string;
+            auth_configured: boolean;
+            tls_mode?: components["schemas"]["SMTPTransportSecurity"];
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        SMTPTestInput: {
+            /** Format: email */
+            target: string;
+        };
+        NotificationQueued: {
+            /** Format: uuid */
+            id: string;
+        };
+        NotificationAttempt: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            event_type: "FIRING" | "RECOVERY" | "REPEAT" | "TEST";
+            /** @enum {string} */
+            channel: "SMTP";
+            target: string;
+            template_id?: string;
+            /** @enum {string} */
+            status: "PENDING" | "SENT" | "FAILED";
+            attempt_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            attempted_at?: string;
+            /** @enum {string} */
+            result?: "SENT" | "FAILED";
+            failure_reason?: string;
+            retry_count?: number;
         };
         /** @enum {string} */
         PerformanceEventType: "LOCK_BLOCKING" | "LONG_TRANSACTION" | "IDLE_IN_TRANSACTION" | "ACTIVE_SESSIONS_HIGH" | "REPLICATION_LAG" | "TEMP_FILES_SURGE";
@@ -2074,6 +2189,114 @@ export interface operations {
             };
             /** @description Alert instance not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification delivery and attempt records for one alert instance. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationAttempt"][];
+                };
+            };
+        };
+    };
+    getSMTPChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Singleton SMTP channel; an unconfigured channel is a value. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SMTPChannel"];
+                };
+            };
+        };
+    };
+    updateSMTPChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SMTPChannelInput"];
+            };
+        };
+        responses: {
+            /** @description Updated SMTP channel without authentication material. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SMTPChannel"];
+                };
+            };
+            /** @description Invalid SMTP configuration. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    testSMTPChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SMTPTestInput"];
+            };
+        };
+        responses: {
+            /** @description Test delivery was durably queued through the normal delivery path. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationQueued"];
+                };
+            };
+            /** @description SMTP is not configured or the target is invalid. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

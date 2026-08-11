@@ -56,3 +56,17 @@ sql:
         package: metric
         out: internal/metric
         sql_package: pgx/v5
+  - engine: postgresql
+    schema: migrations
+    queries: internal/notify/queries.sql
+    database:
+      uri: ${DATABASE_URL}
+    analyzer:
+      database: false
+    rules:
+      - sqlc/db-prepare
+    gen:
+      go:
+        package: notify
+        out: internal/notify
+        sql_package: pgx/v5

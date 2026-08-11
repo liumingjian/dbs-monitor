@@ -23,6 +23,7 @@ figcaption { color: #52514e; font-size: 13px; }
 .collection-todo-item summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
 .collection-todo-item p { margin: 12px 0 8px; }
 .instance-filter-bar { width: 100%; }
+.settings-section { border-top: 1px solid #e1e0d9; padding-top: 20px; }
 @media (max-width: 640px) {
   .app-header { padding-inline: 16px; }
   .app-header h3 { display: none; }
