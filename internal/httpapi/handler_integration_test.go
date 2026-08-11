@@ -279,7 +279,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if len(taskStates) != 8 {
 		t.Fatalf("collection task state count = %d, want 8", len(taskStates))
 	}
-	capabilitiesURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/capabilities", server.URL, createBody.Instance.ID)
+	capabilitiesURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/capabilities", server.URL, createBody.Instance.Id)
 	capabilities := readCapabilities(t, client, capabilitiesURL)
 	if len(capabilities) != 4 {
 		t.Fatalf("capability count = %d, want 4", len(capabilities))
@@ -379,13 +379,13 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertStep(t, client, strings.Replace(seriesURL, "step=raw", "step=auto", 1), "15s")
 	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
 		SET states = jsonb_set(states, '{role.pg_monitor}', '"MISSING"')
-		WHERE instance_id = $1`, createBody.Instance.ID); err != nil {
+		WHERE instance_id = $1`, createBody.Instance.Id); err != nil {
 		t.Fatalf("set missing pg_monitor capability: %v", err)
 	}
 	assertUnavailability(t, client, seriesURL, "PERMISSION_DENIED")
 	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
 		SET states = jsonb_set(states, '{role.pg_monitor}', '"PRESENT"')
-		WHERE instance_id = $1`, createBody.Instance.ID); err != nil {
+		WHERE instance_id = $1`, createBody.Instance.Id); err != nil {
 		t.Fatalf("restore pg_monitor capability: %v", err)
 	}
 	tooWideRaw := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.total&from=%s&to=%s&step=raw",
