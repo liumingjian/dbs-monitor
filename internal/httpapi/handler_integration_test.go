@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -89,28 +90,39 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	login.Body.Close()
 
-	targetPassword := env("PGPASSWORD", "dbs_monitor")
-	instanceInput := map[string]any{
-		"name": "target", "host": env("PGHOST", "localhost"), "port": envInt("PGPORT", 55432),
-		"database": env("PGDATABASE", "dbs_monitor"), "username": env("PGUSER", "dbs_monitor"),
-		"password": targetPassword,
+	instanceInput := api.InstanceCreateInput{
+		Name:     "target",
+		Host:     env("PGHOST", "localhost"),
+		Port:     envInt("PGPORT", 55432),
+		Database: env("PGDATABASE", "dbs_monitor"),
+		Username: env("PGUSER", "dbs_monitor"),
+		Password: env("PGPASSWORD", "dbs_monitor"),
 	}
-	assertCreateRejected(t, ctx, client, server.URL, pool, map[string]any{
-		"name": "unreachable", "host": env("PGHOST", "localhost"), "port": 1,
-		"database": env("PGDATABASE", "dbs_monitor"), "username": env("PGUSER", "dbs_monitor"),
-		"password": targetPassword,
-	}, "NETWORK_UNREACHABLE")
-	assertCreateRejected(t, ctx, client, server.URL, pool, map[string]any{
-		"name": "bad-auth", "host": env("PGHOST", "localhost"), "port": envInt("PGPORT", 55432),
-		"database": env("PGDATABASE", "dbs_monitor"), "username": env("PGUSER", "dbs_monitor"),
-		"password": "definitely-wrong-password",
-	}, "AUTH_FAILED")
+	assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
+		Name:     "unreachable",
+		Host:     instanceInput.Host,
+		Port:     1,
+		Database: instanceInput.Database,
+		Username: instanceInput.Username,
+		Password: instanceInput.Password,
+	}, api.NETWORKUNREACHABLE)
+	assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
+		Name:     "bad-auth",
+		Host:     instanceInput.Host,
+		Port:     instanceInput.Port,
+		Database: instanceInput.Database,
+		Username: instanceInput.Username,
+		Password: "definitely-wrong-password",
+	}, api.AUTHFAILED)
 	if os.Getenv("PG12PORT") != "" {
-		assertCreateRejected(t, ctx, client, server.URL, pool, map[string]any{
-			"name": "unsupported", "host": env("PG12HOST", "localhost"), "port": envInt("PG12PORT", 55431),
-			"database": env("PG12DATABASE", "monitored"), "username": env("PG12USER", "monitored"),
-			"password": env("PG12PASSWORD", "monitored"),
-		}, "VERSION_UNSUPPORTED")
+		assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
+			Name:     "unsupported",
+			Host:     env("PG12HOST", "localhost"),
+			Port:     envInt("PG12PORT", 55431),
+			Database: env("PG12DATABASE", "monitored"),
+			Username: env("PG12USER", "monitored"),
+			Password: env("PG12PASSWORD", "monitored"),
+		}, api.ONBOARDINGVERSIONUNSUPPORTED)
 	}
 	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/instances", instanceInput, "")
 	if created.StatusCode != http.StatusCreated {
@@ -147,14 +159,17 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		FROM instance WHERE id = $1`, createBody.Instance.ID).Scan(&originalCiphertext, &keyVersion, &credentialVersion); err != nil {
 		t.Fatalf("read stored credential: %v", err)
 	}
-	if bytes.Contains(originalCiphertext, []byte(targetPassword)) {
+	if bytes.Contains(originalCiphertext, []byte(instanceInput.Password)) {
 		t.Fatal("stored credential contains plaintext password")
 	}
 	if keyVersion != 1 || credentialVersion != 1 {
 		t.Fatalf("initial key/credential versions = %d/%d, want 1/1", keyVersion, credentialVersion)
 	}
-	failedMetadata := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, map[string]any{
-		"name": "must-not-commit", "host": instanceInput["host"], "port": 1, "database": instanceInput["database"],
+	failedMetadata := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, api.InstanceMetadataInput{
+		Name:     "must-not-commit",
+		Host:     instanceInput.Host,
+		Port:     1,
+		Database: instanceInput.Database,
 	}, "")
 	if failedMetadata.StatusCode != http.StatusBadRequest {
 		t.Fatalf("failed metadata update status = %d, want 400", failedMetadata.StatusCode)
@@ -165,12 +180,15 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT name, port FROM instance WHERE id = $1", createBody.Instance.ID).Scan(&storedName, &storedPort); err != nil {
 		t.Fatalf("read metadata after failed update: %v", err)
 	}
-	if storedName != "target" || storedPort != envInt("PGPORT", 55432) {
-		t.Fatalf("metadata after failed update = %q:%d, want target:%d", storedName, storedPort, envInt("PGPORT", 55432))
+	if storedName != "target" || storedPort != instanceInput.Port {
+		t.Fatalf("metadata after failed update = %q:%d, want target:%d", storedName, storedPort, instanceInput.Port)
 	}
 
-	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, map[string]any{
-		"name": "renamed target", "host": instanceInput["host"], "port": instanceInput["port"], "database": instanceInput["database"],
+	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, api.InstanceMetadataInput{
+		Name:     "renamed target",
+		Host:     instanceInput.Host,
+		Port:     instanceInput.Port,
+		Database: instanceInput.Database,
 	}, "")
 	if updated.StatusCode != http.StatusOK {
 		t.Fatalf("update instance status = %d, want 200", updated.StatusCode)
@@ -186,8 +204,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 
 	credentialsURL := server.URL + "/api/v1/instances/" + createBody.Instance.ID + "/credentials"
-	failedCredential := requestJSON(t, client, http.MethodPut, credentialsURL, map[string]any{
-		"username": instanceInput["username"], "password": "definitely-wrong-password",
+	failedCredential := requestJSON(t, client, http.MethodPut, credentialsURL, api.InstanceCredentialInput{
+		Username: instanceInput.Username,
+		Password: "definitely-wrong-password",
 	}, "")
 	if failedCredential.StatusCode != http.StatusBadRequest {
 		t.Fatalf("failed credential update status = %d, want 400", failedCredential.StatusCode)
@@ -201,8 +220,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatal("failed credential update changed the stored credential")
 	}
 
-	rotated := requestJSON(t, client, http.MethodPut, credentialsURL, map[string]any{
-		"username": instanceInput["username"], "password": targetPassword,
+	rotated := requestJSON(t, client, http.MethodPut, credentialsURL, api.InstanceCredentialInput{
+		Username: instanceInput.Username,
+		Password: instanceInput.Password,
 	}, "")
 	if rotated.StatusCode != http.StatusOK {
 		t.Fatalf("credential update status = %d, want 200", rotated.StatusCode)
@@ -214,7 +234,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("decode credential update response: %v", err)
 	}
 	rotated.Body.Close()
-	if credentialResponse.Username != instanceInput["username"] {
+	if credentialResponse.Username != instanceInput.Username {
 		t.Fatalf("credential response username = %q", credentialResponse.Username)
 	}
 	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, createBody.Instance.ID).
@@ -227,11 +247,14 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	rotatedCiphertext := bytes.Clone(updatedCiphertext)
 
 	updatedHost := "127.0.0.1"
-	if instanceInput["host"] == updatedHost {
+	if instanceInput.Host == updatedHost {
 		updatedHost = "localhost"
 	}
-	updatedConnection := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, map[string]any{
-		"name": "renamed target", "host": updatedHost, "port": instanceInput["port"], "database": instanceInput["database"],
+	updatedConnection := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+createBody.Instance.ID, api.InstanceMetadataInput{
+		Name:     "renamed target",
+		Host:     updatedHost,
+		Port:     instanceInput.Port,
+		Database: instanceInput.Database,
 	}, "")
 	if updatedConnection.StatusCode != http.StatusOK {
 		t.Fatalf("connection metadata update status = %d, want 200", updatedConnection.StatusCode)
@@ -363,7 +386,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("collect unreachable instance: %v", err)
 	}
 	assertUnavailability(t, client, seriesURL, "DB_UNREACHABLE")
-	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", createBody.Instance.ID, envInt("PGPORT", 55432)); err != nil {
+	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", createBody.Instance.ID, instanceInput.Port); err != nil {
 		t.Fatalf("restore instance port: %v", err)
 	}
 	if err := collector.RunOnce(ctx); err != nil {
@@ -559,18 +582,14 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 }
 
-func assertCreateRejected(t *testing.T, ctx context.Context, client *http.Client, serverURL string, pool *pgxpool.Pool, input map[string]any, wantCode string) {
+func assertCreateRejected(t *testing.T, ctx context.Context, client *http.Client, serverURL string, pool *pgxpool.Pool, input api.InstanceCreateInput, wantCode api.ErrorErrorCode) {
 	t.Helper()
 	response := requestJSON(t, client, http.MethodPost, serverURL+"/api/v1/instances", input, "")
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("create rejection status = %d, want 400", response.StatusCode)
 	}
-	var body struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
+	var body api.Error
 	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
 		t.Fatalf("decode create rejection: %v", err)
 	}

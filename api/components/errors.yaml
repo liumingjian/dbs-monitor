@@ -18,6 +18,7 @@ Error:
             - INTERNAL
             - NETWORKUNREACHABLE
             - AUTHFAILED
+            # VERSIONUNSUPPORTED is already generated for the Unavailability enum.
             - ONBOARDINGVERSIONUNSUPPORTED
         message:
           type: string

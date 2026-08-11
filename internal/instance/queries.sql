@@ -23,7 +23,7 @@ FROM instance
 WHERE id = $1;
 
 -- name: GetInstanceForUpdate :one
-SELECT id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_version, created_at
+SELECT host, port, database_name, username, password_ciphertext, password_key_version
 FROM instance
 WHERE id = $1
 FOR UPDATE;
@@ -39,7 +39,7 @@ SET name = $2,
         ELSE 0
     END
 WHERE id = $1
-RETURNING id, name, host, port, database_name, username, agent_version, created_at;
+RETURNING id, name, host, port, database_name, username, agent_version;
 
 -- name: UpdateInstanceCredential :one
 UPDATE instance

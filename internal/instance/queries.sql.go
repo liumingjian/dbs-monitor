@@ -136,39 +136,31 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 }
 
 const getInstanceForUpdate = `-- name: GetInstanceForUpdate :one
-SELECT id, name, host, port, database_name, username, password_ciphertext, password_key_version, agent_version, created_at
+SELECT host, port, database_name, username, password_ciphertext, password_key_version
 FROM instance
 WHERE id = $1
 FOR UPDATE
 `
 
 type GetInstanceForUpdateRow struct {
-	ID                 pgtype.UUID
-	Name               string
 	Host               string
 	Port               int32
 	DatabaseName       string
 	Username           string
 	PasswordCiphertext []byte
 	PasswordKeyVersion int32
-	AgentVersion       pgtype.Text
-	CreatedAt          pgtype.Timestamptz
 }
 
 func (q *Queries) GetInstanceForUpdate(ctx context.Context, id pgtype.UUID) (GetInstanceForUpdateRow, error) {
 	row := q.db.QueryRow(ctx, getInstanceForUpdate, id)
 	var i GetInstanceForUpdateRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
 		&i.Host,
 		&i.Port,
 		&i.DatabaseName,
 		&i.Username,
 		&i.PasswordCiphertext,
 		&i.PasswordKeyVersion,
-		&i.AgentVersion,
-		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -343,7 +335,7 @@ SET name = $2,
         ELSE 0
     END
 WHERE id = $1
-RETURNING id, name, host, port, database_name, username, agent_version, created_at
+RETURNING id, name, host, port, database_name, username, agent_version
 `
 
 type UpdateInstanceMetadataParams struct {
@@ -362,7 +354,6 @@ type UpdateInstanceMetadataRow struct {
 	DatabaseName string
 	Username     string
 	AgentVersion pgtype.Text
-	CreatedAt    pgtype.Timestamptz
 }
 
 func (q *Queries) UpdateInstanceMetadata(ctx context.Context, arg UpdateInstanceMetadataParams) (UpdateInstanceMetadataRow, error) {
@@ -382,7 +373,6 @@ func (q *Queries) UpdateInstanceMetadata(ctx context.Context, arg UpdateInstance
 		&i.DatabaseName,
 		&i.Username,
 		&i.AgentVersion,
-		&i.CreatedAt,
 	)
 	return i, err
 }

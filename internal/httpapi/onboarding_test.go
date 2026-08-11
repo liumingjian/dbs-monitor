@@ -15,8 +15,8 @@ func TestTargetVersionSupported(t *testing.T) {
 		serverVersionNum int
 		want             bool
 	}{
-		{name: "PostgreSQL 12", serverVersionNum: 129999, want: false},
-		{name: "PostgreSQL 13", serverVersionNum: 130000, want: true},
+		{name: "below minimum", serverVersionNum: 120000, want: false},
+		{name: "minimum version", serverVersionNum: 130000, want: true},
 		{name: "newer PostgreSQL", serverVersionNum: 180000, want: true},
 	}
 
@@ -41,8 +41,8 @@ func TestClassifyTargetConnectionError(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			failure, ok := classifyTargetConnectionError(test.err).(*targetValidationError)
-			if !ok || failure.code != test.want {
+			failure := classifyTargetConnectionError(test.err)
+			if failure.code != test.want {
 				t.Fatalf("classification = %#v, want %s", failure, test.want)
 			}
 		})

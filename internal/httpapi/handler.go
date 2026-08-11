@@ -112,8 +112,11 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		return nil, errors.New("instance body is required")
 	}
 	if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
-		host: request.Body.Host, port: request.Body.Port, database: request.Body.Database,
-		username: request.Body.Username, password: request.Body.Password,
+		host:     request.Body.Host,
+		port:     request.Body.Port,
+		database: request.Body.Database,
+		username: request.Body.Username,
+		password: request.Body.Password,
 	}); err != nil {
 		var validationError *targetValidationError
 		if errors.As(err, &validationError) {
@@ -127,9 +130,13 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		return nil, err
 	}
 	row, err := instance.New(handler.platform).CreateInstance(ctx, instance.CreateInstanceParams{
-		ID: pgtype.UUID{Bytes: id, Valid: true}, Name: request.Body.Name,
-		Host: request.Body.Host, Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
-		Username: request.Body.Username, PasswordCiphertext: ciphertext,
+		ID:                 pgtype.UUID{Bytes: id, Valid: true},
+		Name:               request.Body.Name,
+		Host:               request.Body.Host,
+		Port:               int32(request.Body.Port),
+		DatabaseName:       request.Body.Database,
+		Username:           request.Body.Username,
+		PasswordCiphertext: ciphertext,
 		PasswordKeyVersion: keyVersion,
 	})
 	if err != nil {
@@ -157,29 +164,41 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		return nil, errors.New("instance body is required")
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
-	var row instance.UpdateInstanceMetadataRow
+	var updatedInstance instance.UpdateInstanceMetadataRow
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := instance.New(tx)
-		current, err := queries.GetInstanceForUpdate(ctx, instanceID)
+		storedInstance, err := queries.GetInstanceForUpdate(ctx, instanceID)
 		if err != nil {
 			return err
 		}
-		connectionChanged := current.Host != request.Body.Host || current.Port != int32(request.Body.Port) || current.DatabaseName != request.Body.Database
+		connectionChanged := storedInstance.Host != request.Body.Host ||
+			storedInstance.Port != int32(request.Body.Port) ||
+			storedInstance.DatabaseName != request.Body.Database
 		if connectionChanged {
-			password, err := handler.keyring.DecryptPassword(request.Id, current.PasswordCiphertext, current.PasswordKeyVersion)
+			password, err := handler.keyring.DecryptPassword(
+				request.Id,
+				storedInstance.PasswordCiphertext,
+				storedInstance.PasswordKeyVersion,
+			)
 			if err != nil {
 				return err
 			}
 			if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
-				host: request.Body.Host, port: request.Body.Port, database: request.Body.Database,
-				username: current.Username, password: password,
+				host:     request.Body.Host,
+				port:     request.Body.Port,
+				database: request.Body.Database,
+				username: storedInstance.Username,
+				password: password,
 			}); err != nil {
 				return err
 			}
 		}
-		row, err = queries.UpdateInstanceMetadata(ctx, instance.UpdateInstanceMetadataParams{
-			ID: instanceID, Name: request.Body.Name, Host: request.Body.Host,
-			Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
+		updatedInstance, err = queries.UpdateInstanceMetadata(ctx, instance.UpdateInstanceMetadataParams{
+			ID:           instanceID,
+			Name:         request.Body.Name,
+			Host:         request.Body.Host,
+			Port:         int32(request.Body.Port),
+			DatabaseName: request.Body.Database,
 		})
 		return err
 	})
@@ -190,11 +209,20 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		}
 		return nil, err
 	}
-	status, err := alertStatus(ctx, handler.platform, row.ID)
+	status, err := alertStatus(ctx, handler.platform, updatedInstance.ID)
 	if err != nil {
 		return nil, err
 	}
-	return api.UpdateInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, status)), nil
+	return api.UpdateInstance200JSONResponse(toAPIInstance(
+		updatedInstance.ID,
+		updatedInstance.Name,
+		updatedInstance.Host,
+		updatedInstance.Port,
+		updatedInstance.DatabaseName,
+		updatedInstance.Username,
+		updatedInstance.AgentVersion,
+		status,
+	)), nil
 }
 
 func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request api.UpdateInstanceCredentialRequestObject) (api.UpdateInstanceCredentialResponseObject, error) {
@@ -202,16 +230,19 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		return nil, errors.New("instance credential body is required")
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
-	var username string
+	var updatedUsername string
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := instance.New(tx)
-		current, err := queries.GetInstanceForUpdate(ctx, instanceID)
+		storedInstance, err := queries.GetInstanceForUpdate(ctx, instanceID)
 		if err != nil {
 			return err
 		}
 		if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
-			host: current.Host, port: int(current.Port), database: current.DatabaseName,
-			username: request.Body.Username, password: request.Body.Password,
+			host:     storedInstance.Host,
+			port:     int(storedInstance.Port),
+			database: storedInstance.DatabaseName,
+			username: request.Body.Username,
+			password: request.Body.Password,
 		}); err != nil {
 			return err
 		}
@@ -219,9 +250,11 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		if err != nil {
 			return err
 		}
-		username, err = queries.UpdateInstanceCredential(ctx, instance.UpdateInstanceCredentialParams{
-			ID: instanceID, Username: request.Body.Username,
-			PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+		updatedUsername, err = queries.UpdateInstanceCredential(ctx, instance.UpdateInstanceCredentialParams{
+			ID:                 instanceID,
+			Username:           request.Body.Username,
+			PasswordCiphertext: ciphertext,
+			PasswordKeyVersion: keyVersion,
 		})
 		return err
 	})
@@ -232,7 +265,7 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		}
 		return nil, err
 	}
-	return api.UpdateInstanceCredential200JSONResponse{Username: username}, nil
+	return api.UpdateInstanceCredential200JSONResponse{Username: updatedUsername}, nil
 }
 
 func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteInstanceRequestObject) (api.DeleteInstanceResponseObject, error) {

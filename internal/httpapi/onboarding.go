@@ -28,8 +28,8 @@ type targetValidationError struct {
 	message string
 }
 
-func (failure *targetValidationError) Error() string {
-	return failure.message
+func (validationError *targetValidationError) Error() string {
+	return validationError.message
 }
 
 func targetVersionSupported(serverVersionNum int) bool {
@@ -48,16 +48,16 @@ func validateTargetConnection(ctx context.Context, dialer monitorpg.Dialer, inpu
 	config.Password = input.password
 	config.RuntimeParams["application_name"] = "dbs-monitor-onboarding"
 
-	testContext, cancel := context.WithTimeout(ctx, 3*time.Second)
+	validationContext, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	connection, err := dialer.Dial(testContext, config)
+	connection, err := dialer.Dial(validationContext, config)
 	if err != nil {
 		return classifyTargetConnectionError(err)
 	}
 	defer connection.Close(context.Background())
 
 	var serverVersionNum int
-	if err := connection.QueryRow(testContext, "SELECT current_setting('server_version_num')::integer").Scan(&serverVersionNum); err != nil {
+	if err := connection.QueryRow(validationContext, "SELECT current_setting('server_version_num')::integer").Scan(&serverVersionNum); err != nil {
 		return classifyTargetConnectionError(err)
 	}
 	if !targetVersionSupported(serverVersionNum) {
@@ -66,7 +66,7 @@ func validateTargetConnection(ctx context.Context, dialer monitorpg.Dialer, inpu
 	return nil
 }
 
-func classifyTargetConnectionError(err error) error {
+func classifyTargetConnectionError(err error) *targetValidationError {
 	var postgresError *pgxconn.PgError
 	if errors.As(err, &postgresError) && strings.HasPrefix(postgresError.Code, "28") {
 		return &targetValidationError{code: api.AUTHFAILED, message: "目标 PostgreSQL 认证失败"}

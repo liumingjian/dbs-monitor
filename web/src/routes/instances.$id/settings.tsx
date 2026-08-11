@@ -20,70 +20,84 @@ export const instanceSettingsRoute = createRoute({
 
 function InstanceSettingsPage() {
   const { id } = instanceSettingsRoute.useParams()
-  const instance = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } })
-  const currentUser = $api.useQuery('get', '/api/v1/me')
-  const updateMetadata = $api.useMutation('put', '/api/v1/instances/{id}')
-  const updateCredential = $api.useMutation('put', '/api/v1/instances/{id}/credentials')
+  const instanceQuery = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } })
+  const currentUserQuery = $api.useQuery('get', '/api/v1/me')
+  const updateMetadataMutation = $api.useMutation('put', '/api/v1/instances/{id}')
+  const updateCredentialMutation = $api.useMutation('put', '/api/v1/instances/{id}/credentials')
   const [metadataForm] = Form.useForm<InstanceMetadataInput>()
   const [credentialForm] = Form.useForm<InstanceCredentialInput>()
-  const [credentialOpen, setCredentialOpen] = useState(false)
-  const [error, setError] = useState('')
-  const canEditMetadata = currentUser.data?.role === 'ALERT_ADMIN' || currentUser.data?.role === 'PLATFORM_ADMIN'
-  const canEditCredential = currentUser.data?.role === 'PLATFORM_ADMIN'
+  const [credentialModalOpen, setCredentialModalOpen] = useState(false)
+  const [actionError, setActionError] = useState('')
+  const canEditMetadata = currentUserQuery.data?.role === 'ALERT_ADMIN' || currentUserQuery.data?.role === 'PLATFORM_ADMIN'
+  const canEditCredential = currentUserQuery.data?.role === 'PLATFORM_ADMIN'
+  const metadataDisabledReason = canEditMetadata ? undefined : '需要告警管理员角色'
+  const credentialDisabledReason = canEditCredential ? undefined : '需要平台管理员角色'
 
   useEffect(() => {
-    if (instance.data) {
+    if (instanceQuery.data) {
       metadataForm.setFieldsValue({
-        name: instance.data.name,
-        host: instance.data.host,
-        port: instance.data.port,
-        database: instance.data.database,
+        name: instanceQuery.data.name,
+        host: instanceQuery.data.host,
+        port: instanceQuery.data.port,
+        database: instanceQuery.data.database,
       })
     }
-  }, [instance.data, metadataForm])
+  }, [instanceQuery.data, metadataForm])
 
   function saveMetadata(values: InstanceMetadataInput) {
-    setError('')
-    updateMetadata.mutate({ params: { path: { id } }, body: values }, {
-      onSuccess: () => void instance.refetch(),
-      onError: (failure) => setError(apiErrorMessage(failure, '保存元数据失败')),
+    setActionError('')
+    updateMetadataMutation.mutate({ params: { path: { id } }, body: values }, {
+      onSuccess: () => void instanceQuery.refetch(),
+      onError: (failure) => setActionError(apiErrorMessage(failure, '保存元数据失败')),
     })
   }
 
   function saveCredential(values: InstanceCredentialInput) {
-    setError('')
-    updateCredential.mutate({ params: { path: { id } }, body: values }, {
+    setActionError('')
+    updateCredentialMutation.mutate({ params: { path: { id } }, body: values }, {
       onSuccess: () => {
-        setCredentialOpen(false)
+        setCredentialModalOpen(false)
         credentialForm.resetFields()
-        void instance.refetch()
+        void instanceQuery.refetch()
       },
-      onError: (failure) => setError(apiErrorMessage(failure, '更新凭据失败')),
+      onError: (failure) => setActionError(apiErrorMessage(failure, '更新凭据失败')),
     })
   }
 
   function openCredentialModal() {
-    credentialForm.setFieldsValue({ username: instance.data?.username })
-    setCredentialOpen(true)
+    credentialForm.setFieldsValue({ username: instanceQuery.data?.username })
+    setCredentialModalOpen(true)
   }
 
   return (
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Link to="/instances">返回实例列表</Link>
-      <Typography.Title level={2} style={{ margin: 0 }}>{instance.data?.name ?? '接入设置'}</Typography.Title>
-      {error && <Alert type="error" title={error} closable onClose={() => setError('')} />}
+      <Typography.Title level={2} style={{ margin: 0 }}>{instanceQuery.data?.name ?? '接入设置'}</Typography.Title>
+      {actionError && <Alert type="error" title={actionError} closable onClose={() => setActionError('')} />}
 
       <section aria-labelledby="metadata-heading">
         <Typography.Title id="metadata-heading" level={4}>元数据</Typography.Title>
         <Form<InstanceMetadataInput> form={metadataForm} layout="vertical" onFinish={saveMetadata} disabled={!canEditMetadata}>
           <div className="settings-form-grid">
-            <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true }]}><Input /></Form.Item>
-            <Form.Item name="host" label="主机" rules={[{ required: true, whitespace: true }]}><Input /></Form.Item>
-            <Form.Item name="port" label="端口" rules={[{ required: true }]}><InputNumber min={1} max={65535} style={{ width: '100%' }} /></Form.Item>
-            <Form.Item name="database" label="数据库" rules={[{ required: true, whitespace: true }]}><Input /></Form.Item>
+            <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true }]}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="host" label="主机" rules={[{ required: true, whitespace: true }]}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="port" label="端口" rules={[{ required: true }]}>
+              <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="database" label="数据库" rules={[{ required: true, whitespace: true }]}>
+              <Input />
+            </Form.Item>
           </div>
-          <Tooltip title={canEditMetadata ? undefined : '需要告警管理员角色'}>
-            <span><Button type="primary" icon={<SaveOutlined />} htmlType="submit" disabled={!canEditMetadata} loading={updateMetadata.isPending}>保存元数据</Button></span>
+          <Tooltip title={metadataDisabledReason}>
+            <span>
+              <Button type="primary" icon={<SaveOutlined />} htmlType="submit" disabled={!canEditMetadata} loading={updateMetadataMutation.isPending}>
+                保存元数据
+              </Button>
+            </span>
           </Tooltip>
         </Form>
       </section>
@@ -93,10 +107,12 @@ function InstanceSettingsPage() {
         <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start">
           <div>
             <Typography.Title id="credential-heading" level={4}>PG 凭据</Typography.Title>
-            <CredentialSummary username={instance.data?.username ?? ''} />
+            <CredentialSummary username={instanceQuery.data?.username ?? ''} />
           </div>
-          <Tooltip title={canEditCredential ? undefined : '需要平台管理员角色'}>
-            <span><Button icon={<KeyOutlined />} disabled={!canEditCredential} onClick={openCredentialModal}>更新凭据</Button></span>
+          <Tooltip title={credentialDisabledReason}>
+            <span>
+              <Button icon={<KeyOutlined />} disabled={!canEditCredential} onClick={openCredentialModal}>更新凭据</Button>
+            </span>
           </Tooltip>
         </Space>
       </section>
@@ -113,11 +129,15 @@ function InstanceSettingsPage() {
         <Typography.Text type="secondary">暂不可用</Typography.Text>
       </section>
 
-      <Modal title="更新 PG 凭据" open={credentialOpen} footer={null} destroyOnHidden onCancel={() => setCredentialOpen(false)}>
+      <Modal title="更新 PG 凭据" open={credentialModalOpen} footer={null} destroyOnHidden onCancel={() => setCredentialModalOpen(false)}>
         <Form<InstanceCredentialInput> form={credentialForm} layout="vertical" onFinish={saveCredential}>
-          <Form.Item name="username" label="新用户名" rules={[{ required: true, whitespace: true }]}><Input autoComplete="off" /></Form.Item>
-          <Form.Item name="password" label="新密码" rules={[{ required: true }]}><Input type="password" autoComplete="new-password" /></Form.Item>
-          <Button type="primary" htmlType="submit" loading={updateCredential.isPending}>连接测试并更新</Button>
+          <Form.Item name="username" label="新用户名" rules={[{ required: true, whitespace: true }]}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="password" label="新密码" rules={[{ required: true }]}>
+            <Input type="password" autoComplete="new-password" />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={updateCredentialMutation.isPending}>连接测试并更新</Button>
         </Form>
       </Modal>
     </Space>
@@ -131,7 +151,12 @@ export function CredentialSummary({ username }: { username: string }) {
       {
         key: 'password',
         label: '密码',
-        children: <Space><Input aria-label="密码状态" type="password" value={passwordMask} readOnly style={{ width: 150 }} /><Typography.Text type="secondary">已设置</Typography.Text></Space>,
+        children: (
+          <Space>
+            <Input aria-label="密码状态" type="password" value={passwordMask} readOnly style={{ width: 150 }} />
+            <Typography.Text type="secondary">已设置</Typography.Text>
+          </Space>
+        ),
       },
     ]} />
   )
