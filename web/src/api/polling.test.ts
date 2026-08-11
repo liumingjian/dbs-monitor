@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import instanceListSource from '../routes/instances/index.tsx?raw'
 import { pollingIntervals } from './polling'
 
 describe('polling intervals', () => {
@@ -15,5 +16,10 @@ describe('polling intervals', () => {
       history: false,
       details: false,
     })
+  })
+
+  it('keeps instance-list freshness on the centralized cadence', () => {
+    expect(instanceListSource).toContain('collectionInterval={pollingIntervals.instances}')
+    expect(instanceListSource).not.toMatch(/collectionInterval=\{\d[\d_]*\}/)
   })
 })
