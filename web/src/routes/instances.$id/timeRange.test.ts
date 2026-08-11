@@ -44,4 +44,29 @@ describe('time range search', () => {
       metric: 'not-a-metric',
     })).toEqual({ error: '指标必须来自指标字典' })
   })
+
+  it('round-trips standard monitoring controls through search params', () => {
+    const value = {
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+      step: '1m' as const,
+      columns: 3 as const,
+      connect: false,
+      metric: 'pg.tps' as const,
+    }
+
+    expect(parseTimeRange(serializeTimeRange(value))).toEqual(value)
+  })
+
+  it.each([
+    [{ step: '10m' }, '粒度必须来自支持的选项'],
+    [{ columns: 4 }, '列数必须是 1、2 或 3'],
+    [{ connect: 'sometimes' }, '光标联动参数无效'],
+  ])('returns an explained invalid state for malformed monitoring search %o', (extra, error) => {
+    expect(parseTimeRange({
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+      ...extra,
+    })).toEqual({ error })
+  })
 })

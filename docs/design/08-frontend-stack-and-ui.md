@@ -250,6 +250,8 @@ web/src/
 清单的判据是客观的：**「它是不是在呈现 R1 定死的语义？」**——不是「反正好几个页面都用到」。
 
 > **收口增补 2026-08-05：骨架偏离登记。** T11 当前把时间范围的 parse / serialize 逻辑内联在 `web/src/routes/instances.$id/timeRange.ts`，没有独立的 `TimeRangePicker` 组件；待 R5 提取组件时再登记回本清单。
+>
+> **R5 回写 2026-08-11（issue #85）：** `TimeRangePicker` 已提取至 `web/src/domain/TimeRangePicker.tsx` 并登记进封闭清单，骨架内联偏离关闭。
 
 **并且明令禁止 `src/components/`、`src/utils/`、`src/shared/`、`src/common/`**（承 T5 同一条禁令）。
 

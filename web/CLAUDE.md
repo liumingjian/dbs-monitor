@@ -24,7 +24,7 @@ TS + React + Vite 纯 SPA，AntD 6 + ECharts 6，TanStack Router + openapi-react
 ## 目录
 
 路由树即页面树；页面私有件不上浮。
-`domain/` 封闭清单：`Freshness` / `MetricChart` / `UnavailabilityBlock` / `CollectionPausedTag`。
+`domain/` 封闭清单：`Freshness` / `MetricChart` / `UnavailabilityBlock` / `CollectionPausedTag` / `TimeRangePicker`。
 不建 `components/` / `utils/` / `shared/` / `common/`。
 `invalidateQueries` 只许出现在 `domain/<域>/mutations.ts`。
 

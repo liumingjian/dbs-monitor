@@ -28,7 +28,7 @@ function RootLayout() {
         <Typography.Title level={3} style={{ color: 'white', margin: 0 }}>DBS Monitor</Typography.Title>
         {location.pathname !== '/login' && <AuthenticatedHeader />}
       </Layout.Header>
-      <Layout.Content style={{ padding: 24, maxWidth: 1200, width: '100%', margin: '0 auto' }}>
+      <Layout.Content style={{ padding: 24, maxWidth: 1520, width: '100%', margin: '0 auto' }}>
         <Outlet />
       </Layout.Content>
     </Layout>

@@ -4,6 +4,7 @@ import { Alert, Button, Form, Input, InputNumber, Modal, Space, Table, Tooltip, 
 import { useState } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
+import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { defaultTimeRange } from '../instances.$id/timeRange'
 import { rootRoute } from '../root'
@@ -17,7 +18,7 @@ export const instancesRoute = createRoute({
 })
 
 function InstancesPage() {
-  const instancesQuery = $api.useQuery('get', '/api/v1/instances', {}, { refetchInterval: 30_000 })
+  const instancesQuery = $api.useQuery('get', '/api/v1/instances', {}, { refetchInterval: pollingIntervals.instances })
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
   const createInstanceMutation = $api.useMutation('post', '/api/v1/instances')
   const [createOpen, setCreateOpen] = useState(false)

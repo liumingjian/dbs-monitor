@@ -24,6 +24,7 @@ import {
 import { useState } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
+import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { rootRoute } from '../root'
 import { defaultTimeRange } from './timeRange'
@@ -68,7 +69,7 @@ export const collectionManagementRoute = createRoute({
   component: CollectionManagementPage,
 })
 
-const pollingOptions = { refetchInterval: 30_000 }
+const pollingOptions = { refetchInterval: pollingIntervals.collectionManagement }
 
 function CollectionManagementPage() {
   const { id } = collectionManagementRoute.useParams()
