@@ -1,0 +1,21 @@
+/api/v1/alert-instances/{id}/trigger-snapshot:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [alerts]
+    operationId: getAlertTriggerSnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Trigger-time session snapshot result
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alerts.yaml#/AlertTriggerSnapshot }
+      '404':
+        description: Alert instance not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

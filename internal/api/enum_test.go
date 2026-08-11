@@ -62,6 +62,9 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 			api.KNOWNISSUE: "", api.FALSEPOSITIVE: "", api.DUPLICATE: "",
 			api.IMPACTACCEPTABLE: "", api.OTHER: "",
 		})},
+		{"AlertTriggerSnapshotResult", mapKeys(map[api.AlertTriggerSnapshotResult]string{
+			api.TriggerSnapshotSuccess: "", api.TriggerSnapshotFailed: "", api.TriggerSnapshotNotApplicable: "",
+		})},
 	}
 
 	for _, tt := range tests {

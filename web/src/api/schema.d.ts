@@ -231,6 +231,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alert-instances/{id}/trigger-snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAlertTriggerSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent/v1/report": {
         parameters: {
             query?: never;
@@ -560,6 +578,37 @@ export interface components {
             evaluated_at: string;
             /** Format: date-time */
             acted_at: string;
+        };
+        /** @enum {string} */
+        AlertTriggerSnapshotResult: "SUCCESS" | "FAILED" | "NOT_APPLICABLE";
+        AlertTriggerSnapshotSession: {
+            /** Format: int32 */
+            pid: number;
+            username?: string;
+            database_name?: string;
+            client_address?: string;
+            state?: string;
+            /** Format: date-time */
+            query_started_at?: string;
+            /** Format: date-time */
+            transaction_started_at?: string;
+            /** Format: int64 */
+            query_duration_ms?: number;
+            /** Format: int64 */
+            transaction_duration_ms?: number;
+            wait_event_type?: string;
+            wait_event?: string;
+            blocking_pids: number[];
+        };
+        AlertTriggerSnapshot: {
+            result: components["schemas"]["AlertTriggerSnapshotResult"];
+            metric_id: string;
+            /** Format: date-time */
+            captured_at?: string;
+            original_match_count: number;
+            truncated: boolean;
+            failure_reason?: string;
+            sessions: components["schemas"]["AlertTriggerSnapshotSession"][];
         };
         InstanceCreateInput: {
             name: string;
@@ -1376,6 +1425,37 @@ export interface operations {
             };
             /** @description Recovered alert instances cannot be disposed */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertTriggerSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trigger-time session snapshot result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertTriggerSnapshot"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

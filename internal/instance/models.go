@@ -27,6 +27,7 @@ type AlertEvent struct {
 	DispositionNote    pgtype.Text
 	IgnoreReasonCode   pgtype.Text
 	IgnoreReasonDetail pgtype.Text
+	TriggerSnapshotID  pgtype.UUID
 }
 
 type AlertInstance struct {
@@ -99,6 +100,32 @@ type AlertRuleVersion struct {
 	Version   int32
 	Snapshot  []byte
 	CreatedAt pgtype.Timestamptz
+}
+
+type AlertTriggerSnapshot struct {
+	ID                 pgtype.UUID
+	AlertInstanceID    pgtype.UUID
+	CapturedAt         pgtype.Timestamptz
+	Result             string
+	OriginalMatchCount int32
+	Truncated          bool
+	FailureReason      pgtype.Text
+}
+
+type AlertTriggerSnapshotSession struct {
+	SnapshotID            pgtype.UUID
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
 }
 
 type AppUser struct {

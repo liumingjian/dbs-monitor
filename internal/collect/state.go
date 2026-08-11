@@ -235,7 +235,7 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, bat
 				lastErrorCode = pgtype.Text{String: errorCodeCounterReset, Valid: true}
 				lastErrorMessage = pgtype.Text{String: collectionErrorMessage(errorCodeCounterReset), Valid: true}
 			}
-			_, err := tx.Exec(ctx, `UPDATE instance_collection_task_state SET
+			_, err = tx.Exec(ctx, `UPDATE instance_collection_task_state SET
 				last_due_at = $3,
 				last_started_at = $4,
 				last_finished_at = $5,

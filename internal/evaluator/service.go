@@ -13,11 +13,13 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
 type Service struct {
-	platform *db.Pool
-	clock    clock.Clock
+	platform               *db.Pool
+	clock                  clock.Clock
+	withSnapshotConnection func(context.Context, alerting.GetEvaluationTargetRow, func(*monitorpg.TargetConn) error) error
 }
 
 type metricEvaluation struct {
@@ -26,8 +28,12 @@ type metricEvaluation struct {
 	unavailability pgtype.Text
 }
 
-func New(platform *db.Pool, currentClock clock.Clock) *Service {
-	return &Service{platform: platform, clock: currentClock}
+func New(
+	platform *db.Pool,
+	currentClock clock.Clock,
+	withSnapshotConnection func(context.Context, alerting.GetEvaluationTargetRow, func(*monitorpg.TargetConn) error) error,
+) *Service {
+	return &Service{platform: platform, clock: currentClock, withSnapshotConnection: withSnapshotConnection}
 }
 
 func (service *Service) RunOnce(ctx context.Context) error {
@@ -151,7 +157,10 @@ func (service *Service) evaluateRule(
 	firstTriggeredAt := pgtype.Timestamptz{}
 	firstRuleVersion := pgtype.Int4{}
 	var firstRuleSnapshot []byte
-	if previousState != alerting.FIRING && nextSnapshot.State == alerting.FIRING {
+	startsFiringLifecycle := previousState != alerting.FIRING &&
+		!(previousState == alerting.NO_DATA && currentSnapshot.StateBeforeNoData == alerting.FIRING) &&
+		nextSnapshot.State == alerting.FIRING
+	if startsFiringLifecycle {
 		firstTriggeredAt = evaluatedAt
 		firstRuleVersion = pgtype.Int4{Int32: evaluationTarget.Version, Valid: true}
 		firstRuleSnapshot = evaluationTarget.RuleSnapshot
@@ -200,21 +209,43 @@ func (service *Service) evaluateRule(
 	if err != nil {
 		return fmt.Errorf("save alert state: %w", err)
 	}
+
+	var triggerSnapshotID pgtype.UUID
+	triggerSnapshotScope, triggerSnapshotApplicable := alerting.TriggerSnapshotScopeForMetric(evaluationTarget.MetricID)
+	if startsFiringLifecycle && triggerSnapshotApplicable {
+		triggerSnapshotID, err = service.captureAndPersistTriggerSnapshot(
+			ctx,
+			queries,
+			evaluationTarget,
+			alertInstanceID,
+			evaluatedAt,
+			triggerSnapshotScope,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	for _, kind := range alerting.StateEvents(previousState, nextSnapshot.State) {
 		if kind == alerting.EventUpdated && !metricResult.currentValue.Valid {
 			continue
 		}
+		eventTriggerSnapshotID := pgtype.UUID{}
+		if kind == alerting.EventFired {
+			eventTriggerSnapshotID = triggerSnapshotID
+		}
 		if err := queries.CreateAlertEvent(ctx, alerting.CreateAlertEventParams{
-			AlertInstanceID: alertInstanceID,
-			RuleID:          evaluationTarget.RuleID,
-			RuleVersion:     evaluationTarget.Version,
-			Kind:            string(kind),
-			FromState:       string(previousState),
-			ToState:         string(nextSnapshot.State),
-			CurrentValue:    metricResult.currentValue,
-			Unavailability:  metricResult.unavailability,
-			RuleSnapshot:    evaluationTarget.RuleSnapshot,
-			EvaluatedAt:     evaluatedAt,
+			AlertInstanceID:   alertInstanceID,
+			RuleID:            evaluationTarget.RuleID,
+			RuleVersion:       evaluationTarget.Version,
+			Kind:              string(kind),
+			FromState:         string(previousState),
+			ToState:           string(nextSnapshot.State),
+			CurrentValue:      metricResult.currentValue,
+			Unavailability:    metricResult.unavailability,
+			RuleSnapshot:      evaluationTarget.RuleSnapshot,
+			EvaluatedAt:       evaluatedAt,
+			TriggerSnapshotID: eventTriggerSnapshotID,
 		}); err != nil {
 			return fmt.Errorf("save alert event: %w", err)
 		}

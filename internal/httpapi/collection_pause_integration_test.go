@@ -123,7 +123,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	}
 	ruleResponse.Body.Close()
 	seriesID := createAlertTestSeries(t, ctx, pool, instanceID, currentClock.now)
-	eval := evaluator.New(platform, currentClock)
+	eval := evaluator.New(platform, currentClock, collector.WithTriggerSnapshotConnection)
 	for range 2 {
 		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
 		runAlertEvaluation(t, ctx, eval)

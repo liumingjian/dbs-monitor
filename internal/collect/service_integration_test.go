@@ -76,7 +76,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	dialer := &countingDialer{}
 	currentClock := &fixedClock{now: time.Now().UTC()}
 	collector := New(platform, dialer, currentClock, keyring)
-	eval := evaluator.New(platform, currentClock)
+	eval := evaluator.New(platform, currentClock, collector.WithTriggerSnapshotConnection)
 
 	extra := make([]*pgx.Conn, 25)
 	for index := range extra {

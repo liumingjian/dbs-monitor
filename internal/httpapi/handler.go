@@ -50,7 +50,7 @@ type Handler struct {
 	serverVersion     string
 	caFingerprint     string
 	agentDistribution *AgentDistribution
-	health             *platformhealth.Store
+	health            *platformhealth.Store
 }
 
 func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {
@@ -916,7 +916,8 @@ var RequiredRoles = map[string]string{
 	"ListAlertRules":    "READONLY", "CreateAlertRule": "ALERT_ADMIN",
 	"UpdateAlertRule": "ALERT_ADMIN", "UpdateAlertRuleEnabled": "ALERT_ADMIN",
 	"GetAlertDisposition": "READONLY", "UpdateAlertDisposition": "ALERT_ADMIN",
-	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
+	"GetAlertTriggerSnapshot": "READONLY",
+	"ListInstances":           "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
 	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",
 	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "ALERT_ADMIN", "UpdateInstanceCredential": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",

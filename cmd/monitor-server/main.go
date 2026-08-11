@@ -140,7 +140,7 @@ func run(ctx context.Context) error {
 		return certificateErr
 	}
 	health.Update(time.Now().UTC(), platformhealth.CertificateSource(time.Now().UTC(), expiresAt))
-	evaluation := evaluator.New(platform, clock.Real{})
+	evaluation := evaluator.New(platform, clock.Real{}, collector.WithTriggerSnapshotConnection)
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform, health)
 	go func() {

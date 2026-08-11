@@ -150,6 +150,48 @@ func (q *Queries) GetAgentTokenHash(ctx context.Context, id pgtype.UUID) ([]byte
 	return agent_token_hash, err
 }
 
+const getAlertInstanceMetricID = `-- name: GetAlertInstanceMetricID :one
+SELECT metric_id
+FROM alert_instance
+WHERE id = $1
+`
+
+func (q *Queries) GetAlertInstanceMetricID(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getAlertInstanceMetricID, id)
+	var metric_id string
+	err := row.Scan(&metric_id)
+	return metric_id, err
+}
+
+const getAlertTriggerSnapshot = `-- name: GetAlertTriggerSnapshot :one
+SELECT id, captured_at, result, original_match_count, truncated, failure_reason
+FROM alert_trigger_snapshot
+WHERE alert_instance_id = $1
+`
+
+type GetAlertTriggerSnapshotRow struct {
+	ID                 pgtype.UUID
+	CapturedAt         pgtype.Timestamptz
+	Result             string
+	OriginalMatchCount int32
+	Truncated          bool
+	FailureReason      pgtype.Text
+}
+
+func (q *Queries) GetAlertTriggerSnapshot(ctx context.Context, alertInstanceID pgtype.UUID) (GetAlertTriggerSnapshotRow, error) {
+	row := q.db.QueryRow(ctx, getAlertTriggerSnapshot, alertInstanceID)
+	var i GetAlertTriggerSnapshotRow
+	err := row.Scan(
+		&i.ID,
+		&i.CapturedAt,
+		&i.Result,
+		&i.OriginalMatchCount,
+		&i.Truncated,
+		&i.FailureReason,
+	)
+	return i, err
+}
+
 const getCollectionPause = `-- name: GetCollectionPause :one
 SELECT collection_paused, collection_pause_updated_by,
        collection_pause_updated_at, collection_pause_reason
@@ -302,6 +344,64 @@ func (q *Queries) GetUserPassword(ctx context.Context, id pgtype.UUID) ([]byte, 
 	var password_hash []byte
 	err := row.Scan(&password_hash)
 	return password_hash, err
+}
+
+const listAlertTriggerSnapshotSessions = `-- name: ListAlertTriggerSnapshotSessions :many
+SELECT pid, username, database_name, client_address, state,
+       query_started_at, transaction_started_at,
+       query_duration_ms, transaction_duration_ms,
+       wait_event_type, wait_event, blocking_pids
+FROM alert_trigger_snapshot_session
+WHERE snapshot_id = $1
+ORDER BY pid
+`
+
+type ListAlertTriggerSnapshotSessionsRow struct {
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+func (q *Queries) ListAlertTriggerSnapshotSessions(ctx context.Context, snapshotID pgtype.UUID) ([]ListAlertTriggerSnapshotSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listAlertTriggerSnapshotSessions, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertTriggerSnapshotSessionsRow
+	for rows.Next() {
+		var i ListAlertTriggerSnapshotSessionsRow
+		if err := rows.Scan(
+			&i.Pid,
+			&i.Username,
+			&i.DatabaseName,
+			&i.ClientAddress,
+			&i.State,
+			&i.QueryStartedAt,
+			&i.TransactionStartedAt,
+			&i.QueryDurationMs,
+			&i.TransactionDurationMs,
+			&i.WaitEventType,
+			&i.WaitEvent,
+			&i.BlockingPids,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPersistedCollectionTaskStates = `-- name: ListPersistedCollectionTaskStates :many

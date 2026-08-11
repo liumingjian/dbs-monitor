@@ -14,7 +14,7 @@ REDOCLY := npx --yes @redocly/cli@2.20.3
 OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
 SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
 
-.PHONY: gen dev-up dev-down build check check-full check-pg-matrix package-binaries-linux-amd64 package-binaries-linux-arm64 package-linux-amd64 package-linux-arm64
+.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix package-binaries-linux-amd64 package-binaries-linux-arm64 package-linux-amd64 package-linux-arm64
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml
@@ -60,6 +60,10 @@ check-pg-matrix:
 	PG16_URL=postgres://monitored:monitored@localhost:55436/monitored?sslmode=disable \
 	PG17_URL=postgres://monitored:monitored@localhost:55437/monitored?sslmode=disable \
 	go test ./internal/metric -run TestPGStatDatabaseShapeMatrix -count=1
+
+check-snapshot-matrix:
+	docker compose --profile matrix up -d --wait
+	SNAPSHOT_MATRIX_PORTS="55433 55434 55435 55436 55437" go test ./internal/evaluator -run TestTriggerSnapshotQueryPGMatrix -count=1
 
 package-binaries-linux-amd64:
 	cd web && npm ci && npm run build
