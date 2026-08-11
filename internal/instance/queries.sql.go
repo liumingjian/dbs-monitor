@@ -34,9 +34,14 @@ func (q *Queries) CountCredentialsNotUsingKeyVersion(ctx context.Context, passwo
 }
 
 const createInstance = `-- name: CreateInstance :one
-WITH created AS (
+WITH identified AS (
+    INSERT INTO instance_identity (id, name)
+    VALUES ($1, $2)
+    RETURNING id
+), created AS (
     INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    SELECT identified.id, $2, $3, $4, $5, $6, $7, $8
+    FROM identified
     RETURNING id, name, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
@@ -96,11 +101,25 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 }
 
 const deleteInstance = `-- name: DeleteInstance :exec
-DELETE FROM instance WHERE id = $1
+WITH removed AS (
+    DELETE FROM instance
+    WHERE instance.id = $1
+    RETURNING instance.id, instance.name
+)
+UPDATE instance_identity identity
+SET name = removed.name,
+    removed_at = $2
+FROM removed
+WHERE identity.id = removed.id
 `
 
-func (q *Queries) DeleteInstance(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteInstance, id)
+type DeleteInstanceParams struct {
+	ID        pgtype.UUID
+	RemovedAt pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteInstance(ctx context.Context, arg DeleteInstanceParams) error {
+	_, err := q.db.Exec(ctx, deleteInstance, arg.ID, arg.RemovedAt)
 	return err
 }
 
@@ -395,6 +414,19 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 	return items, nil
 }
 
+const lockInstanceForRemoval = `-- name: LockInstanceForRemoval :one
+SELECT id
+FROM instance
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockInstanceForRemoval(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockInstanceForRemoval, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
 const registerAgent = `-- name: RegisterAgent :one
 UPDATE instance
 SET agent_expected = true,
@@ -600,6 +632,12 @@ func (q *Queries) UpdateInstanceCredential(ctx context.Context, arg UpdateInstan
 }
 
 const updateInstanceMetadata = `-- name: UpdateInstanceMetadata :one
+WITH identified AS (
+    UPDATE instance_identity
+    SET name = $2
+    WHERE instance_identity.id = $1
+    RETURNING instance_identity.id
+)
 UPDATE instance
 SET name = $2,
     host = $3,
@@ -609,8 +647,10 @@ SET name = $2,
         WHEN host <> $3 OR port <> $4 OR database_name <> $5 THEN 1
         ELSE 0
     END
-WHERE id = $1
-RETURNING id, name, host, port, database_name, username, agent_version
+FROM identified
+WHERE instance.id = identified.id
+RETURNING instance.id, instance.name, instance.host, instance.port, instance.database_name,
+          instance.username, instance.agent_version
 `
 
 type UpdateInstanceMetadataParams struct {

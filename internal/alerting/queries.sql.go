@@ -37,6 +37,46 @@ func (q *Queries) AlertRuleTargetInstanceExists(ctx context.Context, id pgtype.U
 	return exists, err
 }
 
+const closeAlertsForInstanceRemoval = `-- name: CloseAlertsForInstanceRemoval :exec
+WITH unresolved AS MATERIALIZED (
+    SELECT id, rule_id, rule_version, status, current_value,
+           unavailability, rule_snapshot
+    FROM alert_instance
+    WHERE alert_instance.instance_id = $1
+      AND status <> 'RECOVERED'
+    FOR UPDATE
+), events AS (
+    INSERT INTO alert_event (
+        alert_instance_id, rule_id, rule_version, kind,
+        from_state, to_state, current_value, unavailability,
+        rule_snapshot, evaluated_at, actor_id
+    )
+    SELECT id, rule_id, rule_version, 'INSTANCE_REMOVED',
+           status, 'RECOVERED', current_value, unavailability,
+           rule_snapshot, $2, $3
+    FROM unresolved
+    RETURNING alert_instance_id
+)
+UPDATE alert_instance
+SET status = 'RECOVERED',
+    state_before_no_data = NULL,
+    unavailability = NULL,
+    updated_at = $2,
+    recovered_at = $2
+WHERE id IN (SELECT alert_instance_id FROM events)
+`
+
+type CloseAlertsForInstanceRemovalParams struct {
+	InstanceID pgtype.UUID
+	UpdatedAt  pgtype.Timestamptz
+	ActorID    pgtype.UUID
+}
+
+func (q *Queries) CloseAlertsForInstanceRemoval(ctx context.Context, arg CloseAlertsForInstanceRemovalParams) error {
+	_, err := q.db.Exec(ctx, closeAlertsForInstanceRemoval, arg.InstanceID, arg.UpdatedAt, arg.ActorID)
+	return err
+}
+
 const createAlertDispositionEvent = `-- name: CreateAlertDispositionEvent :exec
 INSERT INTO alert_event (
     alert_instance_id, rule_id, rule_version, kind,

@@ -1,4 +1,4 @@
-import { ApiOutlined, CopyOutlined, KeyOutlined, PoweroffOutlined, SaveOutlined, StopOutlined, SyncOutlined } from '@ant-design/icons'
+import { ApiOutlined, CopyOutlined, DeleteOutlined, KeyOutlined, PoweroffOutlined, SaveOutlined, StopOutlined, SyncOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Descriptions, Divider, Form, Input, InputNumber, Modal, Space, Tag, Tooltip, Typography } from 'antd'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -33,6 +33,8 @@ function InstanceSettingsPage() {
   const rotateAgentMutation = $api.useMutation('post', '/api/v1/instances/{id}/agent/token/rotation')
   const revokeAgentMutation = $api.useMutation('post', '/api/v1/instances/{id}/agent/token/revocation')
   const disableAgentMutation = $api.useMutation('post', '/api/v1/instances/{id}/agent/disable')
+  const deleteInstanceMutation = $api.useMutation('delete', '/api/v1/instances/{id}')
+  const navigate = instanceSettingsRoute.useNavigate()
   const [metadataForm] = Form.useForm<InstanceMetadataInput>()
   const [credentialForm] = Form.useForm<InstanceCredentialInput>()
   const [credentialModalOpen, setCredentialModalOpen] = useState(false)
@@ -128,6 +130,14 @@ function InstanceSettingsPage() {
     rotateAgentMutation.reset()
   }
 
+  function removeInstance() {
+    setActionError('')
+    deleteInstanceMutation.mutate({ params: { path: { id } } }, {
+      onSuccess: () => void navigate({ to: '/instances' }),
+      onError: (failure) => setActionError(apiErrorMessage(failure, '移除实例失败')),
+    })
+  }
+
   return (
     <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <Link to="/instances">返回实例列表</Link>
@@ -195,7 +205,12 @@ function InstanceSettingsPage() {
       <Divider />
       <section aria-labelledby="danger-heading">
         <Typography.Title id="danger-heading" level={4} type="danger">危险区</Typography.Title>
-        <Typography.Text type="secondary">暂不可用</Typography.Text>
+        <InstanceRemovalPanel
+          instanceName={instanceQuery.data?.name ?? ''}
+          canRemove={canEditCredential}
+          actionPending={deleteInstanceMutation.isPending}
+          onRemove={removeInstance}
+        />
       </section>
 
       <Modal title="更新 PG 凭据" open={credentialModalOpen} footer={null} destroyOnHidden onCancel={() => setCredentialModalOpen(false)}>
@@ -211,6 +226,61 @@ function InstanceSettingsPage() {
       </Modal>
       <AgentTokenModal issued={issuedAgentToken} onClose={closeIssuedAgentToken} />
     </Space>
+  )
+}
+
+type InstanceRemovalPanelProps = {
+  instanceName: string
+  canRemove: boolean
+  actionPending: boolean
+  onRemove: () => void
+}
+
+export function InstanceRemovalPanel({ instanceName, canRemove, actionPending, onRemove }: InstanceRemovalPanelProps) {
+  const [open, setOpen] = useState(false)
+  const [confirmation, setConfirmation] = useState('')
+  const disabledReason = canRemove ? undefined : '需要平台管理员角色'
+
+  function close() {
+    setOpen(false)
+    setConfirmation('')
+  }
+
+  return (
+    <>
+      <Tooltip title={disabledReason}>
+        <span>
+          <Button danger icon={<DeleteOutlined />} disabled={!canRemove || !instanceName} onClick={() => setOpen(true)}>
+            移除实例
+          </Button>
+        </span>
+      </Tooltip>
+      <Modal
+        title={`移除 ${instanceName}`}
+        open={open}
+        onCancel={() => {
+          if (!actionPending) close()
+        }}
+        onOk={onRemove}
+        okText="确认移除"
+        okButtonProps={{ danger: true, disabled: confirmation !== instanceName, loading: actionPending }}
+        cancelText="取消"
+        cancelButtonProps={{ disabled: actionPending }}
+        closable={!actionPending}
+        mask={{ closable: !actionPending }}
+      >
+        <Alert type="warning" showIcon title="配置将立即删除，未恢复告警将关闭；历史样本按保留周期过期。" />
+        <Typography.Paragraph style={{ marginTop: 16, marginBottom: 8 }}>
+          输入实例名 <Typography.Text code>{instanceName}</Typography.Text> 以确认。
+        </Typography.Paragraph>
+        <Input
+          aria-label="输入实例名确认移除"
+          value={confirmation}
+          onChange={(event) => setConfirmation(event.target.value)}
+          autoComplete="off"
+        />
+      </Modal>
+    </>
   )
 }
 

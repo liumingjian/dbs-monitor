@@ -58,8 +58,11 @@ func (service *Service) RunOnce(ctx context.Context) error {
 func (service *Service) evaluateInstance(ctx context.Context, targets []alerting.ListEvaluationTargetsRow, now time.Time) error {
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 		var paused bool
-		if err := tx.QueryRow(ctx, `SELECT collection_paused FROM instance_collection_config
-			WHERE instance_id = $1 FOR SHARE`, targets[0].InstanceID).Scan(&paused); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT config.collection_paused
+			FROM instance
+			JOIN instance_collection_config config ON config.instance_id = instance.id
+			WHERE instance.id = $1
+			FOR SHARE OF instance, config`, targets[0].InstanceID).Scan(&paused); err != nil {
 			return err
 		}
 		if paused {
