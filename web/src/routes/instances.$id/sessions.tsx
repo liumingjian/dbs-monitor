@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
 import { Freshness } from '../../domain/Freshness'
-import { UnavailabilityBlock } from '../../domain/UnavailabilityBlock'
+import { UnavailabilityBlock, unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { defaultTimeRange } from './timeRange'
 import { sessionPageHref, SessionWorkbenchHeader } from './sessionLayout'
@@ -43,7 +43,10 @@ function SessionSnapshotPage({ id, search }: { id: string; search: SessionSearch
   } else if (snapshot.data?.unavailability !== undefined) {
     snapshotContent = <UnavailabilityBlock
       code={snapshot.data.unavailability}
-      href={`/instances/${encodeURIComponent(id)}/collection`}
+      href={unavailabilityHref(snapshot.data.unavailability, {
+        current: sessionPageHref(id, search),
+        collection: `/instances/${encodeURIComponent(id)}/collection`,
+      })}
     />
   } else if (snapshot.data !== undefined) {
     snapshotContent = <>

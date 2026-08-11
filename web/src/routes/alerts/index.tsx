@@ -9,6 +9,7 @@ import type { components } from '../../api/schema'
 import { AlertStatus } from '../../domain/AlertStatus'
 import { Freshness } from '../../domain/Freshness'
 import { AlertSuppressionTags } from '../../domain/SuppressionTags'
+import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { parseAlertListSearch, type AlertListSearch } from './search'
 
@@ -163,7 +164,7 @@ const currentColumns: TableColumnsType<AlertObservation> = [
   { title: '阈值', width: 100, render: (_, alert) => optionalNumber(alert.threshold) },
   { title: '首次触发', width: 190, render: (_, alert) => optionalTime(alert.first_triggered_at) },
   { title: '持续时间', width: 120, render: (_, alert) => durationLabel(alert.duration_ms) },
-  { title: 'No Data 原因', width: 180, render: (_, alert) => alert.unavailability ?? '—' },
+  { title: 'No Data 原因', width: 210, render: (_, alert) => <UnavailabilityReason alert={alert} /> },
   {
     title: '操作',
     fixed: 'right',
@@ -174,6 +175,19 @@ const currentColumns: TableColumnsType<AlertObservation> = [
     >详情</Link>,
   },
 ]
+
+function UnavailabilityReason({ alert }: { alert: AlertObservation }) {
+  if (!alert.unavailability) return '—'
+  const copy = unavailabilityCopy(alert.unavailability)
+  const href = unavailabilityHref(alert.unavailability, {
+    current: `/instances/${encodeURIComponent(alert.instance_id)}/alerts/${encodeURIComponent(alert.id)}`,
+    collection: `/instances/${encodeURIComponent(alert.instance_id)}/collection?metric=${encodeURIComponent(alert.metric_id)}`,
+  })
+  return <Space direction="vertical" size={0}>
+    <Typography.Text>{copy.title}</Typography.Text>
+    <a href={href}>{copy.action}</a>
+  </Space>
+}
 
 const historyColumns: TableColumnsType<AlertObservation> = [
   { title: '状态', width: 100, render: (_, alert) => <AlertStatus status={alert.status} /> },

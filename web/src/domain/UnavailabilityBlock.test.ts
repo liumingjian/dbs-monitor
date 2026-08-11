@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { createElement } from 'react'
-import { UnavailabilityBlock, unavailabilityCopy } from './UnavailabilityBlock'
+import { UnavailabilityBlock, unavailabilityCopy, unavailabilityHref } from './UnavailabilityBlock'
 
-const codes = [
-  'NO_SAMPLES_YET', 'NO_DATA_IN_RANGE', 'STALE', 'COLLECTION_PAUSED',
-  'COLLECTION_FAILED', 'DB_UNREACHABLE', 'AGENT_OFFLINE', 'PERMISSION_DENIED',
-  'EXTENSION_MISSING', 'FEATURE_DISABLED', 'VERSION_UNSUPPORTED',
-  'NOT_APPLICABLE_ROLE', 'COUNTER_RESET',
+const destinationCases = [
+  ['NO_SAMPLES_YET', '/current'],
+  ['NO_DATA_IN_RANGE', '/current'],
+  ['STALE', '/collection'],
+  ['COLLECTION_PAUSED', '/collection'],
+  ['COLLECTION_FAILED', '/collection'],
+  ['DB_UNREACHABLE', '/collection'],
+  ['AGENT_OFFLINE', '/collection'],
+  ['PERMISSION_DENIED', '/collection'],
+  ['EXTENSION_MISSING', '/collection'],
+  ['FEATURE_DISABLED', '/collection'],
+  ['VERSION_UNSUPPORTED', '/collection'],
+  ['NOT_APPLICABLE_ROLE', '/collection'],
+  ['COUNTER_RESET', '/current'],
 ] as const
+const codes = destinationCases.map(([code]) => code)
 
 describe('unavailability copy', () => {
   it.each(codes)('explains %s with an action', (code) => {
@@ -22,6 +32,13 @@ describe('unavailability copy', () => {
     const view = render(createElement(UnavailabilityBlock, { code, href: `/next/${code}` }))
     expect(view.getByRole('link', { name: unavailabilityCopy(code).action }).getAttribute('href')).toBe(`/next/${code}`)
     view.unmount()
+  })
+
+  it.each(destinationCases)('selects the canonical destination for %s', (code, expected) => {
+    expect(unavailabilityHref(code, {
+      current: '/current',
+      collection: '/collection',
+    })).toBe(expected)
   })
 
   it('never presents collection pause as collection failure or database unreachability', () => {

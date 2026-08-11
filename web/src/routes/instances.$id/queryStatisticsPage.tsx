@@ -5,6 +5,7 @@ import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { Freshness } from '../../domain/Freshness'
+import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { defaultTimeRange } from './timeRange'
 import { queryStatisticsView } from './queryStatistics'
@@ -40,7 +41,12 @@ function QueryStatisticsRanking({ id, search }: { id: string; search: SessionSea
   if (statistics.isPending) {
     statisticsContent = <Spin size="large" />
   } else if (statistics.data !== undefined) {
-    statisticsContent = <QueryStatisticsContent response={statistics.data} dataUpdatedAt={statistics.dataUpdatedAt} />
+    statisticsContent = <QueryStatisticsContent
+      id={id}
+      search={search}
+      response={statistics.data}
+      dataUpdatedAt={statistics.dataUpdatedAt}
+    />
   }
 
   return <Space orientation="vertical" size="large" style={{ width: '100%' }}>
@@ -55,13 +61,25 @@ function QueryStatisticsRanking({ id, search }: { id: string; search: SessionSea
   </Space>
 }
 
-function QueryStatisticsContent({ response, dataUpdatedAt }: {
+function QueryStatisticsContent({ id, search, response, dataUpdatedAt }: {
+  id: string
+  search: SessionSearch
   response: components['schemas']['QueryStatisticsSnapshot']
   dataUpdatedAt: number
 }) {
   const view = queryStatisticsView(response)
   if (view.kind === 'unavailable') {
-    return <Alert type="warning" showIcon title={view.title} description={view.description} />
+    const href = unavailabilityHref(view.code, {
+      current: queryStatisticsPageHref(id, search),
+      collection: `/instances/${encodeURIComponent(id)}/collection`,
+    })
+    return <Alert
+      type="warning"
+      showIcon
+      title={view.title}
+      description={view.description}
+      action={<Button size="small" href={href}>{unavailabilityCopy(view.code).action}</Button>}
+    />
   }
   return <>
     <Space className="snapshot-meta" wrap>

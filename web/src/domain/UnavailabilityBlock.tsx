@@ -4,6 +4,7 @@ import type { components } from '../api/schema'
 export type Unavailability = components['schemas']['Unavailability']
 
 type Copy = { title: string; description: string; action: string }
+type Destinations = { current: string; collection: string }
 type UnavailabilityBlockProps = {
   code: Unavailability
   href: string
@@ -26,6 +27,28 @@ export function unavailabilityCopy(code: Unavailability): Copy {
     case 'NOT_APPLICABLE_ROLE': return { title: '当前角色不适用', description: '该指标不适用于当前主备角色或拓扑。', action: '查看实例角色' }
     case 'COUNTER_RESET': return { title: '计数器已重置', description: '该点无法计算可靠速率，因此保留为断点。', action: '等待下一个采集周期' }
     default: return assertNever(code)
+  }
+}
+
+export function unavailabilityHref(code: Unavailability, destinations: Destinations): string {
+  switch (code) {
+    case 'NO_SAMPLES_YET':
+    case 'NO_DATA_IN_RANGE':
+    case 'COUNTER_RESET':
+      return destinations.current
+    case 'STALE':
+    case 'COLLECTION_PAUSED':
+    case 'COLLECTION_FAILED':
+    case 'DB_UNREACHABLE':
+    case 'AGENT_OFFLINE':
+    case 'PERMISSION_DENIED':
+    case 'EXTENSION_MISSING':
+    case 'FEATURE_DISABLED':
+    case 'VERSION_UNSUPPORTED':
+    case 'NOT_APPLICABLE_ROLE':
+      return destinations.collection
+    default:
+      return assertNever(code)
   }
 }
 

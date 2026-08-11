@@ -8,7 +8,7 @@ import type { components } from '../../api/schema'
 import { Freshness } from '../../domain/Freshness'
 import { MetricChart, metricUnavailability, type MetricChartSeries } from '../../domain/MetricChart'
 import { TimeRangePicker } from '../../domain/TimeRangePicker'
-import type { Unavailability } from '../../domain/UnavailabilityBlock'
+import { unavailabilityHref, type Unavailability } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import {
   buildEnhancedChartView,
@@ -182,7 +182,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
                   series={view.series}
                   step={metricsQuery.data?.step ?? step}
                   unavailability={view.unavailability}
-                  unavailabilityHref={unavailabilityHref(id, primaryMetric, view.unavailability)}
+                  unavailabilityHref={metricUnavailabilityHref(id, primaryMetric, view.unavailability)}
                   connectionGroup={connected ? `standard-monitoring-${id}` : undefined}
                   loading={metricsQuery.isFetching}
                 />
@@ -293,7 +293,7 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
                 series={view.series}
                 step={metricsQuery.data?.step ?? enhancedMonitoringDefaults.step}
                 unavailability={view.unavailability}
-                unavailabilityHref={unavailabilityHref(id, metricID, view.unavailability)}
+                unavailabilityHref={metricUnavailabilityHref(id, metricID, view.unavailability)}
                 unavailabilityDetail={view.unavailability ? enhancedUnavailabilityDetail(view.unavailability, taskResult) : undefined}
                 loading={metricsQuery.isFetching}
               />
@@ -404,9 +404,12 @@ function seriesName(metric: MetricID, labels: Record<string, string>): string {
   return dimensions ? `${label} · ${dimensions}` : label
 }
 
-function unavailabilityHref(id: string, metric: MetricID, code: Unavailability | null): string {
-  if (code === 'NO_DATA_IN_RANGE' || code === 'NO_SAMPLES_YET' || code === 'COUNTER_RESET') return '#monitoring-controls'
-  return `/instances/${encodeURIComponent(id)}/collection?metric=${encodeURIComponent(metric)}`
+function metricUnavailabilityHref(id: string, metric: MetricID, code: Unavailability | null): string {
+  const destinations = {
+    current: '#monitoring-controls',
+    collection: `/instances/${encodeURIComponent(id)}/collection?metric=${encodeURIComponent(metric)}`,
+  }
+  return code ? unavailabilityHref(code, destinations) : destinations.current
 }
 
 function longQuerySamplesHref(id: string, search: MonitoringSearch): string {

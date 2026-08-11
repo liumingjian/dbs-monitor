@@ -18,7 +18,7 @@ import { AlertStatus } from '../../domain/AlertStatus'
 import { Freshness } from '../../domain/Freshness'
 import { HealthStatus } from '../../domain/HealthStatus'
 import { SuppressionTags } from '../../domain/SuppressionTags'
-import { unavailabilityCopy } from '../../domain/UnavailabilityBlock'
+import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import {
   attributionLabel,
   dataFreshnessLabel,
@@ -210,18 +210,30 @@ function MetricFacts({ id, search, metricIDs, metrics }: {
     return {
       key: metricID,
       label: <a href={destinations.monitoring}>{metricOption(metricID).label}</a>,
-      children: <MetricFactValue metricID={metricID} snapshot={snapshot} collectionHref={destinations.collection} />,
+      children: <MetricFactValue
+        metricID={metricID}
+        snapshot={snapshot}
+        monitoringHref={destinations.monitoring}
+        collectionHref={destinations.collection}
+      />,
     }
   })} />
 }
 
-function MetricFactValue({ metricID, snapshot, collectionHref }: {
+function MetricFactValue({ metricID, snapshot, monitoringHref, collectionHref }: {
   metricID: MetricID
   snapshot: LatestMetricFacts
+  monitoringHref: string
   collectionHref: string
 }) {
   if (snapshot.unavailability) {
-    return <a href={collectionHref}>{unavailabilityCopy(snapshot.unavailability).title}</a>
+    const copy = unavailabilityCopy(snapshot.unavailability)
+    const href = unavailabilityHref(snapshot.unavailability, { current: monitoringHref, collection: collectionHref })
+    return <Space direction="vertical" size={0}>
+      <Typography.Text>{copy.title}</Typography.Text>
+      <Typography.Text type="secondary">{copy.description}</Typography.Text>
+      <a href={href}>{copy.action}</a>
+    </Space>
   }
   return <Space direction="vertical" size={0}>
     {snapshot.facts.map((fact, index) => <span key={`${fact.sampledAt}-${index}`}>
