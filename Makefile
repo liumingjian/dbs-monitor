@@ -52,13 +52,14 @@ check-full: check
 	sh scripts/check-e2e.sh
 
 check-pg-matrix:
-	docker compose --profile matrix up -d --wait monitored-pg13 monitored-pg14 monitored-pg15 monitored-pg16 monitored-pg17
+	docker compose --profile matrix up -d --wait monitored-pg13 monitored-pg14 monitored-pg15 monitored-pg16 monitored-pg17 monitored-pg17-replica
 	PG13_URL=postgres://monitored:monitored@localhost:55433/monitored?sslmode=disable \
 	PG14_URL=postgres://monitored:monitored@localhost:55434/monitored?sslmode=disable \
 	PG15_URL=postgres://monitored:monitored@localhost:55435/monitored?sslmode=disable \
 	PG16_URL=postgres://monitored:monitored@localhost:55436/monitored?sslmode=disable \
 	PG17_URL=postgres://monitored:monitored@localhost:55437/monitored?sslmode=disable \
-	go test ./internal/metric -run 'TestPG(StatDatabase|StatActivity)ShapeMatrix' -count=1
+	PG17_REPLICA_URL=postgres://monitored:monitored@localhost:55438/monitored?sslmode=disable \
+	go test ./internal/metric -run 'TestPG((StatDatabase|StatActivity|Replication|ReplicationSlot|PreparedXacts|Role)ShapeMatrix|ReplicationStandbyView)' -count=1
 
 check-snapshot-matrix:
 	docker compose --profile matrix up -d --wait

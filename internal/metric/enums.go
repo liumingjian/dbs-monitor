@@ -6,4 +6,20 @@ var NonNumericMetricEncodings = map[string]map[string]float64{
 		"unreachable": 0,
 		"reachable":   1,
 	},
+	MetricReplicationRole.String(): {
+		"standalone": 0,
+		"primary":    1,
+		"replica":    2,
+	},
+	MetricReplicationConnectionState.String(): {
+		"stopped":    0,
+		"starting":   1,
+		"startup":    2,
+		"catchup":    3,
+		"streaming":  4,
+		"backup":     5,
+		"stopping":   6,
+		"waiting":    7,
+		"restarting": 8,
+	},
 }

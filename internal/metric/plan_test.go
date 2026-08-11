@@ -27,3 +27,29 @@ func TestTaskIntervalValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestIssue57TaskDefaultIntervals(t *testing.T) {
+	tests := []struct {
+		taskID metric.TaskID
+		want   time.Duration
+	}{
+		{metric.TaskReplication, 5 * time.Second},
+		{metric.TaskReplicationSlot, 5 * time.Second},
+		{metric.TaskPreparedXacts, 5 * time.Minute},
+		{metric.TaskRole, 5 * time.Minute},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.taskID), func(t *testing.T) {
+			for _, task := range metric.Tasks {
+				if task.ID == tt.taskID {
+					if task.Interval != tt.want {
+						t.Fatalf("interval = %s, want %s", task.Interval, tt.want)
+					}
+					return
+				}
+			}
+			t.Fatalf("task %q is missing", tt.taskID)
+		})
+	}
+}

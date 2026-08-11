@@ -468,6 +468,10 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("probed pg_monitor capability = %+v", roleCapability)
 	}
 	assertMetricSeriesHasPoints(t, client, seriesURL)
+	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.prepared_xacts.count", 1))
+	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.role", 1))
+	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.wal_lag_bytes", 1), "NOT_APPLICABLE_ROLE")
+	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication_slot.retained_wal_bytes", 1), "NOT_APPLICABLE_ROLE")
 	sampledAt := time.Now().UTC().Truncate(time.Second)
 	oldSampledAt := sampledAt.Add(-31 * 24 * time.Hour)
 	for _, capturedAt := range []time.Time{oldSampledAt, sampledAt} {

@@ -86,10 +86,8 @@ func TaskCapabilityBlockReason(task Task, states map[CapabilityID]CapabilityStat
 			}
 		case CapabilityNotApplicable:
 			switch required {
-			case CapabilityTopologyHasReplication:
+			case CapabilityTopologyHasReplication, CapabilityTopologyHasSlot:
 				return CapabilityBlockNotApplicableRole, true
-			case CapabilityTopologyHasSlot:
-				return CapabilityBlockFeatureDisabled, true
 			}
 		}
 		return CapabilityBlockCollectionFailed, true

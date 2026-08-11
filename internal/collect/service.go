@@ -179,7 +179,12 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 			return outcome
 		}
 		if blocked {
-			outcome.err = service.recordCapabilityBlocked(ctx, run, reason)
+			if reason == metric.CapabilityBlockNotApplicableRole {
+				outcome.err = service.recordNotApplicable(ctx, run, reason)
+				outcome.result = resultSuccess
+			} else {
+				outcome.err = service.recordCapabilityBlocked(ctx, run, reason)
+			}
 			return outcome
 		}
 	}
@@ -293,6 +298,8 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 			return collectedBatch{}, err
 		}
 		return service.statDatabaseRates.observe(run.key.instanceID, observation), nil
+	case metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole:
+		return collectDeclaredTask(ctx, conn, run.task)
 	default:
 		return collectedBatch{}, fmt.Errorf("unsupported collection task %q", run.task.ID)
 	}
@@ -537,10 +544,11 @@ func (service *Service) taskIntervals(ctx context.Context, targetID pgtype.UUID)
 }
 
 func scheduledTasks() []metric.Task {
-	tasks := make([]metric.Task, 0, 3)
+	tasks := make([]metric.Task, 0, 7)
 	for _, task := range metric.Tasks {
 		switch task.ID {
-		case metric.TaskProbe, metric.TaskStatDatabase, metric.TaskStatActivity:
+		case metric.TaskProbe, metric.TaskStatDatabase, metric.TaskStatActivity,
+			metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole:
 			tasks = append(tasks, task)
 		}
 	}

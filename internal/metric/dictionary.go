@@ -294,10 +294,10 @@ FROM aggregate`,
 FROM pg_stat_replication
 UNION ALL
 SELECT
-       COALESCE(sender_host::text, 'standby') AS replica,
-       status::text AS connection_state,
-       NULL::double precision AS replay_lag_ms,
-       NULL::double precision AS wal_lag_bytes
+	       COALESCE(sender_host::text, 'standby') AS replica,
+	       status::text AS connection_state,
+	       NULL::double precision AS replay_lag_ms,
+	       pg_wal_lsn_diff(COALESCE(latest_end_lsn, flushed_lsn), pg_last_wal_replay_lsn())::double precision AS wal_lag_bytes
 FROM pg_stat_wal_receiver`,
 		Yields: []MetricYield{
 			{Metric: MetricReplicationConnectionState, Columns: []string{"replica", "connection_state"}, Dimensions: []string{"replica"}},
@@ -308,15 +308,15 @@ FROM pg_stat_wal_receiver`,
 	{
 		ID: TaskReplicationSlot, Kind: TaskKindSQL, Interval: 5 * time.Second,
 		Requires: []CapabilityID{CapabilityRolePGMonitor, CapabilityTopologyHasSlot},
-		SQL: `SELECT slot_name::text AS slot, pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::double precision AS retained_wal_bytes
+		SQL: `SELECT slot_name::text AS slot, pg_wal_lsn_diff(pg_current_wal_lsn(), COALESCE(confirmed_flush_lsn, restart_lsn))::double precision AS retained_wal_bytes
 FROM pg_replication_slots
-WHERE restart_lsn IS NOT NULL`,
+WHERE COALESCE(confirmed_flush_lsn, restart_lsn) IS NOT NULL`,
 		Yields: []MetricYield{{Metric: MetricReplicationSlotRetainedWAL, Columns: []string{"slot", "retained_wal_bytes"}, Dimensions: []string{"slot"}}},
 	},
 	{
-		ID: TaskPreparedXacts, Kind: TaskKindSQL, Interval: 60 * time.Second,
-		SQL: `SELECT database.datname AS database,
-       count(prepared.gid)::double precision AS prepared_xacts_count
+		ID: TaskPreparedXacts, Kind: TaskKindSQL, Interval: 5 * time.Minute,
+		SQL: `SELECT database.datname::text AS database,
+	       count(prepared.gid)::double precision AS prepared_xacts_count
 FROM pg_database AS database
 LEFT JOIN pg_prepared_xacts AS prepared ON prepared.database = database.datname
 WHERE database.datallowconn
@@ -324,8 +324,12 @@ GROUP BY database.datname`,
 		Yields: []MetricYield{{Metric: MetricPreparedXactsCount, Columns: []string{"database", "prepared_xacts_count"}, Dimensions: []string{"database"}}},
 	},
 	{
-		ID: TaskRole, Kind: TaskKindSQL, Interval: 60 * time.Second,
-		SQL:    `SELECT CASE WHEN pg_is_in_recovery() THEN 'replica' ELSE 'primary' END AS role`,
+		ID: TaskRole, Kind: TaskKindSQL, Interval: 5 * time.Minute,
+		SQL: `SELECT CASE
+	    WHEN pg_is_in_recovery() THEN 'replica'
+	    WHEN EXISTS (SELECT 1 FROM pg_stat_replication) THEN 'primary'
+	    ELSE 'standalone'
+	END::text AS role`,
 		Yields: []MetricYield{{Metric: MetricReplicationRole, Columns: []string{"role"}}},
 	},
 	{
@@ -375,7 +379,7 @@ type Capability struct {
 var Capabilities = []Capability{
 	{ID: CapabilityRolePGMonitor, Class: CapabilityClassFixable, Probe: "SELECT pg_has_role(current_user, 'pg_monitor', 'member')", FixHint: "将监控账号加入 pg_monitor 角色。"},
 	{ID: CapabilityExtensionPGStatStatements, Class: CapabilityClassFixable, Probe: "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements')", FixHint: "预加载并安装 pg_stat_statements 扩展。"},
-	{ID: CapabilityTopologyHasReplication, Class: CapabilityClassStructural, Probe: "SELECT pg_is_in_recovery() OR EXISTS (SELECT 1 FROM pg_stat_replication)", NAReason: "本实例没有复制拓扑。"},
+	{ID: CapabilityTopologyHasReplication, Class: CapabilityClassStructural, Probe: "SELECT pg_is_in_recovery() OR EXISTS (SELECT 1 FROM pg_stat_replication)", NAReason: "本实例为主库且没有备库，复制指标不适用。"},
 	{ID: CapabilityTopologyHasSlot, Class: CapabilityClassStructural, Probe: "SELECT EXISTS (SELECT 1 FROM pg_replication_slots)", NAReason: "本实例没有 replication slot。"},
 }
 

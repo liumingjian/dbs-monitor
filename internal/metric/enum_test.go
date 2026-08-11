@@ -14,6 +14,22 @@ func TestNonNumericMetricEncodingGolden(t *testing.T) {
 			"unreachable": 0,
 			"reachable":   1,
 		}},
+		{"pg.replication.role", map[string]float64{
+			"standalone": 0,
+			"primary":    1,
+			"replica":    2,
+		}},
+		{"pg.replication.connection_state", map[string]float64{
+			"stopped":    0,
+			"starting":   1,
+			"startup":    2,
+			"catchup":    3,
+			"streaming":  4,
+			"backup":     5,
+			"stopping":   6,
+			"waiting":    7,
+			"restarting": 8,
+		}},
 	}
 
 	if len(NonNumericMetricEncodings) != len(tests) {

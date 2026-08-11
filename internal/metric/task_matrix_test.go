@@ -63,9 +63,88 @@ func TestPGStatActivityShapeMatrix(t *testing.T) {
 	assertTaskShapeMatrix(t, task, expected)
 }
 
+func TestPGReplicationShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskReplication)
+	assertVariableRowsTaskShapeMatrix(t, task, []taskColumnShape{
+		{name: "replica", oid: pgtype.TextOID},
+		{name: "connection_state", oid: pgtype.TextOID},
+		{name: "replay_lag_ms", oid: pgtype.Float8OID, nullable: true},
+		{name: "wal_lag_bytes", oid: pgtype.Float8OID},
+	})
+}
+
+func TestPGReplicationStandbyView(t *testing.T) {
+	connectionURL := os.Getenv("PG17_REPLICA_URL")
+	if connectionURL == "" {
+		t.Skip("PG17_REPLICA_URL is not set; run make check-pg-matrix")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn, err := pgx.Connect(ctx, connectionURL)
+	if err != nil {
+		t.Fatalf("connect to PostgreSQL 17 replica: %v", err)
+	}
+	defer conn.Close(context.Background())
+
+	var role string
+	if err := conn.QueryRow(ctx, requiredTask(t, metric.TaskRole).SQL).Scan(&role); err != nil {
+		t.Fatalf("collect replica role: %v", err)
+	}
+	if role != "replica" {
+		t.Fatalf("replica role = %q, want replica", role)
+	}
+
+	rows, err := conn.Query(ctx, requiredTask(t, metric.TaskReplication).SQL)
+	if err != nil {
+		t.Fatalf("collect standby replication view: %v", err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatalf("standby replication view has no row: %v", rows.Err())
+	}
+	values, err := rows.Values()
+	if err != nil {
+		t.Fatalf("read standby replication row: %v", err)
+	}
+	if len(values) != 4 || values[1] != "streaming" {
+		t.Fatalf("standby replication row = %#v, want streaming state", values)
+	}
+	if _, ok := values[3].(float64); !ok {
+		t.Fatalf("standby WAL lag = %T, want float64", values[3])
+	}
+	if rows.Next() {
+		t.Fatal("standby replication view returned more than one row")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate standby replication rows: %v", err)
+	}
+}
+
+func TestPGReplicationSlotShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskReplicationSlot)
+	assertVariableRowsTaskShapeMatrix(t, task, []taskColumnShape{
+		{name: "slot", oid: pgtype.TextOID},
+		{name: "retained_wal_bytes", oid: pgtype.Float8OID},
+	})
+}
+
+func TestPGPreparedXactsShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskPreparedXacts)
+	assertVariableRowsTaskShapeMatrix(t, task, []taskColumnShape{
+		{name: "database", oid: pgtype.TextOID},
+		{name: "prepared_xacts_count", oid: pgtype.Float8OID},
+	})
+}
+
+func TestPGRoleShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskRole)
+	assertTaskShapeMatrix(t, task, []taskColumnShape{{name: "role", oid: pgtype.TextOID}})
+}
+
 type taskColumnShape struct {
-	name string
-	oid  uint32
+	name     string
+	oid      uint32
+	nullable bool
 }
 
 func metricColumnShapes(task metric.Task) []taskColumnShape {
@@ -78,6 +157,14 @@ func metricColumnShapes(task metric.Task) []taskColumnShape {
 }
 
 func assertTaskShapeMatrix(t *testing.T, task metric.Task, expected []taskColumnShape) {
+	assertTaskShapeMatrixWithRowCount(t, task, expected, true)
+}
+
+func assertVariableRowsTaskShapeMatrix(t *testing.T, task metric.Task, expected []taskColumnShape) {
+	assertTaskShapeMatrixWithRowCount(t, task, expected, false)
+}
+
+func assertTaskShapeMatrixWithRowCount(t *testing.T, task metric.Task, expected []taskColumnShape, requireSingleRow bool) {
 	t.Helper()
 	expectedColumns := make([]string, len(expected))
 	for index, column := range expected {
@@ -139,6 +226,9 @@ func assertTaskShapeMatrix(t *testing.T, task metric.Task, expected []taskColumn
 					t.Fatalf("row width = %d, want %d", len(values), len(expectedColumns))
 				}
 				for index, value := range values {
+					if value == nil && expected[index].nullable {
+						continue
+					}
 					if expected[index].oid == pgtype.Float8OID {
 						if _, isFloat64 := value.(float64); !isFloat64 {
 							t.Errorf("column %s Go value type = %T, want float64", expectedColumns[index], value)
@@ -149,7 +239,7 @@ func assertTaskShapeMatrix(t *testing.T, task metric.Task, expected []taskColumn
 			if err := rows.Err(); err != nil {
 				t.Fatalf("iterate result: %v", err)
 			}
-			if rowCount != 1 {
+			if requireSingleRow && rowCount != 1 {
 				t.Fatalf("row count = %d, want 1", rowCount)
 			}
 		})
@@ -169,4 +259,13 @@ func taskColumns(task metric.Task) []string {
 		}
 	}
 	return columns
+}
+
+func requiredTask(t *testing.T, id metric.TaskID) metric.Task {
+	t.Helper()
+	task, ok := taskByID(id)
+	if !ok {
+		t.Fatalf("task %q is missing", id)
+	}
+	return task
 }

@@ -33,6 +33,7 @@ const (
 type collectedSample struct {
 	metricID metric.MetricID
 	value    float64
+	labels   map[string]string
 }
 
 type collectedBatch struct {
@@ -143,6 +144,39 @@ func (service *Service) recordCapabilityBlocked(ctx context.Context, run schedul
 	})
 }
 
+func (service *Service) recordNotApplicable(ctx context.Context, run scheduledRun, reason metric.CapabilityBlockReason) error {
+	finished := service.clock.Now().UTC()
+	code := string(reason)
+	message := collectionErrorMessage(code)
+	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
+		collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
+		if err != nil {
+			return err
+		}
+		if !collectionActive {
+			return nil
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO instance_collection_task_state
+			(instance_id, task_id, last_due_at, last_finished_at, last_success_at, last_result,
+			 consecutive_failures, next_eligible_at, last_error_code, last_error_message)
+			VALUES ($1, $2, $3, $4, $4, 'SUCCESS', 0, NULL, $5, $6)
+			ON CONFLICT (instance_id, task_id) DO UPDATE SET
+			last_due_at = EXCLUDED.last_due_at,
+			last_finished_at = EXCLUDED.last_finished_at,
+			last_success_at = EXCLUDED.last_success_at,
+			last_result = EXCLUDED.last_result,
+			consecutive_failures = 0,
+			next_eligible_at = NULL,
+			last_error_code = EXCLUDED.last_error_code,
+			last_error_message = EXCLUDED.last_error_message`,
+			run.target.ID, run.task.ID, run.dueAt, finished, code, message)
+		if err != nil {
+			return err
+		}
+		return advanceWatermarkIfComplete(ctx, tx, run.target.ID, finished)
+	})
+}
+
 func (service *Service) recordFailure(ctx context.Context, run scheduledRun, result taskResult, code string, connectionFailure bool) error {
 	finished := service.clock.Now().UTC()
 	message := collectionErrorMessage(code)
@@ -226,7 +260,7 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, bat
 				return nil
 			}
 			for _, sample := range batch.samples {
-				if err := insertSample(ctx, tx, run.target.ID, sample.metricID, sample.value, finished); err != nil {
+				if err := insertCollectedSample(ctx, tx, run.target.ID, sample, finished); err != nil {
 					return err
 				}
 			}
@@ -269,37 +303,41 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, bat
 					return err
 				}
 			}
-			var complete bool
-			if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (
-				SELECT 1 FROM instance_collection_task_state
-				WHERE instance_id = $1
-				  AND (last_due_at IS NULL OR last_success_at IS NULL OR last_success_at < last_due_at)
-			)`, run.target.ID).Scan(&complete); err != nil {
-				return err
-			}
-			if !complete {
-				return nil
-			}
-			var counterResetPending bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS (
-				SELECT 1 FROM instance_collection_task_state
-				WHERE instance_id = $1 AND last_error_code = $2
-			)`, run.target.ID, errorCodeCounterReset).Scan(&counterResetPending); err != nil {
-				return err
-			}
-			if counterResetPending {
-				_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_success_at)
-					VALUES ($1, 'SERVER_DIRECT', $2)
-					ON CONFLICT (instance_id, source) DO UPDATE SET last_success_at = EXCLUDED.last_success_at`, run.target.ID, finished)
-				return err
-			}
-			return instance.New(tx).SetCollectSuccess(ctx, instance.SetCollectSuccessParams{
-				InstanceID:    run.target.ID,
-				LastSuccessAt: pgtype.Timestamptz{Time: finished, Valid: true},
-			})
+			return advanceWatermarkIfComplete(ctx, tx, run.target.ID, finished)
 		})
 	}
 	return service.withPartitionRepair(ctx, finished, write)
+}
+
+func advanceWatermarkIfComplete(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, finished time.Time) error {
+	var complete bool
+	if err := tx.QueryRow(ctx, `SELECT NOT EXISTS (
+		SELECT 1 FROM instance_collection_task_state
+		WHERE instance_id = $1
+		  AND (last_due_at IS NULL OR last_success_at IS NULL OR last_success_at < last_due_at)
+	)`, instanceID).Scan(&complete); err != nil {
+		return err
+	}
+	if !complete {
+		return nil
+	}
+	var counterResetPending bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (
+		SELECT 1 FROM instance_collection_task_state
+		WHERE instance_id = $1 AND last_error_code = $2
+	)`, instanceID, errorCodeCounterReset).Scan(&counterResetPending); err != nil {
+		return err
+	}
+	if counterResetPending {
+		_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_success_at)
+			VALUES ($1, 'SERVER_DIRECT', $2)
+			ON CONFLICT (instance_id, source) DO UPDATE SET last_success_at = EXCLUDED.last_success_at`, instanceID, finished)
+		return err
+	}
+	return instance.New(tx).SetCollectSuccess(ctx, instance.SetCollectSuccessParams{
+		InstanceID:    instanceID,
+		LastSuccessAt: pgtype.Timestamptz{Time: finished, Valid: true},
+	})
 }
 
 func (service *Service) nextEligible(ctx context.Context, run scheduledRun) (time.Time, error) {
@@ -327,14 +365,26 @@ func (service *Service) nextEligible(ctx context.Context, run scheduledRun) (tim
 }
 
 func insertSample(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, metricID metric.MetricID, value float64, observedAt time.Time) error {
+	return insertCollectedSample(ctx, tx, instanceID, collectedSample{metricID: metricID, value: value}, observedAt)
+}
+
+func insertCollectedSample(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUID, sample collectedSample, observedAt time.Time) error {
+	labels := sample.labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	encodedLabels, err := json.Marshal(labels)
+	if err != nil {
+		return fmt.Errorf("encode metric labels: %w", err)
+	}
 	seriesID, err := metric.New(tx).UpsertSeries(ctx, metric.UpsertSeriesParams{
-		InstanceID: instanceID, MetricID: string(metricID), Labels: json.RawMessage(`{}`), LabelsKey: "{}",
+		InstanceID: instanceID, MetricID: string(sample.metricID), Labels: encodedLabels, LabelsKey: string(encodedLabels),
 		LastSeen: pgtype.Timestamptz{Time: observedAt, Valid: true},
 	})
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, observedAt, value)
+	_, err = tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, observedAt, sample.value)
 	return err
 }
 
@@ -407,7 +457,7 @@ func collectionErrorMessage(code string) string {
 	case string(metric.CapabilityBlockFeatureDisabled):
 		return "required database feature is not enabled"
 	case string(metric.CapabilityBlockNotApplicableRole):
-		return "collection task does not apply to this database role"
+		return "collection task does not apply to this database role or topology"
 	case string(resultSkippedBackpressure):
 		return "collection skipped because scheduler capacity was unavailable"
 	case string(resultBackoff):

@@ -130,8 +130,8 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		WHERE instance_id = $1 AND last_result = 'SUCCESS'`, pgID).Scan(&successfulTasks); err != nil {
 		t.Fatalf("count successful collection tasks: %v", err)
 	}
-	if successfulTasks != 3 {
-		t.Fatalf("successful task count = %d, want 3", successfulTasks)
+	if successfulTasks != 7 {
+		t.Fatalf("successful task count = %d, want 7", successfulTasks)
 	}
 	collector.queryConnectionMu.Lock()
 	cached := collector.queryConnections[instanceID.String()]
@@ -143,8 +143,8 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if err := cached.conn.QueryRow(ctx, "SHOW statement_timeout").Scan(&statementTimeout); err != nil {
 		t.Fatalf("read server-side statement timeout: %v", err)
 	}
-	if statementTimeout != "4s" {
-		t.Fatalf("statement_timeout = %q, want 4s", statementTimeout)
+	if statementTimeout != "10s" {
+		t.Fatalf("statement_timeout = %q, want 10s", statementTimeout)
 	}
 	targets, err := instance.New(pool).ListCollectionTargets(ctx)
 	if err != nil || len(targets) != 1 {
@@ -294,6 +294,101 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	if storedSessions > sessionSnapshotLimit || sessionCount < storedSessions || sessionsTruncated != (sessionCount > sessionSnapshotLimit) {
 		t.Fatalf("latest session snapshot = stored %d original %d truncated %t", storedSessions, sessionCount, sessionsTruncated)
+	}
+	assertReplicationSlotSemantics(t, ctx, admin, platform, collector, targets[0], pgID, currentClock)
+}
+
+func assertReplicationSlotSemantics(
+	t *testing.T,
+	ctx context.Context,
+	admin *sql.DB,
+	platform *db.Pool,
+	collector *Service,
+	target instance.ListCollectionTargetsRow,
+	instanceID pgtype.UUID,
+	currentClock *fixedClock,
+) {
+	t.Helper()
+	states := storedCapabilityStates(t, ctx, platform.Pool, instanceID)
+	if states[metric.CapabilityTopologyHasSlot] != metric.CapabilityNotApplicable {
+		t.Fatalf("initial slot capability = %s, want NOT_APPLICABLE", states[metric.CapabilityTopologyHasSlot])
+	}
+
+	slotName := fmt.Sprintf("dbs_monitor_test_%d", os.Getpid())
+	admin.ExecContext(ctx, "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1", slotName)
+	var createdSlot string
+	if err := admin.QueryRowContext(ctx, "SELECT slot_name FROM pg_create_physical_replication_slot($1, true)", slotName).Scan(&createdSlot); err != nil {
+		t.Fatalf("create physical replication slot: %v", err)
+	}
+	defer func() {
+		admin.ExecContext(context.Background(), "SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = $1", slotName)
+	}()
+
+	conn, err := collector.queryConnection(ctx, target)
+	if err != nil {
+		t.Fatalf("open target connection for slot collection: %v", err)
+	}
+	complete, err := capability.ProbeAndStoreSnapshot(ctx, ctx, platform, conn, instanceID, currentClock.Now().UTC())
+	if err != nil || !complete {
+		t.Fatalf("probe slot capability: complete=%t error=%v", complete, err)
+	}
+	states = storedCapabilityStates(t, ctx, platform.Pool, instanceID)
+	if states[metric.CapabilityTopologyHasSlot] != metric.CapabilityPresent {
+		t.Fatalf("created slot capability = %s, want PRESENT", states[metric.CapabilityTopologyHasSlot])
+	}
+
+	var slotTask metric.Task
+	for _, task := range scheduledTasks() {
+		if task.ID == metric.TaskReplicationSlot {
+			slotTask = task
+			break
+		}
+	}
+	run := newScheduledRun(target, slotTask, 0, currentClock.Now().UTC())
+	run.startedAt = currentClock.Now().UTC()
+	if recorded, err := collector.recordStarted(ctx, run); err != nil || !recorded {
+		t.Fatalf("record slot task start: recorded=%t error=%v", recorded, err)
+	}
+	var advancedLSN string
+	if err := admin.QueryRowContext(ctx,
+		"SELECT end_lsn::text FROM pg_replication_slot_advance($1, pg_current_wal_lsn())", slotName).Scan(&advancedLSN); err != nil {
+		t.Fatalf("advance physical replication slot: %v", err)
+	}
+	batch, err := collector.collectQueryTask(ctx, conn, run)
+	if err != nil {
+		t.Fatalf("collect replication slot: %v", err)
+	}
+	if err := collector.recordSuccess(ctx, run, batch); err != nil {
+		t.Fatalf("persist replication slot: %v", err)
+	}
+	var value float64
+	var labels []byte
+	if err := platform.QueryRow(ctx, `SELECT sample.value, series.labels
+		FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1 AND series.metric_id = 'pg.replication_slot.retained_wal_bytes'
+		ORDER BY sample.ts DESC LIMIT 1`, instanceID).Scan(&value, &labels); err != nil {
+		t.Fatalf("read replication slot sample: %v", err)
+	}
+	var decodedLabels map[string]string
+	if err := json.Unmarshal(labels, &decodedLabels); err != nil {
+		t.Fatalf("decode replication slot labels: %v", err)
+	}
+	if value < 0 || decodedLabels["slot"] != slotName {
+		t.Fatalf("slot sample = value %v labels %v, want nonnegative value/slot %s", value, decodedLabels, slotName)
+	}
+
+	if _, err := admin.ExecContext(ctx, "SELECT pg_drop_replication_slot($1)", slotName); err != nil {
+		t.Fatalf("drop physical replication slot: %v", err)
+	}
+	complete, err = capability.ProbeAndStoreSnapshot(ctx, ctx, platform, conn, instanceID, currentClock.Now().UTC())
+	if err != nil || !complete {
+		t.Fatalf("re-probe absent slot capability: complete=%t error=%v", complete, err)
+	}
+	states = storedCapabilityStates(t, ctx, platform.Pool, instanceID)
+	reason, blocked := metric.MetricCapabilityBlockReason(metric.MetricReplicationSlotRetainedWAL, states)
+	if states[metric.CapabilityTopologyHasSlot] != metric.CapabilityNotApplicable || !blocked || reason != metric.CapabilityBlockNotApplicableRole {
+		t.Fatalf("absent slot = capability %s blocked %t reason %s", states[metric.CapabilityTopologyHasSlot], blocked, reason)
 	}
 }
 
