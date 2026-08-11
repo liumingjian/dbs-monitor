@@ -13,8 +13,9 @@ OAPI_CODEGEN := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@
 REDOCLY := npx --yes @redocly/cli@2.20.3
 OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
 SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
+GOOSE := go run github.com/pressly/goose/v3/cmd/goose@v3.24.3
 
-.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix
+.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix check-sqlc-vet
 .PHONY: legacy-package-binaries-linux-amd64 legacy-package-binaries-linux-arm64 legacy-package-linux-amd64 legacy-package-linux-arm64
 
 gen:
@@ -50,6 +51,22 @@ check:
 check-full: check
 	$(MAKE) build
 	sh scripts/check-e2e.sh
+	$(MAKE) check-sqlc-vet
+	$(MAKE) check-pg-matrix
+
+check-sqlc-vet:
+	@database=dbs_monitor_sqlc_vet_$$$$; \
+	cleanup() { \
+		PGPASSWORD="$(PGPASSWORD)" psql -h "$(PGHOST)" -p "$(PGPORT)" -U "$(PGUSER)" -d postgres \
+			-c "DROP DATABASE IF EXISTS \"$$database\" WITH (FORCE)" >/dev/null 2>&1 || true; \
+	}; \
+	trap cleanup EXIT INT TERM; \
+	PGPASSWORD="$(PGPASSWORD)" psql -h "$(PGHOST)" -p "$(PGPORT)" -U "$(PGUSER)" -d postgres -v ON_ERROR_STOP=1 \
+		-c "CREATE DATABASE \"$$database\" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'" >/dev/null; \
+	vet_url="postgres://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$$database?sslmode=disable"; \
+	$(GOOSE) -dir migrations postgres "$$vet_url" up; \
+	$(GOOSE) -dir migrations postgres "$$vet_url" up; \
+	DATABASE_URL="$$vet_url" $(SQLC) vet
 
 check-pg-matrix:
 	docker compose --profile matrix up -d --wait monitored-pg13 monitored-pg14 monitored-pg15 monitored-pg16 monitored-pg17 monitored-pg17-replica
