@@ -44,6 +44,7 @@
 | [`docs/design/15-ci-and-release-pipeline.md`](design/15-ci-and-release-pipeline.md) | R2 · CI 与发布流水线：GitHub Actions 唯一规范执行者、PR 门与 `check-full`、tag + 精确提交校验 + 人工审批发布、四组合构建矩阵、留痕规则 | **v1.0** |
 | [`docs/design/16-r2-decision-index.md`](design/16-r2-decision-index.md) | R2 收口索引：固化地图 #15 的 `Decisions so far`，以 `make check ≤120 秒` 为当前真值 | **v1.0** |
 | [`docs/design/18-v1-macos-support-boundary.md`](design/18-v1-macos-support-boundary.md) | v1 macOS 首发支持边界：macOS 14.0+、仅原生 arm64，以及开发/CI/安装/交付运行的最低验收语义 | **v1.0** |
+| [`docs/design/19-v1-macos-runtime-and-postgresql.md`](design/19-v1-macos-runtime-and-postgresql.md) | v1 macOS 运行与 PostgreSQL 交付：随包 PG 17、系统级 launchd、离线安装，以及备份/升级/卸载闭环 | **v1.0** |
 | [`docs/validation/t11-windows-amd64-progress.md`](validation/t11-windows-amd64-progress.md) | T11 · Windows amd64 环境验证记录、Docker Desktop 兼容性结论与 Linux amd64 后续验收清单 | 已完成（T11 已验收） |
 
 ### 2.1 四条跨文档不变式
