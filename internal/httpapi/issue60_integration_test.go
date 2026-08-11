@@ -126,10 +126,12 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	queryStatsURL := fmt.Sprintf("%s/api/v1/instances/%s/query-stats", server.URL, instanceID)
 	producedUnavailability := make(map[api.Unavailability]struct{})
 	assertProducedMetric := func(address string, want api.Unavailability) {
+		t.Helper()
 		assertUnavailability(t, client, address, string(want))
 		producedUnavailability[want] = struct{}{}
 	}
 	assertProducedQueryStatistics := func(want api.Unavailability) {
+		t.Helper()
 		assertQueryStatisticsUnavailability(t, client, queryStatsURL, want)
 		producedUnavailability[want] = struct{}{}
 	}

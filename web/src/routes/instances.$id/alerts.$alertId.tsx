@@ -47,6 +47,9 @@ function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; 
     recovered_at: detail.recovered_at,
     updated_at: detail.updated_at,
   }) : undefined
+  const currentMetricHref = monitoringSearch
+    ? alertMonitoringHref(detail.instance_id, monitoringSearch)
+    : '#trigger-metric-heading'
   const instance = $api.useQuery('get', '/api/v1/instances/{id}', {
     params: { path: { id: detail.instance_id } },
   })
@@ -134,7 +137,7 @@ function AlertDetailContent({ detail, routeInstanceID }: { detail: AlertDetail; 
               detail.instance_id,
               detail.metric_id,
               detail.unavailability,
-              monitoringSearch ? alertMonitoringHref(detail.instance_id, monitoringSearch) : '#trigger-metric-heading',
+              currentMetricHref,
             )}
           />
         : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无 No Data 原因" />}
@@ -191,20 +194,21 @@ function AlertMetricChart({ detail, metricID, monitoringSearch }: {
     ? response.series.map((item) => ({ name: detail.metric_id, unit: response.unit, points: item.points }))
     : []
   const unavailability = detail.unavailability ?? metricUnavailability(response)
+  const remediationHref = unavailability
+    ? alertUnavailabilityHref(
+        detail.instance_id,
+        detail.metric_id,
+        unavailability,
+        alertMonitoringHref(detail.instance_id, monitoringSearch),
+      )
+    : '#trigger-metric-heading'
 
   return <MetricChart
     label={detail.rule_name}
     series={series}
     step={metrics.data?.step ?? 'auto'}
     unavailability={unavailability}
-    unavailabilityHref={unavailability
-      ? alertUnavailabilityHref(
-          detail.instance_id,
-          detail.metric_id,
-          unavailability,
-          alertMonitoringHref(detail.instance_id, monitoringSearch),
-        )
-      : '#trigger-metric-heading'}
+    unavailabilityHref={remediationHref}
     loading={metrics.isFetching}
   />
 }
@@ -213,10 +217,10 @@ function alertUnavailabilityHref(
   instanceID: string,
   metricID: string,
   code: components['schemas']['Unavailability'],
-  current: string,
+  currentHref: string,
 ): string {
   return unavailabilityHref(code, {
-    current,
+    current: currentHref,
     collection: `/instances/${encodeURIComponent(instanceID)}/collection?metric=${encodeURIComponent(metricID)}`,
   })
 }

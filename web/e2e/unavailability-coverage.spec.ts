@@ -4,7 +4,7 @@ import { standardMonitoringGroups, standardMonitoringMetricIDs } from '../src/ro
 const instanceID = '11111111-1111-4111-8111-111111111111'
 const from = '2026-08-11T10:00:00.000Z'
 const to = '2026-08-11T11:00:00.000Z'
-const cases = [
+const unavailabilityCases = [
   { code: 'NO_SAMPLES_YET', title: '等待首个样本', action: '稍后刷新', destination: 'current' },
   { code: 'NO_DATA_IN_RANGE', title: '所选范围没有数据', action: '扩大时间范围', destination: 'current' },
   { code: 'STALE', title: '数据已过期', action: '检查采集状态', destination: 'collection' },
@@ -36,8 +36,8 @@ test('all 13 backend codes render copy and canonical destinations without blank 
   }))
 
   const charts = standardMonitoringGroups.flatMap((group) => group.charts)
-  const codeByMetric = new Map(charts.slice(0, cases.length).flatMap((chart, index) =>
-    chart.metrics.map((metric) => [metric, cases[index].code] as const),
+  const codeByMetric = new Map(charts.slice(0, unavailabilityCases.length).flatMap((chart, index) =>
+    chart.metrics.map((metric) => [metric, unavailabilityCases[index].code] as const),
   ))
   await page.route('**/api/v1/instances/*/metrics/series*', (route) => route.fulfill({
     json: {
@@ -58,7 +58,7 @@ test('all 13 backend codes render copy and canonical destinations without blank 
 
   await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
 
-  for (const [index, item] of cases.entries()) {
+  for (const [index, item] of unavailabilityCases.entries()) {
     const chart = charts[index]
     const card = page.locator('.metric-card').filter({ has: page.getByText(chart.title, { exact: true }) })
     await expect(card.getByText(item.title, { exact: true })).toBeVisible()
