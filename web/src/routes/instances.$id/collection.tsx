@@ -33,6 +33,7 @@ type CollectionPause = components['schemas']['CollectionPauseStatus']
 type CollectionTask = components['schemas']['CollectionTaskState']
 type AgentRegistration = components['schemas']['AgentRegistration']
 type TaskID = CollectionTask['task_id']
+type StatusPresentation = { label: string; color?: string }
 
 type CollectionManagementViewProps = {
   instanceName: string
@@ -49,8 +50,17 @@ type CollectionManagementViewProps = {
   onPauseChange: (paused: boolean, reason: string) => void
 }
 
-type CollectionConfigurationProps = Pick<CollectionManagementViewProps,
-  'tasks' | 'pause' | 'agentMetricsEnabled' | 'canManage' | 'intervalPending' | 'pausePending' | 'onIntervalChange' | 'onPauseChange'>
+type CollectionConfigurationProps = Pick<
+  CollectionManagementViewProps,
+  | 'tasks'
+  | 'pause'
+  | 'agentMetricsEnabled'
+  | 'canManage'
+  | 'intervalPending'
+  | 'pausePending'
+  | 'onIntervalChange'
+  | 'onPauseChange'
+>
 
 export const collectionManagementRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -58,16 +68,16 @@ export const collectionManagementRoute = createRoute({
   component: CollectionManagementPage,
 })
 
-const polling = { refetchInterval: 30_000 }
+const pollingOptions = { refetchInterval: 30_000 }
 
 function CollectionManagementPage() {
   const { id } = collectionManagementRoute.useParams()
-  const instanceQuery = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } }, polling)
+  const instanceQuery = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } }, pollingOptions)
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
-  const tasksQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/tasks', { params: { path: { id } } }, polling)
-  const capabilitiesQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/capabilities', { params: { path: { id } } }, polling)
-  const registrationQuery = $api.useQuery('get', '/api/v1/instances/{id}/agent/registration', { params: { path: { id } } }, polling)
-  const pauseQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/pause', { params: { path: { id } } }, polling)
+  const tasksQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/tasks', { params: { path: { id } } }, pollingOptions)
+  const capabilitiesQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/capabilities', { params: { path: { id } } }, pollingOptions)
+  const registrationQuery = $api.useQuery('get', '/api/v1/instances/{id}/agent/registration', { params: { path: { id } } }, pollingOptions)
+  const pauseQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/pause', { params: { path: { id } } }, pollingOptions)
   const intervalMutation = $api.useMutation('put', '/api/v1/instances/{id}/collection/tasks/{task_id}')
   const pauseMutation = $api.useMutation('put', '/api/v1/instances/{id}/collection/pause')
   const [error, setError] = useState('')
@@ -141,6 +151,9 @@ export function CollectionManagementView({
   onIntervalChange,
   onPauseChange,
 }: CollectionManagementViewProps) {
+  const extensionCapabilities = capabilities.filter((capability) => capability.capability_id.startsWith('ext.'))
+  const databaseCapabilities = capabilities.filter((capability) => !capability.capability_id.startsWith('ext.'))
+
   return <Space orientation="vertical" size="large" style={{ width: '100%' }}>
     <div>
       <Typography.Title level={2} style={{ margin: 0 }}>{instanceName}</Typography.Title>
@@ -154,9 +167,9 @@ export function CollectionManagementView({
     <Divider />
     <AgentStatus registration={registration} />
     <Divider />
-    <CapabilityModule title="数据库连接与权限检查" capabilities={capabilities.filter((item) => !item.capability_id.startsWith('ext.'))} />
+    <CapabilityModule title="数据库连接与权限检查" capabilities={databaseCapabilities} />
     <Divider />
-    <CapabilityModule title="扩展与插件能力" capabilities={capabilities.filter((item) => item.capability_id.startsWith('ext.'))} />
+    <CapabilityModule title="扩展与插件能力" capabilities={extensionCapabilities} />
     <Divider />
     <MetricStatus tasks={tasks} />
     <Divider />
@@ -177,22 +190,23 @@ export function CollectionManagementView({
 }
 
 export function ConfigurationTodo({ capabilities, tasks }: { capabilities: Capability[]; tasks: CollectionTask[] }) {
-  const unknown = capabilities.filter((item) => item.status === 'UNKNOWN')
-  const missing = capabilities.filter((item) => item.class === 'fixable' && item.status === 'MISSING')
-  const observedAt = capabilities.map((item) => item.observed_at).filter((value): value is string => Boolean(value)).sort().at(-1)
-  const ready = capabilities.length > 0 && unknown.length === 0 && missing.length === 0 && observedAt !== undefined
+  const unknownCapabilities = capabilities.filter((capability) => capability.status === 'UNKNOWN')
+  const missingCapabilities = capabilities.filter((capability) => capability.class === 'fixable' && capability.status === 'MISSING')
+  const latestObservation = latestTimestamp(capabilities.map((capability) => capability.observed_at))
+  const showReadyState = capabilities.length > 0 && unknownCapabilities.length === 0 &&
+    missingCapabilities.length === 0 && latestObservation !== undefined
 
   return <section role="region" aria-labelledby="configuration-todo-heading" aria-label="配置缺失待办">
     <Typography.Title id="configuration-todo-heading" level={4}>配置缺失待办</Typography.Title>
     <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-      {(unknown.length > 0 || capabilities.length === 0) && <Alert
+      {(unknownCapabilities.length > 0 || capabilities.length === 0) && <Alert
         type="warning"
         showIcon
         icon={<WarningOutlined />}
         title="无法检查采集能力"
-        description={unknown.length > 0 ? `以下 ${unknown.length} 项状态未知` : '能力快照不可用，状态未知'}
+        description={unknownCapabilities.length > 0 ? `以下 ${unknownCapabilities.length} 项状态未知` : '能力快照不可用，状态未知'}
       />}
-      {missing.map((capability) => {
+      {missingCapabilities.map((capability) => {
         const metrics = affectedMetrics(capability.capability_id, tasks)
         return <details className="collection-todo-item" key={capability.capability_id}>
           <summary>
@@ -203,47 +217,47 @@ export function ConfigurationTodo({ capabilities, tasks }: { capabilities: Capab
           {metrics.length > 0 && <Space wrap>{metrics.map((metricID) => <a key={metricID} href={`#metric-${metricID}`}>{metricID}</a>)}</Space>}
         </details>
       })}
-      {ready && <Alert
+      {showReadyState && <Alert
         type="success"
         showIcon
         icon={<CheckCircleOutlined />}
         title="无待办——所有可修复的采集能力均已就绪"
-        description={`最近检查 ${formatTime(observedAt)}`}
+        description={`最近检查 ${formatTime(latestObservation)}`}
       />}
     </Space>
   </section>
 }
 
 function CollectionOverview({ tasks, pause }: { tasks: CollectionTask[]; pause: CollectionPause }) {
-  const lastSuccess = tasks.map((task) => task.last_success_at).filter((value): value is string => Boolean(value)).sort().at(-1)
-  const failures = tasks.reduce((total, task) => total + task.consecutive_failures, 0)
-  const state = pause.paused ? { label: '已暂停', color: 'default' } : failures > 0
-    ? { label: '存在采集失败', color: 'error' }
-    : tasks.some((task) => task.last_result === 'SUCCESS')
-      ? { label: '正常', color: 'success' }
-      : { label: '尚未采集', color: 'default' }
+  const lastSuccess = latestTimestamp(tasks.map((task) => task.last_success_at))
+  const consecutiveFailures = tasks.reduce((total, task) => total + task.consecutive_failures, 0)
+  const status = collectionStatusPresentation(
+    pause.paused,
+    consecutiveFailures,
+    tasks.some((task) => task.last_result === 'SUCCESS'),
+  )
 
   return <section aria-labelledby="collection-overview-heading">
     <Typography.Title id="collection-overview-heading" level={4}>采集总状态</Typography.Title>
     <Descriptions size="small" column={{ xs: 1, sm: 2, md: 4 }} items={[
-      { key: 'status', label: '当前状态', children: <Tag color={state.color}>{state.label}</Tag> },
+      { key: 'status', label: '当前状态', children: <Tag color={status.color}>{status.label}</Tag> },
       { key: 'connection', label: '数据库连接', children: taskResult(tasks.find((task) => task.task_id === 'pg.probe')?.last_result) },
       { key: 'success', label: '最近成功采集', children: formatOptionalTime(lastSuccess) },
       { key: 'freshness', label: '数据新鲜度', children: lastSuccess ? formatAge(lastSuccess) : '未知' },
-      { key: 'failures', label: '连续失败数', children: failures },
+      { key: 'failures', label: '连续失败数', children: consecutiveFailures },
     ]} />
   </section>
 }
 
 function AgentStatus({ registration }: { registration: AgentRegistration }) {
-  const state = agentRegistrationPresentation(registration.state)
+  const statePresentation = agentRegistrationPresentation(registration.state)
   return <section aria-labelledby="agent-status-heading">
     <Typography.Title id="agent-status-heading" level={4}>Agent 状态</Typography.Title>
     <Descriptions size="small" column={{ xs: 1, sm: 2 }} items={[
-      { key: 'state', label: '登记状态', children: <Tag color={state.color}>{state.label}</Tag> },
+      { key: 'state', label: '登记状态', children: <Tag color={statePresentation.color}>{statePresentation.label}</Tag> },
       { key: 'heartbeat', label: '最近心跳', children: formatOptionalTime(registration.last_reported_at) },
       { key: 'version', label: '版本', children: registration.agent_version ?? '未上报' },
-      { key: 'permission', label: '权限状态', children: registration.state === 'REVOKED' ? '令牌已吊销' : registration.agent_expected ? '允许上报' : '未启用' },
+      { key: 'permission', label: '权限状态', children: agentPermissionStatus(registration) },
     ]} />
   </section>
 }
@@ -267,14 +281,14 @@ function CapabilityModule({ title, capabilities }: { title: string; capabilities
 }
 
 function MetricStatus({ tasks }: { tasks: CollectionTask[] }) {
-  const rows = tasks.flatMap((task) => task.metric_ids.map((metricID) => ({ metricID, task })))
+  const metricRows = tasks.flatMap((task) => task.metric_ids.map((metricID) => ({ metricID, task })))
   return <section aria-labelledby="metric-status-heading" id="metric-status">
     <Typography.Title id="metric-status-heading" level={4}>指标采集状态</Typography.Title>
     <Table
       size="small"
       pagination={false}
       rowKey="metricID"
-      dataSource={rows}
+      dataSource={metricRows}
       onRow={(row) => ({ id: `metric-${row.metricID}` })}
       scroll={{ x: 780 }}
       columns={[
@@ -408,7 +422,18 @@ function taskResult(result: CollectionTask['last_result']): string {
   }
 }
 
-function agentRegistrationPresentation(state: AgentRegistration['state']): { label: string; color?: string } {
+function collectionStatusPresentation(
+  paused: boolean,
+  consecutiveFailures: number,
+  hasSuccessfulTask: boolean,
+): StatusPresentation {
+  if (paused) return { label: '已暂停', color: 'default' }
+  if (consecutiveFailures > 0) return { label: '存在采集失败', color: 'error' }
+  if (hasSuccessfulTask) return { label: '正常', color: 'success' }
+  return { label: '尚未采集', color: 'default' }
+}
+
+function agentRegistrationPresentation(state: AgentRegistration['state']): StatusPresentation {
   switch (state) {
     case 'NEVER_REGISTERED': return { label: '未安装' }
     case 'EXPECTED_ONLINE': return { label: '应在线', color: 'success' }
@@ -416,6 +441,16 @@ function agentRegistrationPresentation(state: AgentRegistration['state']): { lab
     case 'DISABLED': return { label: '已停用' }
     default: return assertNever(state)
   }
+}
+
+function agentPermissionStatus(registration: AgentRegistration): string {
+  if (registration.state === 'REVOKED') return '令牌已吊销'
+  if (registration.agent_expected) return '允许上报'
+  return '未启用'
+}
+
+function latestTimestamp(values: (string | undefined)[]): string | undefined {
+  return values.filter((value): value is string => Boolean(value)).sort().at(-1)
 }
 
 function formatOptionalTime(value: string | undefined): string {

@@ -12,7 +12,14 @@ import { rootRoute } from './routes/root'
 import { usersRoute } from './routes/users'
 import './styles.css'
 
-const routeTree = rootRoute.addChildren([loginRoute, instancesRoute, instanceRoute, collectionManagementRoute, instanceSettingsRoute, usersRoute])
+const routeTree = rootRoute.addChildren([
+  loginRoute,
+  instancesRoute,
+  instanceRoute,
+  collectionManagementRoute,
+  instanceSettingsRoute,
+  usersRoute,
+])
 const router = createRouter({ routeTree, defaultPreload: 'intent' })
 const queryClient = new QueryClient()
 

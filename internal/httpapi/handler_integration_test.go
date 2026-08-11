@@ -329,12 +329,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if tasks.StatusCode != http.StatusOK {
 		t.Fatalf("collection task states status = %d, want 200", tasks.StatusCode)
 	}
-	var taskStates []struct {
-		TaskID               string   `json:"task_id"`
-		IntervalSeconds      int      `json:"interval_seconds"`
-		MetricIDs            []string `json:"metric_ids"`
-		RequiredCapabilities []string `json:"required_capabilities"`
-	}
+	var taskStates []api.CollectionTaskState
 	if err := json.NewDecoder(tasks.Body).Decode(&taskStates); err != nil {
 		t.Fatalf("decode collection task states: %v", err)
 	}
@@ -342,19 +337,14 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if len(taskStates) != 8 {
 		t.Fatalf("collection task state count = %d, want 8", len(taskStates))
 	}
-	var activityTask *struct {
-		TaskID               string   `json:"task_id"`
-		IntervalSeconds      int      `json:"interval_seconds"`
-		MetricIDs            []string `json:"metric_ids"`
-		RequiredCapabilities []string `json:"required_capabilities"`
-	}
+	var activityTask *api.CollectionTaskState
 	for index := range taskStates {
-		if taskStates[index].TaskID == "pg.stat_activity" {
+		if taskStates[index].TaskId == "pg.stat_activity" {
 			activityTask = &taskStates[index]
 			break
 		}
 	}
-	if activityTask == nil || !slices.Contains(activityTask.MetricIDs, "pg.connection.active") ||
+	if activityTask == nil || !slices.Contains(activityTask.MetricIds, "pg.connection.active") ||
 		!slices.Equal(activityTask.RequiredCapabilities, []string{"role.pg_monitor"}) {
 		t.Fatalf("pg.stat_activity dictionary projection = %+v", activityTask)
 	}
@@ -373,9 +363,24 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		capability string
 		wantStatus string
 	}{
-		{name: "all ready", states: `{"role.pg_monitor":"PRESENT","ext.pg_stat_statements":"PRESENT","topo.has_replication":"PRESENT","topo.has_slot":"PRESENT"}`, capability: "role.pg_monitor", wantStatus: "PRESENT"},
-		{name: "fixable missing", states: `{"role.pg_monitor":"MISSING","ext.pg_stat_statements":"PRESENT","topo.has_replication":"PRESENT","topo.has_slot":"PRESENT"}`, capability: "role.pg_monitor", wantStatus: "MISSING"},
-		{name: "structural not applicable", states: `{"role.pg_monitor":"PRESENT","ext.pg_stat_statements":"PRESENT","topo.has_replication":"PRESENT","topo.has_slot":"NOT_APPLICABLE"}`, capability: "topo.has_slot", wantStatus: "NOT_APPLICABLE"},
+		{
+			name:       "all ready",
+			states:     `{"role.pg_monitor":"PRESENT","ext.pg_stat_statements":"PRESENT","topo.has_replication":"PRESENT","topo.has_slot":"PRESENT"}`,
+			capability: "role.pg_monitor",
+			wantStatus: "PRESENT",
+		},
+		{
+			name:       "fixable missing",
+			states:     `{"role.pg_monitor":"MISSING","ext.pg_stat_statements":"PRESENT","topo.has_replication":"PRESENT","topo.has_slot":"PRESENT"}`,
+			capability: "role.pg_monitor",
+			wantStatus: "MISSING",
+		},
+		{
+			name:       "structural not applicable",
+			states:     `{"role.pg_monitor":"PRESENT","ext.pg_stat_statements":"PRESENT","topo.has_replication":"PRESENT","topo.has_slot":"NOT_APPLICABLE"}`,
+			capability: "topo.has_slot",
+			wantStatus: "NOT_APPLICABLE",
+		},
 	}
 	for _, capabilityCase := range capabilityCases {
 		t.Run("capability todo fact "+capabilityCase.name, func(t *testing.T) {

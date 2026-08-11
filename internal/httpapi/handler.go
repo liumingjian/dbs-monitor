@@ -160,7 +160,15 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 			return nil, err
 		}
 		response = append(response, toAPIInstance(
-			row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, row.AgentMetricsEnabled, status,
+			row.ID,
+			row.Name,
+			row.Host,
+			row.Port,
+			row.DatabaseName,
+			row.Username,
+			row.AgentVersion,
+			row.AgentMetricsEnabled,
+			status,
 			toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 		))
 	}
@@ -202,7 +210,18 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		return nil, err
 	}
 	return api.CreateInstance201JSONResponse{
-		Instance: toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, true, api.OK, api.CollectionPauseStatus{Paused: false}),
+		Instance: toAPIInstance(
+			row.ID,
+			row.Name,
+			row.Host,
+			row.Port,
+			row.DatabaseName,
+			row.Username,
+			row.AgentVersion,
+			true,
+			api.OK,
+			api.CollectionPauseStatus{Paused: false},
+		),
 	}, nil
 }
 
@@ -216,7 +235,15 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 		return nil, err
 	}
 	return api.GetInstance200JSONResponse(toAPIInstance(
-		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion, row.AgentMetricsEnabled, status,
+		row.ID,
+		row.Name,
+		row.Host,
+		row.Port,
+		row.DatabaseName,
+		row.Username,
+		row.AgentVersion,
+		row.AgentMetricsEnabled,
+		status,
 		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 	)), nil
 }
@@ -960,8 +987,27 @@ func SeedAdmin(ctx context.Context, platform *db.Pool, username, password string
 	})
 }
 
-func toAPIInstance(id pgtype.UUID, name, host string, port int32, database, username string, agentVersion pgtype.Text, agentMetricsEnabled bool, status api.AlertStatus, pause api.CollectionPauseStatus) api.Instance {
-	result := api.Instance{Id: id.Bytes, Name: name, Host: host, Port: int(port), Database: database, Username: username, AgentMetricsEnabled: agentMetricsEnabled, AlertStatus: status, CollectionPause: pause}
+func toAPIInstance(
+	id pgtype.UUID,
+	name, host string,
+	port int32,
+	database, username string,
+	agentVersion pgtype.Text,
+	agentMetricsEnabled bool,
+	status api.AlertStatus,
+	pause api.CollectionPauseStatus,
+) api.Instance {
+	result := api.Instance{
+		Id:                  id.Bytes,
+		Name:                name,
+		Host:                host,
+		Port:                int(port),
+		Database:            database,
+		Username:            username,
+		AgentMetricsEnabled: agentMetricsEnabled,
+		AlertStatus:         status,
+		CollectionPause:     pause,
+	}
 	if agentVersion.Valid {
 		result.AgentVersion = &agentVersion.String
 	}
