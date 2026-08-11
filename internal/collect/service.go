@@ -671,7 +671,7 @@ func (service *Service) Run(ctx context.Context, interval time.Duration) {
 			scheduler.dispatch(ctx)
 		case <-ticks:
 			now := service.clock.Now().UTC()
-			if now.Sub(scheduler.lastLog) >= time.Minute {
+			if now.Sub(scheduler.lastSummaryAt) >= time.Minute {
 				scheduler.refreshDiskHealth(now)
 			}
 			refreshErr := scheduler.refresh(ctx, now)

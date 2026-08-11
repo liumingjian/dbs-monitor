@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"reflect"
 	"testing"
 
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
@@ -34,7 +33,9 @@ func TestDiskThresholdsFromEnvironment(t *testing.T) {
 		{
 			name: "deployment overrides",
 			values: map[string]string{
-				"DISK_WARNING_PERCENT": "75.5", "DISK_CRITICAL_PERCENT": "85", "DISK_EMERGENCY_PERCENT": "92.5",
+				"DISK_WARNING_PERCENT":   "75.5",
+				"DISK_CRITICAL_PERCENT":  "85",
+				"DISK_EMERGENCY_PERCENT": "92.5",
 			},
 			want: platformhealth.DiskThresholds{Warning: 75.5, Critical: 85, Emergency: 92.5, Hysteresis: 2},
 		},
@@ -58,7 +59,7 @@ func TestDiskThresholdsFromEnvironment(t *testing.T) {
 			if (err != nil) != test.wantError {
 				t.Fatalf("diskThresholdsFromEnvironment() error = %v, wantError %t", err, test.wantError)
 			}
-			if !test.wantError && !reflect.DeepEqual(got, test.want) {
+			if !test.wantError && got != test.want {
 				t.Fatalf("disk thresholds = %+v, want %+v", got, test.want)
 			}
 		})

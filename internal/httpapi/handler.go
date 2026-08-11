@@ -31,13 +31,15 @@ import (
 )
 
 const (
-	sessionCookie            = "dbs_monitor_session"
-	agentBackfillWindow      = 5 * time.Minute
-	agentClockSkew           = 30 * time.Second
-	agentClockSkewErrorCode  = "CLOCK_SKEW"
-	agentClockSkewMessage    = "时钟偏移"
-	agentVersionErrorCode    = "AGENT_VERSION_TOO_OLD"
-	agentVersionErrorMessage = "版本过旧，需升级"
+	sessionCookie               = "dbs_monitor_session"
+	agentBackfillWindow         = 5 * time.Minute
+	agentClockSkew              = 30 * time.Second
+	agentClockSkewErrorCode     = "CLOCK_SKEW"
+	agentClockSkewMessage       = "时钟偏移"
+	agentDiskEmergencyErrorCode = "DISK_EMERGENCY_WATERMARK"
+	agentDiskEmergencyMessage   = "磁盘紧急水位，样本写入已拒绝"
+	agentVersionErrorCode       = "AGENT_VERSION_TOO_OLD"
+	agentVersionErrorMessage    = "版本过旧，需升级"
 )
 
 type authenticatedAgentKey struct{}
@@ -819,7 +821,7 @@ func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.Repo
 		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentClockSkewErrorCode, agentClockSkewMessage)
 	}
 	if handler.health != nil && handler.health.RejectSampleWrites() {
-		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, "DISK_EMERGENCY_WATERMARK", "磁盘紧急水位，样本写入已拒绝")
+		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentDiskEmergencyErrorCode, agentDiskEmergencyMessage)
 	}
 
 	if err := handler.storeAgentReport(ctx, authenticated, *request.Body, now); err != nil {

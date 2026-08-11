@@ -186,12 +186,21 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alert_instance WHERE instance_id = $1", pgID).Scan(&alertsAfterEmergency); err != nil {
 		t.Fatalf("count alerts after disk emergency: %v", err)
 	}
-	if samplesAfterEmergency != samplesBeforeEmergency || !emergencyWatermark.Equal(healthyWatermark) ||
-		emergencyResult != "FAILED" || emergencyCode != "DISK_EMERGENCY_WATERMARK" || emergencyMessage == "" ||
-		!retentionSentinelExists || alertsAfterEmergency != alertsBeforeEmergency {
-		t.Fatalf("disk emergency samples/watermark/task/retention/alerts = %d/%s/%s:%s/%t/%d, want %d/%s/FAILED:DISK_EMERGENCY_WATERMARK/true/%d",
-			samplesAfterEmergency, emergencyWatermark, emergencyResult, emergencyCode, retentionSentinelExists, alertsAfterEmergency,
-			samplesBeforeEmergency, healthyWatermark, alertsBeforeEmergency)
+	if samplesAfterEmergency != samplesBeforeEmergency {
+		t.Fatalf("samples after disk emergency = %d, want unchanged %d", samplesAfterEmergency, samplesBeforeEmergency)
+	}
+	if !emergencyWatermark.Equal(healthyWatermark) {
+		t.Fatalf("watermark after disk emergency = %s, want unchanged %s", emergencyWatermark, healthyWatermark)
+	}
+	if emergencyResult != "FAILED" || emergencyCode != errorCodeDiskEmergency || emergencyMessage == "" {
+		t.Fatalf("task state after disk emergency = %s/%s/%q, want FAILED/%s/non-empty message",
+			emergencyResult, emergencyCode, emergencyMessage, errorCodeDiskEmergency)
+	}
+	if !retentionSentinelExists {
+		t.Fatal("retention sentinel partition was removed during disk emergency")
+	}
+	if alertsAfterEmergency != alertsBeforeEmergency {
+		t.Fatalf("alerts after disk emergency = %d, want unchanged %d", alertsAfterEmergency, alertsBeforeEmergency)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE instance SET name = 'emergency control write' WHERE id = $1", pgID); err != nil {
 		t.Fatalf("control-plane write during disk emergency: %v", err)

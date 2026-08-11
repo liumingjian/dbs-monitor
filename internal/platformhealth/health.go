@@ -48,14 +48,24 @@ type DiskThresholds struct {
 }
 
 func DefaultDiskThresholds() DiskThresholds {
-	return DiskThresholds{Warning: 80, Critical: 90, Emergency: 95, Hysteresis: 2}
+	return DiskThresholds{
+		Warning:    80,
+		Critical:   90,
+		Emergency:  95,
+		Hysteresis: 2,
+	}
 }
 
 func (thresholds DiskThresholds) Validate() error {
-	if math.IsNaN(thresholds.Warning) || math.IsNaN(thresholds.Critical) || math.IsNaN(thresholds.Emergency) ||
-		math.IsNaN(thresholds.Hysteresis) || math.IsInf(thresholds.Warning, 0) || math.IsInf(thresholds.Critical, 0) ||
-		math.IsInf(thresholds.Emergency, 0) || math.IsInf(thresholds.Hysteresis, 0) {
-		return errors.New("disk thresholds must be finite")
+	for _, value := range [...]float64{
+		thresholds.Warning,
+		thresholds.Critical,
+		thresholds.Emergency,
+		thresholds.Hysteresis,
+	} {
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return errors.New("disk thresholds must be finite")
+		}
 	}
 	if thresholds.Warning <= 0 || thresholds.Warning >= thresholds.Critical ||
 		thresholds.Critical >= thresholds.Emergency || thresholds.Emergency > 100 {
@@ -67,19 +77,19 @@ func (thresholds DiskThresholds) Validate() error {
 	return nil
 }
 
-func ClassifyDiskLevel(usagePercent float64, previous DiskLevel, thresholds DiskThresholds) DiskLevel {
+func ClassifyDiskLevel(usagePercent float64, previousLevel DiskLevel, thresholds DiskThresholds) DiskLevel {
 	switch {
 	case usagePercent >= thresholds.Emergency:
 		return DiskEmergency
-	case previous == DiskEmergency && usagePercent >= thresholds.Emergency-thresholds.Hysteresis:
+	case previousLevel == DiskEmergency && usagePercent >= thresholds.Emergency-thresholds.Hysteresis:
 		return DiskEmergency
 	case usagePercent >= thresholds.Critical:
 		return DiskCritical
-	case (previous == DiskEmergency || previous == DiskCritical) && usagePercent >= thresholds.Critical-thresholds.Hysteresis:
+	case (previousLevel == DiskEmergency || previousLevel == DiskCritical) && usagePercent >= thresholds.Critical-thresholds.Hysteresis:
 		return DiskCritical
 	case usagePercent >= thresholds.Warning:
 		return DiskWarning
-	case previous != DiskNormal && usagePercent >= thresholds.Warning-thresholds.Hysteresis:
+	case previousLevel != DiskNormal && usagePercent >= thresholds.Warning-thresholds.Hysteresis:
 		return DiskWarning
 	default:
 		return DiskNormal
@@ -244,16 +254,21 @@ func PartitionSource(facts PartitionFacts) SourceSnapshot {
 	return result
 }
 
-func DiskSource(usagePercent float64, previous DiskLevel, thresholds DiskThresholds) SourceSnapshot {
+func DiskSource(usagePercent float64, previousLevel DiskLevel, thresholds DiskThresholds) SourceSnapshot {
 	if math.IsNaN(usagePercent) || math.IsInf(usagePercent, 0) || usagePercent < 0 || usagePercent > 100 {
-		return DiskUnavailableSource(previous)
+		return DiskUnavailableSource(previousLevel)
 	}
-	level := ClassifyDiskLevel(usagePercent, previous, thresholds)
+	level := ClassifyDiskLevel(usagePercent, previousLevel, thresholds)
 	result := SourceSnapshot{
-		Source: SourceDisk, Status: StatusOK, Code: "DISK_NORMAL",
-		DiskLevel: &level, DiskUsagePercent: float64Pointer(usagePercent),
-		DiskWarningPercent: float64Pointer(thresholds.Warning), DiskCriticalPercent: float64Pointer(thresholds.Critical),
-		DiskEmergencyPercent: float64Pointer(thresholds.Emergency), DiskHysteresisPoints: float64Pointer(thresholds.Hysteresis),
+		Source:               SourceDisk,
+		Status:               StatusOK,
+		Code:                 "DISK_NORMAL",
+		DiskLevel:            &level,
+		DiskUsagePercent:     float64Pointer(usagePercent),
+		DiskWarningPercent:   float64Pointer(thresholds.Warning),
+		DiskCriticalPercent:  float64Pointer(thresholds.Critical),
+		DiskEmergencyPercent: float64Pointer(thresholds.Emergency),
+		DiskHysteresisPoints: float64Pointer(thresholds.Hysteresis),
 	}
 	switch level {
 	case DiskWarning:
@@ -269,8 +284,13 @@ func DiskSource(usagePercent float64, previous DiskLevel, thresholds DiskThresho
 	return result
 }
 
-func DiskUnavailableSource(previous DiskLevel) SourceSnapshot {
-	return SourceSnapshot{Source: SourceDisk, Status: StatusUnknown, Code: "DISK_USAGE_UNAVAILABLE", DiskLevel: &previous}
+func DiskUnavailableSource(lastKnownLevel DiskLevel) SourceSnapshot {
+	return SourceSnapshot{
+		Source:    SourceDisk,
+		Status:    StatusUnknown,
+		Code:      "DISK_USAGE_UNAVAILABLE",
+		DiskLevel: &lastKnownLevel,
+	}
 }
 
 type Store struct {
