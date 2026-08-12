@@ -132,13 +132,14 @@ func TestLegacyUpgradeBacksUpControlPlaneBeforeReplacingFiles(t *testing.T) {
 }
 
 func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
-	makefile, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "Makefile"))
+	projectRoot := filepath.Join(internalRoot(t), "..")
+	makefile, err := os.ReadFile(filepath.Join(projectRoot, "Makefile"))
 	if err != nil {
 		t.Fatalf("read Makefile: %v", err)
 	}
-	contents := string(makefile)
+	makefileContents := string(makefile)
 
-	checkFull := requireMakeTarget(t, contents, "check-full")
+	checkFull := requireMakeTarget(t, makefileContents, "check-full")
 	if strings.Contains(checkFull, "GOOS=linux") {
 		t.Error("check-full must remain host-neutral; deferred Linux builds cannot gate the v1 release")
 	}
@@ -153,12 +154,28 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 		"legacy-package-linux-arm64",
 	} {
 		targetDeclaration := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(target) + `:`)
-		if !targetDeclaration.MatchString(contents) {
+		if !targetDeclaration.MatchString(makefileContents) {
 			t.Errorf("deferred Linux packaging target must be explicitly marked legacy: missing %q", target)
 		}
 	}
-	if regexp.MustCompile(`(?m)^package-(?:binaries-)?linux-(?:amd64|arm64):`).MatchString(contents) {
+	if regexp.MustCompile(`(?m)^package-(?:binaries-)?linux-(?:amd64|arm64):`).MatchString(makefileContents) {
 		t.Error("unqualified Linux package targets make the deferred release path appear active")
+	}
+
+	workflowsDir := filepath.Join(projectRoot, ".github", "workflows")
+	workflows, err := os.ReadDir(workflowsDir)
+	if err != nil {
+		t.Fatalf("read workflows: %v", err)
+	}
+	for _, workflow := range workflows {
+		workflowContents, err := os.ReadFile(filepath.Join(workflowsDir, workflow.Name()))
+		if err != nil {
+			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
+		}
+		workflowText := string(workflowContents)
+		if strings.Contains(workflowText, "legacy-package-") || strings.Contains(workflowText, "scripts/package-linux.sh") {
+			t.Errorf("workflow %s must not invoke deferred Linux packaging", workflow.Name())
+		}
 	}
 }
 
