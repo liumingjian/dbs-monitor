@@ -173,8 +173,16 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
 		}
 		workflowText := string(workflowContents)
-		if strings.Contains(workflowText, "legacy-package-") || strings.Contains(workflowText, "scripts/package-linux.sh") {
-			t.Errorf("workflow %s must not invoke deferred Linux packaging", workflow.Name())
+		for _, legacyEntryPoint := range []string{
+			"legacy-package-",
+			"scripts/package-linux.sh",
+			"packaging/bundle/install.sh",
+			"packaging/bundle/upgrade.sh",
+			"packaging/systemd/",
+		} {
+			if strings.Contains(workflowText, legacyEntryPoint) {
+				t.Errorf("workflow %s must not invoke deferred Linux release entry point %q", workflow.Name(), legacyEntryPoint)
+			}
 		}
 	}
 }

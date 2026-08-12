@@ -2,7 +2,7 @@
 
 > 出处：[现有 Linux 发布票 #92 的 v1 处置 #102](https://github.com/liumingjian/dbs-monitor/issues/102)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
 > 输入边界：[18](18-v1-macos-support-boundary.md) 已冻结 `darwin/arm64` 为唯一 v1 原生目标；[19](19-v1-macos-runtime-and-postgresql.md) 已冻结 macOS 运行契约；[20](20-v1-macos-build-validation-and-release.md) 已冻结 macOS 构建与发布图。
-> 状态：2026-08-11 冻结。本文只处置 [#92](https://github.com/liumingjian/dbs-monitor/issues/92) 及其 Linux 资产，不实现 macOS 发布路线，也不承诺未来 Linux 目标。
+> 状态：2026-08-11 冻结。本文处置 [#92](https://github.com/liumingjian/dbs-monitor/issues/92) 及其 Linux 资产，并记录该处置对依赖票 #95 的直接推论；不实现 macOS 发布路线，也不承诺未来 Linux 目标。
 
 ---
 
@@ -61,3 +61,9 @@
 | 新增禁用的 Linux release workflow | 形成半启用发布线，并暗示其矩阵与权限设计已经有效 |
 | 让 legacy Linux job 非阻塞地挂在 macOS workflow | 仍把两个产品路线耦合在同一 workflow 图中 |
 | 未来直接 reopen #92 | 四组合、runner 与兼容范围可能已过时，不能绕过重新决策 |
+
+## 6. 对依赖票 #95 的直接推论
+
+[#95](https://github.com/liumingjian/dbs-monitor/issues/95) 写定的生命周期演练以 #92 的 Linux 离线 tar 为输入，并要求在 root、systemd 与自建 `--without-icu` PostgreSQL 环境中执行。因此 #92 退出 v1 后，这条演练不能继续作为 v1 实现票，也不能把 `packaging/bundle/` 或 `packaging/systemd/` 接入 macOS release workflow 来冒充完成。#95 的三项未执行验收不得勾选；保留现有 Linux 安装、升级与迁移锁资产仅代表 post-v1 可复用参考。
+
+生命周期门本身没有取消。macOS v1 的下游实现票必须按 [19](19-v1-macos-runtime-and-postgresql.md) 与 [20](20-v1-macos-build-validation-and-release.md) 重新落位：对同一份签名、公证并 stapled 的 `.pkg`，在专用干净 Mac 上验证 LaunchDaemon、Unix socket、安装、同大版本升级、控制面与独立 keyring 恢复、回滚和 HTTPS health。并发首启的 advisory lock、缺 key 明确失败、无明文 `password` 列以及夹具/日志无可恢复实例密码仍是必须消费的既有行为，但不能用未执行的 Linux #95 清单充当 macOS 证据。
