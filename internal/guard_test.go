@@ -146,6 +146,9 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 	if strings.Contains(checkFull, "legacy-package-") {
 		t.Error("check-full must not invoke deferred Linux packaging targets")
 	}
+	if strings.Contains(checkFull, "scripts/rt-c") || strings.Contains(checkFull, "RT_C_") {
+		t.Error("check-full must not turn the historical Linux RT-C reproduction into a v1 release gate")
+	}
 
 	for _, target := range []string{
 		"legacy-package-binaries-linux-amd64",
@@ -173,8 +176,29 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
 		}
 		workflowText := string(workflowContents)
-		if strings.Contains(workflowText, "legacy-package-") || strings.Contains(workflowText, "scripts/package-linux.sh") {
-			t.Errorf("workflow %s must not invoke deferred Linux packaging", workflow.Name())
+		if strings.Contains(workflowText, "legacy-package-") || strings.Contains(workflowText, "scripts/package-linux.sh") ||
+			strings.Contains(workflowText, "scripts/rt-c") || strings.Contains(workflowText, "RT_C_") {
+			t.Errorf("workflow %s must not invoke deferred Linux packaging or RT-C evidence", workflow.Name())
+		}
+	}
+}
+
+func TestIssue96IsRetiredWithTheLinuxReleaseScope(t *testing.T) {
+	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
+	if err != nil {
+		t.Fatalf("read Linux release disposition: %v", err)
+	}
+	contents := string(disposition)
+	for _, required := range []string{
+		"#96",
+		"Linux arm64",
+		"darwin/arm64",
+		"453.6M",
+		"不得以缩减参数",
+		"新 PRD",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Errorf("Linux release disposition does not retire issue #96 completely: missing %q", required)
 		}
 	}
 }
