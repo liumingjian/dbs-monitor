@@ -222,6 +222,31 @@ func TestIssue96IsRetiredWithTheLinuxReleaseScope(t *testing.T) {
 	}
 }
 
+func TestIssue97CloseoutMovesToTheMacOSReleaseScope(t *testing.T) {
+	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
+	if err != nil {
+		t.Fatalf("read Linux release disposition: %v", err)
+	}
+	dispositionText := string(disposition)
+	for _, required := range []string{
+		"#97",
+		"Unavailability 13 码",
+		"API",
+		"01-appendix-implemented.md",
+		"make gen",
+		"PG13–17",
+		"升级窗口",
+		"外部探测",
+		"干净 Mac",
+		"Release assets",
+		"不得勾选",
+	} {
+		if !strings.Contains(dispositionText, required) {
+			t.Errorf("Linux release disposition does not retire issue #97 completely: missing %q", required)
+		}
+	}
+}
+
 func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..")
 	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))

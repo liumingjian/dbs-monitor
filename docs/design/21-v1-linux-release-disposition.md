@@ -2,7 +2,7 @@
 
 > 出处：[现有 Linux 发布票 #92 的 v1 处置 #102](https://github.com/liumingjian/dbs-monitor/issues/102)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
 > 输入边界：[18](18-v1-macos-support-boundary.md) 已冻结 `darwin/arm64` 为唯一 v1 原生目标；[19](19-v1-macos-runtime-and-postgresql.md) 已冻结 macOS 运行契约；[20](20-v1-macos-build-validation-and-release.md) 已冻结 macOS 构建与发布图。
-> 状态：2026-08-11 冻结；2026-08-12 补记其下游 [#95](https://github.com/liumingjian/dbs-monitor/issues/95) 与 [#96](https://github.com/liumingjian/dbs-monitor/issues/96) 的同源处置。本文只处置 #92、#95、#96 及其 Linux 资产，不实现 macOS 发布路线，也不承诺未来 Linux 目标。
+> 状态：2026-08-11 冻结；2026-08-12 补记其下游 [#95](https://github.com/liumingjian/dbs-monitor/issues/95)、[#96](https://github.com/liumingjian/dbs-monitor/issues/96) 与 [#97](https://github.com/liumingjian/dbs-monitor/issues/97) 的同源处置。本文只处置 #92、#95、#96、#97 及其 Linux 发布前提，不实现 macOS 发布路线，也不承诺未来 Linux 目标。
 
 ---
 
@@ -83,3 +83,16 @@
 [#95](https://github.com/liumingjian/dbs-monitor/issues/95) 写定的生命周期演练以 #92 的 Linux 离线 tar 为输入，并要求在 root、systemd 与自建 `--without-icu` PostgreSQL 环境中执行。因此 #92 退出 v1 后，这条演练不能继续作为 v1 实现票，也不能把 `packaging/bundle/` 或 `packaging/systemd/` 接入 macOS release workflow 来冒充完成。#95 的三项未执行验收不得勾选；保留现有 Linux 安装、升级与迁移锁资产仅代表 post-v1 可复用参考。
 
 生命周期门本身没有取消。macOS v1 的下游实现票必须按 [19](19-v1-macos-runtime-and-postgresql.md) 与 [20](20-v1-macos-build-validation-and-release.md) 重新落位：对同一份签名、公证并 stapled 的 `.pkg`，在专用干净 Mac 上验证 LaunchDaemon、Unix socket、安装、同大版本升级、控制面与独立 keyring 恢复、回滚和 HTTPS health。并发首启的 advisory lock、缺 key 明确失败、无明文 `password` 列以及夹具/日志无可恢复实例密码仍是必须消费的既有行为，但不能用未执行的 Linux #95 清单充当 macOS 证据。
+
+## 7. 对发布收口终票 #97 的直接推论
+
+[#97](https://github.com/liumingjian/dbs-monitor/issues/97) 把平台无关的账目项与片⑩的 Linux 发布终判据绑在同一张票里：它要求 Unavailability 13 码全表验收、生成 appendix 和补齐交付文档，同时把 #95 的干净机生命周期演练与 #92 的发布流水线出包作为整体完成条件。#92、#95 与 #96 退出 v1 后，#97 已不能按原验收对象完成，应由 issue 维护流程记录为被 #98/#102 取代；四项验收均不得勾选，也不得用既有 Linux 资产、历史证据或尚未执行的 macOS 路线冒充完成。
+
+退出原票不取消其中仍适用于 v1 的账目。macOS 发布路线的下游实现票必须重新落位并验收：
+
+1. Unavailability 13 码仍须逐码驱动真实产生条件并经 API 断言；不得 mock 或直插库表伪造原因码。`VERSION_UNSUPPORTED` 仍按 PG12 接入即拒与码表存在性验收，码表只增不改。
+2. `01-appendix-implemented.md` 仍须从 Go 声明生成并入库，漂移检查继续复用 `make gen` 与统一 diff 门，不另造生成入口。
+3. macOS 安装与交付文档仍须明确被监控 PostgreSQL 前置为 PG13–17、升级窗口内时序数据丢失是有意代价，以及整机宕机仍需客户的外部探测。
+4. 片⑩整体发布证据须改为 [20](20-v1-macos-build-validation-and-release.md) 定义的同一候选：专用干净 Mac 验证最终 `.pkg`，发布门全绿后归档 Release assets。未执行的 Linux 装升回滚演练和不存在的 Linux release workflow 都不能计入该证据。
+
+以上四项必须绑定实际 macOS 候选重新执行并留痕；本文只记录归属迁移，不实现这些交付物，也不声明 v1 已可发布。未来 Linux 新 PRD 也不得继承 #97 的未执行验收为已完成。
