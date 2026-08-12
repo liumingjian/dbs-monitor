@@ -77,14 +77,14 @@ func TestInstalledDatabaseAndCredentialKeyringStaySeparate(t *testing.T) {
 }
 
 func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
-	root := filepath.Join(internalRoot(t), "..")
-	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	projectRoot := filepath.Join(internalRoot(t), "..")
+	makefile, err := os.ReadFile(filepath.Join(projectRoot, "Makefile"))
 	if err != nil {
 		t.Fatalf("read Makefile: %v", err)
 	}
-	contents := string(makefile)
+	makefileContents := string(makefile)
 
-	checkFull := regexp.MustCompile(`(?m)^check-full:[^\n]*\n(?:\t[^\n]*\n)*`).FindString(contents)
+	checkFull := regexp.MustCompile(`(?m)^check-full:[^\n]*\n(?:\t[^\n]*\n)*`).FindString(makefileContents)
 	if checkFull == "" {
 		t.Fatal("Makefile is missing the check-full target")
 	}
@@ -102,24 +102,26 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 		"legacy-package-linux-arm64",
 	} {
 		targetDeclaration := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(target) + `:`)
-		if !targetDeclaration.MatchString(contents) {
+		if !targetDeclaration.MatchString(makefileContents) {
 			t.Errorf("deferred Linux packaging target must be explicitly marked legacy: missing %q", target)
 		}
 	}
-	if regexp.MustCompile(`(?m)^package-(?:binaries-)?linux-(?:amd64|arm64):`).MatchString(contents) {
+	if regexp.MustCompile(`(?m)^package-(?:binaries-)?linux-(?:amd64|arm64):`).MatchString(makefileContents) {
 		t.Error("unqualified Linux package targets make the deferred release path appear active")
 	}
 
-	workflows, err := os.ReadDir(filepath.Join(root, ".github", "workflows"))
+	workflowsDir := filepath.Join(projectRoot, ".github", "workflows")
+	workflows, err := os.ReadDir(workflowsDir)
 	if err != nil {
 		t.Fatalf("read workflows: %v", err)
 	}
 	for _, workflow := range workflows {
-		contents, err := os.ReadFile(filepath.Join(root, ".github", "workflows", workflow.Name()))
+		workflowContents, err := os.ReadFile(filepath.Join(workflowsDir, workflow.Name()))
 		if err != nil {
 			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
 		}
-		if strings.Contains(string(contents), "legacy-package-") || strings.Contains(string(contents), "scripts/package-linux.sh") {
+		workflowText := string(workflowContents)
+		if strings.Contains(workflowText, "legacy-package-") || strings.Contains(workflowText, "scripts/package-linux.sh") {
 			t.Errorf("workflow %s must not invoke deferred Linux packaging", workflow.Name())
 		}
 	}
