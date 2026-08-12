@@ -320,7 +320,9 @@ func (service *Service) evaluateRule(
 				}
 			}
 			if err := notificationQueries.RecordMaintenanceSuppressed(ctx, notify.RecordMaintenanceSuppressedParams{
-				ID: alertInstanceID, MaintenanceWindowID: maintenanceWindowID, EvaluatedAt: evaluatedAt,
+				ID:                  alertInstanceID,
+				MaintenanceWindowID: maintenanceWindowID,
+				EvaluatedAt:         evaluatedAt,
 			}); err != nil {
 				return fmt.Errorf("record maintenance suppression: %w", err)
 			}

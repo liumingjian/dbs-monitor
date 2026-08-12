@@ -17,12 +17,16 @@ type MaintenanceWindowScope struct {
 }
 
 func FindActiveMaintenanceWindow(ctx context.Context, queries *Queries, instanceID pgtype.UUID, at time.Time) (pgtype.UUID, bool, error) {
-	rows, err := queries.ListMaintenanceWindowsForInstance(ctx, instanceID)
+	maintenanceWindows, err := queries.ListMaintenanceWindowsForInstance(ctx, instanceID)
 	if err != nil {
 		return pgtype.UUID{}, false, err
 	}
-	id := uuid.UUID(instanceID.Bytes)
-	window, active := ActiveMaintenanceWindow(id, at.UTC(), MaintenanceWindowScopes(id, rows))
+	targetInstanceID := uuid.UUID(instanceID.Bytes)
+	window, active := ActiveMaintenanceWindow(
+		targetInstanceID,
+		at.UTC(),
+		MaintenanceWindowScopes(targetInstanceID, maintenanceWindows),
+	)
 	if !active {
 		return pgtype.UUID{}, false, nil
 	}

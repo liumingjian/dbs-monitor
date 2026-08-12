@@ -21,6 +21,8 @@ type maintenanceWindowValues struct {
 	reason      string
 }
 
+const invalidMaintenanceWindowMessage = "instances, a future end time, ordered bounds, and a reason are required"
+
 var errMaintenanceInstanceNotFound = errors.New("maintenance window instance not found")
 
 func (handler *Handler) ListMaintenanceWindows(ctx context.Context, _ api.ListMaintenanceWindowsRequestObject) (api.ListMaintenanceWindowsResponseObject, error) {
@@ -32,31 +34,34 @@ func (handler *Handler) ListMaintenanceWindows(ctx context.Context, _ api.ListMa
 	now := handler.clock.Now().UTC()
 	response := make(api.ListMaintenanceWindows200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		item, err := toAPIMaintenanceWindow(ctx, queries, row, now)
+		maintenanceWindow, err := toAPIMaintenanceWindow(ctx, queries, row, now)
 		if err != nil {
 			return nil, err
 		}
-		response = append(response, item)
+		response = append(response, maintenanceWindow)
 	}
 	return response, nil
 }
 
 func (handler *Handler) CreateMaintenanceWindow(ctx context.Context, request api.CreateMaintenanceWindowRequestObject) (api.CreateMaintenanceWindowResponseObject, error) {
 	now := handler.clock.Now().UTC()
-	values, ok := maintenanceWindowInputValues(request.Body, now)
+	values, ok := parseMaintenanceWindowInput(request.Body, now)
 	if !ok {
-		return api.CreateMaintenanceWindow400JSONResponse(errorBody(api.VALIDATIONFAILED, "instances, a future end time, ordered bounds, and a reason are required")), nil
+		return api.CreateMaintenanceWindow400JSONResponse(errorBody(api.VALIDATIONFAILED, invalidMaintenanceWindowMessage)), nil
 	}
 	windowID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
-	var row notify.MaintenanceWindow
+	var createdWindow notify.MaintenanceWindow
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := notify.New(tx)
 		if err := maintenanceWindowInstancesExist(ctx, queries, values.instanceIDs); err != nil {
 			return err
 		}
 		var err error
-		row, err = queries.CreateMaintenanceWindow(ctx, notify.CreateMaintenanceWindowParams{
-			ID: windowID, StartsAt: values.startsAt, EndsAt: values.endsAt, Reason: values.reason,
+		createdWindow, err = queries.CreateMaintenanceWindow(ctx, notify.CreateMaintenanceWindowParams{
+			ID:        windowID,
+			StartsAt:  values.startsAt,
+			EndsAt:    values.endsAt,
+			Reason:    values.reason,
 			CreatedBy: databaseUUID(authenticatedUserID(ctx)),
 			CreatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		})
@@ -71,29 +76,32 @@ func (handler *Handler) CreateMaintenanceWindow(ctx context.Context, request api
 	if err != nil {
 		return nil, err
 	}
-	item, err := toAPIMaintenanceWindow(ctx, notify.New(handler.platform), row, now)
+	response, err := toAPIMaintenanceWindow(ctx, notify.New(handler.platform), createdWindow, now)
 	if err != nil {
 		return nil, err
 	}
-	return api.CreateMaintenanceWindow201JSONResponse(item), nil
+	return api.CreateMaintenanceWindow201JSONResponse(response), nil
 }
 
 func (handler *Handler) UpdateMaintenanceWindow(ctx context.Context, request api.UpdateMaintenanceWindowRequestObject) (api.UpdateMaintenanceWindowResponseObject, error) {
 	now := handler.clock.Now().UTC()
-	values, ok := maintenanceWindowInputValues(request.Body, now)
+	values, ok := parseMaintenanceWindowInput(request.Body, now)
 	if !ok {
-		return api.UpdateMaintenanceWindow400JSONResponse(errorBody(api.VALIDATIONFAILED, "instances, a future end time, ordered bounds, and a reason are required")), nil
+		return api.UpdateMaintenanceWindow400JSONResponse(errorBody(api.VALIDATIONFAILED, invalidMaintenanceWindowMessage)), nil
 	}
 	windowID := databaseUUID(request.Id)
-	var row notify.MaintenanceWindow
+	var updatedWindow notify.MaintenanceWindow
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := notify.New(tx)
 		if err := maintenanceWindowInstancesExist(ctx, queries, values.instanceIDs); err != nil {
 			return err
 		}
 		var err error
-		row, err = queries.UpdateMaintenanceWindow(ctx, notify.UpdateMaintenanceWindowParams{
-			ID: windowID, StartsAt: values.startsAt, EndsAt: values.endsAt, Reason: values.reason,
+		updatedWindow, err = queries.UpdateMaintenanceWindow(ctx, notify.UpdateMaintenanceWindowParams{
+			ID:        windowID,
+			StartsAt:  values.startsAt,
+			EndsAt:    values.endsAt,
+			Reason:    values.reason,
 			UpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		})
 		if err != nil {
@@ -108,54 +116,57 @@ func (handler *Handler) UpdateMaintenanceWindow(ctx context.Context, request api
 		return api.UpdateMaintenanceWindow400JSONResponse(errorBody(api.VALIDATIONFAILED, "all instances must exist")), nil
 	}
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, lookupErr := notify.New(handler.platform).GetMaintenanceWindow(ctx, windowID)
-		if errors.Is(lookupErr, pgx.ErrNoRows) {
-			return api.UpdateMaintenanceWindow404JSONResponse(errorBody(api.NOTFOUND, "maintenance window not found")), nil
-		}
+		exists, lookupErr := maintenanceWindowExists(ctx, notify.New(handler.platform), windowID)
 		if lookupErr != nil {
 			return nil, lookupErr
+		}
+		if !exists {
+			return api.UpdateMaintenanceWindow404JSONResponse(errorBody(api.NOTFOUND, "maintenance window not found")), nil
 		}
 		return api.UpdateMaintenanceWindow400JSONResponse(errorBody(api.CONFLICT, "ended maintenance windows cannot be edited")), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	item, err := toAPIMaintenanceWindow(ctx, notify.New(handler.platform), row, now)
+	response, err := toAPIMaintenanceWindow(ctx, notify.New(handler.platform), updatedWindow, now)
 	if err != nil {
 		return nil, err
 	}
-	return api.UpdateMaintenanceWindow200JSONResponse(item), nil
+	return api.UpdateMaintenanceWindow200JSONResponse(response), nil
 }
 
 func (handler *Handler) EndMaintenanceWindow(ctx context.Context, request api.EndMaintenanceWindowRequestObject) (api.EndMaintenanceWindowResponseObject, error) {
 	now := handler.clock.Now().UTC()
 	windowID := databaseUUID(request.Id)
-	row, err := notify.New(handler.platform).EndMaintenanceWindow(ctx, notify.EndMaintenanceWindowParams{
-		ID: windowID, EndsAt: pgtype.Timestamptz{Time: now, Valid: true},
+	queries := notify.New(handler.platform)
+	endedWindow, err := queries.EndMaintenanceWindow(ctx, notify.EndMaintenanceWindowParams{
+		ID:     windowID,
+		EndsAt: pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		_, lookupErr := notify.New(handler.platform).GetMaintenanceWindow(ctx, windowID)
-		if errors.Is(lookupErr, pgx.ErrNoRows) {
-			return api.EndMaintenanceWindow404JSONResponse(errorBody(api.NOTFOUND, "maintenance window not found")), nil
-		}
+		exists, lookupErr := maintenanceWindowExists(ctx, queries, windowID)
 		if lookupErr != nil {
 			return nil, lookupErr
+		}
+		if !exists {
+			return api.EndMaintenanceWindow404JSONResponse(errorBody(api.NOTFOUND, "maintenance window not found")), nil
 		}
 		return api.EndMaintenanceWindow400JSONResponse(errorBody(api.CONFLICT, "maintenance window is not active")), nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	item, err := toAPIMaintenanceWindow(ctx, notify.New(handler.platform), row, now)
+	response, err := toAPIMaintenanceWindow(ctx, queries, endedWindow, now)
 	if err != nil {
 		return nil, err
 	}
-	return api.EndMaintenanceWindow200JSONResponse(item), nil
+	return api.EndMaintenanceWindow200JSONResponse(response), nil
 }
 
 func (handler *Handler) DeleteMaintenanceWindow(ctx context.Context, request api.DeleteMaintenanceWindowRequestObject) (api.DeleteMaintenanceWindowResponseObject, error) {
 	deleted, err := notify.New(handler.platform).DeleteMaintenanceWindow(ctx, notify.DeleteMaintenanceWindowParams{
-		ID: databaseUUID(request.Id), DeletedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+		ID:        databaseUUID(request.Id),
+		DeletedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 	})
 	if err != nil {
 		return nil, err
@@ -166,7 +177,7 @@ func (handler *Handler) DeleteMaintenanceWindow(ctx context.Context, request api
 	return api.DeleteMaintenanceWindow204Response{}, nil
 }
 
-func maintenanceWindowInputValues(input *api.MaintenanceWindowInput, now time.Time) (maintenanceWindowValues, bool) {
+func parseMaintenanceWindowInput(input *api.MaintenanceWindowInput, now time.Time) (maintenanceWindowValues, bool) {
 	if input == nil || len(input.InstanceIds) == 0 || !input.StartsAt.Before(input.EndsAt) || !now.Before(input.EndsAt) {
 		return maintenanceWindowValues{}, false
 	}
@@ -174,13 +185,13 @@ func maintenanceWindowInputValues(input *api.MaintenanceWindowInput, now time.Ti
 	if reason == "" {
 		return maintenanceWindowValues{}, false
 	}
-	seen := make(map[uuid.UUID]bool, len(input.InstanceIds))
+	seen := make(map[uuid.UUID]struct{}, len(input.InstanceIds))
 	instanceIDs := make([]pgtype.UUID, 0, len(input.InstanceIds))
 	for _, instanceID := range input.InstanceIds {
-		if seen[instanceID] {
+		if _, exists := seen[instanceID]; exists {
 			return maintenanceWindowValues{}, false
 		}
-		seen[instanceID] = true
+		seen[instanceID] = struct{}{}
 		instanceIDs = append(instanceIDs, databaseUUID(instanceID))
 	}
 	return maintenanceWindowValues{
@@ -189,6 +200,17 @@ func maintenanceWindowInputValues(input *api.MaintenanceWindowInput, now time.Ti
 		endsAt:      pgtype.Timestamptz{Time: input.EndsAt.UTC(), Valid: true},
 		reason:      reason,
 	}, true
+}
+
+func maintenanceWindowExists(ctx context.Context, queries *notify.Queries, windowID pgtype.UUID) (bool, error) {
+	_, err := queries.GetMaintenanceWindow(ctx, windowID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func maintenanceWindowInstancesExist(ctx context.Context, queries *notify.Queries, instanceIDs []pgtype.UUID) error {
@@ -207,7 +229,8 @@ func maintenanceWindowInstancesExist(ctx context.Context, queries *notify.Querie
 func addMaintenanceWindowInstances(ctx context.Context, queries *notify.Queries, windowID pgtype.UUID, instanceIDs []pgtype.UUID) error {
 	for _, instanceID := range instanceIDs {
 		if err := queries.AddMaintenanceWindowInstance(ctx, notify.AddMaintenanceWindowInstanceParams{
-			MaintenanceWindowID: windowID, InstanceID: instanceID,
+			MaintenanceWindowID: windowID,
+			InstanceID:          instanceID,
 		}); err != nil {
 			return err
 		}
@@ -220,10 +243,6 @@ func toAPIMaintenanceWindow(ctx context.Context, queries *notify.Queries, row no
 	if err != nil {
 		return api.MaintenanceWindow{}, err
 	}
-	apiInstanceIDs := make([]uuid.UUID, 0, len(instanceIDs))
-	for _, instanceID := range instanceIDs {
-		apiInstanceIDs = append(apiInstanceIDs, uuid.UUID(instanceID.Bytes))
-	}
 	status := api.MaintenanceEnded
 	if now.Before(row.StartsAt.Time) {
 		status = api.MaintenanceScheduled
@@ -231,9 +250,14 @@ func toAPIMaintenanceWindow(ctx context.Context, queries *notify.Queries, row no
 		status = api.MaintenanceActive
 	}
 	return api.MaintenanceWindow{
-		Id: uuid.UUID(row.ID.Bytes), InstanceIds: apiInstanceIDs,
-		StartsAt: row.StartsAt.Time.UTC(), EndsAt: row.EndsAt.Time.UTC(), Reason: row.Reason,
-		CreatedBy: uuid.UUID(row.CreatedBy.Bytes), Status: status,
-		CreatedAt: row.CreatedAt.Time.UTC(), UpdatedAt: row.UpdatedAt.Time.UTC(),
+		Id:          uuid.UUID(row.ID.Bytes),
+		InstanceIds: toAPIUUIDs(instanceIDs),
+		StartsAt:    row.StartsAt.Time.UTC(),
+		EndsAt:      row.EndsAt.Time.UTC(),
+		Reason:      row.Reason,
+		CreatedBy:   uuid.UUID(row.CreatedBy.Bytes),
+		Status:      status,
+		CreatedAt:   row.CreatedAt.Time.UTC(),
+		UpdatedAt:   row.UpdatedAt.Time.UTC(),
 	}, nil
 }

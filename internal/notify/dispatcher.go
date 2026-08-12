@@ -47,7 +47,7 @@ func (dispatcher *Dispatcher) EnqueueDueRepeats(ctx context.Context, now time.Ti
 		if err != nil {
 			return enqueued, fmt.Errorf("match repeat maintenance window: %w", err)
 		}
-		ids, err := dispatcher.queries.EnqueueAlertNotifications(ctx, EnqueueAlertNotificationsParams{
+		notificationIDs, err := dispatcher.queries.EnqueueAlertNotifications(ctx, EnqueueAlertNotificationsParams{
 			AlertInstanceID: candidate.AlertInstanceID,
 			EventType:       string(EventRepeat),
 			TemplateID:      pgtype.Text{String: "builtin.notification.repeat.v1", Valid: true},
@@ -57,21 +57,22 @@ func (dispatcher *Dispatcher) EnqueueDueRepeats(ctx context.Context, now time.Ti
 		if err != nil {
 			return enqueued, fmt.Errorf("enqueue repeat notification: %w", err)
 		}
-		if !ShouldDeliver(EventRepeat, SuppressionFacts{Maintenance: inMaintenance}) && len(ids) > 0 {
-			for _, notificationID := range ids {
+		if !ShouldDeliver(EventRepeat, SuppressionFacts{Maintenance: inMaintenance}) && len(notificationIDs) > 0 {
+			for _, notificationID := range notificationIDs {
 				if err := dispatcher.queries.DeletePendingNotification(ctx, notificationID); err != nil {
 					return enqueued, fmt.Errorf("discard maintenance-suppressed repeat: %w", err)
 				}
 			}
 			if err := dispatcher.queries.RecordMaintenanceSuppressed(ctx, RecordMaintenanceSuppressedParams{
-				ID: candidate.AlertInstanceID, MaintenanceWindowID: maintenanceWindowID,
-				EvaluatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+				ID:                  candidate.AlertInstanceID,
+				MaintenanceWindowID: maintenanceWindowID,
+				EvaluatedAt:         pgtype.Timestamptz{Time: now, Valid: true},
 			}); err != nil {
 				return enqueued, fmt.Errorf("record repeat maintenance suppression: %w", err)
 			}
 			continue
 		}
-		enqueued += len(ids)
+		enqueued += len(notificationIDs)
 	}
 	return enqueued, nil
 }
@@ -92,8 +93,9 @@ func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, ch
 		}
 		if !ShouldDeliver(EventType(delivery.EventType), SuppressionFacts{Maintenance: inMaintenance}) {
 			if err := dispatcher.queries.SuppressNotificationForMaintenance(ctx, SuppressNotificationForMaintenanceParams{
-				ID: delivery.ID, MaintenanceWindowID: maintenanceWindowID,
-				EvaluatedAt: pgtype.Timestamptz{Time: now.UTC(), Valid: true},
+				ID:                  delivery.ID,
+				MaintenanceWindowID: maintenanceWindowID,
+				EvaluatedAt:         pgtype.Timestamptz{Time: now.UTC(), Valid: true},
 			}); err != nil {
 				return true, fmt.Errorf("suppress claimed notification for maintenance: %w", err)
 			}
