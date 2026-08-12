@@ -248,6 +248,25 @@ func TestIssue97IsRetiredWithoutDroppingV1ReleaseRequirements(t *testing.T) {
 	}
 }
 
+func TestIssue50SpecIsSupersededWithoutClaimingReleaseCompletion(t *testing.T) {
+	dispositionText := readLinuxReleaseDisposition(t)
+	for _, required := range []string{
+		"#50",
+		"#36",
+		"#93",
+		"#94",
+		"被 #98/#102 取代",
+		"不表示片⑩验收完成",
+		"同一份最终 `.pkg`",
+		"真实候选",
+		"不得勾选",
+	} {
+		if !strings.Contains(dispositionText, required) {
+			t.Errorf("Linux release disposition does not supersede issue #50 safely: missing %q", required)
+		}
+	}
+}
+
 func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..")
 	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))

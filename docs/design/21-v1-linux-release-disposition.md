@@ -2,7 +2,7 @@
 
 > 出处：[现有 Linux 发布票 #92 的 v1 处置 #102](https://github.com/liumingjian/dbs-monitor/issues/102)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
 > 输入边界：[18](18-v1-macos-support-boundary.md) 已冻结 `darwin/arm64` 为唯一 v1 原生目标；[19](19-v1-macos-runtime-and-postgresql.md) 已冻结 macOS 运行契约；[20](20-v1-macos-build-validation-and-release.md) 已冻结 macOS 构建与发布图。
-> 状态：2026-08-11 冻结；2026-08-12 补记其下游 [#95](https://github.com/liumingjian/dbs-monitor/issues/95)、[#96](https://github.com/liumingjian/dbs-monitor/issues/96) 与 [#97](https://github.com/liumingjian/dbs-monitor/issues/97) 的同源处置。本文只处置 #92、#95、#96、#97 及其 Linux 发布前提，不实现 macOS 发布路线，也不承诺未来 Linux 目标。
+> 状态：2026-08-11 冻结；2026-08-12 补记其下游 [#95](https://github.com/liumingjian/dbs-monitor/issues/95)、[#96](https://github.com/liumingjian/dbs-monitor/issues/96)、[#97](https://github.com/liumingjian/dbs-monitor/issues/97) 与父 spec [#50](https://github.com/liumingjian/dbs-monitor/issues/50) 的同源处置。本文只处置 #50、#92、#95、#96、#97 及其 Linux 发布前提，不实现 macOS 发布路线，也不承诺未来 Linux 目标。
 
 ---
 
@@ -96,3 +96,11 @@
 4. 片⑩整体发布证据须改为 [20](20-v1-macos-build-validation-and-release.md) 定义的同一候选：专用干净 Mac 验证最终 `.pkg`，发布门全绿后归档 Release assets。未执行的 Linux 装升回滚演练和不存在的 Linux release workflow 都不能计入该证据。
 
 以上四项必须绑定实际 macOS 候选重新执行并留痕；本文只记录归属迁移，不实现这些交付物，也不声明 v1 已可发布。未来 Linux 新 PRD 也不得继承 #97 的未执行验收为已完成。
+
+## 8. 对父 spec #50 的最终处置
+
+[#50](https://github.com/liumingjian/dbs-monitor/issues/50) 来自已收口的 MVP 切片地图 [#36](https://github.com/liumingjian/dbs-monitor/issues/36)，其十片规划和发布收口要求继续作为历史规格依据。但 #50 的最终判据把 v1 发布绑定到 Linux 离线 tar、四组合构建和原生 Linux 证据；这些产品边界已被 #98 的 macOS v1 路线与 #102 的延期决策推翻。因此 #50 由 issue 维护流程记录为被 #98/#102 取代，不改写原 issue，也不得勾选其中未执行的 Linux 验收。
+
+这项处置不回退已经交付的平台无关基础：#93 的控制面备份与 advisory lock 行为继续保留，#94 接入的 PG13–17 矩阵与 sqlc vet 继续作为 host-neutral `check-full` 门。关闭 #50 只清除已经失效的 Linux 发布阻塞关系，不表示片⑩验收完成、Linux 已发布或 macOS v1 已可发布。
+
+片⑩仍有效的生命周期、账目和发布要求转由 [20](20-v1-macos-build-validation-and-release.md) 的下游实现票承接。它们必须绑定同一份最终 `.pkg` 和真实候选重新实现、执行并留痕；#92、#95、#96、#97 的未执行验收、legacy Linux 资产与历史证据均不能替代该证据。未来恢复 Linux 时仍须按 §4 从新 PRD 重启。
