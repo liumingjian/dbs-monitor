@@ -29,6 +29,15 @@ func containsAnySubstring(text string, substrings ...string) bool {
 	return false
 }
 
+func readLinuxReleaseDisposition(t *testing.T) string {
+	t.Helper()
+	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
+	if err != nil {
+		t.Fatalf("read Linux release disposition: %v", err)
+	}
+	return string(disposition)
+}
+
 func TestMigrationsContainOnlyUpSections(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..", "migrations")
 	entries, err := os.ReadDir(root)
@@ -203,11 +212,7 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 }
 
 func TestIssue96IsRetiredWithTheLinuxReleaseScope(t *testing.T) {
-	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
-	if err != nil {
-		t.Fatalf("read Linux release disposition: %v", err)
-	}
-	dispositionText := string(disposition)
+	dispositionText := readLinuxReleaseDisposition(t)
 	for _, required := range []string{
 		"#96",
 		"Linux arm64",
@@ -222,12 +227,8 @@ func TestIssue96IsRetiredWithTheLinuxReleaseScope(t *testing.T) {
 	}
 }
 
-func TestIssue97CloseoutMovesToTheMacOSReleaseScope(t *testing.T) {
-	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
-	if err != nil {
-		t.Fatalf("read Linux release disposition: %v", err)
-	}
-	dispositionText := string(disposition)
+func TestIssue97IsRetiredWithoutDroppingV1ReleaseRequirements(t *testing.T) {
+	dispositionText := readLinuxReleaseDisposition(t)
 	for _, required := range []string{
 		"#97",
 		"Unavailability 13 码",
