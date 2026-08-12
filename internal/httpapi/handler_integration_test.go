@@ -789,6 +789,16 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	health.Update(now, platformhealth.DiskSource(
 		77, health.DiskLevel(), platformhealth.DefaultDiskThresholds(),
 	))
+	recovered := requestJSON(t, client, http.MethodPost, server.URL+"/api/agent/v1/report", map[string]any{
+		"instance_id":   instanceID,
+		"agent_version": "2.4.0",
+		"timestamp":     time.Now().UTC().Format(time.RFC3339Nano),
+		"metrics":       []map[string]any{},
+	}, agentToken)
+	recovered.Body.Close()
+	if recovered.StatusCode != http.StatusNoContent {
+		t.Fatalf("post-emergency Agent heartbeat status = %d, want 204", recovered.StatusCode)
+	}
 	hostSeriesURL, err := url.Parse(fmt.Sprintf("%s/api/v1/instances/%s/metrics/series", server.URL, instanceID))
 	if err != nil {
 		t.Fatalf("parse host series URL: %v", err)
