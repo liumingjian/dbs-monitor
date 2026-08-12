@@ -20,6 +20,15 @@ func requireMakeTarget(t *testing.T, makefileContents, target string) string {
 	return contents
 }
 
+func containsAnySubstring(text string, substrings ...string) bool {
+	for _, substring := range substrings {
+		if strings.Contains(text, substring) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestMigrationsContainOnlyUpSections(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..", "migrations")
 	entries, err := os.ReadDir(root)
@@ -146,6 +155,9 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 	if strings.Contains(checkFull, "legacy-package-") {
 		t.Error("check-full must not invoke deferred Linux packaging targets")
 	}
+	if containsAnySubstring(checkFull, "scripts/rt-c", "RT_C_") {
+		t.Error("check-full must not turn the historical Linux RT-C reproduction into a v1 release gate")
+	}
 
 	for _, target := range []string{
 		"legacy-package-binaries-linux-amd64",
@@ -173,6 +185,8 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 		"packaging/bundle/install.sh",
 		"packaging/bundle/upgrade.sh",
 		"packaging/systemd/",
+		"scripts/rt-c",
+		"RT_C_",
 	}
 	for _, workflow := range workflows {
 		workflowContents, err := os.ReadFile(filepath.Join(workflowsDir, workflow.Name()))
@@ -184,6 +198,26 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 			if strings.Contains(workflowText, legacyEntryPoint) {
 				t.Errorf("workflow %s must not invoke deferred Linux release entry point %q", workflow.Name(), legacyEntryPoint)
 			}
+		}
+	}
+}
+
+func TestIssue96IsRetiredWithTheLinuxReleaseScope(t *testing.T) {
+	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
+	if err != nil {
+		t.Fatalf("read Linux release disposition: %v", err)
+	}
+	dispositionText := string(disposition)
+	for _, required := range []string{
+		"#96",
+		"Linux arm64",
+		"darwin/arm64",
+		"453.6M",
+		"不得以缩减参数",
+		"新 PRD",
+	} {
+		if !strings.Contains(dispositionText, required) {
+			t.Errorf("Linux release disposition does not retire issue #96 completely: missing %q", required)
 		}
 	}
 }
