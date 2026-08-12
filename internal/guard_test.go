@@ -77,7 +77,8 @@ func TestInstalledDatabaseAndCredentialKeyringStaySeparate(t *testing.T) {
 }
 
 func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
-	makefile, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "Makefile"))
+	root := filepath.Join(internalRoot(t), "..")
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
 	if err != nil {
 		t.Fatalf("read Makefile: %v", err)
 	}
@@ -107,5 +108,19 @@ func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
 	}
 	if regexp.MustCompile(`(?m)^package-(?:binaries-)?linux-(?:amd64|arm64):`).MatchString(contents) {
 		t.Error("unqualified Linux package targets make the deferred release path appear active")
+	}
+
+	workflows, err := os.ReadDir(filepath.Join(root, ".github", "workflows"))
+	if err != nil {
+		t.Fatalf("read workflows: %v", err)
+	}
+	for _, workflow := range workflows {
+		contents, err := os.ReadFile(filepath.Join(root, ".github", "workflows", workflow.Name()))
+		if err != nil {
+			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
+		}
+		if strings.Contains(string(contents), "legacy-package-") || strings.Contains(string(contents), "scripts/package-linux.sh") {
+			t.Errorf("workflow %s must not invoke deferred Linux packaging", workflow.Name())
+		}
 	}
 }
