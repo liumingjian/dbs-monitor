@@ -127,6 +127,7 @@ SELECT alert.id, alert.instance_id, identity.name AS instance_name,
        alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
        alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
        alert.severity, alert.disposition,
+       alert.in_maintenance, alert.maintenance_window_id,
        coalesce(config.collection_paused, false) AS paused,
        config.collection_pause_updated_at AS paused_at,
        coalesce((SELECT event.current_value FROM alert_event event
@@ -153,6 +154,7 @@ SELECT alert.id, alert.instance_id, identity.name AS instance_name,
        alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
        alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
        alert.severity, alert.disposition,
+       alert.in_maintenance, alert.maintenance_window_id,
        coalesce(config.collection_paused, false) AS paused,
        config.collection_pause_updated_at AS paused_at,
        coalesce((SELECT event.current_value FROM alert_event event
@@ -207,13 +209,14 @@ WHERE alert.instance_id = sqlc.arg(instance_id)
 SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
        alert.instance_id, alert.status AS alert_status, alert.severity,
        alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
-       fired.current_value AS trigger_value,
+       fired.current_value AS trigger_value, fired.in_maintenance,
+       fired.maintenance_window_id,
        (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
        snapshot.result AS trigger_snapshot_result
 FROM performance_event event
 JOIN alert_instance alert ON alert.id = event.alert_instance_id
 JOIN LATERAL (
-    SELECT current_value, rule_snapshot
+    SELECT current_value, rule_snapshot, in_maintenance, maintenance_window_id
     FROM alert_event
     WHERE alert_instance_id = alert.id AND kind = 'FIRED'
     ORDER BY evaluated_at, id
@@ -280,13 +283,14 @@ LIMIT sqlc.arg(row_limit);
 SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
        alert.instance_id, alert.status AS alert_status, alert.severity,
        alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
-       fired.current_value AS trigger_value,
+       fired.current_value AS trigger_value, fired.in_maintenance,
+       fired.maintenance_window_id,
        (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
        snapshot.result AS trigger_snapshot_result
 FROM performance_event event
 JOIN alert_instance alert ON alert.id = event.alert_instance_id
 JOIN LATERAL (
-    SELECT current_value, rule_snapshot
+    SELECT current_value, rule_snapshot, in_maintenance, maintenance_window_id
     FROM alert_event
     WHERE alert_instance_id = alert.id AND kind = 'FIRED'
     ORDER BY evaluated_at, id

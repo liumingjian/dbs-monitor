@@ -251,6 +251,7 @@ SELECT alert.id, alert.instance_id, identity.name AS instance_name,
        alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
        alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
        alert.severity, alert.disposition,
+       alert.in_maintenance, alert.maintenance_window_id,
        coalesce(config.collection_paused, false) AS paused,
        config.collection_pause_updated_at AS paused_at,
        coalesce((SELECT event.current_value FROM alert_event event
@@ -270,25 +271,27 @@ WHERE alert.id = $1
 `
 
 type GetAlertObservationRow struct {
-	ID               pgtype.UUID
-	InstanceID       pgtype.UUID
-	InstanceName     string
-	RuleID           pgtype.UUID
-	RuleName         string
-	RuleVersion      int32
-	RuleSnapshot     []byte
-	MetricID         string
-	Status           string
-	Severity         string
-	Disposition      string
-	Paused           bool
-	PausedAt         pgtype.Timestamptz
-	CurrentValue     pgtype.Float8
-	Threshold        float64
-	FirstTriggeredAt pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	RecoveredAt      pgtype.Timestamptz
-	Unavailability   pgtype.Text
+	ID                  pgtype.UUID
+	InstanceID          pgtype.UUID
+	InstanceName        string
+	RuleID              pgtype.UUID
+	RuleName            string
+	RuleVersion         int32
+	RuleSnapshot        []byte
+	MetricID            string
+	Status              string
+	Severity            string
+	Disposition         string
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
+	Paused              bool
+	PausedAt            pgtype.Timestamptz
+	CurrentValue        pgtype.Float8
+	Threshold           float64
+	FirstTriggeredAt    pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	RecoveredAt         pgtype.Timestamptz
+	Unavailability      pgtype.Text
 }
 
 func (q *Queries) GetAlertObservation(ctx context.Context, id pgtype.UUID) (GetAlertObservationRow, error) {
@@ -306,6 +309,8 @@ func (q *Queries) GetAlertObservation(ctx context.Context, id pgtype.UUID) (GetA
 		&i.Status,
 		&i.Severity,
 		&i.Disposition,
+		&i.InMaintenance,
+		&i.MaintenanceWindowID,
 		&i.Paused,
 		&i.PausedAt,
 		&i.CurrentValue,
@@ -425,13 +430,14 @@ const getPerformanceEvent = `-- name: GetPerformanceEvent :one
 SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
        alert.instance_id, alert.status AS alert_status, alert.severity,
        alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
-       fired.current_value AS trigger_value,
+       fired.current_value AS trigger_value, fired.in_maintenance,
+       fired.maintenance_window_id,
        (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
        snapshot.result AS trigger_snapshot_result
 FROM performance_event event
 JOIN alert_instance alert ON alert.id = event.alert_instance_id
 JOIN LATERAL (
-    SELECT current_value, rule_snapshot
+    SELECT current_value, rule_snapshot, in_maintenance, maintenance_window_id
     FROM alert_event
     WHERE alert_instance_id = alert.id AND kind = 'FIRED'
     ORDER BY evaluated_at, id
@@ -454,6 +460,8 @@ type GetPerformanceEventRow struct {
 	RecoveredAt           pgtype.Timestamptz
 	MetricID              string
 	TriggerValue          pgtype.Float8
+	InMaintenance         bool
+	MaintenanceWindowID   pgtype.UUID
 	Threshold             float64
 	TriggerSnapshotResult pgtype.Text
 }
@@ -474,6 +482,8 @@ func (q *Queries) GetPerformanceEvent(ctx context.Context, id pgtype.UUID) (GetP
 		&i.RecoveredAt,
 		&i.MetricID,
 		&i.TriggerValue,
+		&i.InMaintenance,
+		&i.MaintenanceWindowID,
 		&i.Threshold,
 		&i.TriggerSnapshotResult,
 	)
@@ -617,6 +627,7 @@ SELECT alert.id, alert.instance_id, identity.name AS instance_name,
        alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
        alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
        alert.severity, alert.disposition,
+       alert.in_maintenance, alert.maintenance_window_id,
        coalesce(config.collection_paused, false) AS paused,
        config.collection_pause_updated_at AS paused_at,
        coalesce((SELECT event.current_value FROM alert_event event
@@ -649,25 +660,27 @@ type ListAlertObservationsParams struct {
 }
 
 type ListAlertObservationsRow struct {
-	ID               pgtype.UUID
-	InstanceID       pgtype.UUID
-	InstanceName     string
-	RuleID           pgtype.UUID
-	RuleName         string
-	RuleVersion      int32
-	RuleSnapshot     []byte
-	MetricID         string
-	Status           string
-	Severity         string
-	Disposition      string
-	Paused           bool
-	PausedAt         pgtype.Timestamptz
-	CurrentValue     pgtype.Float8
-	Threshold        float64
-	FirstTriggeredAt pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
-	RecoveredAt      pgtype.Timestamptz
-	Unavailability   pgtype.Text
+	ID                  pgtype.UUID
+	InstanceID          pgtype.UUID
+	InstanceName        string
+	RuleID              pgtype.UUID
+	RuleName            string
+	RuleVersion         int32
+	RuleSnapshot        []byte
+	MetricID            string
+	Status              string
+	Severity            string
+	Disposition         string
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
+	Paused              bool
+	PausedAt            pgtype.Timestamptz
+	CurrentValue        pgtype.Float8
+	Threshold           float64
+	FirstTriggeredAt    pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	RecoveredAt         pgtype.Timestamptz
+	Unavailability      pgtype.Text
 }
 
 func (q *Queries) ListAlertObservations(ctx context.Context, arg ListAlertObservationsParams) ([]ListAlertObservationsRow, error) {
@@ -698,6 +711,8 @@ func (q *Queries) ListAlertObservations(ctx context.Context, arg ListAlertObserv
 			&i.Status,
 			&i.Severity,
 			&i.Disposition,
+			&i.InMaintenance,
+			&i.MaintenanceWindowID,
 			&i.Paused,
 			&i.PausedAt,
 			&i.CurrentValue,
@@ -904,13 +919,14 @@ const listPerformanceEvents = `-- name: ListPerformanceEvents :many
 SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
        alert.instance_id, alert.status AS alert_status, alert.severity,
        alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
-       fired.current_value AS trigger_value,
+       fired.current_value AS trigger_value, fired.in_maintenance,
+       fired.maintenance_window_id,
        (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
        snapshot.result AS trigger_snapshot_result
 FROM performance_event event
 JOIN alert_instance alert ON alert.id = event.alert_instance_id
 JOIN LATERAL (
-    SELECT current_value, rule_snapshot
+    SELECT current_value, rule_snapshot, in_maintenance, maintenance_window_id
     FROM alert_event
     WHERE alert_instance_id = alert.id AND kind = 'FIRED'
     ORDER BY evaluated_at, id
@@ -957,6 +973,8 @@ type ListPerformanceEventsRow struct {
 	RecoveredAt           pgtype.Timestamptz
 	MetricID              string
 	TriggerValue          pgtype.Float8
+	InMaintenance         bool
+	MaintenanceWindowID   pgtype.UUID
 	Threshold             float64
 	TriggerSnapshotResult pgtype.Text
 }
@@ -992,6 +1010,8 @@ func (q *Queries) ListPerformanceEvents(ctx context.Context, arg ListPerformance
 			&i.RecoveredAt,
 			&i.MetricID,
 			&i.TriggerValue,
+			&i.InMaintenance,
+			&i.MaintenanceWindowID,
 			&i.Threshold,
 			&i.TriggerSnapshotResult,
 		); err != nil {

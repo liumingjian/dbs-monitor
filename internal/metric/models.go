@@ -9,54 +9,58 @@ import (
 )
 
 type AlertEvent struct {
-	ID                 int64
-	AlertInstanceID    pgtype.UUID
-	RuleID             pgtype.UUID
-	RuleVersion        int32
-	Kind               string
-	FromState          string
-	ToState            string
-	CurrentValue       pgtype.Float8
-	Unavailability     pgtype.Text
-	RuleSnapshot       []byte
-	EvaluatedAt        pgtype.Timestamptz
-	ActorID            pgtype.UUID
-	ActedAt            pgtype.Timestamptz
-	FromDisposition    pgtype.Text
-	ToDisposition      pgtype.Text
-	DispositionNote    pgtype.Text
-	IgnoreReasonCode   pgtype.Text
-	IgnoreReasonDetail pgtype.Text
-	TriggerSnapshotID  pgtype.UUID
+	ID                  int64
+	AlertInstanceID     pgtype.UUID
+	RuleID              pgtype.UUID
+	RuleVersion         int32
+	Kind                string
+	FromState           string
+	ToState             string
+	CurrentValue        pgtype.Float8
+	Unavailability      pgtype.Text
+	RuleSnapshot        []byte
+	EvaluatedAt         pgtype.Timestamptz
+	ActorID             pgtype.UUID
+	ActedAt             pgtype.Timestamptz
+	FromDisposition     pgtype.Text
+	ToDisposition       pgtype.Text
+	DispositionNote     pgtype.Text
+	IgnoreReasonCode    pgtype.Text
+	IgnoreReasonDetail  pgtype.Text
+	TriggerSnapshotID   pgtype.UUID
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
 }
 
 type AlertInstance struct {
-	InstanceID         pgtype.UUID
-	MetricID           string
-	Status             string
-	BreachCount        int32
-	RecoveryCount      int32
-	NoDataCount        int32
-	StateBeforeNoData  pgtype.Text
-	Unavailability     pgtype.Text
-	UpdatedAt          pgtype.Timestamptz
-	ID                 pgtype.UUID
-	RuleID             pgtype.UUID
-	RuleVersion        int32
-	Severity           string
-	CurrentValue       pgtype.Float8
-	RuleSnapshot       []byte
-	MetricDimensionKey string
-	FirstTriggeredAt   pgtype.Timestamptz
-	FirstRuleVersion   pgtype.Int4
-	FirstRuleSnapshot  []byte
-	RecoveredAt        pgtype.Timestamptz
-	Disposition        string
-	DispositionBy      pgtype.UUID
-	DispositionAt      pgtype.Timestamptz
-	DispositionNote    pgtype.Text
-	IgnoreReasonCode   pgtype.Text
-	IgnoreReasonDetail pgtype.Text
+	InstanceID          pgtype.UUID
+	MetricID            string
+	Status              string
+	BreachCount         int32
+	RecoveryCount       int32
+	NoDataCount         int32
+	StateBeforeNoData   pgtype.Text
+	Unavailability      pgtype.Text
+	UpdatedAt           pgtype.Timestamptz
+	ID                  pgtype.UUID
+	RuleID              pgtype.UUID
+	RuleVersion         int32
+	Severity            string
+	CurrentValue        pgtype.Float8
+	RuleSnapshot        []byte
+	MetricDimensionKey  string
+	FirstTriggeredAt    pgtype.Timestamptz
+	FirstRuleVersion    pgtype.Int4
+	FirstRuleSnapshot   []byte
+	RecoveredAt         pgtype.Timestamptz
+	Disposition         string
+	DispositionBy       pgtype.UUID
+	DispositionAt       pgtype.Timestamptz
+	DispositionNote     pgtype.Text
+	IgnoreReasonCode    pgtype.Text
+	IgnoreReasonDetail  pgtype.Text
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
 }
 
 type AlertRule struct {
@@ -283,6 +287,22 @@ type LongQuerySampleSnapshot struct {
 	SampledAt     pgtype.Timestamptz
 	OriginalCount int32
 	Truncated     bool
+}
+
+type MaintenanceWindow struct {
+	ID        pgtype.UUID
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	Reason    string
+	CreatedBy pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+}
+
+type MaintenanceWindowInstance struct {
+	MaintenanceWindowID pgtype.UUID
+	InstanceID          pgtype.UUID
 }
 
 type MetricSample struct {

@@ -135,23 +135,26 @@ const createAlertEvent = `-- name: CreateAlertEvent :exec
 INSERT INTO alert_event (
     alert_instance_id, rule_id, rule_version, kind,
     from_state, to_state, current_value, unavailability,
-    rule_snapshot, evaluated_at, trigger_snapshot_id
+    rule_snapshot, evaluated_at, trigger_snapshot_id,
+    in_maintenance, maintenance_window_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 `
 
 type CreateAlertEventParams struct {
-	AlertInstanceID   pgtype.UUID
-	RuleID            pgtype.UUID
-	RuleVersion       int32
-	Kind              string
-	FromState         string
-	ToState           string
-	CurrentValue      pgtype.Float8
-	Unavailability    pgtype.Text
-	RuleSnapshot      []byte
-	EvaluatedAt       pgtype.Timestamptz
-	TriggerSnapshotID pgtype.UUID
+	AlertInstanceID     pgtype.UUID
+	RuleID              pgtype.UUID
+	RuleVersion         int32
+	Kind                string
+	FromState           string
+	ToState             string
+	CurrentValue        pgtype.Float8
+	Unavailability      pgtype.Text
+	RuleSnapshot        []byte
+	EvaluatedAt         pgtype.Timestamptz
+	TriggerSnapshotID   pgtype.UUID
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
 }
 
 func (q *Queries) CreateAlertEvent(ctx context.Context, arg CreateAlertEventParams) error {
@@ -167,6 +170,8 @@ func (q *Queries) CreateAlertEvent(ctx context.Context, arg CreateAlertEventPara
 		arg.RuleSnapshot,
 		arg.EvaluatedAt,
 		arg.TriggerSnapshotID,
+		arg.InMaintenance,
+		arg.MaintenanceWindowID,
 	)
 	return err
 }
@@ -413,7 +418,7 @@ func (q *Queries) DeleteRecoveredAlertHistoryBefore(ctx context.Context, recover
 }
 
 const getAlertDispositionForRead = `-- name: GetAlertDispositionForRead :one
-SELECT instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail FROM alert_instance WHERE id = $1 FOR SHARE
+SELECT instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail, in_maintenance, maintenance_window_id FROM alert_instance WHERE id = $1 FOR SHARE
 `
 
 func (q *Queries) GetAlertDispositionForRead(ctx context.Context, id pgtype.UUID) (AlertInstance, error) {
@@ -446,12 +451,14 @@ func (q *Queries) GetAlertDispositionForRead(ctx context.Context, id pgtype.UUID
 		&i.DispositionNote,
 		&i.IgnoreReasonCode,
 		&i.IgnoreReasonDetail,
+		&i.InMaintenance,
+		&i.MaintenanceWindowID,
 	)
 	return i, err
 }
 
 const getAlertDispositionForUpdate = `-- name: GetAlertDispositionForUpdate :one
-SELECT instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail FROM alert_instance WHERE id = $1 FOR UPDATE
+SELECT instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail, in_maintenance, maintenance_window_id FROM alert_instance WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetAlertDispositionForUpdate(ctx context.Context, id pgtype.UUID) (AlertInstance, error) {
@@ -484,6 +491,8 @@ func (q *Queries) GetAlertDispositionForUpdate(ctx context.Context, id pgtype.UU
 		&i.DispositionNote,
 		&i.IgnoreReasonCode,
 		&i.IgnoreReasonDetail,
+		&i.InMaintenance,
+		&i.MaintenanceWindowID,
 	)
 	return i, err
 }
@@ -781,7 +790,7 @@ func (q *Queries) GetNotificationPolicy(ctx context.Context, id pgtype.UUID) (No
 }
 
 const listAlertDispositionEvents = `-- name: ListAlertDispositionEvents :many
-SELECT id, alert_instance_id, rule_id, rule_version, kind, from_state, to_state, current_value, unavailability, rule_snapshot, evaluated_at, actor_id, acted_at, from_disposition, to_disposition, disposition_note, ignore_reason_code, ignore_reason_detail, trigger_snapshot_id
+SELECT id, alert_instance_id, rule_id, rule_version, kind, from_state, to_state, current_value, unavailability, rule_snapshot, evaluated_at, actor_id, acted_at, from_disposition, to_disposition, disposition_note, ignore_reason_code, ignore_reason_detail, trigger_snapshot_id, in_maintenance, maintenance_window_id
 FROM alert_event
 WHERE alert_instance_id = $1
   AND kind IN ('ACKED', 'IGNORED')
@@ -817,6 +826,8 @@ func (q *Queries) ListAlertDispositionEvents(ctx context.Context, alertInstanceI
 			&i.IgnoreReasonCode,
 			&i.IgnoreReasonDetail,
 			&i.TriggerSnapshotID,
+			&i.InMaintenance,
+			&i.MaintenanceWindowID,
 		); err != nil {
 			return nil, err
 		}
@@ -1108,23 +1119,27 @@ SET metric_id = $2,
     state_before_no_data = NULL,
     unavailability = NULL,
     updated_at = $10,
-    recovered_at = $10
+    recovered_at = $10,
+    in_maintenance = $11,
+    maintenance_window_id = $12
 WHERE id = $1
   AND status <> 'RECOVERED'
 RETURNING id
 `
 
 type RecoverAlertSnapshotParams struct {
-	ID            pgtype.UUID
-	MetricID      string
-	RuleVersion   int32
-	Severity      string
-	CurrentValue  pgtype.Float8
-	RuleSnapshot  []byte
-	BreachCount   int32
-	RecoveryCount int32
-	NoDataCount   int32
-	UpdatedAt     pgtype.Timestamptz
+	ID                  pgtype.UUID
+	MetricID            string
+	RuleVersion         int32
+	Severity            string
+	CurrentValue        pgtype.Float8
+	RuleSnapshot        []byte
+	BreachCount         int32
+	RecoveryCount       int32
+	NoDataCount         int32
+	UpdatedAt           pgtype.Timestamptz
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
 }
 
 func (q *Queries) RecoverAlertSnapshot(ctx context.Context, arg RecoverAlertSnapshotParams) (pgtype.UUID, error) {
@@ -1139,6 +1154,8 @@ func (q *Queries) RecoverAlertSnapshot(ctx context.Context, arg RecoverAlertSnap
 		arg.RecoveryCount,
 		arg.NoDataCount,
 		arg.UpdatedAt,
+		arg.InMaintenance,
+		arg.MaintenanceWindowID,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -1153,20 +1170,24 @@ SET rule_version = $2,
     breach_count = $5,
     recovery_count = $6,
     no_data_count = $7,
-    updated_at = $8
+    updated_at = $8,
+    in_maintenance = $9,
+    maintenance_window_id = $10
 WHERE id = $1
   AND status <> 'RECOVERED'
 `
 
 type ResetIgnoredMissingAlertParams struct {
-	ID            pgtype.UUID
-	RuleVersion   int32
-	Severity      string
-	RuleSnapshot  []byte
-	BreachCount   int32
-	RecoveryCount int32
-	NoDataCount   int32
-	UpdatedAt     pgtype.Timestamptz
+	ID                  pgtype.UUID
+	RuleVersion         int32
+	Severity            string
+	RuleSnapshot        []byte
+	BreachCount         int32
+	RecoveryCount       int32
+	NoDataCount         int32
+	UpdatedAt           pgtype.Timestamptz
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
 }
 
 func (q *Queries) ResetIgnoredMissingAlert(ctx context.Context, arg ResetIgnoredMissingAlertParams) error {
@@ -1179,6 +1200,8 @@ func (q *Queries) ResetIgnoredMissingAlert(ctx context.Context, arg ResetIgnored
 		arg.RecoveryCount,
 		arg.NoDataCount,
 		arg.UpdatedAt,
+		arg.InMaintenance,
+		arg.MaintenanceWindowID,
 	)
 	return err
 }
@@ -1240,9 +1263,10 @@ INSERT INTO alert_instance (
     status, rule_version, severity, current_value, rule_snapshot,
     breach_count, recovery_count, no_data_count,
     state_before_no_data, unavailability, updated_at,
-    first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at
+    first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at,
+    in_maintenance, maintenance_window_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 ON CONFLICT (rule_id, instance_id, metric_dimension_key)
 WHERE status <> 'RECOVERED'
 DO UPDATE SET metric_id = EXCLUDED.metric_id,
@@ -1260,30 +1284,34 @@ DO UPDATE SET metric_id = EXCLUDED.metric_id,
               first_triggered_at = COALESCE(alert_instance.first_triggered_at, EXCLUDED.first_triggered_at),
               first_rule_version = COALESCE(alert_instance.first_rule_version, EXCLUDED.first_rule_version),
               first_rule_snapshot = COALESCE(alert_instance.first_rule_snapshot, EXCLUDED.first_rule_snapshot),
-              recovered_at = EXCLUDED.recovered_at
+              recovered_at = EXCLUDED.recovered_at,
+              in_maintenance = EXCLUDED.in_maintenance,
+              maintenance_window_id = EXCLUDED.maintenance_window_id
 RETURNING id
 `
 
 type SaveAlertSnapshotParams struct {
-	RuleID             pgtype.UUID
-	InstanceID         pgtype.UUID
-	MetricID           string
-	MetricDimensionKey string
-	Status             string
-	RuleVersion        int32
-	Severity           string
-	CurrentValue       pgtype.Float8
-	RuleSnapshot       []byte
-	BreachCount        int32
-	RecoveryCount      int32
-	NoDataCount        int32
-	StateBeforeNoData  pgtype.Text
-	Unavailability     pgtype.Text
-	UpdatedAt          pgtype.Timestamptz
-	FirstTriggeredAt   pgtype.Timestamptz
-	FirstRuleVersion   pgtype.Int4
-	FirstRuleSnapshot  []byte
-	RecoveredAt        pgtype.Timestamptz
+	RuleID              pgtype.UUID
+	InstanceID          pgtype.UUID
+	MetricID            string
+	MetricDimensionKey  string
+	Status              string
+	RuleVersion         int32
+	Severity            string
+	CurrentValue        pgtype.Float8
+	RuleSnapshot        []byte
+	BreachCount         int32
+	RecoveryCount       int32
+	NoDataCount         int32
+	StateBeforeNoData   pgtype.Text
+	Unavailability      pgtype.Text
+	UpdatedAt           pgtype.Timestamptz
+	FirstTriggeredAt    pgtype.Timestamptz
+	FirstRuleVersion    pgtype.Int4
+	FirstRuleSnapshot   []byte
+	RecoveredAt         pgtype.Timestamptz
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
 }
 
 func (q *Queries) SaveAlertSnapshot(ctx context.Context, arg SaveAlertSnapshotParams) (pgtype.UUID, error) {
@@ -1307,6 +1335,8 @@ func (q *Queries) SaveAlertSnapshot(ctx context.Context, arg SaveAlertSnapshotPa
 		arg.FirstRuleVersion,
 		arg.FirstRuleSnapshot,
 		arg.RecoveredAt,
+		arg.InMaintenance,
+		arg.MaintenanceWindowID,
 	)
 	var id pgtype.UUID
 	err := row.Scan(&id)
@@ -1376,7 +1406,7 @@ SET disposition = $2,
     ignore_reason_code = $6,
     ignore_reason_detail = $7
 WHERE id = $1
-RETURNING instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail
+RETURNING instance_id, metric_id, status, breach_count, recovery_count, no_data_count, state_before_no_data, unavailability, updated_at, id, rule_id, rule_version, severity, current_value, rule_snapshot, metric_dimension_key, first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at, disposition, disposition_by, disposition_at, disposition_note, ignore_reason_code, ignore_reason_detail, in_maintenance, maintenance_window_id
 `
 
 type UpdateAlertDispositionParams struct {
@@ -1427,6 +1457,8 @@ func (q *Queries) UpdateAlertDisposition(ctx context.Context, arg UpdateAlertDis
 		&i.DispositionNote,
 		&i.IgnoreReasonCode,
 		&i.IgnoreReasonDetail,
+		&i.InMaintenance,
+		&i.MaintenanceWindowID,
 	)
 	return i, err
 }

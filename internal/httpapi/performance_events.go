@@ -77,6 +77,8 @@ func (handler *Handler) ListPerformanceEvents(ctx context.Context, request api.L
 			metricID:              row.MetricID,
 			triggerValue:          row.TriggerValue,
 			threshold:             row.Threshold,
+			inMaintenance:         row.InMaintenance,
+			maintenanceWindowID:   row.MaintenanceWindowID,
 			triggerSnapshotResult: row.TriggerSnapshotResult,
 		})
 		if err != nil {
@@ -109,6 +111,8 @@ func (handler *Handler) GetPerformanceEvent(ctx context.Context, request api.Get
 		metricID:              row.MetricID,
 		triggerValue:          row.TriggerValue,
 		threshold:             row.Threshold,
+		inMaintenance:         row.InMaintenance,
+		maintenanceWindowID:   row.MaintenanceWindowID,
 		triggerSnapshotResult: row.TriggerSnapshotResult,
 	})
 	if err != nil {
@@ -131,6 +135,8 @@ type performanceEventProjection struct {
 	metricID              string
 	triggerValue          pgtype.Float8
 	threshold             float64
+	inMaintenance         bool
+	maintenanceWindowID   pgtype.UUID
 	triggerSnapshotResult pgtype.Text
 }
 
@@ -169,6 +175,8 @@ func (handler *Handler) performanceEventResponse(row performanceEventProjection)
 		AlertStatus:           api.AlertStatus(row.alertStatus),
 		Severity:              api.AlertSeverity(row.severity),
 		Disposition:           api.AlertDisposition(row.disposition),
+		InMaintenance:         row.inMaintenance,
+		MaintenanceWindowId:   uuidPointer(row.maintenanceWindowID),
 		DerivedAt:             row.derivedAt.Time.UTC(),
 		UpdatedAt:             row.updatedAt.Time.UTC(),
 		RecoveredAt:           timePointer(row.recoveredAt),

@@ -11,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addMaintenanceWindowInstance = `-- name: AddMaintenanceWindowInstance :exec
+INSERT INTO maintenance_window_instance (maintenance_window_id, instance_id)
+VALUES ($1, $2)
+`
+
+type AddMaintenanceWindowInstanceParams struct {
+	MaintenanceWindowID pgtype.UUID
+	InstanceID          pgtype.UUID
+}
+
+func (q *Queries) AddMaintenanceWindowInstance(ctx context.Context, arg AddMaintenanceWindowInstanceParams) error {
+	_, err := q.db.Exec(ctx, addMaintenanceWindowInstance, arg.MaintenanceWindowID, arg.InstanceID)
+	return err
+}
+
 const addNotificationContactGroupMember = `-- name: AddNotificationContactGroupMember :exec
 INSERT INTO notification_contact_group_member (group_id, contact_id) VALUES ($1, $2)
 `
@@ -106,6 +121,15 @@ func (q *Queries) ClaimDueNotification(ctx context.Context, claimedAt pgtype.Tim
 	return i, err
 }
 
+const clearMaintenanceWindowInstances = `-- name: ClearMaintenanceWindowInstances :exec
+DELETE FROM maintenance_window_instance WHERE maintenance_window_id = $1
+`
+
+func (q *Queries) ClearMaintenanceWindowInstances(ctx context.Context, maintenanceWindowID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearMaintenanceWindowInstances, maintenanceWindowID)
+	return err
+}
+
 const clearNotificationContactGroupMembers = `-- name: ClearNotificationContactGroupMembers :exec
 DELETE FROM notification_contact_group_member WHERE group_id = $1
 `
@@ -140,6 +164,46 @@ DELETE FROM notification_policy_contact WHERE policy_id = $1
 func (q *Queries) ClearNotificationPolicyContacts(ctx context.Context, policyID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, clearNotificationPolicyContacts, policyID)
 	return err
+}
+
+const createMaintenanceWindow = `-- name: CreateMaintenanceWindow :one
+INSERT INTO maintenance_window (
+    id, starts_at, ends_at, reason, created_by, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
+RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at
+`
+
+type CreateMaintenanceWindowParams struct {
+	ID        pgtype.UUID
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	Reason    string
+	CreatedBy pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateMaintenanceWindow(ctx context.Context, arg CreateMaintenanceWindowParams) (MaintenanceWindow, error) {
+	row := q.db.QueryRow(ctx, createMaintenanceWindow,
+		arg.ID,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.Reason,
+		arg.CreatedBy,
+		arg.CreatedAt,
+	)
+	var i MaintenanceWindow
+	err := row.Scan(
+		&i.ID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const createNotificationContact = `-- name: CreateNotificationContact :one
@@ -296,6 +360,25 @@ func (q *Queries) CreateWebhookTarget(ctx context.Context, arg CreateWebhookTarg
 	return i, err
 }
 
+const deleteMaintenanceWindow = `-- name: DeleteMaintenanceWindow :execrows
+UPDATE maintenance_window
+SET deleted_at = $2, updated_at = $2
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+type DeleteMaintenanceWindowParams struct {
+	ID        pgtype.UUID
+	DeletedAt pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteMaintenanceWindow(ctx context.Context, arg DeleteMaintenanceWindowParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteMaintenanceWindow, arg.ID, arg.DeletedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteNotificationContact = `-- name: DeleteNotificationContact :execrows
 DELETE FROM notification_contact WHERE id = $1
 `
@@ -332,6 +415,15 @@ func (q *Queries) DeleteNotificationPolicy(ctx context.Context, id pgtype.UUID) 
 	return result.RowsAffected(), nil
 }
 
+const deletePendingNotification = `-- name: DeletePendingNotification :exec
+DELETE FROM notification_delivery WHERE id = $1 AND status = 'PENDING'
+`
+
+func (q *Queries) DeletePendingNotification(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deletePendingNotification, id)
+	return err
+}
+
 const deleteWebhookTarget = `-- name: DeleteWebhookTarget :execrows
 DELETE FROM webhook_target WHERE id = $1
 `
@@ -342,6 +434,34 @@ func (q *Queries) DeleteWebhookTarget(ctx context.Context, id pgtype.UUID) (int6
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const endMaintenanceWindow = `-- name: EndMaintenanceWindow :one
+UPDATE maintenance_window
+SET ends_at = $2, updated_at = $2
+WHERE id = $1 AND deleted_at IS NULL AND starts_at <= $2 AND ends_at > $2
+RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at
+`
+
+type EndMaintenanceWindowParams struct {
+	ID     pgtype.UUID
+	EndsAt pgtype.Timestamptz
+}
+
+func (q *Queries) EndMaintenanceWindow(ctx context.Context, arg EndMaintenanceWindowParams) (MaintenanceWindow, error) {
+	row := q.db.QueryRow(ctx, endMaintenanceWindow, arg.ID, arg.EndsAt)
+	var i MaintenanceWindow
+	err := row.Scan(
+		&i.ID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const enqueueAlertNotifications = `-- name: EnqueueAlertNotifications :many
@@ -481,6 +601,46 @@ func (q *Queries) EnqueueTestWebhookNotification(ctx context.Context, arg Enqueu
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getMaintenanceWindow = `-- name: GetMaintenanceWindow :one
+SELECT id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at FROM maintenance_window
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetMaintenanceWindow(ctx context.Context, id pgtype.UUID) (MaintenanceWindow, error) {
+	row := q.db.QueryRow(ctx, getMaintenanceWindow, id)
+	var i MaintenanceWindow
+	err := row.Scan(
+		&i.ID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const getNotificationAlertInstance = `-- name: GetNotificationAlertInstance :one
+SELECT alert.id, alert.instance_id
+FROM notification_delivery delivery
+JOIN alert_instance alert ON alert.id = delivery.alert_instance_id
+WHERE delivery.id = $1
+`
+
+type GetNotificationAlertInstanceRow struct {
+	ID         pgtype.UUID
+	InstanceID pgtype.UUID
+}
+
+func (q *Queries) GetNotificationAlertInstance(ctx context.Context, id pgtype.UUID) (GetNotificationAlertInstanceRow, error) {
+	row := q.db.QueryRow(ctx, getNotificationAlertInstance, id)
+	var i GetNotificationAlertInstanceRow
+	err := row.Scan(&i.ID, &i.InstanceID)
+	return i, err
 }
 
 const getNotificationContact = `-- name: GetNotificationContact :one
@@ -727,6 +887,105 @@ func (q *Queries) ListAlertNotificationAttempts(ctx context.Context, alertInstan
 			&i.Result,
 			&i.FailureReason,
 			&i.RetryCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMaintenanceWindowInstances = `-- name: ListMaintenanceWindowInstances :many
+SELECT instance_id FROM maintenance_window_instance
+WHERE maintenance_window_id = $1
+ORDER BY instance_id
+`
+
+func (q *Queries) ListMaintenanceWindowInstances(ctx context.Context, maintenanceWindowID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listMaintenanceWindowInstances, maintenanceWindowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var instance_id pgtype.UUID
+		if err := rows.Scan(&instance_id); err != nil {
+			return nil, err
+		}
+		items = append(items, instance_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMaintenanceWindows = `-- name: ListMaintenanceWindows :many
+SELECT id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at FROM maintenance_window
+WHERE deleted_at IS NULL
+ORDER BY starts_at DESC, id
+`
+
+func (q *Queries) ListMaintenanceWindows(ctx context.Context) ([]MaintenanceWindow, error) {
+	rows, err := q.db.Query(ctx, listMaintenanceWindows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MaintenanceWindow
+	for rows.Next() {
+		var i MaintenanceWindow
+		if err := rows.Scan(
+			&i.ID,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Reason,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMaintenanceWindowsForInstance = `-- name: ListMaintenanceWindowsForInstance :many
+SELECT maintenance.id, maintenance.starts_at, maintenance.ends_at, maintenance.reason, maintenance.created_by, maintenance.created_at, maintenance.updated_at, maintenance.deleted_at
+FROM maintenance_window maintenance
+JOIN maintenance_window_instance scope ON scope.maintenance_window_id = maintenance.id
+WHERE scope.instance_id = $1
+  AND maintenance.deleted_at IS NULL
+ORDER BY maintenance.ends_at, maintenance.id
+`
+
+func (q *Queries) ListMaintenanceWindowsForInstance(ctx context.Context, instanceID pgtype.UUID) ([]MaintenanceWindow, error) {
+	rows, err := q.db.Query(ctx, listMaintenanceWindowsForInstance, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MaintenanceWindow
+	for rows.Next() {
+		var i MaintenanceWindow
+		if err := rows.Scan(
+			&i.ID,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Reason,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1006,26 +1265,47 @@ func (q *Queries) ListRecentActiveChannelFailures(ctx context.Context) ([]ListRe
 }
 
 const listRepeatCandidates = `-- name: ListRepeatCandidates :many
-SELECT alert.id AS alert_instance_id, alert.disposition,
+SELECT alert.id AS alert_instance_id, alert.instance_id, alert.disposition,
        policy.repeat_interval,
-       latest.created_at AS last_notification_at,
-       latest.payload
+       greatest(
+           coalesce((SELECT max(delivery.created_at) FROM notification_delivery delivery
+                     WHERE delivery.alert_instance_id = alert.id
+                       AND delivery.event_type IN ('FIRING', 'REPEAT')), '-infinity'::timestamptz),
+           coalesce((SELECT max(event.evaluated_at) FROM alert_event event
+                     WHERE event.alert_instance_id = alert.id
+                       AND event.kind = 'MAINTENANCE_SUPPRESSED'), '-infinity'::timestamptz),
+           alert.first_triggered_at
+       )::timestamptz AS last_notification_at,
+       jsonb_build_object(
+           'alert_instance_id', alert.id,
+           'rule_name', coalesce(alert.rule_snapshot->>'name', rule.name),
+           'instance_name', identity.name,
+           'metric_id', alert.metric_id,
+           'severity', alert.severity,
+           'current_value', coalesce(alert.current_value::text, '')
+       ) AS payload
 FROM alert_instance alert
 JOIN alert_rule rule ON rule.id = alert.rule_id
+JOIN instance_identity identity ON identity.id = alert.instance_id
 JOIN notification_policy policy ON policy.id = COALESCE(
     rule.notification_policy_id,
     (SELECT id FROM notification_policy WHERE is_default)
 )
-JOIN LATERAL (
-    SELECT delivery.created_at, delivery.payload
-    FROM notification_delivery delivery
-    WHERE delivery.alert_instance_id = alert.id
-      AND delivery.event_type IN ('FIRING', 'REPEAT')
-    ORDER BY delivery.created_at DESC, delivery.id DESC
-    LIMIT 1
-) latest ON true
 WHERE alert.status = 'FIRING'
+  AND alert.first_triggered_at IS NOT NULL
   AND alert.severity = ANY(policy.severity_filter)
+  AND (
+      EXISTS (
+          SELECT 1 FROM notification_delivery delivery
+          WHERE delivery.alert_instance_id = alert.id
+            AND delivery.event_type IN ('FIRING', 'REPEAT')
+      )
+      OR EXISTS (
+          SELECT 1 FROM alert_event event
+          WHERE event.alert_instance_id = alert.id
+            AND event.kind = 'MAINTENANCE_SUPPRESSED'
+      )
+  )
   AND NOT EXISTS (
       SELECT 1 FROM notification_delivery pending
       WHERE pending.alert_instance_id = alert.id AND pending.status = 'PENDING'
@@ -1035,6 +1315,7 @@ ORDER BY alert.id
 
 type ListRepeatCandidatesRow struct {
 	AlertInstanceID    pgtype.UUID
+	InstanceID         pgtype.UUID
 	Disposition        string
 	RepeatInterval     int32
 	LastNotificationAt pgtype.Timestamptz
@@ -1052,6 +1333,7 @@ func (q *Queries) ListRepeatCandidates(ctx context.Context) ([]ListRepeatCandida
 		var i ListRepeatCandidatesRow
 		if err := rows.Scan(
 			&i.AlertInstanceID,
+			&i.InstanceID,
 			&i.Disposition,
 			&i.RepeatInterval,
 			&i.LastNotificationAt,
@@ -1133,6 +1415,46 @@ func (q *Queries) ListWebhookTargetsForKeyRotation(ctx context.Context) ([]Webho
 		return nil, err
 	}
 	return items, nil
+}
+
+const maintenanceWindowInstanceExists = `-- name: MaintenanceWindowInstanceExists :one
+SELECT EXISTS (SELECT 1 FROM instance WHERE id = $1)
+`
+
+func (q *Queries) MaintenanceWindowInstanceExists(ctx context.Context, id pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, maintenanceWindowInstanceExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const recordMaintenanceSuppressed = `-- name: RecordMaintenanceSuppressed :exec
+WITH marked AS (
+    UPDATE alert_instance alert
+    SET in_maintenance = true, maintenance_window_id = $2
+    WHERE alert.id = $1
+    RETURNING alert.instance_id, alert.metric_id, alert.status, alert.breach_count, alert.recovery_count, alert.no_data_count, alert.state_before_no_data, alert.unavailability, alert.updated_at, alert.id, alert.rule_id, alert.rule_version, alert.severity, alert.current_value, alert.rule_snapshot, alert.metric_dimension_key, alert.first_triggered_at, alert.first_rule_version, alert.first_rule_snapshot, alert.recovered_at, alert.disposition, alert.disposition_by, alert.disposition_at, alert.disposition_note, alert.ignore_reason_code, alert.ignore_reason_detail, alert.in_maintenance, alert.maintenance_window_id
+)
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, in_maintenance, maintenance_window_id
+)
+SELECT alert.id, alert.rule_id, alert.rule_version, 'MAINTENANCE_SUPPRESSED',
+       alert.status, alert.status, alert.current_value, alert.unavailability,
+       alert.rule_snapshot, $3, true, $2
+FROM marked alert
+`
+
+type RecordMaintenanceSuppressedParams struct {
+	ID                  pgtype.UUID
+	MaintenanceWindowID pgtype.UUID
+	EvaluatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) RecordMaintenanceSuppressed(ctx context.Context, arg RecordMaintenanceSuppressedParams) error {
+	_, err := q.db.Exec(ctx, recordMaintenanceSuppressed, arg.ID, arg.MaintenanceWindowID, arg.EvaluatedAt)
+	return err
 }
 
 const recordNotificationFailure = `-- name: RecordNotificationFailure :exec
@@ -1217,6 +1539,77 @@ type RecordNotificationSentParams struct {
 func (q *Queries) RecordNotificationSent(ctx context.Context, arg RecordNotificationSentParams) error {
 	_, err := q.db.Exec(ctx, recordNotificationSent, arg.NotificationID, arg.EvaluatedAt, arg.RetryCount)
 	return err
+}
+
+const suppressNotificationForMaintenance = `-- name: SuppressNotificationForMaintenance :exec
+WITH removed AS (
+    DELETE FROM notification_delivery delivery
+    WHERE delivery.id = $1 AND delivery.status = 'PENDING'
+    RETURNING delivery.alert_instance_id
+), marked AS (
+    UPDATE alert_instance alert
+    SET in_maintenance = true, maintenance_window_id = $2
+    FROM removed
+    WHERE alert.id = removed.alert_instance_id
+    RETURNING alert.instance_id, alert.metric_id, alert.status, alert.breach_count, alert.recovery_count, alert.no_data_count, alert.state_before_no_data, alert.unavailability, alert.updated_at, alert.id, alert.rule_id, alert.rule_version, alert.severity, alert.current_value, alert.rule_snapshot, alert.metric_dimension_key, alert.first_triggered_at, alert.first_rule_version, alert.first_rule_snapshot, alert.recovered_at, alert.disposition, alert.disposition_by, alert.disposition_at, alert.disposition_note, alert.ignore_reason_code, alert.ignore_reason_detail, alert.in_maintenance, alert.maintenance_window_id
+)
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, in_maintenance, maintenance_window_id
+)
+SELECT alert.id, alert.rule_id, alert.rule_version, 'MAINTENANCE_SUPPRESSED',
+       alert.status, alert.status, alert.current_value, alert.unavailability,
+       alert.rule_snapshot, $3, true, $2
+FROM marked alert
+`
+
+type SuppressNotificationForMaintenanceParams struct {
+	ID                  pgtype.UUID
+	MaintenanceWindowID pgtype.UUID
+	EvaluatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) SuppressNotificationForMaintenance(ctx context.Context, arg SuppressNotificationForMaintenanceParams) error {
+	_, err := q.db.Exec(ctx, suppressNotificationForMaintenance, arg.ID, arg.MaintenanceWindowID, arg.EvaluatedAt)
+	return err
+}
+
+const updateMaintenanceWindow = `-- name: UpdateMaintenanceWindow :one
+UPDATE maintenance_window
+SET starts_at = $2, ends_at = $3, reason = $4, updated_at = $5
+WHERE id = $1 AND deleted_at IS NULL AND ends_at > $5
+RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at
+`
+
+type UpdateMaintenanceWindowParams struct {
+	ID        pgtype.UUID
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	Reason    string
+	UpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateMaintenanceWindow(ctx context.Context, arg UpdateMaintenanceWindowParams) (MaintenanceWindow, error) {
+	row := q.db.QueryRow(ctx, updateMaintenanceWindow,
+		arg.ID,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.Reason,
+		arg.UpdatedAt,
+	)
+	var i MaintenanceWindow
+	err := row.Scan(
+		&i.ID,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const updateNotificationContact = `-- name: UpdateNotificationContact :one

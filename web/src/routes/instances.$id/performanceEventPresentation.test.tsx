@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   PerformanceEventSeverityTag,
+  PerformanceEventMaintenanceTag,
   performanceEventDispositionLabel,
   performanceEventDurationLabel,
   performanceEventSeverityPresentation,
@@ -46,5 +47,12 @@ describe('performance event presentation', () => {
     [24 * 60 * 60_000, '1 天'],
   ])('formats a %i ms duration as %s', (milliseconds, label) => {
     expect(performanceEventDurationLabel(milliseconds)).toBe(label)
+  })
+
+  it('shows the maintenance marker only for attributed events', () => {
+    const { rerender } = render(<PerformanceEventMaintenanceTag inMaintenance />)
+    expect(screen.getByText('维护中')).toBeTruthy()
+    rerender(<PerformanceEventMaintenanceTag inMaintenance={false} />)
+    expect(screen.queryByText('维护中')).toBeNull()
   })
 })

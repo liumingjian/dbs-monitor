@@ -8,6 +8,7 @@ PerformanceEvent:
     - alert_status
     - severity
     - disposition
+    - in_maintenance
     - derived_at
     - updated_at
     - duration_ms
@@ -25,6 +26,8 @@ PerformanceEvent:
     alert_status: { $ref: ../enums.yaml#/AlertStatus }
     severity: { $ref: ../enums.yaml#/AlertSeverity }
     disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    in_maintenance: { type: boolean }
+    maintenance_window_id: { type: string, format: uuid }
     derived_at: { type: string, format: date-time }
     updated_at: { type: string, format: date-time }
     recovered_at: { type: string, format: date-time }

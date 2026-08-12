@@ -205,9 +205,10 @@ INSERT INTO alert_instance (
     status, rule_version, severity, current_value, rule_snapshot,
     breach_count, recovery_count, no_data_count,
     state_before_no_data, unavailability, updated_at,
-    first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at
+    first_triggered_at, first_rule_version, first_rule_snapshot, recovered_at,
+    in_maintenance, maintenance_window_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 ON CONFLICT (rule_id, instance_id, metric_dimension_key)
 WHERE status <> 'RECOVERED'
 DO UPDATE SET metric_id = EXCLUDED.metric_id,
@@ -225,7 +226,9 @@ DO UPDATE SET metric_id = EXCLUDED.metric_id,
               first_triggered_at = COALESCE(alert_instance.first_triggered_at, EXCLUDED.first_triggered_at),
               first_rule_version = COALESCE(alert_instance.first_rule_version, EXCLUDED.first_rule_version),
               first_rule_snapshot = COALESCE(alert_instance.first_rule_snapshot, EXCLUDED.first_rule_snapshot),
-              recovered_at = EXCLUDED.recovered_at
+              recovered_at = EXCLUDED.recovered_at,
+              in_maintenance = EXCLUDED.in_maintenance,
+              maintenance_window_id = EXCLUDED.maintenance_window_id
 RETURNING id;
 
 -- name: RecoverAlertSnapshot :one
@@ -242,7 +245,9 @@ SET metric_id = $2,
     state_before_no_data = NULL,
     unavailability = NULL,
     updated_at = $10,
-    recovered_at = $10
+    recovered_at = $10,
+    in_maintenance = $11,
+    maintenance_window_id = $12
 WHERE id = $1
   AND status <> 'RECOVERED'
 RETURNING id;
@@ -255,7 +260,9 @@ SET rule_version = $2,
     breach_count = $5,
     recovery_count = $6,
     no_data_count = $7,
-    updated_at = $8
+    updated_at = $8,
+    in_maintenance = $9,
+    maintenance_window_id = $10
 WHERE id = $1
   AND status <> 'RECOVERED';
 
@@ -271,9 +278,10 @@ DO UPDATE SET last_evaluated_at = EXCLUDED.last_evaluated_at;
 INSERT INTO alert_event (
     alert_instance_id, rule_id, rule_version, kind,
     from_state, to_state, current_value, unavailability,
-    rule_snapshot, evaluated_at, trigger_snapshot_id
+    rule_snapshot, evaluated_at, trigger_snapshot_id,
+    in_maintenance, maintenance_window_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
 
 -- name: CloseAlertsForInstanceRemoval :exec
 WITH unresolved_alerts AS MATERIALIZED (

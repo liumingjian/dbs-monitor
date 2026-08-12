@@ -10,6 +10,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
 
 type instanceHealthProjection struct {
@@ -30,6 +31,7 @@ type instanceHealthProjectionInput struct {
 	capabilityObservedAt   pgtype.Timestamptz
 	capabilityStates       []byte
 	alerts                 []alerting.ListInstanceHealthAlertsRow
+	inMaintenance          bool
 	now                    time.Time
 }
 
@@ -40,6 +42,12 @@ func (handler *Handler) loadInstanceHealthProjection(ctx context.Context, input 
 		return instanceHealthProjection{}, err
 	}
 	input.alerts = alertsByInstance[input.instanceID]
+	_, input.inMaintenance, err = notify.FindActiveMaintenanceWindow(
+		ctx, notify.New(handler.platform), databaseUUID(input.instanceID), now,
+	)
+	if err != nil {
+		return instanceHealthProjection{}, err
+	}
 	input.now = now
 	return projectInstanceHealth(input)
 }
@@ -74,6 +82,7 @@ func projectInstanceHealth(input instanceHealthProjectionInput) (instanceHealthP
 	rollup := alerting.RollupInstanceHealth(alerting.HealthRollupInput{
 		Paused:               input.paused,
 		EverCollected:        input.collectorLastSuccessAt.Valid,
+		InMaintenance:        input.inMaintenance,
 		ConfigurationMissing: configurationMissing,
 		Now:                  input.now,
 		Alerts:               toHealthAlerts(input.alerts),

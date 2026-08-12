@@ -631,6 +631,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/maintenance-windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMaintenanceWindows"];
+        put?: never;
+        post: operations["createMaintenanceWindow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance-windows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateMaintenanceWindow"];
+        post?: never;
+        delete: operations["deleteMaintenanceWindow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance-windows/{id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["endMaintenanceWindow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/performance-events": {
         parameters: {
             query: {
@@ -1205,8 +1257,9 @@ export interface components {
             paused: boolean;
             /** Format: date-time */
             paused_at?: string;
-            /** @description Empty until maintenance-window projection is delivered. */
-            in_maintenance?: boolean | null;
+            in_maintenance: boolean;
+            /** Format: uuid */
+            maintenance_window_id?: string;
             /** Format: double */
             current_value?: number;
             /** Format: double */
@@ -1344,6 +1397,27 @@ export interface components {
             channels: components["schemas"]["ChannelFailureSummary"][];
         };
         /** @enum {string} */
+        MaintenanceWindowStatus: "ACTIVE" | "SCHEDULED" | "ENDED";
+        MaintenanceWindowInput: {
+            instance_ids: string[];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            reason: string;
+        };
+        MaintenanceWindow: components["schemas"]["MaintenanceWindowInput"] & {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            created_by: string;
+            status: components["schemas"]["MaintenanceWindowStatus"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
         PerformanceEventType: "LOCK_BLOCKING" | "LONG_TRANSACTION" | "IDLE_IN_TRANSACTION" | "ACTIVE_SESSIONS_HIGH" | "REPLICATION_LAG" | "TEMP_FILES_SURGE";
         PerformanceEvent: {
             /** Format: uuid */
@@ -1356,6 +1430,9 @@ export interface components {
             alert_status: components["schemas"]["AlertStatus"];
             severity: components["schemas"]["AlertSeverity"];
             disposition: components["schemas"]["AlertDisposition"];
+            in_maintenance: boolean;
+            /** Format: uuid */
+            maintenance_window_id?: string;
             /** Format: date-time */
             derived_at: string;
             /** Format: date-time */
@@ -3448,6 +3525,172 @@ export interface operations {
             };
             /** @description The default policy cannot be deleted. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMaintenanceWindows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Non-deleted maintenance windows with status projected at server time. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"][];
+                };
+            };
+        };
+    };
+    createMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWindowInput"];
+            };
+        };
+        responses: {
+            /** @description Maintenance window created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Invalid maintenance window. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWindowInput"];
+            };
+        };
+        responses: {
+            /** @description Maintenance window updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Invalid or already ended maintenance window. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Maintenance window not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Maintenance window deleted while preserving historical references. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Maintenance window not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    endMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active maintenance window ended at server time. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Maintenance window is not active. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Maintenance window not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

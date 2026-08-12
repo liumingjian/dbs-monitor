@@ -13,6 +13,7 @@ AlertObservation:
     - severity
     - disposition
     - paused
+    - in_maintenance
     - updated_at
     - duration_ms
   properties:
@@ -33,8 +34,7 @@ AlertObservation:
     paused_at: { type: string, format: date-time }
     in_maintenance:
       type: boolean
-      nullable: true
-      description: Empty until maintenance-window projection is delivered.
+    maintenance_window_id: { type: string, format: uuid }
     current_value: { type: number, format: double }
     threshold: { type: number, format: double }
     first_triggered_at: { type: string, format: date-time }

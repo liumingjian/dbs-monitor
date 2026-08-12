@@ -15,6 +15,7 @@ import {
 } from './performanceEvents'
 import {
   PerformanceEventSeverityTag,
+  PerformanceEventMaintenanceTag,
   performanceEventDispositionLabel,
   performanceEventDurationLabel,
   performanceEventSeverityPresentation,
@@ -85,6 +86,7 @@ function PerformanceEventDetailContent({ event, instanceName, search, onDisposit
           <Typography.Title level={2} style={{ margin: 0 }}>{performanceEventTypeLabel(event.event_type)}</Typography.Title>
           <AlertStatus status={event.alert_status} />
           <PerformanceEventSeverityTag severity={event.severity} />
+          <PerformanceEventMaintenanceTag inMaintenance={event.in_maintenance} />
         </Space>
         <Typography.Text type="secondary">{instanceName ?? event.instance_id} · {event.metric_id}</Typography.Text>
       </div>
@@ -104,6 +106,7 @@ function PerformanceEventDetailContent({ event, instanceName, search, onDisposit
       { key: 'status', label: '状态', children: <AlertStatus status={event.alert_status} /> },
       { key: 'severity', label: '级别', children: severity.label },
       { key: 'disposition', label: '处置状态', children: performanceEventDispositionLabel(event.disposition) },
+      { key: 'maintenance', label: '维护窗口', children: event.maintenance_window_id ?? '—' },
       { key: 'derived', label: '首次发生时间', children: performanceEventTimeLabel(event.derived_at) },
       { key: 'updated', label: '最近发生时间', children: performanceEventTimeLabel(event.updated_at) },
       { key: 'recovered', label: '恢复时间', children: performanceEventTimeLabel(event.recovered_at) },
