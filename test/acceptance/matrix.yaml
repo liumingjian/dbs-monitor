@@ -9,6 +9,8 @@
 # 若再定加深基线，同样只增不减，各自在自己的决策记录里交代。
 # B 组（#119，片02/03/04）定稿 7 条加深基线，硬底累加至 67 —— 出处与理由见
 # docs/design/22-v1-acceptance-entries-b.md D1–D7。
+# C 组（#120，片05/06）定稿 4 条加深基线，硬底累加至 71 —— 出处与理由见
+# docs/design/23-v1-acceptance-entries-c.md D1/D2/D4/D8。
 # baseline: true 的条目不许 pending；n-a 必须写 reason。
 # 说明：实现落地前 baseline 条目以 pending 占位；v1 判定时 baseline 仍为 pending 即未达标。
 # test_ref 规范（#118 定）：值必须内含条目 ID 字面量 —— Go 用 TestAcceptance_AC_01_S1 形，
@@ -607,143 +609,282 @@ entries:
     slice: "05"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "端到端成功路径：IA §6.1 日常巡检，实例列表三层信息契约 → 总览 → 标准监控"
+    layer: browser
+    asserts:
+      - "IA §6.1 整条路径：实例列表 → 实例总览 → 可用性/资源/负载/复制/告警摘要 → 进标准监控 → 看异常指标趋势"
+      - "实例列表按三层信息契约呈现：主状态（四档 + 已暂停 override）→ 归因行（规则名 + 当前值）→ C/W/I 计数与五种正交标记"
+      - "Agent 状态、最近采集时间、数据新鲜度是独立展示列，不参与健康计算（「库有问题」与「采集有问题」可区分）"
+      - "筛选与排序齐备且默认视图不隐藏任何实例；已暂停显示暂停时长，超 7 天转警示色"
+      - "实例总览置顶复用同一主状态与归因行，列表与总览的判定永不打架"
+      - "标准监控三组指标区（资源 5 / 数据库 12 / 复制 5）出真实曲线，时间范围、粒度、列数、光标联动可用"
+    pages: ["实例列表", "实例工作台/实例总览", "实例工作台/监控与报警/标准监控"]
+    operations: [listInstancesHealth, getInstanceOverview, getMetricSeries]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "IA §6.1 由本条承载整条路径（23 号 D1）；三层信息契约的呈现面在此，投影正确性归 AC-05-S5"
+  - id: AC-05-S2
+    slice: "05"
+    kind: S2
+    baseline: true
+    title: "IA §6.2 CPU 或连接数异常排障：跳转自动定位触发时间并继承时间范围"
+    layer: browser
+    asserts:
+      - "IA §6.2 整条路径：总览异常卡片 → 告警详情或标准监控 → 定位异常开始时间 → 会话与阻塞 → 筛选活跃会话/长事务/等待事件 → 会话详情 → 回看关联指标"
+      - "从告警跳标准监控自动定位触发时间范围；从标准监控跳会话与阻塞继承时间范围（03 §5.1 全表、§5.2 七项上下文）"
+      - "时间一律绝对 RFC3339 且全部进 URL search params，链接贴给同事打开是同一屏"
+      - "会话详情不展示 SQL 文本，只给 PID / query_start / 数据库 / 数据库用户等原生线索，定位字段可复制并带时效性提示"
+      - "告警详情骨架只断自身列表与详情骨架，不重复走 IA §6.4（22 号 D9 单向约定）"
+    pages: ["实例工作台/实例总览", "实例工作台/监控与报警/标准监控", "实例工作台/会话与阻塞/活跃会话", "实例工作台/会话与阻塞/会话详情"]
+    operations: [getInstanceOverview, getMetricSeries, getInstanceSessions, getSessionDetail]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "IA §6.2 由本条承载（23 号 D1）；上下文继承是本条独有断言点，否决与 §6.3 合并"
+  - id: AC-05-S3
+    slice: "05"
+    kind: S3
+    baseline: true
+    title: "IA §6.3 锁等待与阻塞排障：锁等待 → 阻塞链 → 阻塞源会话详情，全页无 SQL 文本"
+    layer: browser
+    asserts:
+      - "IA §6.3 整条路径：总览/告警 → 会话与阻塞 → 锁等待列表 → 阻塞链 → 阻塞源会话详情 → PID/用户/数据库/客户端/持续时间 → 关联指标趋势"
+      - "在目标库真造三层递归阻塞链（真事务真锁等待，可与 AC-03-S2 共用同一次现场准备，执行不合并）"
+      - "只展示最近一次成功采集的瞬时态，明示采集时间与新鲜度，不把旧快照当实时"
+      - "全页渲染文本与 API 响应全字段扫描：不含任何 SQL 文本（原文/脱敏/截断摘要一律没有），无「SQL ID」统称，无按 PID/queryid 搜索入口"
+      - "首版只读：页面不出现 kill / cancel / 批量终止入口"
+      - "命名固定「长查询采样记录」「查询统计排行」，不出现「慢 SQL 明细」类名称"
+    pages: ["实例工作台/会话与阻塞/锁等待", "实例工作台/会话与阻塞/阻塞链", "实例工作台/会话与阻塞/会话详情", "实例工作台/会话与阻塞/长查询采样记录"]
+    operations: [getInstanceSessions, getBlockingChains, getSessionDetail, listLongQuerySamples]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "IA §6.3 由本条承载（23 号 D1）；无 SQL 文本全扫是只读断言，不进 D4 白名单（23 号 D10）"
+  - id: AC-05-S4
+    slice: "05"
+    kind: S4
+    baseline: false
+    title: "AntD 交互观感门（50 行实例列表首次渲染 + 标准监控 22 图切换时间范围）"
+    layer: browser
+    asserts: []
+    pages: ["实例列表", "实例工作台/监控与报警/标准监控"]
+    operations: []
+    crosscut: []
+    status: n-a
+    test_ref: null
+    owner_issue: 115
+    reason: "人工观感判定项，无机器阈值，不可自动判定，按 20 号 D6.5 不得伪装成 covered；人工判定归 #115 真实 Linux 验收会话执行，结论回写骨架欠账第 4 条；实测卡顿即触发 11 §9 二类（结构型）停下、开 wayfinder 票交回 HITL，不得自行换库（ECharts 卡顿有 uPlot 预写后备，走一类预授权路径）"
+  - id: AC-05-S5
+    slice: "05"
+    kind: S5
+    baseline: true
+    title: "实例健康归并全语义由真实告警事实驱动，服务端聚合投影口径不失真"
+    layer: api
+    asserts:
+      - "四类事实全部经业务 API 真实产生：片②真规则触发、片③真忽略、片④真维护窗口、片⑦真暂停，无一条直插业务表"
+      - "判定顺序：已暂停 override → critical/warning 取最高 → 从未成功采集为未知 → 否则正常"
+      - "已忽略退出归并：不进主状态、不计入 C/W/I、不进归因行，但告警列表仍可见"
+      - "info 不染色；纯 info 时归因行展示最早那条 info"
+      - "「未知」一次性单调：唯一入口是从未成功采集，首采成功后永不再回（此后失联由内置规则染色，不变灰）"
+      - "归因行取最坏级别中首次触发最早者，不堆叠多行"
+      - "绿色永不等于「什么都没有」：计数为 0 也不隐藏已忽略与配置缺失标记"
+      - "结构性不适用与配置缺失不产生告警、不进健康"
+      - "实例列表与实例总览置顶块读同一投影，口径不分叉"
+    pages: []
+    operations: [listInstancesHealth, getInstanceOverview]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "A5 纯函数单测证明算得对，证明不了它被接进投影路径；归并入参跨片②③④⑦，接线错则全平台健康失真——按 21 号 D1 升为加深基线，理由见 23 号 D4"
   - id: AC-05-F1
     slice: "05"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
-    crosscut: []
+    title: "权限拒绝：观察面读取面无收窄，且不出现可用的写入口"
+    layer: api
+    asserts:
+      - "三档角色账号一律经用户管理 API 创建（20 号 D9），不直插 user 表"
+      - "三档角色在实例列表、实例总览、会话与阻塞、全局告警两列表所见实例集合与字段完全一致（可见性不收窄）"
+      - "观察面不出现任何可用的写入口（暂停归片⑦、处置归片③、规则归片②）"
+      - "只读运维对全部观察面读端点调用成功，非 403、非静默降级"
+    pages: ["实例列表", "全局告警/当前告警", "全局告警/告警历史", "实例工作台/会话与阻塞/活跃会话"]
+    operations: [listInstancesHealth, getInstanceOverview, getInstanceSessions, listActiveAlerts, listAlertHistory]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "全矩阵唯一一条断「读取面无收窄」的条目，覆盖页面最多，不可由 AC-01-F1 / AC-07-S2 / AC-03-F1 / AC-04-F1 推得（23 号 D7）"
   - id: AC-05-F2
     slice: "05"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
-    asserts: []
+    title: "空状态：片①能产出的 11 码逐码由真实后端条件驱动，200 + 码且不补 0"
+    layer: api
+    asserts:
+      - "逐码制造真实后端条件，驱动出片①能产出的 11 个 Unavailability 码，每码至少一次真实产出"
+      - "全部空状态一律 200 + 码，不走 error 路径（07 §8.3）"
+      - "空状态是值不是 error：缺桶不出现在结果里，绝不补 0"
+      - "码值属封闭 13 码表，不出现表外码；同一场景不产生两个自相矛盾的码"
     pages: []
-    operations: []
+    operations: [getMetricSeries, listInstanceCapabilities, getQueryStatsRanking]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "S1 判据「13 码空状态由后端真实驱动」的广度面（23 号 D2）。范围按 S1 跨片原则对账：本条驱动片①产出的 11 码；COLLECTION_PAUSED 的产生条件归片⑦（UI 面已由 AC-07-F2 覆盖）；VERSION_UNSUPPORTED 在 P0 无产生者；13 码全表对账归片⑩（#110/#114）——不是漏两码"
   - id: AC-05-F3
     slice: "05"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "目标库不可达或能力不足：查询统计排行五态严格可区分，绝不表现为空表"
+    layer: api
+    asserts:
+      - "查询统计排行五态严格可区分：未启用 / 权限不足 / 暂时不可用 / 统计已重置 / 区间内无记录"
+      - "任一不可用态绝不表现为空表或「暂无数据」，页面只说明能力状态与排查方向"
+      - "不提供启用扩展 / 提权按钮（03 §4.5）"
+      - "真停目标库容器后，会话与阻塞页降级并明示最近一次成功采集时间与新鲜度，不把旧快照当实时"
+      - "降级不表现为「有数据但全零」"
+    pages: ["实例工作台/会话与阻塞/查询统计排行", "实例工作台/会话与阻塞/活跃会话"]
+    operations: [getQueryStatsRanking, getInstanceSessions]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "「统计已重置」与「区间内无记录」两态在片①完全没有对象，不可由 AC-01-F3 推得（23 号 D8）"
   - id: AC-05-F4
     slice: "05"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "平台自身故障不污染健康证据面：实例不得翻绿、未恢复告警不得被擦掉"
+    layer: api
+    asserts:
+      - "注入平台库不可达（真停平台 PG 容器，与 AC-01-F4 / AC-09-F4 同一手法）"
+      - "期间实例列表不得把实例主状态改写为「正常」或「无数据」，不得擦掉未恢复告警"
+      - "平台自身故障表现为平台侧不可用（09 D6），而非目标实例状态的变化"
+      - "恢复后归因行、C/W/I 计数与正交标记与故障前一致：不回放、不重算出第二个结论"
+    pages: ["实例列表"]
+    operations: [listInstancesHealth]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "「绿色是最危险的谎」是观察面独有的下游语义，AC-01-F4（零样本零告警）与 AC-09-F4（不白屏不 502）都断不到（23 号 D7）"
+  - id: AC-05-F5
+    slice: "05"
+    kind: F5
+    baseline: true
+    title: "13 码在观察面各页面均有文案与去向链接，COLLECTION_PAUSED 不冒充别的码"
+    layer: browser
+    asserts:
+      - "11 码 × 观察面各页面：每码渲染专属文案，且带 03 §7.2 规定的去向链接（如「无权限 → 采集管理」）"
+      - "COLLECTION_PAUSED 绝不渲染成「采集失败」或「数据库不可达」"
+      - "空状态壳组件对 13 码穷尽（assertNever），无兜底文案吞码"
+      - "任一码的空状态均不渲染成 0，曲线断开而非落到零线"
+    pages: ["实例工作台/监控与报警/标准监控", "实例工作台/会话与阻塞/查询统计排行", "实例工作台/实例总览"]
+    operations: [getMetricSeries, getQueryStatsRanking]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "S1 判据「13 码空状态由后端真实驱动」的 UI 覆盖面（23 号 D2）；与 AC-01-F2 的界是「码的广度」对「一个码的整条路径 + B6 四项」，加深基线不许 pending"
   # ── 片06 · 增强监控
   - id: AC-06-S1
     slice: "06"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "端到端成功路径：开页即基线四要素，曲线是真实 5 秒原始点"
+    layer: browser
+    asserts:
+      - "打开增强监控页签零配置即得基线四要素：最近 30 分钟窗口 / 5 秒粒度（step=raw）/ 平均值聚合 / 两列布局"
+      - "曲线数据来自片①共用管线的真实 5 秒样本，原始点距 5 秒，响应回传实际粒度"
+      - "五个控件可用：指标管理（候选集来自字典 EnhancedCandidate，27 项）、时间选择、聚合方式、布局切换、指标含义与详情"
+      - "页签始终可见、无需开通或启用任何东西；不是标准监控的粒度选项而是并列页签"
+      - "打开本页不向目标库发起任何额外查询（读的全是已采样本）"
+      - "页面静态说明高频监控的资源代价，文案不暗示「打开页面才采集」"
+      - "时间窗口进 URL search params，链接可分享；dataUpdatedAt 随轮询前进"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, getMetricDetail]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "S1 判据「基线四要素可用」；30 分钟是查询窗口下界不是等待时长，无需真等 30 分钟（23 号 D9）"
   - id: AC-06-F1
     slice: "06"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
-    crosscut: []
+    title: "权限：页签对全部角色可见性不收窄，且本页无任何写端点"
+    layer: api
+    asserts:
+      - "三档角色会话各打开增强页：页签可见、数据一致、无「需要更高权限」提示、无降级"
+      - "本页涉及的全部 operationId 在 OpenAPI 里没有一条写语义的 x-required-role 条目"
+      - "页面不出现任何启停 / 开通 / 套餐类入口（ADR-04 冻结否决项）"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, getMetricDetail]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "不记 n-a：权限语义在本片存在（ADR-09 可见性不收窄）；第二条断言是「本页无写面」这条本片决策的唯一验收面，守的是页面职责边界（23 号 D6）"
   - id: AC-06-F2
     slice: "06"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
-    crosscut: []
+    title: "空状态：5 秒粒度下秒级空隙保持空隙，不补 0、不插值、不重用旧值"
+    layer: api
+    asserts:
+      - "窗口内存在真实采集空隙时，缺桶不出现在结果里（不补 0）"
+      - "不插值、不重用旧值：相邻点之间的空隙在响应里就是缺失，不是零值也不是重复值"
+      - "整窗无样本时返回 200 + 封闭 13 码之一，不返回空数组冒充「有数据但全零」"
+      - "毛刺与缺数不被编造的数据抹平：真实采集值原样返回，无平滑"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries]
+    crosscut: [INV-2]
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "5 秒粒度是全矩阵对「不补 0」最锋利的一次执行；#121 的 INV-2 端到端面可引用本条，引用不改变横切独立计分"
   - id: AC-06-F3
     slice: "06"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "能力不足或目标库不可达：逐图局部降级，且点距随周期配置如实变化"
+    layer: browser
+    asserts:
+      - "真回收能力（或真停目标库容器）后，只有受影响的那张图降级并显示原因，其余图照常出曲线——模块永不整体消失"
+      - "降级原因码属封闭 13 码，经领域图表组件的必填 unavailability 入参渲染，不造第二套呈现、不引入通用 Badge"
+      - "能力四态在页面可见，降级不表现为「有数据但全零」"
+      - "经片⑦周期配置入口把任务周期由 5s 调到 10s 后，同一张图原始点距如实变为 10s，响应回传的实际粒度跟着变，页面不谎称仍是 5 秒"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "S1 判据「能力不足局部降级并显示原因」；user story 14「配置与呈现不分裂」并入本条同一次执行，不单设条目（23 号 D5/D9）"
   - id: AC-06-F4
     slice: "06"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "平台自我保护细因与目标库故障在呈现上可区分，跳过不冒充数据库故障"
+    layer: browser
+    asserts:
+      - "真造背压与退避（并发压满采集池 / 触发保护性退避），页面对该指标显示 COLLECTION_FAILED 并区分平台侧细因 SKIPPED_BACKPRESSURE 与 BACKOFF"
+      - "平台自我保护造成的秒级空隙绝不渲染成「数据库不可达」或「采集配置错误」（12 §5.3 的展示层兑现）"
+      - "同一页面上目标库侧故障与平台侧自我保护两类原因用户可区分，不混为一谈"
+      - "增强页不引入第二套判定：不产生新评估、不产生新告警、不影响健康归并"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 120
-    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+    reason: "本条显式不断 NO_DATA 豁免：12 号 D7 明文「背压跳过不推进完整性水位，连续缺数照常进 NO_DATA」，该口径优先于 T14 的一般表述——T14 管的是平台故障（目标库根本没被观测），背压是按设计主动放弃观测，缺数是事实，掩盖它才是错的（23 号 D5）"
   # ── 片07 · 采集管理页
   - id: AC-07-S1
     slice: "07"
