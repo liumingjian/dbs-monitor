@@ -11,6 +11,11 @@
 # docs/design/22-v1-acceptance-entries-b.md D1–D7。
 # C 组（#120，片05/06）定稿 4 条加深基线，硬底累加至 71 —— 出处与理由见
 # docs/design/23-v1-acceptance-entries-c.md D1/D2/D4/D8。
+# D 组（#121，片08 + 横切组）定稿 7 条加深基线，硬底累加至 78 —— 出处与理由见
+# docs/design/24-v1-acceptance-entries-d.md D2/D3。四票定稿完毕，硬底最终值 78。
+# 横切条目新增 rides_on 字段（24 号 D7）：横切自带断言集与 test_ref 独立计分，
+# rides_on 只记账它搭在哪次执行现场上；crosscut 写在片条目上是覆盖维，两者不互为反向索引。
+# 执行序两条硬约束（24 号 D1/D14）：AC-08-S1 最先（全矩阵接入前置），AC-08-S7 最末（停 server 跑离线轮换）。
 # baseline: true 的条目不许 pending；n-a 必须写 reason。
 # 说明：实现落地前 baseline 条目以 pending 占位；v1 判定时 baseline 仍为 pending 即未达标。
 # test_ref 规范（#118 定）：值必须内含条目 ID 字面量 —— Go 用 TestAcceptance_AC_01_S1 形，
@@ -1018,76 +1023,239 @@ entries:
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   # ── 片08 · 凭据与接入
+  # 执行序硬约束（24 号 D14）：AC-08-S1 必须最先执行（全矩阵接入前置），
+  # AC-08-S7 必须最后执行（停 server 跑离线轮换，污染后续状态）。其余条目顺序自由。
   - id: AC-08-S1
     slice: "08"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
+    title: "接入前置主干：创建即验 → 凭据密文落库 → 登记 Agent 一次性拿 token → 真进程上报 → 可见"
+    layer: api
+    asserts:
+      - "首启 admin 由 INITIAL_ADMIN_PASSWORD 引导，三档角色账号一律经用户管理 API 创建（20 号 D9），不直插 user 表"
+      - "创建实例走创建即验：连接测试 + 版本门（被监控 PG ≥13）都过才落库"
+      - "凭据以密文落库：password_ciphertext 非空、password_key_version 非空，请求响应均不含明文"
+      - "登记 Agent（enrollAgent）在一次性响应中拿到 token 明文，token 落盘 0600，服务端只存 SHA-256"
+      - "cmd/monitor-agent 以真进程运行、走真实 token 接入，不预置任何行（20 号 D7）"
+      - "agent 真实上报后指标经业务 API 可见，全链路无直插业务表"
+    pages: ["实例列表", "实例工作台/接入设置"]
+    operations: [createInstance, testInstanceConnection, enrollAgent, reportAgentMetrics, createUser]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "本条同时是 make acceptance 的 setup 阶段与全矩阵的执行前置（24 号 D1）；安装命令、CA 指纹钉扎、unit 写入、安装期时钟自检不在本条射程，显式移交 #110"
+  - id: AC-08-S2
+    slice: "08"
+    kind: S2
+    baseline: true
+    title: "迁移一：明文 password 列与旧读写路径一次性删除"
+    layer: db
+    asserts:
+      - "迁移后 instance 表无 password 明文列，且全库查询扫不出任何明文口令"
+      - "password_ciphertext / password_key_version 两列存在且对全部实例非空"
+      - "keyring 只在「不存在且库中无加密凭据」时生成一次，重启不替换、不新增版本"
+    pages: []
+    operations: []
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据「两笔迁移完成且旧路径删除」的第一笔，按 21 号 D1 升加深基线；全矩阵唯一一条 DB 层只读断言——API 层永远看不见明文列是否还在（24 号 D2）"
+  - id: AC-08-S3
+    slice: "08"
+    kind: S3
+    baseline: true
+    title: "迁移二：B7 例外从创建实例响应迁至登记/轮换，一次性回显关闭后不可再读"
+    layer: browser
+    asserts:
+      - "创建实例 201 响应不含 agent_token 字段（B7 唯一例外已迁走）"
+      - "登记/轮换成功后弹窗一次性显示 token 明文，含复制按钮与「关闭后不再显示」警示"
+      - "关闭弹窗后页面无任何再次读取控件，刷新后不再出现"
+      - "再次调用登记端点只会换发新 token，绝不回显旧 token"
+      - "用户初始口令/重置口令同一断言形状成立（一次性回显、无二次读取路径）"
+      - "PG 凭据区 password 字段掩码呈现，无任何查看控件"
+    pages: ["实例工作台/接入设置", "用户管理/用户列表"]
+    operations: [enrollAgent, rotateAgentToken, createUser, resetUserPassword]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据的第二笔迁移，升加深基线；片⑧唯一一条浏览器条目（24 号 D13）——vitest 证明不了真实一次性响应被接进弹窗、也证明不了刷新后拿不回来，spec 的 vitest 那条仍照做，两者不互相顶替"
+  - id: AC-08-S4
+    slice: "08"
+    kind: S4
+    baseline: true
+    title: "Agent 生命周期四态可区分：从未登记 / 应在线 / 已吊销 / 已停用，吊销 ≠ 停用"
+    layer: api
+    asserts:
+      - "四态由持久化事实（是否期待 / 令牌哈希 / 签发时间 / 吊销时间 / 首次登记时间）判定，不靠 agent_token_hash IS NULL 猜"
+      - "轮换提交后旧 token 立即被拒（401），新 token 立即可用"
+      - "吊销后 agent_expected 仍为 true、实例继续显示离线"
+      - "停用后 host.* 与 Agent 离线规则结构性不适用，历史样本保留"
+      - "停用后重新启用必须重新登记签发新 token，旧 token 不复活"
+    pages: ["实例工作台/接入设置"]
+    operations: [enrollAgent, rotateAgentToken, revokeAgentToken, disableAgent, reenableAgent]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "四态是片⑦呈现的读取契约来源（24 号 D2）；一旦塌成布尔判断，片⑦全线错而片⑦自己测不出，故升加深基线"
+  - id: AC-08-S5
+    slice: "08"
+    kind: S5
+    baseline: true
+    title: "用户管理两页语义：一次性口令、只停用不删除、启用态平台管理员 ≥1 并发守卫"
+    layer: api
+    asserts:
+      - "创建用户输入仅用户名 + 角色，初始口令服务端随机生成并一次性回显"
+      - "停用立即断登录并废全部会话；用户不可删除、用户名不可改不回收，历史处置留痕仍可归因"
+      - "自改口令须验旧口令，最小长度 12 字符"
+      - "并发两笔「停用/降级最后两名平台管理员之一」至多一笔提交成功，另一笔被拒并说明原因（真库并发事务）"
+      - "任何用户不得停用或降级自己，被拒时说明原因"
+    pages: ["用户管理/用户列表"]
+    operations: [listUsers, createUser, updateUserRole, deactivateUser, resetUserPassword, changeOwnPassword]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据「S2 定稿的两页语义全落地」的用户页一半，升加深基线；本条的状态变更类断言一律用带条目 ID 前缀的一次性账号（24 号 D11），不碰三个长期角色账号"
+  - id: AC-08-S6
+    slice: "08"
+    kind: S6
+    baseline: true
+    title: "移除实例三层分收：配置立删、未恢复告警连带关闭留痕、样本随 TTL 不同步删"
+    layer: api
+    asserts:
+      - "输入实例名双确认后，实例、采集计划、凭据密文、Agent 登记与令牌立删，采集即刻停止"
+      - "该实例全部未恢复告警连带关闭并留痕关闭原因，告警历史与处置留痕保留"
+      - "时序样本不同步删除，随 30 天分区 TTL 过期"
+      - "重接为新实例、不继承任何历史"
+    pages: ["实例工作台/接入设置"]
+    operations: [deleteInstance]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据的实例页一半，升加深基线；三层各自都可能单独坏掉，且「移除」字面成立与「历史归因不悬空」是一对相反方向的约束（24 号 D2）"
+  - id: AC-08-S7
+    slice: "08"
+    kind: S7
+    baseline: true
+    title: "主密钥离线轮换：停 server → 轮换 → 重启 → 密文仍可解，中断可重跑"
+    layer: api
+    asserts:
+      - "轮换后全部 password_key_version 为 vN+1，旧版本零引用"
+      - "重启后密文仍可解、采集正常恢复出点"
+      - "旧 key 在无引用后清理；仍有引用时不得删旧 key（反向断言）"
+      - "轮换执行到一半 kill 掉后重跑，结果与一次跑完一致"
     pages: []
     operations: []
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "13 号 D7/D8 整条承诺（备份不含 keyring、遗失即不可恢复、无后门）在自动化面上的唯一验收面，故不降级为可 pending 的普通加深；执行序必须最末（24 号 D14），停 server 跑离线命令是产品承诺的形态，不停 server 跑等于验收一个不存在的形态"
+  - id: AC-08-S8
+    slice: "08"
+    kind: S8
+    baseline: false
+    title: "Agent 二进制下载端点鉴权：Agent token 鉴权、无 token 401、非法 arch 被拒"
+    layer: api
+    asserts:
+      - "downloadAgentBinary 需 Agent token 鉴权，无 token / 错 token 返回 401"
+      - "arch 参数仅接受受支持取值，非法值被拒且不落 500"
+    pages: ["实例工作台/接入设置"]
+    operations: [downloadAgentBinary]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "19 号决策后新增的 HTTP 面，不在片⑧ spec 的 S1 验收判据内，按 21 号 D1 准入不够格升基线 —— 全矩阵第二条允许 pending 的普通加深（第一条是 22 号的 90 天清理），两条都进 Go/No-Go 的 pending 清单；安装脚本本体归 #110"
   - id: AC-08-F1
     slice: "08"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
-    crosscut: []
+    title: "权限拒绝：三档角色 × 两类写面（接触秘密全归平台管理员，元数据编辑归告警管理员）"
+    layer: api
+    asserts:
+      - "平台管理员专属面（创建实例、更新 PG 凭据、Agent 五操作、移除实例、用户管理全部写操作）× 三档角色：仅平台管理员成功，其余拿到规定拒绝语义而非 500 或静默成功"
+      - "元数据编辑面（updateInstance）× 三档角色：告警管理员成功，只读运维被拒"
+      - "三档角色对本片全部读端点可见性不收窄，无权控件置灰并说明所需角色"
+      - "本片全部新端点均声明 x-required-role（B3 自动覆盖）"
+    pages: ["实例工作台/接入设置", "用户管理/用户列表"]
+    operations: [createInstance, updateInstance, updateInstanceCredential, enrollAgent, rotateAgentToken, revokeAgentToken, disableAgent, reenableAgent, deleteInstance, listUsers, createUser, updateUserRole, deactivateUser, resetUserPassword]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "一条覆盖两类写面，不拆两条：20 号 D6.2 的粒度取向 + D9 规定的「三种角色各跑一遍」本就是同一次执行（24 号 D6）；INV-3 的「写能力收窄」端到端面搭在本条执行上"
   - id: AC-08-F2
     slice: "08"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
+    title: "空状态：本片无时序读取面"
+    layer: api
     asserts: []
     pages: []
     operations: []
     crosscut: []
-    status: pending
+    status: n-a
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "片⑧不产时序、无观测面。VERSION_UNSUPPORTED 是接入即拒（写操作的失败分类）不是空状态码，塞进 F2 会稀释「封闭 13 码 = 观测面不可用性」这个概念本身，故归 F3（24 号 D3）；空状态保护由 AC-08-F5 补回"
   - id: AC-08-F3
     slice: "08"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "创建即验三类分类原因：网络不通 / 认证失败 / 版本 <13，且三类都不落库"
+    layer: api
+    asserts:
+      - "停目标库容器或指向不存在的 host:port → 不可达类分类原因，非 500、非静默成功"
+      - "给错 username/password → 认证失败类分类原因，错误映射服从 13 号 D9 稳定映射"
+      - "对真实 postgres:12 实例接入 → 封闭码 VERSION_UNSUPPORTED，接入即拒"
+      - "三类请求返回后库里均不存在该实例行（「库里永远不存在从未连通过的实例」的唯一验收面）"
+      - "编辑同构重测：host/port/database 改动用库内既存凭据重测，失败保留原值原密文"
+    pages: ["实例列表", "实例工作台/接入设置"]
+    operations: [createInstance, testInstanceConnection, updateInstance, updateInstanceCredential]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "版本门用真实 postgres:12 容器（compose 独立 profile，不进默认启动集），不 mock 版本号——20 号 D8 明令；本条使 VERSION_UNSUPPORTED 有了唯一产生者，闭合 23 号 D2 在 AC-05-F2 里记的「无产生者」缺口（24 号 D4）"
   - id: AC-08-F4
     slice: "08"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
+    title: "keyring 类故障是平台自身故障：不降格为 DB_UNREACHABLE、不计入 NO_DATA、绝不静默生成新密钥"
+    layer: api
+    asserts:
+      - "把 master-key-vN chmod 成错误权限（或让 current 悬空）后，该实例凭据读取被拒并诊断为平台自身故障"
+      - "该实例不产生 DB_UNREACHABLE 告警、不计入 NO_DATA（T14 硬约束）"
+      - "恢复权限并重启后 keyring 目录内文件数与版本号与故障前完全一致——平台绝不静默生成新密钥"
     pages: []
     operations: []
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "真实手段改文件权限，不注入错误、不 mock；第三条断言单列不与第一条合并——静默生成新密钥是无声的秘密丢失，前两条可以同时全绿（24 号 D5）；暴露面（平台健康四态 / journal / 诊断 API）归片⑨的 AC-09-*，本条只断故障事实产生且不污染"
+  - id: AC-08-F5
+    slice: "08"
+    kind: F5
+    baseline: true
+    title: "新接入实例在首个采集周期完成前落 NO_DATA，不是 0、不是空数组、不是 200 空对象"
+    layer: api
+    asserts:
+      - "创建即验通过后、首个采集周期完成前，观测面落 NO_DATA 或对应封闭码"
+      - "不渲染成 0、不返回空数组冒充有数据、不返回 200 空对象"
+    pages: ["实例列表", "实例工作台/总览"]
+    operations: [listInstancesHealth, getMetricSeries]
+    crosscut: [INV-1]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "补回 AC-08-F2 记 n-a 让出的空状态保护，故升加深基线（24 号 D3）；全矩阵唯一覆盖「刚接入、还没有任何样本」这个时刻的条目——AC-05-F2 的 11 码逐码驱动跑在已有数据的实例上，跑不到这个窗口"
   # ── 片09 · 平台可观测性
   - id: AC-09-S1
     slice: "09"
@@ -1236,87 +1404,118 @@ entries:
     owner_issue: 118
     reason: "14 D6 四类故障注入的第四类，Q6 的七条里无归宿，补为加深基线"
   # ── 横切组（独立计分；每条必须同时有 A 栏表驱动单测与端到端断言）
+  # 挂载形态（24 号 D7）：横切条目自带 asserts 与 test_ref，达标由它自己证明，与承载执行是否绿无关；
+  # rides_on 显式记账它搭在哪次执行上。rides_on 写在横切条目（执行编排），
+  # crosscut 写在片条目（覆盖维，不计分），两者不是互为反向索引。
   - id: INV-1
     slice: crosscut
     kind: crosscut
     baseline: true
     title: "告警状态五档，压制是正交轴"
     unit_test: A1        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
-    layer: TBD               # 端到端面的主断言层
-    asserts: []
+    layer: api
+    rides_on: [AC-02-S1, AC-02-F3, AC-07-S3]
+    asserts:
+      - "状态字段取值封闭于五档（OK / PENDING / FIRING / NO_DATA / RECOVERED），全程不出现第六个字面量"
+      - "确认 / 维护窗口 / 已暂停三个标记与状态字段正交：标记变化不改变状态"
+      - "状态迁移不清除已置上的正交标记"
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "端到端面搭在片②的四态迁移、转 NO_DATA 与片⑦的冻结三次执行上（24 号 D8）；引用不计入承载条目的达标，本条自带断言集独立计分"
   - id: INV-2
     slice: crosscut
     kind: crosscut
     baseline: true
     title: "实例健康 = 未恢复告警最坏归并 + 已暂停 override，单一来源"
     unit_test: A5        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
-    layer: TBD               # 端到端面的主断言层
-    asserts: []
+    layer: api
+    rides_on: [AC-05-S5]
+    asserts:
+      - "「未恢复告警最坏级别 × 已暂停」四种组合逐一断出的健康值全部正确"
+      - "不存在第二个端点返回与之矛盾的健康值（单一来源）"
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "纠正 23 号 §14 给本票的提示（24 号 D8）：INV-2 是健康归并 override，不是「不补 0」（不补 0 是 T2 口径，不在四不变式内），AC-06-F2 断的是 5 秒空隙保持空隙，与本条无语义交集、搭不上；天然承载面是 23 号自设的 AC-05-S5，其现场（真规则触发 / 真忽略 / 真维护窗口 / 真暂停）恰是本条四种组合所需的全部输入。按纪律 23 号一字不动，纠正只落在 24 号与本 reason"
   - id: INV-3
     slice: crosscut
     kind: crosscut
     baseline: true
     title: "三档全局角色：可见性不收窄、写能力收窄、凭据永不回显"
-    unit_test: B7        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
-    layer: TBD               # 端到端面的主断言层
-    asserts: []
+    unit_test: A10       # 24 号 D10 新增：三档角色 × 页面 × 写操作的可见性/写能力判定表
+    layer: api
+    rides_on: [AC-08-S1, AC-05-F1, AC-08-F1]
+    asserts:
+      - "可见性不收窄：三档角色所见实例集合与字段完全一致（搭 AC-05-F1 现场）"
+      - "写能力收窄：接触秘密的动作仅平台管理员成功（搭 AC-08-F1 现场）"
+      - "凭据永不回显：创建实例 201 / 实例详情 / 凭据更新三处响应体全文正则扫描，命中口令明文、密文 base64、password_key_version、完整 DSN 即红"
+      - "一次性回显只出现一次：同一 token / 初始口令第二次读取端点拿不到，只能换发新的"
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "unit_test 由骨架预填的 B7 改为新增 A10（24 号 D10）——B 栏是结构守卫，扫 schema 只证明「声明齐全」，一份把所有端点都声明成 viewer 的 spec 能让 B3 全绿，顶不了表驱动判定；B7 退回结构守卫侧的分工：B7 管「schema 里不许声明」（含本片例外从创建实例迁至登记/轮换，先红后绿），本条管「真实响应体里确实没有」。用全文正则而非字段白名单，因为要防的是意料之外的字段（24 号 D12）"
   - id: INV-4
     slice: crosscut
     kind: crosscut
     baseline: true
     title: "三条内置采集状态规则不可删不可停，严重级别下限 warning"
-    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
-    layer: TBD               # 端到端面的主断言层
-    asserts: []
+    unit_test: A11       # 24 号 D10 新增：三条内置规则的受限语义判定表（存在 / 启用 / severity 下限）
+    layer: api
+    rides_on: [AC-02-S2]
+    asserts:
+      - "三条规则装机即存在，删除请求被 4xx + 封闭错误码拒绝"
+      - "停用请求被拒，三条规则启用态不可变更"
+      - "severity 改 info 被拒；warning / critical 之间可自由改；阈值与通知策略可改"
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "unit_test 由骨架预填的 A9（枚举码 golden）改为新增 A11（24 号 D10）；本条断受限语义，BUILTIN-1..3 断「真的会点着」——两者不重复，见 24 号 D9"
   - id: BUILTIN-1
     slice: crosscut
     kind: crosscut
     baseline: true
-    title: "内置采集状态规则 1"
-    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
-    layer: TBD               # 端到端面的主断言层
-    asserts: []
+    title: "内置规则「数据库不可达」（pg.availability.reachable）被真实故障打到 FIRING"
+    unit_test: A11       # 与 INV-4 共用受限语义判定表；端到端面不同（24 号 D10）
+    layer: api
+    rides_on: [AC-01-F5]
+    asserts:
+      - "停目标库容器后，该内置规则真实进入 FIRING（不是只躺在规则表里）"
+      - "默认严重级别 critical，实例健康随之按 INV-2 归并"
+      - "目标库恢复后按滞回语义恢复，不残留未恢复告警"
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "按三条规则切而非按受限语义切（24 号 D9）：受限语义已由 INV-4 覆盖，重复切会让横切组两条断同一件事；「规则在表里但从来没被评估过」是最典型的改坏了没人看得出来，INV-4 全绿与它从未触发可以同时成立"
   - id: BUILTIN-2
     slice: crosscut
     kind: crosscut
     baseline: true
-    title: "内置采集状态规则 2"
-    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
-    layer: TBD               # 端到端面的主断言层
-    asserts: []
+    title: "内置规则「Agent 离线」（agent.status）被真实故障打到 FIRING"
+    unit_test: A11       # 与 INV-4 共用受限语义判定表；端到端面不同（24 号 D10）
+    layer: api
+    rides_on: []
+    asserts:
+      - "kill agent 真进程后，该内置规则真实进入 FIRING"
+      - "默认严重级别 critical"
+      - "Agent 停用（非吊销）时该规则结构性不适用，不产生离线告警（承 AC-08-S4 的四态语义）"
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "现场与片⑦的 Agent 离线执行可复用，但吊销 / 停用两态的区分只有本条与 AC-08-S4 覆盖，故 rides_on 留空、独立执行一次（24 号 D9）"
   - id: BUILTIN-3
     slice: crosscut
     kind: crosscut
     baseline: true
-    title: "内置采集状态规则 3"
-    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
-    layer: TBD               # 端到端面的主断言层
-    asserts: []
+    title: "内置规则「数据过期」（collector.last_success_time）被真实故障打到 FIRING"
+    unit_test: A11       # 与 INV-4 共用受限语义判定表；端到端面不同（24 号 D10）
+    layer: api
+    rides_on: []
+    asserts:
+      - "停采集使新鲜度超阈值后，该内置规则真实进入 FIRING"
+      - "默认严重级别 warning（下限即默认，改 info 被拒由 INV-4 覆盖）"
+      - "采集恢复后按滞回语义恢复"
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+    reason: "独立执行一次；采集新鲜度阈值参数化到秒级是本条跑得完的前提，是 24 号 D15 外溢到实现的硬要求之一 —— 不参数化就只能直写历史样本，落进 D4 白名单，而四组定稿后 exceptions 全程为 []"
