@@ -1169,13 +1169,14 @@ entries:
     asserts:
       - "downloadAgentBinary 需 Agent token 鉴权，无 token / 错 token 返回 401"
       - "arch 参数仅接受受支持取值，非法值被拒且不落 500"
+      - "agent_binary_dir 缺失或二进制不齐时，端点返回明确失败而非 404 沉默，且该缺失进入健康事实源（27 号 D9）"
     pages: ["实例工作台/接入设置"]
     operations: [downloadAgentBinary]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 121
-    reason: "19 号决策后新增的 HTTP 面，不在片⑧ spec 的 S1 验收判据内，按 21 号 D1 准入不够格升基线 —— 全矩阵第二条允许 pending 的普通加深（第一条是 22 号的 90 天清理），两条都进 Go/No-Go 的 pending 清单；安装脚本本体归 #110"
+    reason: "19 号决策后新增的 HTTP 面，不在片⑧ spec 的 S1 验收判据内，按 21 号 D1 准入不够格升基线 —— 全矩阵第二条允许 pending 的普通加深（第一条是 22 号的 90 天清理），两条都进 Go/No-Go 的 pending 清单；安装脚本本体归 #110。27 号 D11 补入第三条断言：agent 二进制由部署时放入 agent_binary_dir（我方不发布二进制，D2/D9），因此「目录缺失」是真实可达的运行态，是本票唯一有产品语义的产出；条目数与硬底不变"
   - id: AC-08-F1
     slice: "08"
     kind: F1
