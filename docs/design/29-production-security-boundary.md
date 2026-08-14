@@ -2,7 +2,7 @@
 
 > 出处：[生产安全边界的具体断言集 #112](https://github.com/liumingjian/dbs-monitor/issues/112)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：地图 Notes 第 6 条「HTTP 安全头由 server 无条件输出、server 自行终结 TLS、允许但不依赖前置反向代理」只定了边界的**存在**，没定它的**内容**。本文把这条边界写成可断言的具体取值，并逐条交代哪些能自动判定、哪些只能是文档承诺。
-> **本文不原地改写 20 / 21 / 22 / 23 / 24 / 26 / 28 任何一条**，只在矩阵上新开第三个横切组 `SEC-1..10`。
+> **本文不原地改写 20 / 21 / 22 / 23 / 24 / 26 / `27-external-postgres-prerequisites` 任何一条**，只在矩阵上新开第三个横切组 `SEC-1..10`。
 > 输入边界（不重议）：[17](17-user-role-and-instance-onboarding.md) D1–D4（本地账号、只停用不删除、口令随机生成一次性回显、角色守卫）、D6；[13](13-credential-encryption-rotation-and-revocation.md)（凭据加密与 Agent 令牌）；[14](14-platform-observability-and-diagnostics.md) D2（平台健康四态）、D4（磁盘分级保护）、D5（诊断出口秘密禁区）；[18](18-v1-delivery-boundary-bs-binary.md) §6 D5；[19](19-agent-distribution-and-upgrade.md)（CA 指纹钉扎、全程无 `-k`）；[25](25-master-key-provenance-and-startup-failure.md) D1/D4（配置文件是规范来源、启动失败语义）；[26](26-data-and-recovery-gate.md) D5/D7/D9（启动失败按性质两分、执行序全序、参数化不是模拟）；[20](20-v1-acceptance-matrix.md) D4/D5/D6/D8、[21](21-v1-acceptance-entries-a.md) D1/D7/D8、[24](24-v1-acceptance-entries-d.md) D7/D14；[00](00-decision-index.md) M1（目标库监控账号权限）。平台库权限与前置校验归 [外部前置 PostgreSQL 的版本要求与部署前置条件 #116](https://github.com/liumingjian/dbs-monitor/issues/116)，本文只引用不复写。
 > 状态：v1.0，2026-08-14 HITL 拍板。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
@@ -154,7 +154,7 @@
 
 - [25](25-master-key-provenance-and-startup-failure.md) 已定「`/etc/dbs-monitor/credentials/` 由 root 预建、server 不 `mkdir` 父目录」。本条正好接上：**root 建目录并 `chown dbsmon`，进程本身不以 root 跑**。
 - 断言面 = 端到端断 server 进程 **uid ≠ 0**（`SEC-9`）。
-- **不由本票统一收口三个权限面**：#116 已在写「专属 database + 独立 schema `dbsmon` + 不需要 superuser、不需要扩展」，两票同写平台库权限就是第二份真相。本文显式记账「平台库那一半在 28 号」，而不是假装它不存在。
+- **不由本票统一收口三个权限面**：#116 已在写「专属 database + 独立 schema `dbsmon` + 不需要 superuser、不需要扩展」，两票同写平台库权限就是第二份真相。本文显式记账「平台库那一半在 [`27-external-postgres-prerequisites`](27-external-postgres-prerequisites.md)」，而不是假装它不存在。
 
 ---
 
@@ -258,12 +258,20 @@
 
 ---
 
-## 14. 交给下游
+## 14. 编号撞车的记账
+
+本文取 **29**：27 号在 `9c5db89`（[#110](https://github.com/liumingjian/dbs-monitor/issues/110)）已被 `27-v1-deliverables-and-candidate-provenance.md` 占用，而并发进行的 [#116](https://github.com/liumingjian/dbs-monitor/issues/116) 在 `6692f51` 又以 `27-external-postgres-prerequisites.md` 落了同一号——`docs/design/` 现存**两份 27**。本文避开该号段取 29，**28 空缺**。
+
+这不是本票能单方面修的：改编号要动 `00` / `16` 两份索引与两份文档的全部互引。**留作一条待处置项**，处置时应重编 `#116` 那份（它更晚落盘）为 28，且以一次显式提交完成，不得顺手夹带。
+
+---
+
+## 15. 交给下游
 
 | 内容 | 去处 |
 |---|---|
 | 会话表 schema、登录/登出端点、cookie 下发、中间件落位 | 片⑧「凭据与接入」spec |
-| `SEC-1..10` 条目写入 `test/acceptance/matrix.yaml` | 本票后续提交（待 #116 的 `matrix.yaml` 改动先合入） |
+| `SEC-1..10` 条目写入 `test/acceptance/matrix.yaml` | **已完成**（#116 的 `REC-11..13` 先合入 `6692f51`，本票在其之上追加，终态 104 条 / 硬底 101） |
 | `A12` / `B13` 登记进 `10` §3.2 | 片⑧实现票 |
 | `tls` 子系统进 `14` 的健康模型 | 片⑧实现票 |
 | Go/No-Go 报告如何呈现 `govulncheck` / `npm audit` 结果 | [Go/No-Go 质量门组成 #114](https://github.com/liumingjian/dbs-monitor/issues/114) |

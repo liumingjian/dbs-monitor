@@ -21,7 +21,11 @@
 # 横切条目新增 rides_on 字段（24 号 D7）：横切自带断言集与 test_ref 独立计分，
 # rides_on 只记账它搭在哪次执行现场上；crosscut 写在片条目上是覆盖维，两者不互为反向索引。
 # 执行序两条硬约束（24 号 D1/D14）：AC-08-S1 最先（全矩阵接入前置），AC-08-S7 最末（停 server 跑离线轮换）。
-# 执行序全序（26 号 D7）：AC-08-S1 最先 → 其余片条目 → REC-* → AC-08-S7 最末。
+# 生产安全边界横切组 SEC-1..10（#112）是矩阵上第三个横切组，10 条全基线，独立计分，
+# 硬底 91 → 101、条目 94 → 104 —— 出处与理由见 docs/design/29-production-security-boundary.md D8。
+# 不并进 REC 组：REC 的组名语义是恢复门（26 号 D1），安全边界不同轴，并进去会让组名说谎。
+# 执行序全序（26 号 D7，经 29 号 D8.2 改写）：AC-08-S1 最先 → 其余片条目 → REC-* → SEC-* → AC-08-S7 最末。
+# SEC 组内 SEC-3/4/5 要求 server 以不同证书或配置重启，用 after 压到组尾。
 # baseline: true 的条目不许 pending；n-a 必须写 reason。
 # 说明：实现落地前 baseline 条目以 pending 占位；v1 判定时 baseline 仍为 pending 即未达标。
 # test_ref 规范（#118 定）：值必须内含条目 ID 字面量 —— Go 用 TestAcceptance_AC_01_S1 形，
@@ -1757,3 +1761,172 @@ entries:
     test_ref: null
     owner_issue: 116
     reason: "27 号 D3.4 那道缝的唯一验收面：26 号 D5 的后台自愈路径上进程已在对外 503，无处可「拒启动」。不定死这一格，实现只有两种坏收场——自愈路径跳过校验（硬门半途失效）或调 os.Exit（杀掉一个正在服务的进程）。REC-11 断「必须退出」、本条断「必须不退出」，互斥，合并会让断言互相打架，而这恰是实现最容易写错的地方"
+  # ── 横切组三 · 生产安全边界（#112，29 号 D8）
+  - id: SEC-1
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "安全头六项无条件输出，且 /api/* 与静态资源两条 handler 链都发"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "对 /api/v1/* 任一端点断六项头齐全，取值逐字对齐 B13 golden"
+      - "对静态资源（/、/assets/*）断同一组头齐全且取值一致"
+      - "对 Agent 上报端点同样输出（无条件 = 不按客户端类型分叉）"
+      - "HSTS 取值恰为 max-age=31536000：不含 preload、不含 includeSubDomains"
+      - "CSP 的 script-src 不含 'unsafe-inline' / 'unsafe-eval'"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D1.3：现状 cmd/monitor-server/main.go 按 /api/ 前缀分叉成两条 handler 链，只在一条上挂中间件是最典型的漏法且症状极隐蔽（页面能开、接口能通、只扫 API 报绿）。与 B13 分工：B13 断取值逐字（防手滑删行照绿），本条断真的发出来了且两条链都发"
+  - id: SEC-2
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "TLS 下限 1.3：1.2 握手被拒、1.3 通过，自签证书开箱可用"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "以 MaxVersion=TLS1.2 的客户端握手：被拒绝"
+      - "以 TLS1.3 客户端握手：成功，且能完成一次业务 API 调用"
+      - "首次启动自动生成的自签证书直接可用，全程钉扎 CA 指纹、无 -k（承 19 号）"
+      - "不对密码套件作任何断言（29 号 D2：不列举即不承诺）"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D2。现状 main.go 的 MinVersion=TLS12 是 Go 默认值不是决策；交付目标 linux/amd64+arm64、客户端只有现代浏览器与我方 agent，无需迁就老客户端。刻意不断套件——断了就等于承诺一份会随 Go 版本过时的清单"
+  - id: SEC-3
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "证书已过期：不拒启动，tls 子系统 DEGRADED 且平台事件显式"
+    layer: api
+    rides_on: []
+    after: [SEC-1, SEC-2]
+    asserts:
+      - "以 fixtures 中已过期的证书/私钥启动 server：进程不退出、HTTP 面可用"
+      - "健康快照中 tls 子系统 = DEGRADED（第九个子系统，29 号 D3）"
+      - "平台事件含一条指名「证书已过期」的记录，绝不静默"
+      - "tls 子系统不存在 FAILED 取值：整机健康不因证书过期被最坏归并判死"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D3。与 25 号 D4 同构——证书过期时服务本身完全健康，拒启动会把计划内的换证逾期直接升级成「监控平台整个看不见」，而看不见的第一个后果就是没人知道证书到期了。手段是真放一张过期证书（客户自备证书路径本就支持），不加 test-only 开关、不新造配置项（承 26 号 D9）。与 AC-09-F7 同注入手段、两个断言点，不合并：本条断平台自身健康事实源如实降级，AC-09-F7 断它不污染目标库告警与 NO_DATA"
+  - id: SEC-4
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "证书临近到期（<30 天）：DEGRADED 预警，且与已过期状态可区分"
+    layer: api
+    rides_on: []
+    after: [SEC-3]
+    asserts:
+      - "以 fixtures 中 20 天后到期的证书启动：进程正常、HTTP 面可用"
+      - "tls 子系统 = DEGRADED，事件内容指名「剩余有效期不足 30 天」并带剩余天数"
+      - "该事件与 SEC-3 的「已过期」事件内容可区分，不是同一句话"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D3。预警与已过期同为 DEGRADED，若事件内容不可区分则预警等于没有——运维看到 DEGRADED 却不知道还剩几天。与 SEC-3 分开而不合并：合并后「还有 20 天」和「已经过期」会退化成同一条断言，而这两种处境的动作完全不同"
+  - id: SEC-5
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "会话过期两条腿：绝对有效期与空闲有效期（TTL 参数化 90s / 30s）"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "session_absolute_ttl=90s 时：持续活动的会话在 90s 后仍被拒（绝对上限不被活动续期）"
+      - "session_idle_ttl=30s 时：静默 30s 后的会话被拒，静默期内每 10s 请求一次则不过期"
+      - "过期会话的请求返回鉴权失败，不返回 13 码、不返回业务数据"
+      - "两个 TTL 均为部署期配置项（29 号 D4.2），非编译期常量"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D4.2。单轮 ≤10 分钟（21 号 D7）下 12h/2h 不可直接验，参数化不是模拟——调小后跑的是同一段代码，做法同 22 号对 repeat_interval 的处置。不可配就等于「过期」这条腿永远测不到，因此 TTL 可配是外溢实现硬要求而非实现自由"
+  - id: SEC-6
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "会话即时失效三面：登出、用户被停用、口令重置吊销其它会话"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "登出后原 cookie 立即失效（不等 TTL）"
+      - "用户被停用后其全部在用会话立即失效（17 号 D2 的硬要求）"
+      - "口令自改或被管理员重置后，该用户其它会话全部失效、当前会话可继续"
+      - "并发会话不受限制：同一用户两个会话可同时存在并各自工作"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D4.1/D4.2。这三面正是「服务端会话表而非无状态 JWT」这条决策的唯一验收面——JWT 做不到即时失效除非再加吊销表。并发不限制一并断死：限制并发会在双人值班或一人两处盯屏时把人锁在门外，而这是监控平台"
+  - id: SEC-7
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "cookie 四属性齐全，且响应体全文无会话令牌"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "登录响应的 Set-Cookie 使用 __Host- 前缀"
+      - "含 HttpOnly、Secure、SameSite=Strict 三项属性"
+      - "登录及后续任一响应的 body 全文正则扫描：不含会话令牌值"
+      - "会话令牌不出现在 URL、查询参数或任何自定义响应头中"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D4.2/D4.3。全文正则而非字段白名单，防的是意料之外的字段（同 24 号 D11「凭据永不回显」的第三层做法）。__Host- 前缀强制 Secure + Path=/ + 无 Domain，正好匹配单 host 部署；SameSite=Strict 是「不引入 CSRF token」那条推理的前提之一，它一旦松动本条即刻变红"
+  - id: SEC-8
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "审计可归因端到端三项：登录失败 / 用户停用 / 凭据更新"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "登录失败留下事件，主体为尝试的用户名；事件全文不含口令任何形式"
+      - "停用用户留下带 actor 的记录；被守卫拒绝的停用尝试同样留痕"
+      - "凭据更新留下带 actor 的记录，且记录中不含凭据明文（承 13 号）"
+      - "三项记录均可被全部登录用户只读检索（29 号 D5.1）"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D5.2。十一项登记表的完整性由 A12 表驱动单测承担——「有没有漏登记一项」是表驱动判定不是执行判定，端到端逐项跑十一次既贵又证明不了第十二项被忘了。这三项取三种最容易漏的形状：登录失败无 actor 主体（易被实现成匿名丢弃）、用户停用有守卫（易在拒绝路径上漏留痕）、凭据更新接触秘密（易连带把秘密写进留痕）"
+  - id: SEC-9
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "server 进程以非 root 专用系统用户运行"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "运行中的 server 进程 uid ≠ 0"
+      - "凭据目录归该用户所有且为 0600 / 0700（承 25 号 D3）"
+      - "该用户对 /etc/dbs-monitor 之外无写权限"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D6，本票在最小权限上出的唯一一条——平台库权限归 #116（两票同写就是第二份真相），目标库权限已由 00 号 M1 冻结、片①能力四态覆盖。环境要求：compose 中 server 必须以非 root 跑，否则本条恒绿，是一条自欺条目"
+  - id: SEC-10
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "CSP 不破功能：关键路径浏览器 console 无 CSP violation"
+    layer: browser
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "走一条关键路径（登录 → 实例列表 → 实例工作台图表）"
+      - "全程 console 无任何 CSP violation 报告"
+      - "AntD 组件样式正常渲染、ECharts 图表正常出图"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D8.1，本组唯一浏览器条目。CSP 在真实世界的失败模式是砸自己的页面而不是被绕过——style-src 放行 'unsafe-inline' 这个取舍（29 号 D1.1，AntD 6.5.3 cssinjs 运行时注入 style）到底够不够，只有这一条能证明。img-src 带 data: 同样只在这里被真实使用（ECharts 导出）"
