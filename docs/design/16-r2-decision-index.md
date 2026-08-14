@@ -28,7 +28,7 @@
 | T9 | [10-ai-guardrails-and-verification.md](10-ai-guardrails-and-verification.md) | `make check` / `make check-full` 两层闭环，现行快层预算为 **≤120 秒**；Docker 真 PG；A/B 护栏登记表、两份 `CLAUDE.md`、CI PR 门；RT-C 由人工 / R3 发布门接管。 |
 | T10 | [11-walking-skeleton-slice.md](11-walking-skeleton-slice.md) | 骨架只验证必须跑起来才能证伪的选型：两条采集通路、告警、认证、前端两级路由、分区和真实验收；不预摆 R3–R6 空壳。 |
 | T12 | [12-collection-concurrency-timeouts-and-backpressure.md](12-collection-concurrency-timeouts-and-backpressure.md) | 中央调度、探针/查询双槽、分层超时与背压；不补跑、不自动降频；采集源完整性水位；平台自身诊断边界移交 T14。 |
-| T13 | [13-credential-encryption-rotation-and-revocation.md](13-credential-encryption-rotation-and-revocation.md) | PG password 使用版本化 keyring + AES-256-GCM；Agent 显式登记、token 只存哈希；解密故障属于平台自身故障；秘密永不出站。 |
+| T13 ⚠ | [13-credential-encryption-rotation-and-revocation.md](13-credential-encryption-rotation-and-revocation.md) | PG password 使用版本化 keyring + AES-256-GCM；Agent 显式登记、token 只存哈希；解密故障属于平台自身故障；秘密永不出站。 |
 | T14 | [14-platform-observability-and-diagnostics.md](14-platform-observability-and-diagnostics.md) | 平台健康独立四态，journal 是历史，诊断 API 是管理员入口；平台故障不进入目标告警或 `NO_DATA`；磁盘紧急时拒写新样本但不自动删旧数据或缩短保留。 |
 | T15 ⚠ | [15-ci-and-release-pipeline.md](15-ci-and-release-pipeline.md) | GitHub Actions 是规范执行者；PR 门为 `make check`，默认分支为 `make check-full`；语义化 tag + 精确提交校验 + Environment 审批；四种原生架构/glibc 组合与长期 Release assets。 |
 
@@ -46,6 +46,7 @@
 |---|---|---|
 | [18-v1-delivery-boundary-bs-binary.md](18-v1-delivery-boundary-bs-binary.md) · v1 交付边界：B/S 二进制直接运行验收 | **T8** 中依附「离线 tar 安装包」「自带并自建 PG17」「安装脚本」的全部结论（D1、D2、D4、D5、D8、D9.1、D10/D11 的执行者、§3 的 glibc 下限与 §12 交付物清单）；**T15** 中依附「四组合架构 × glibc + 长期 Release assets」的部分（D3.3、D4、D5）；地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 及决策票 #99–#102 的整条 macOS `.pkg` 首发路线。**T2 / T12 / T13 机制 / T14 不受影响**，见该文 §13 点名清单。 | [#106](https://github.com/liumingjian/dbs-monitor/issues/106)（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)） |
 | [19-agent-distribution-and-upgrade.md](19-agent-distribution-and-upgrade.md) · Agent 分发与升级形态（无安装器） | **T8** D7 全条与 §8.1（安装脚本自举形态下的自分发、CA 指纹内嵌、plan B 依托 tar 包）、以及 T8 D11 时钟检查的执行者；载体全部改写为「接入设置页生成的安装命令 + 下载端点 + Agent 启动自检」。**「绝不自升级」「装要 root 跑不要 root」「信任根带外传递、全程无 `-k`」「编译期同源 / 运行期容一个大版本」四条原则保留。** | [#108](https://github.com/liumingjian/dbs-monitor/issues/108)（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)） |
+| [25-master-key-provenance-and-startup-failure.md](25-master-key-provenance-and-startup-failure.md) · 主密钥来源与启动失败语义（无安装器形态） | **T13** D2 全条（主密钥来源、首启自举、缺失/损坏的进程行为）、D1 的保护面/不保护面清单、D7.1 步骤 1 的「或取得排他维护锁」。改定为：密钥文件是唯一规范来源（环境变量只覆盖路径、KMS 出局）、三条件 + `O_EXCL` 自动生成并显式记事件、**keyring 故障不拒绝启动**（唯一拒启动情形是配置文件读不到）、轮换为停机子命令 + 平台库 advisory lock 拒绝并发。**威胁模型保护面升级**（外部 PG 主机整机失陷不泄露目标库密码），**不保护面新增「配置文件泄露 = 平台库凭据泄露」**（平台库凭据明文留在 `0600` 配置文件，鸡生蛋不可避）。并接下 [18](18-v1-delivery-boundary-bs-binary.md) D5 移交的本地通知快照密钥来源（无变化）。**T13 D3–D6、D8、D9 不受影响**，见该文 §12。 | [#109](https://github.com/liumingjian/dbs-monitor/issues/109)（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)） |
 
 ## 5. v1 投产路线新增的决策（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)）
 
