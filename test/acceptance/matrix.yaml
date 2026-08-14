@@ -7,6 +7,8 @@
 # A 组（#118，片01/07/09）定稿 8 条加深基线，硬底因此为 60 —— 出处与理由见
 # docs/design/21-v1-acceptance-entries-a.md D1/D2/D4/D6。B/C/D 组（#119/#120/#121）
 # 若再定加深基线，同样只增不减，各自在自己的决策记录里交代。
+# B 组（#119，片02/03/04）定稿 7 条加深基线，硬底累加至 67 —— 出处与理由见
+# docs/design/22-v1-acceptance-entries-b.md D1–D7。
 # baseline: true 的条目不许 pending；n-a 必须写 reason。
 # 说明：实现落地前 baseline 条目以 pending 占位；v1 判定时 baseline 仍为 pending 即未达标。
 # test_ref 规范（#118 定）：值必须内含条目 ID 字面量 —— Go 用 TestAcceptance_AC_01_S1 形，
@@ -170,214 +172,436 @@ entries:
     slice: "02"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
-    crosscut: []
+    title: "端到端成功路径：自建规则跑通 OK → PENDING → FIRING → RECOVERED，含强制滞回"
+    layer: api
+    asserts:
+      - "经 createAlertRule 建单指标单条件规则（触发阈值 3、恢复阈值 1、consecutive_count 2），全程无业务表直写（B11）"
+      - "对目标库真实开 5 条连接，pg.connection.total 由真实采集管线越过阈值（不直插样本）"
+      - "状态序列 OK → PENDING → FIRING，PENDING 需连续 2 个评估周期，单次抖动不进 PENDING"
+      - "断到 1 条连接：越过独立恢复阈值后才 RECOVERED；触发阈值与恢复阈值之间的取值不产生任何状态迁移（滞回成立）"
+      - "AlertEvent 序列 PENDING_STARTED → FIRED → RECOVERED 齐全，各带 rule_version 与规则快照字段"
+      - "同一去重键（rule_id + resource_id + metric_dimension）未恢复前只有一条告警实例"
+    pages: ["实例工作台/监控与报警/告警规则"]
+    operations: [createAlertRule, listAlertRules, listAlertInstances, listAlertEvents]
+    crosscut: [INV-1]
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿；实现归片②实现票，届时置 covered 并填 test_ref"
+  - id: AC-02-S2
+    slice: "02"
+    kind: S2
+    baseline: true
+    title: "规则版本快照：下一次评估生效、重置未完成计数、不回放不重算"
+    layer: api
+    asserts:
+      - "对一条 FIRING 中的规则改阈值：产生新 version，实例 ID 与首次触发时间保持不变"
+      - "新配置从下一次评估起生效，保存瞬间不重算、不回放历史"
+      - "未完成的触发 / 恢复计数被重置，不带着旧计数跨版本累加"
+      - "告警实例与事件记录的 rule_version 与保存后的新版本一致；历史事件仍指向其当时的版本"
+      - "启停不产生新版本快照，但记录操作人与时间；停用期间存量未恢复实例原地保留、不评估、不谎报 RECOVERED，重启用后延续同一实例"
+      - "内置三规则改阈值 / severity（warning|critical）成功；删除、停用、降为 info 被 4xx + 封闭错误码拒绝（语义归属 INV-4，此处只引用一次）"
+    pages: ["实例工作台/监控与报警/告警规则"]
+    operations: [updateAlertRule, toggleAlertRule, listAlertRuleVersions, deleteAlertRule]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板验收判据原文「ADR-03 全语义可走通」，按 21 号 D1 设为加深基线，不许 pending"
   - id: AC-02-F1
     slice: "02"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
+    title: "权限拒绝：三档角色 × 规则写端点（写权限 = 告警管理员）"
+    layer: api
+    asserts:
+      - "三档角色账号一律经用户管理 API 创建（20 号 D9），不直插 user 表"
+      - "只读运维调 createAlertRule / updateAlertRule / toggleAlertRule / deleteAlertRule 得规定拒绝语义，非 500、非静默成功"
+      - "告警管理员与平台管理员（按包含关系）调用成功"
+      - "三档角色读端点全部可达：可见性不收窄"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [createAlertRule, updateAlertRule, toggleAlertRule, deleteAlertRule, listAlertRules]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿"
   - id: AC-02-F2
     slice: "02"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "空状态：规则所需能力不满足 / 指标无样本，落封闭 13 码且不渲染成 0"
+    layer: api
+    asserts:
+      - "规则列表的「所需能力是否满足」在能力缺失时为假，并带原因，不呈现为满足"
+      - "指标无样本时告警详情原样透传片①产出的封闭 13 码之一，不造第二来源"
+      - "无样本区间不出现补 0 的桶（T2 不补 0 + B6）"
+      - "该状态不等同于「条件不满足」：规则不因缺数推进任何状态转换，未完成计数清零"
+    pages: ["实例工作台/监控与报警/告警规则"]
+    operations: [listAlertRules, getAlertInstance, getMetricSeries]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿"
   - id: AC-02-F3
     slice: "02"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
+    title: "目标库不可达：FIRING 中转 NO_DATA，不恢复、不关闭、仍计一条未恢复告警"
+    layer: api
+    asserts:
+      - "真停目标库容器（真实手段，非 mock）；缺数连续 2 个评估周期后进入 NO_DATA"
+      - "实例 ID 与首次触发时间保持，生命周期不中断，仍计一条未恢复告警"
+      - "绝不转 RECOVERED —— 数据库不可达擦不掉已知问题"
+      - "NO_DATA_ENTERED / NO_DATA_EXITED 事件齐全；NO_DATA 本身不产生通知"
+      - "目标库恢复后回到 state_before_no_data，计数从零重新累计，不回放缺数期间"
+      - "no_data_policy = ignore 的规则在同一缺数下不进 NO_DATA，与 mark_no_data 严格可区分"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [listAlertInstances, listAlertEvents]
+    crosscut: [INV-1]
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿；片②的 F3 由 NO_DATA 路径承载，能力不足面归片① AC-01-F3/F5/F6"
   - id: AC-02-F4
     slice: "02"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
+    title: "平台自身故障：断平台库期间不得把目标实例判成 NO_DATA、不得产生告警实例"
+    layer: api
+    asserts:
+      - "真断平台库连接（真实手段）；目标库全程健康、真实采集管线仍在产出"
+      - "平台库恢复后：不存在因平台故障新建的告警实例，既有实例未被推进到 NO_DATA"
+      - "平台故障期间的缺口不计入 NO_DATA 门槛计数（T14：平台自身故障不进入目标告警或 NO_DATA）"
+      - "恢复后不回放、不补评估平台故障期间的时间轴"
+      - "该故障以平台四态呈现（归片⑨ AC-09-F4），不落到任何目标实例的告警面"
     pages: []
-    operations: []
+    operations: [listAlertInstances, getPlatformHealth]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿；与 AC-01-F4 / AC-09-F4 手段同源、断言点不同，分工见 docs/design/22-v1-acceptance-entries-b.md D4"
   # ── 片03 · 告警处置与性能事件
   - id: AC-03-S1
     slice: "03"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
+    title: "端到端成功路径：确认 ⇄ 忽略可相互切换且每次操作追加留痕"
+    layer: api
+    asserts:
+      - "对一条 FIRING 告警确认（备注可选）→ 忽略（五档原因码必选）→ 再确认，三次操作全部成功"
+      - "忽略选 OTHER 时补充说明必填，缺失即 400 VALIDATION_FAILED + field_errors"
+      - "AlertEvent 追加三条处置事件，记录操作人、时间、操作前后处置状态，旧记录不被覆盖"
+      - "处置事件保存规则版本、指标值、阈值、评估时间等快照字段，规则改版后处置历史仍自解释"
+      - "处置不触发恢复、不停止评估、不停用规则：处置后该实例仍按恢复条件正常 RECOVERED"
+      - "恢复后再次触发是新实例，disposition 回到 NONE，不继承旧的已确认"
     pages: []
-    operations: []
+    operations: [ackAlert, ignoreAlert, listAlertEvents, getAlertInstance]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿"
+  - id: AC-03-S2
+    slice: "03"
+    kind: S2
+    baseline: true
+    title: "触发现场快照：首次 FIRING 采一次不重采，截断契约成立，永不含 SQL 文本"
+    layer: api
+    asserts:
+      - "在目标库真造阻塞现场（真事务 + 真锁等待，含三层递归阻塞链），触发锁等待类规则"
+      - "快照只在首次进入 FIRING 时采一次；后续评估、数值更新、处置变化均不重采（比对 captured_at 恒定）"
+      - "会话上限参数化至 5：超限时优先保留直接命中对象与完整阻塞链，记录原始匹配数与截断标识"
+      - "快照字段沿 03 §4.5，含 PID / 等待事件 / 时长；全字段扫描断言不含任何 SQL 文本"
+      - "一个告警实例至多一份快照；FIRED 事件与事件详情引用同一份，不复制数据"
+    pages: []
+    operations: [getAlertSnapshot, getAlertInstance]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板验收判据原文「快照首次 FIRING 采一次、截断契约成立」，按 21 号 D1 设为加深基线，不许 pending"
+  - id: AC-03-S3
+    slice: "03"
+    kind: S3
+    baseline: true
+    title: "性能事件页签四模块与 IA §6.4 告警处理全路径，事件处置写回同一条告警"
+    layer: browser
+    asserts:
+      - "IA §6.4 整条路径：告警详情 → 触发条件 / 触发值 / 阈值 / 持续时长 / 规则版本可见 → 是否 NO_DATA 或维护窗口可见 → 跳性能事件 → 确认或忽略 → 恢复记录可追"
+      - "性能事件页签四模块（触发中 / 已恢复 / 已确认已忽略 / 事件详情）按告警实例投影筛选，不存第二份状态"
+      - "事件详情展示按事件类型的只读知识模板（原因摘要 + 建议动作），以告警上下文填充"
+      - "事件详情引用的快照标注「告警触发时现场」，不得呈现为当前状态"
+      - "在事件页做确认 / 忽略后，回到告警详情看到同一处置状态（两处永不分叉）"
+      - "跳转带上下文：事件详情 → 标准监控（instance_id / metric_id / 时间范围）、事件详情 → 告警详情（alert_instance_id）"
+    pages: ["实例工作台/性能事件", "实例工作台/监控与报警/告警详情"]
+    operations: [listPerformanceEvents, getPerformanceEvent, ackAlert, ignoreAlert]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板判据「事件列表与详情可用」，加深基线；IA §6.4 整条关键路径由本条一条承载（22 号 D3），#120 的告警详情页骨架条目不重复走 §6.4"
   - id: AC-03-F1
     slice: "03"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
+    title: "权限拒绝：三档角色 × 处置写端点"
+    layer: api
+    asserts:
+      - "只读运维调 ackAlert / ignoreAlert 得规定拒绝语义，非 500、非静默成功"
+      - "告警管理员与平台管理员调用成功"
+      - "只读运维仍可读到全部处置摘要与处置历史：可见性不收窄、写能力收窄"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [ackAlert, ignoreAlert, listAlertEvents]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿"
   - id: AC-03-F2
     slice: "03"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
+    title: "空状态：本片不产出 Unavailability 13 码"
+    layer: api
     asserts: []
     pages: []
     operations: []
     crosscut: []
-    status: pending
+    status: n-a
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "处置、快照与性能事件都不是指标序列面，不产出封闭 13 码；告警历史时间筛选超出 90 天保留界时是自然空集，spec 片③ Further Notes 明确不新增 Unavailability 码（承 07 D7.e）。属 20 号 D6.5「该语义在本片不存在」的正当 n-a，非「暂时测不了」。让出的保护由 AC-03-F5 补齐。"
   - id: AC-03-F3
     slice: "03"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
+    title: "目标库不可达：快照采集失败不影响告警触发，失败原因可见而非空白"
+    layer: api
+    asserts:
+      - "在快照采集窗口内真停目标库容器（真实手段，非 mock）"
+      - "告警照常触发、状态照常转入 FIRING、FIRED 事件照常写入"
+      - "快照结果为「失败」并带失败原因，详情展示原因而非空白"
+      - "失败即终态：后续评估不补采（比对快照记录不变）"
+      - "不表现为「有数据但全零」，也不表现为「该类型不适用」"
     pages: []
-    operations: []
+    operations: [getAlertSnapshot, listAlertInstances]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿"
   - id: AC-03-F4
     slice: "03"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
+    title: "平台自身故障：不得写出处置事件、不得伪造快照失败记录（证据面不被污染）"
+    layer: api
+    asserts:
+      - "真断平台库连接期间发起处置请求：请求失败且不产生半截处置事件"
+      - "平台库恢复后：处置状态与事件序列与故障前完全一致，无幽灵事件"
+      - "平台故障不得使既有快照被改写为「失败」，快照结果保持原值"
+      - "该故障不污染目标实例告警面、不计入 NO_DATA"
+    pages: []
+    operations: [ackAlert, listAlertEvents, getAlertSnapshot]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿；与 AC-02-F4 / AC-09-F4 手段同源、断言点不同，分工见 22 号 D4"
+  - id: AC-03-F5
+    slice: "03"
+    kind: F5
+    baseline: true
+    title: "快照三态严格可区分，空集是值不是 error"
+    layer: api
+    asserts:
+      - "成功 / 失败（带原因）/ 该类型不适用，三态在契约上严格可区分"
+      - "不适用类型（不可达、Agent 离线、主机资源、复制 / WAL / slot 类）返回明确的「该类型不采集现场快照」，绝不冒充「失败」"
+      - "失败绝不冒充「空白」或「不适用」"
+      - "三态一律以带结果的值返回，不用 404、不用 error"
+      - "告警历史时间筛选超出保留界为空集，同样是值不是 error，且不渲染成 0"
+    pages: []
+    operations: [getAlertSnapshot, listAlertInstances]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "补回 AC-03-F2 记 n-a 让出的保护（22 号 D2），加深基线不许 pending"
+  - id: AC-03-F6
+    slice: "03"
+    kind: F6
+    baseline: false
+    title: "告警历史清理：已恢复实例连同事件与快照级联删除，未恢复实例永不清理"
+    layer: db
+    asserts:
+      - "保留期参数化至 2 分钟（部署期配置项，走与生产相同的判定代码路径）"
+      - "清理前取 DB 只读基线：告警实例、AlertEvent、快照行数"
+      - "已恢复且过期的实例连同其全部 AlertEvent 与快照被删除（外键级联）"
+      - "同期未恢复的实例及其事件与快照仍在（承 02 §3.4：不做基于时长的自动关闭）"
+      - "清理不触碰任何未过期实例"
     pages: []
     operations: []
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "S1 未拍板此判据，按 21 号 D1 的纪律不擅自升为加深基线；但它是片③唯一会删数据的路径，不设即留覆盖真空。B 组唯一一条允许 pending 的普通加深，兑现归片③清理循环实现票。"
   # ── 片04 · 通知与告警设置区
   - id: AC-04-S1
     slice: "04"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
+    title: "端到端成功路径：真实评估触发 → 真收端收到邮件与 Webhook → 留痕契约一致"
+    layer: api
+    asserts:
+      - "compose 内起本地 SMTP sink 与 Webhook 回环接收端（被测系统之外的真实网络对端，非 mock、非进程内 httptest）"
+      - "经 API 建联系人 → 建通知策略 → 规则绑定；策略为空的规则回显「默认策略（继承）」"
+      - "真实评估进入 FIRING 后：SMTP sink 真收到邮件，Webhook 收端真收到载荷与 HMAC 签名头"
+      - "恢复时默认收到恢复通知（notify_on_recovery 默认开启）"
+      - "发送发生在评估事务提交之后（以收端观察时序断言，提交前收端零投递）"
+      - "每次尝试留痕（告警实例、事件类型、渠道、目标、时间、结果、失败原因、重试次数）；listNotificationsByAlert 与收端观测一致"
+      - "NOTIFICATION_SENT 事件进入告警事件历史"
+      - "全部通知域响应扫描：不存在 password / secret 类秘密字段（B7），非「返回掩码字符串」而是字段不存在"
+      - "repeat 下限参数化至 30s：未确认的告警按 repeat_interval 重复通知；确认后重复通知停止，触发 / 恢复通知不受影响"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [createContact, createNotificationPolicy, putSmtpConfig, createWebhookTarget, listNotificationsByAlert]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿；「凭据永不回显」在片④只并入本条 asserts（22 号 D6），INV-3 的端到端面引用本次执行"
+  - id: AC-04-S2
+    slice: "04"
+    kind: S2
+    baseline: true
+    title: "维护窗口：窗口期只压通知不断评估，结束不补发"
+    layer: api
+    asserts:
+      - "经 createMaintenanceWindow 建窗口（多选实例 + 起止 + 原因），窗口期内真实制造 FIRING"
+      - "评估照常：告警实例与事件照常生成更新，历史无空洞"
+      - "收端零投递：窗口期内不发出任何触发 / 重复通知"
+      - "窗口内产生或更新的告警实例与事件带维护窗口标记与窗口引用，并落 MAINTENANCE_SUPPRESSED 事件"
+      - "窗口结束瞬间不补发、不排队重放、不发摘要；仍未恢复的告警由下一个 repeat_interval 自然接管"
+      - "提前结束窗口后压制立即解除，同样不补发"
+      - "压制只影响通知，不影响评估、状态与页面可见性（ADR-07 统一律）"
+    pages: []
+    operations: [createMaintenanceWindow, endMaintenanceWindowEarly, listMaintenanceWindows, listAlertEvents]
+    crosscut: [INV-1]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板验收判据原文「窗口期只压通知不断评估」，按 21 号 D1 设为加深基线；与 INV-1 的分工见 22 号 D5（本条断维护窗口这一种压制来源的端到端事实，INV-1 断压制作为正交轴不改变五状态，引用不计入横切达标）"
+  - id: AC-04-S3
+    slice: "04"
+    kind: S3
+    baseline: true
+    title: "告警设置区四页齐：可见性不收窄、写能力收窄、秘密以「已设置 / 未设置」呈现"
+    layer: browser
+    asserts:
+      - "顶层区「告警设置」四页（通知渠道 / 联系人 / 通知策略 / 维护窗口）全部可达"
+      - "通知渠道页同页承载 SMTP 单例表单与 Webhook 目标列表两区块，含失败摘要与可展开的最近失败记录"
+      - "只读运维：四页全部可见，写控件置灰并注明所需角色，入口不隐藏"
+      - "SMTP 密码与 Webhook 密钥呈现为「已设置 / 未设置」，而非回显掩码字符串；任何角色都读不回明文"
+      - "存在未清除的渠道失败时，「通知渠道」页签导航角标出现；角标不产生告警实例、不影响实例健康"
+    pages: ["告警设置/通知渠道", "告警设置/联系人", "告警设置/通知策略", "告警设置/维护窗口"]
+    operations: [getSmtpConfig, listWebhookTargets, listContacts, listNotificationPolicies, listMaintenanceWindows, getChannelFailureSummary]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板判据「告警设置区四页齐」，纯呈现语义按 20 号 D3 必须上浏览器，加深基线不许 pending"
   - id: AC-04-F1
     slice: "04"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
+    title: "权限拒绝：三档角色 × 告警设置四页写端点（含维护窗口提前结束）"
+    layer: api
+    asserts:
+      - "只读运维调渠道配置写入、Webhook 目标 CRUD、测试发送 / 测试请求、联系人与组 CRUD、策略 CRUD、维护窗口 CRUD 与提前结束，全部得规定拒绝语义"
+      - "告警管理员与平台管理员调用成功"
+      - "被拒绝时非 500、非静默成功；读端点对三档角色全部可达"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [putSmtpConfig, testSmtpDelivery, createWebhookTarget, createContact, createNotificationPolicy, createMaintenanceWindow, endMaintenanceWindowEarly]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿"
   - id: AC-04-F2
     slice: "04"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
+    title: "空状态：本片不产出 Unavailability 13 码"
+    layer: api
     asserts: []
     pages: []
     operations: []
     crosscut: []
-    status: pending
+    status: n-a
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "通知域不是指标序列面，渠道 / 联系人 / 策略 / 窗口的空集与未配置态都不映射封闭 13 码。属 20 号 D6.5「该语义在本片不存在」的正当 n-a，非「暂时测不了」。让出的保护由 AC-04-F5 补齐。"
   - id: AC-04-F3
     slice: "04"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "外部依赖不可用：通知出口不可达 → 三次指数退避后留终态失败，失败可见"
+    layer: api
+    asserts:
+      - "真停 SMTP sink 容器、Webhook 收端固定返 5xx（真实手段，非 mock）"
+      - "固定 3 次指数退避（退避封顶参数化至 5s），第 3 次后记终态失败，不无限重试"
+      - "每次尝试均留痕，重试次数与时序可核对"
+      - "NOTIFICATION_FAILED 事件进入告警事件历史"
+      - "渠道页失败摘要出现最近失败次数与最后一次失败原因，导航角标出现"
+      - "失败不产生新的告警实例、不进状态机、不影响实例健康（不做「通知失败本身产生告警」的递归）"
+    pages: ["告警设置/通知渠道"]
+    operations: [listNotificationsByAlert, getChannelFailureSummary, listAlertEvents]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "F3「外部依赖不可用」在通知域的语义映射：通知的外部依赖是出口而非被监控库，语义映射的记账见 22 号 D2；S1 判据「失败三次退避留终态」由本条承载"
   - id: AC-04-F4
     slice: "04"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
+    title: "平台自身故障：不得发出通知，也不得丢失已排队的待发通知与退避进度"
+    layer: api
+    asserts:
+      - "真断平台库连接 / 重启 server 进程（真实手段）"
+      - "故障期间收端零投递"
+      - "恢复后：故障前已排队的待发通知仍被发出，收端确实收到（待发通知落表而非内存队列的验收面）"
+      - "退避进度与未尽的 repeat 义务跨进程重启不丢、不重置为第 1 次"
+      - "平台自身故障不产生目标实例告警、不计入 NO_DATA"
     pages: []
-    operations: []
+    operations: [listNotificationsByAlert]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 119
-    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+    reason: "条目内容由 #119 定稿；与 AC-02-F4 / AC-03-F4 / AC-09-F4 手段同源、断言点不同，分工见 22 号 D4"
+  - id: AC-04-F5
+    slice: "04"
+    kind: F5
+    baseline: true
+    title: "渠道未配置：是「未设置」不是 error，且绝不静默"
+    layer: api
+    asserts:
+      - "SMTP 未配置且无 Webhook 目标时触发一条告警：不 500、不 404，配置读端点返回「未设置」的值"
+      - "该次通知义务不被静默丢弃：留痕表出现一条无可用出口的失败记录，带明确原因"
+      - "渠道页失败摘要与导航角标据此可见 —— 用户能回答「这条告警为什么没通知到我」"
+      - "评估与告警状态不受影响：无出口不影响 FIRING 与 RECOVERED"
+      - "装机 seed 的全局默认策略始终存在且不可删除，三条内置规则天然有通知归属，不存在静默事故窗口"
+    pages: ["告警设置/通知渠道"]
+    operations: [getSmtpConfig, listWebhookTargets, listNotificationsByAlert, getChannelFailureSummary]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "补回 AC-04-F2 记 n-a 让出的保护（22 号 D2），加深基线不许 pending"
   # ── 片05 · 观察面
   - id: AC-05-S1
     slice: "05"
