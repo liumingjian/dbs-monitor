@@ -1,6 +1,7 @@
-# 27 · 外部前置 PostgreSQL 的版本要求与部署前置条件
+# 30 · 外部前置 PostgreSQL 的版本要求与部署前置条件
 
 > 出处：[外部前置 PostgreSQL 的版本要求与部署前置条件 #116](https://github.com/liumingjian/dbs-monitor/issues/116)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
+> **编号勘误**：本文最初在 `6692f51` 以 `27-external-postgres-prerequisites.md` 落盘，与 `9c5db89` 的 `27-v1-deliverables-and-candidate-provenance.md` 撞号（[29](29-production-security-boundary.md) §14 记为待处置项，建议重编更晚落盘的本份）。28/29 已被占用，故重编为 **30**。GitHub 票据与既有决策文档中的 `27-ext` / `27-external-postgres-prerequisites` 均指本文；除本条注记、标题编号与各文档链接目标外，内容一字未改。
 > 定位：填 [18](18-v1-delivery-boundary-bs-binary.md) D2 留下的洞。该记录把平台库改为**客户自备的外部前置**、把 T8 D4（自带 PG 钉死 17、不接管客户既有 PG）**整条作废**并注明「版本要求另议」，同时在 §4 第 3 点把「要求专属实例 / 独立 database / 最小权限集 / 启动时校验前置条件并快速失败」四件事**显式移交**给本票。本文结案「另议」，并接下那四件事。
 > **本文不原地改写 20 / 21 / 22 / 23 / 24 / 26 任何一条**，只在矩阵的既有 `REC` 横切组上追加三条。
 > 输入边界（不重议）：[18](18-v1-delivery-boundary-bs-binary.md) D2（交付形态）、§6 D5 第 1 条、§8 D7；[25](25-master-key-provenance-and-startup-failure.md) D1（配置文件是规范来源）、D4（启动失败语义）；[26](26-data-and-recovery-gate.md) D2（三把 advisory lock）、D5（启动失败按失败性质两分）、D7（执行序）、§9（客户责任清单七条 + 两条措辞硬要求）；[20](20-v1-acceptance-matrix.md) D4/D5/D6/D8；[21](21-v1-acceptance-entries-a.md) D1（加深基线准入）、D8（`test_ref` 形态）；[24](24-v1-acceptance-entries-d.md) D7（`rides_on` 语义）、D14（执行序硬约束）；[19](19-agent-distribution-and-upgrade.md)（信任根与「全程无 `-k`」）；一手事实见 [平台库 PG13+ 的一手事实核实 #107](https://github.com/liumingjian/dbs-monitor/issues/107)。

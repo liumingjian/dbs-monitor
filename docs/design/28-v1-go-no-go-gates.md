@@ -1,10 +1,10 @@
 # 28 · v1 Go/No-Go 质量门组成
 
 > 出处：[Go/No-Go 质量门组成 #114](https://github.com/liumingjian/dbs-monitor/issues/114)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
-> 定位：把 [20](20-v1-acceptance-matrix.md)–[24](24-v1-acceptance-entries-d.md) 定稿、[26](26-data-and-recovery-gate.md)/[27-ext](27-external-postgres-prerequisites.md)/[29](29-production-security-boundary.md) 追加后的 104 条矩阵、[26](26-data-and-recovery-gate.md) 的恢复门、[27](27-v1-deliverables-and-candidate-provenance.md) 的候选留痕与报告、[27-ext](27-external-postgres-prerequisites.md) D7 移交的「开发与 CI 触及的一切平台库必须是 17」**接进真实的执行者**——哪些检查是硬门、跑在哪、失败即阻断什么。
-> **本文不原地改写 [20](20-v1-acceptance-matrix.md) / [21](21-v1-acceptance-entries-a.md) / [22](22-v1-acceptance-entries-b.md) / [23](23-v1-acceptance-entries-c.md) / [24](24-v1-acceptance-entries-d.md) / [26](26-data-and-recovery-gate.md) / [27-ext](27-external-postgres-prerequisites.md) 任何一条，矩阵终态（[29](29-production-security-boundary.md) 追加 `SEC-1..10` 后为 **104 条条目 / 101 条硬底** / `n-a` 5 / `pending` 2 / `exceptions` `[]`）不被本票动摇。** 本票**不新增、不删除任何矩阵条目**。
+> 定位：把 [20](20-v1-acceptance-matrix.md)–[24](24-v1-acceptance-entries-d.md) 定稿、[26](26-data-and-recovery-gate.md)/[27-ext](30-external-postgres-prerequisites.md)/[29](29-production-security-boundary.md) 追加后的 104 条矩阵、[26](26-data-and-recovery-gate.md) 的恢复门、[27](27-v1-deliverables-and-candidate-provenance.md) 的候选留痕与报告、[27-ext](30-external-postgres-prerequisites.md) D7 移交的「开发与 CI 触及的一切平台库必须是 17」**接进真实的执行者**——哪些检查是硬门、跑在哪、失败即阻断什么。
+> **本文不原地改写 [20](20-v1-acceptance-matrix.md) / [21](21-v1-acceptance-entries-a.md) / [22](22-v1-acceptance-entries-b.md) / [23](23-v1-acceptance-entries-c.md) / [24](24-v1-acceptance-entries-d.md) / [26](26-data-and-recovery-gate.md) / [27-ext](30-external-postgres-prerequisites.md) 任何一条，矩阵终态（[29](29-production-security-boundary.md) 追加 `SEC-1..10` 后为 **104 条条目 / 101 条硬底** / `n-a` 5 / `pending` 2 / `exceptions` `[]`）不被本票动摇。** 本票**不新增、不删除任何矩阵条目**。
 > **本文不 supersede 任何在效条款。** 对 [10](10-ai-guardrails-and-verification.md) D1 只加适用面澄清，对 [15](15-ci-and-release-pipeline.md) D2 只增不改（见 §16）。
-> 输入边界（不重议）：[10](10-ai-guardrails-and-verification.md) D1（两层闭环、≤120 秒预算与其重新触发条件）、D2（compose 两 profile 与 `PGHOST_EXTERNAL` 逃生舱、`datlocprovider` 同构性）、D3（A/B 两栏登记表与三问准入判据）；[15](15-ci-and-release-pipeline.md) D1/D2（Actions 唯一规范执行者、复用同一组 `make` 命令、PR 门 = `make check`）与 D3.4（最小权限、不用个人长期 token）；[18](18-v1-delivery-boundary-bs-binary.md)（交付形态、废 T15 D3.3/D4/D5、解除 qemu 否决）；[20](20-v1-acceptance-matrix.md) D4（反假覆盖）、D6.6（`test_ref` 漂移门）、执行入口 `make acceptance`；[27](27-v1-deliverables-and-candidate-provenance.md) D1（SHA 是身份）、D3（`main` 保护）、D5（报告与判定规则写死在生成器里）、D6（`release-gate` 与 rc 语义）；[27-ext](27-external-postgres-prerequisites.md) D1（平台库钉死 17）、D7（原则归其、落地归本票）；一手事实见 [平台库 PG13+ 的一手事实核实 #107](https://github.com/liumingjian/dbs-monitor/issues/107)（sqlc 解析器固定 PG17 语法）。
+> 输入边界（不重议）：[10](10-ai-guardrails-and-verification.md) D1（两层闭环、≤120 秒预算与其重新触发条件）、D2（compose 两 profile 与 `PGHOST_EXTERNAL` 逃生舱、`datlocprovider` 同构性）、D3（A/B 两栏登记表与三问准入判据）；[15](15-ci-and-release-pipeline.md) D1/D2（Actions 唯一规范执行者、复用同一组 `make` 命令、PR 门 = `make check`）与 D3.4（最小权限、不用个人长期 token）；[18](18-v1-delivery-boundary-bs-binary.md)（交付形态、废 T15 D3.3/D4/D5、解除 qemu 否决）；[20](20-v1-acceptance-matrix.md) D4（反假覆盖）、D6.6（`test_ref` 漂移门）、执行入口 `make acceptance`；[27](27-v1-deliverables-and-candidate-provenance.md) D1（SHA 是身份）、D3（`main` 保护）、D5（报告与判定规则写死在生成器里）、D6（`release-gate` 与 rc 语义）；[27-ext](30-external-postgres-prerequisites.md) D1（平台库钉死 17）、D7（原则归其、落地归本票）；一手事实见 [平台库 PG13+ 的一手事实核实 #107](https://github.com/liumingjian/dbs-monitor/issues/107)（sqlc 解析器固定 PG17 语法）。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
 ---
@@ -71,7 +71,7 @@
 
 **理由**：版本差异的唯一真实落点就是采集 SQL 与 `pg_stat_*` 系视图的可用性。更要紧的是——[24](24-v1-acceptance-entries-d.md) 已经把 `VERSION_UNSUPPORTED` 的唯一产生者钉在片⑧的**接入拒绝**上，[23](23-v1-acceptance-entries-c.md) 也据此在 `AC-05-F2` 记了缺口：**采集侧的版本差异目前没有任何验收面**。这张三态表就是那个面。它不进矩阵（矩阵射程是产品语义，且已定稿无 `TBD`），而是作为发布门的独立证据存在。
 
-**不在射程内**：平台库版本矩阵。平台库已由 [27-ext](27-external-postgres-prerequisites.md) D1 钉死 17，不存在矩阵可跑。
+**不在射程内**：平台库版本矩阵。平台库已由 [27-ext](30-external-postgres-prerequisites.md) D1 钉死 17，不存在矩阵可跑。
 
 ---
 
@@ -82,9 +82,9 @@
 1. **运行期**：当前连接的平台库 `server_version_num` 落在 17 大版本区间；并一并断言 [10](10-ai-guardrails-and-verification.md) §2.1 早已规定、但至今仍是纸面的 `datlocprovider <> 'i'`。
 2. **静态**：扫 `compose.yaml` 与 `.github/workflows/*.yml`，凡作**平台库**用的 PostgreSQL image tag 字面量必须是 `17`。被监控库（`matrix` profile）与 `postgres:12`、非 17 平台库这两个专用 profile 不在射程内，靠 service / profile 名白名单区分。
 
-**理由**：这条门保护的不是客户，是**本仓库自己**。[27-ext](27-external-postgres-prerequisites.md) D1 的运行期拒启动挡住的是「客户接了 PG16」；挡不住的是「AI 会话把开发库换成 16、写了一段 PG17 才有的语法、`make gen` 全绿、合进 `main`」——因为 [#107](https://github.com/liumingjian/dbs-monitor/issues/107) 已经查实：**sqlc 不连服务端，解析器固定为 PG17 语法**。只做运行期断言而不扫 image tag，等于把一道结构门降级成「希望没人改配置」。
+**理由**：这条门保护的不是客户，是**本仓库自己**。[27-ext](30-external-postgres-prerequisites.md) D1 的运行期拒启动挡住的是「客户接了 PG16」；挡不住的是「AI 会话把开发库换成 16、写了一段 PG17 才有的语法、`make gen` 全绿、合进 `main`」——因为 [#107](https://github.com/liumingjian/dbs-monitor/issues/107) 已经查实：**sqlc 不连服务端，解析器固定为 PG17 语法**。只做运行期断言而不扫 image tag，等于把一道结构门降级成「希望没人改配置」。
 
-**这条同时结清** [27-ext](27-external-postgres-prerequisites.md) D7 移交给本票的落地项。
+**这条同时结清** [27-ext](30-external-postgres-prerequisites.md) D7 移交给本票的落地项。
 
 ---
 
@@ -258,7 +258,7 @@
 ## 15. D15 · 外溢到实现的硬要求
 
 1. `Makefile` 新增 `acceptance` 目标；`check-full` 调用它；**`check` 绝不调用它**。
-2. `Makefile`/`compose.yaml` 补齐两个尚不存在的 profile：`postgres:12`（[24](24-v1-acceptance-entries-d.md) 要求）、非 17 平台库（[27-ext](27-external-postgres-prerequisites.md) 要求）。
+2. `Makefile`/`compose.yaml` 补齐两个尚不存在的 profile：`postgres:12`（[24](24-v1-acceptance-entries-d.md) 要求）、非 17 平台库（[27-ext](30-external-postgres-prerequisites.md) 要求）。
 3. 落地 B11 / B12 / B14 三条守卫进 `make check`；B14 含 `datlocprovider <> 'i'` 断言。（B13 = [29](29-production-security-boundary.md) 的安全头 golden，不是本票的。）
 4. 新增两条 workflow：`acceptance`（push `main`，独立 job）、`release-evidence`（`workflow_dispatch` + SHA 入参）。漏洞扫描按 [29](29-production-security-boundary.md) D7 进 `check-full`，不另建 workflow。
 5. 报告生成器实现 D7 的 `evidence` 块与五条判定规则，其中**规则 2 与规则 3 必须输出两种不同的失败信息**。
@@ -286,7 +286,7 @@
 | [20](20-v1-acceptance-matrix.md)–[24](24-v1-acceptance-entries-d.md)、[26](26-data-and-recovery-gate.md)、[29](29-production-security-boundary.md) | **一字不动**。104 条条目 / 101 条硬底不变 |
 | [27](27-v1-deliverables-and-candidate-provenance.md) D5 | **扩写不推翻**：判定规则仍写死在生成器里，本票只加 `evidence` 块与三条新规则 |
 | [27](27-v1-deliverables-and-candidate-provenance.md) D6 | 保留。按 [29](29-production-security-boundary.md) D7，`release-gate` **不重跑扫描、只读报告**（D5） |
-| [27-ext](27-external-postgres-prerequisites.md) D7 | **结清**：落地形态 = B14（D4） |
+| [27-ext](30-external-postgres-prerequisites.md) D7 | **结清**：落地形态 = B14（D4） |
 | [29](29-production-security-boundary.md) D7 | **本票让步**：漏洞扫描的归属与阻断语义以其为准；本票只定「结果怎么进报告」（D5） |
 | [29](29-production-security-boundary.md) D9 `B13` | 保留。本票的平台库守卫顺延取 **B14** |
 | [29](29-production-security-boundary.md) `SEC-1..10` | **一字不动**。本票的硬底基数取其终态 101 条 |

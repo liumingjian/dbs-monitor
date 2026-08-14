@@ -16,7 +16,7 @@
 # 恢复门横切组 REC-1..10（#113）新增 10 条全基线，硬底 78 → 88、条目 81 → 91 —— 出处与
 # 理由见 docs/design/26-data-and-recovery-gate.md D1/D10。它是矩阵上第二个横切组，独立计分。
 # 外部前置 PG 的前置校验（#116）追加 REC-11..13 进同一横切组（不开第三组），硬底 88 → 91、
-# 条目 91 → 94 —— 出处与理由见 docs/design/27-external-postgres-prerequisites.md D11。
+# 条目 91 → 94 —— 出处与理由见 docs/design/30-external-postgres-prerequisites.md D11。
 # 新增 after 字段（26 号 D8）：只记执行序依赖，与 rides_on（搭车执行）语义不同，不得混用。
 # 横切条目新增 rides_on 字段（24 号 D7）：横切自带断言集与 test_ref 独立计分，
 # rides_on 只记账它搭在哪次执行现场上；crosscut 写在片条目上是覆盖维，两者不互为反向索引。

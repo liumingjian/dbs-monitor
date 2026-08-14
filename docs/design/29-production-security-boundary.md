@@ -154,7 +154,7 @@
 
 - [25](25-master-key-provenance-and-startup-failure.md) 已定「`/etc/dbs-monitor/credentials/` 由 root 预建、server 不 `mkdir` 父目录」。本条正好接上：**root 建目录并 `chown dbsmon`，进程本身不以 root 跑**。
 - 断言面 = 端到端断 server 进程 **uid ≠ 0**（`SEC-9`）。
-- **不由本票统一收口三个权限面**：#116 已在写「专属 database + 独立 schema `dbsmon` + 不需要 superuser、不需要扩展」，两票同写平台库权限就是第二份真相。本文显式记账「平台库那一半在 [`27-external-postgres-prerequisites`](27-external-postgres-prerequisites.md)」，而不是假装它不存在。
+- **不由本票统一收口三个权限面**：#116 已在写「专属 database + 独立 schema `dbsmon` + 不需要 superuser、不需要扩展」，两票同写平台库权限就是第二份真相。本文显式记账「平台库那一半在 [`27-external-postgres-prerequisites`](30-external-postgres-prerequisites.md)」，而不是假装它不存在。
 
 ---
 

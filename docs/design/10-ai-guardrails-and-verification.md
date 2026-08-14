@@ -116,7 +116,7 @@ T11/R3 边界：T11 的 `check-full` 验证真实构建、Playwright、双架构
 | B11 | 测试与 E2E 脚本中禁止对业务表写入（白名单外命中即红） | [20](20-v1-acceptance-matrix.md) D4 | `check` | 矩阵落地 |
 | B12 | `covered` 条目的 `test_ref` 必须在测试代码中可检索（覆盖漂移门） | [20](20-v1-acceptance-matrix.md) D6.6 | `check` | 矩阵落地 |
 | B13 | **安全头 golden 快照**：六项头的取值逐字入 golden 文件 | [29](29-production-security-boundary.md) D9 | `check` | 片⑧实现期 |
-| B14 | 平台库必须是 PG 17：查 `server_version_num` + `datlocprovider <> 'i'`，并扫 `compose.yaml` 与 workflow 的平台库 image tag | [28](28-v1-go-no-go-gates.md) D4（承 [27-ext](27-external-postgres-prerequisites.md) D7） | `check` | 矩阵落地 |
+| B14 | 平台库必须是 PG 17：查 `server_version_num` + `datlocprovider <> 'i'`，并扫 `compose.yaml` 与 workflow 的平台库 image tag | [28](28-v1-go-no-go-gates.md) D4（承 [27-ext](30-external-postgres-prerequisites.md) D7） | `check` | 矩阵落地 |
 
 ### 3.4 清单是一张有约束力的登记表
 
