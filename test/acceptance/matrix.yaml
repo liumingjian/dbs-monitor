@@ -3,8 +3,14 @@
 # 规则与字段定义：docs/design/20-v1-acceptance-matrix.md（决策票 #111）
 # 本文件由 #111 生成骨架，逐条内容由 #118 / #119 / #120 / #121 填入。
 #
-# 硬底：九片 × 5 条基线（S1 + F1..F4）= 45 条，加 7 条横切 = 52 条。
+# 硬底：九片 × 5 条基线（S1 + F1..F4）= 45 条，加 7 条横切，加逐条票定稿的加深基线。
+# A 组（#118，片01/07/09）定稿 8 条加深基线，硬底因此为 60 —— 出处与理由见
+# docs/design/21-v1-acceptance-entries-a.md D1/D2/D4/D6。B/C/D 组（#119/#120/#121）
+# 若再定加深基线，同样只增不减，各自在自己的决策记录里交代。
 # baseline: true 的条目不许 pending；n-a 必须写 reason。
+# 说明：实现落地前 baseline 条目以 pending 占位；v1 判定时 baseline 仍为 pending 即未达标。
+# test_ref 规范（#118 定）：值必须内含条目 ID 字面量 —— Go 用 TestAcceptance_AC_01_S1 形，
+# Playwright 用 [AC-07-F2] 前缀形，使 B12 漂移门退化为单条 grep。
 # 片⑩（发布收口）不出条目，其内容归 #110 / #114。
 
 version: 1
@@ -20,72 +26,145 @@ entries:
     slice: "01"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "端到端成功路径：经业务 API 建实例 → 真实 Task 采集 → 指标序列出点"
+    layer: api
+    asserts:
+      - "实例经 createInstance 创建，全程无业务表直写（B11）"
+      - "≤2×采集周期内 metric_sample 出现该实例的真实样本（由真实 Task 产出）"
+      - "getMetricSeries 返回绝对时间桶，无补 0 桶"
+      - "collector.last_success_time 完整性水位随全部当期义务满足而推进"
+    pages: ["实例工作台/监控与报警/标准监控"]
+    operations: [createInstance, getMetricSeries, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿；实现归片①实现票，届时置 covered 并填 test_ref"
+  - id: AC-01-S2
+    slice: "01"
+    kind: S2
+    baseline: true
+    title: "全字典对账：每项 P0 指标要么有真实样本，要么显式降级到封闭 13 码，无第三种结局"
+    layer: api
+    asserts:
+      - "遍历 R1 字典全部 P0 指标，逐项二分判定：有真实样本 OR 带封闭 13 码之一的显式降级"
+      - "不存在既无样本又无原因码的指标（第三种结局即红）"
+      - "降级项的码与该指标所属 Task.Requires 的能力快照事实一致，不得自相矛盾"
+      - "指标枚举由字典单一来源生成，与 OpenAPI 枚举一致"
+    pages: []
+    operations: [getMetricSeries, listInstanceCapabilities]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "S1 拍板验收判据原文（片①Further Notes），按 21 号 D1 设为加深基线，不许 pending 落地后必须 covered"
   - id: AC-01-F1
     slice: "01"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
+    title: "权限拒绝：三档角色 × 任务采样周期写端点"
+    layer: api
+    asserts:
+      - "三档角色账号一律经用户管理 API 创建（D9），不直插 user 表"
+      - "只读运维、告警管理员调 updateCollectionTaskInterval 得规定拒绝语义，非 500、非静默成功"
+      - "平台管理员调用成功，且 UI 读回的周期恒等于配置值"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [updateCollectionTaskInterval]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   - id: AC-01-F2
     slice: "01"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "空状态用户可见路径：IA §6.5 从空图表一路走到采集管理的受影响指标"
+    layer: browser
+    asserts:
+      - "空图表渲染 13 码之一的原因文案，绝不渲染成 0（B6）"
+      - "缺桶不补 0，曲线断开而非落到零线"
+      - "dataUpdatedAt 数据新鲜度可见（B6）"
+      - "时间范围与筛选走 search params 往返（B6）"
+      - "从空图表可跳转至采集管理页，并定位到受影响指标行（IA §6.5 全路径）"
+    pages: ["实例工作台/监控与报警/标准监控", "实例工作台/采集管理/指标采集状态"]
+    operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "本组唯一命中 IA §6 关键路径的条目（§6.5），按 21 号 D3 由本条承载整条路径"
   - id: AC-01-F3
     slice: "01"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
+    title: "能力不足降级：真实回收 pg_monitor → MISSING + 修复指引 + 影响 N 项指标"
+    layer: api
+    asserts:
+      - "以真实 SQL 回收监控账号的 pg_monitor 角色（真实手段，非 mock、非直改状态表）"
+      - "能力快照 role.pg_monitor = MISSING 且 Class=fixable，附 FixHint"
+      - "「影响 N 项指标」沿 Task.Requires 反查得出，无第二张映射表"
+      - "受影响指标序列返回 PERMISSION_DENIED，不得表现为「有数据但全零」"
     pages: []
-    operations: []
+    operations: [listInstanceCapabilities, getMetricSeries]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   - id: AC-01-F4
     slice: "01"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
+    title: "平台自身故障不污染目标侧：平台库不可达期间零告警实例、零 NO_DATA、零样本"
+    layer: api
+    asserts:
+      - "注入平台库不可达（真停平台 PG 容器，与 AC-09-F4 同一手法）"
+      - "目标实例侧零新增告警实例、零 NO_DATA"
+      - "metric_sample 该实例零新增行（DB 层只读计数，前后对比）"
+      - "平台库恢复后采集继续，不补跑、不造占位样本"
     pages: []
-    operations: []
+    operations: [getMetricSeries]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-01-F5
+    slice: "01"
+    kind: F5
+    baseline: true
+    title: "目标库不可达：DB_UNREACHABLE + 能力快照整份 UNKNOWN（不是空清单、不是 MISSING）"
+    layer: api
+    asserts:
+      - "真停目标库容器（真实手段）"
+      - "指标序列返回 DB_UNREACHABLE"
+      - "能力快照整份投影 UNKNOWN，绝不反推为 MISSING，绝不呈现为空清单"
+      - "探针 reachable=false 与「平台过载跳过」在任务状态上可区分（跳过不写 reachable=false）"
+    pages: []
+    operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "能力四态的 UNKNOWN 态与不可达故障合并进 F3 会变成两次执行；按 21 号 D2 拆出并设为加深基线"
+  - id: AC-01-F6
+    slice: "01"
+    kind: F6
+    baseline: true
+    title: "结构性不适用：主库上的复制延迟与无 slot，均为 NOT_APPLICABLE 而非 0"
+    layer: api
+    asserts:
+      - "主库实例上复制延迟类指标返回 NOT_APPLICABLE_ROLE 并附 NAReason，不报错、不空白"
+      - "无 replication slot 时呈现「不适用」，与真实积压 0 字节严格可区分"
+      - "topo.has_replication / topo.has_slot 能力 Class=structural，不进配置缺失待办"
+    pages: []
+    operations: [getMetricSeries, listInstanceCapabilities]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "同 AC-01-F5，四态的 NOT_APPLICABLE 态独立成条，加深基线不许 pending"
   # ── 片02 · 告警规则与评估
   - id: AC-02-S1
     slice: "02"
@@ -446,72 +525,133 @@ entries:
     slice: "07"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "暂停端到端：开关 → 调度器停调度 → 水位不推进 → COLLECTION_PAUSED → 恢复后从最新意图续采"
+    layer: api
+    asserts:
+      - "pauseInstanceCollection 后该实例全部任务不再被调度"
+      - "完整性水位不推进（不因暂停而虚假前进，也不判为采集失败）"
+      - "指标序列与最新值查询一律 200 + COLLECTION_PAUSED"
+      - "操作人与时间系统自动必录，可经暂停状态读取契约读回；原因选填"
+      - "resumeInstanceCollection 后从最新意图开始采集，不补跑暂停期"
+      - "Agent 全程不知情：照常 push，agent.status 保持 online，但样本一并不写"
+    pages: ["实例工作台/采集管理/采集配置"]
+    operations: [pauseInstanceCollection, resumeInstanceCollection, getMetricSeries, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
+  - id: AC-07-S2
+    slice: "07"
+    kind: S2
+    baseline: true
+    title: "配置缺失待办三态四情形：不报假绿、永不隐藏、正向空状态带最近检查时间"
+    layer: browser
+    asserts:
+      - "可修复缺失（MISSING/fixable）：出条目，带影响指标计数与文字修复指引，无一键修复按钮"
+      - "结构性不适用（NOT_APPLICABLE）：不进清单，仅在能力模块显示「不适用」+ NAReason，措辞区别于「缺失」"
+      - "查不到（UNKNOWN，含快照过期投影）：进清单且排最前，绝不降级为「就绪」"
+      - "全部就绪：显式正向空状态，且必须带能力快照 observed_at 的最近检查时间"
+      - "四种情形下模块均不隐藏"
+      - "D9 的那条 UI 断言并入本次执行：采集配置模块对非平台管理员置灰并说明所需角色，入口不隐藏（可见性不收窄、写能力收窄）"
+    pages: ["实例工作台/采集管理/配置缺失待办", "实例工作台/采集管理/扩展 / 插件能力", "实例工作台/采集管理/采集配置"]
+    operations: [listInstanceCapabilities]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "S1 拍板验收判据原文（片⑦Further Notes），按 21 号 D1 设为加深基线"
+  - id: AC-07-S3
+    slice: "07"
+    kind: S3
+    baseline: true
+    title: "冻结/解冻告警语义：不转 RECOVERED、解冻不回放、延续同一实例、暂停期历史照常可查"
+    layer: api
+    asserts:
+      - "暂停前置一条 FIRING 告警（经真实评估产生，非直插）"
+      - "暂停后该告警状态原地保留、不转 RECOVERED、不发任何通知"
+      - "告警列表仍可见并带 PAUSED 正交标记"
+      - "暂停期不产生 NO_DATA，暂停实例不产生任何新告警实例"
+      - "解冻且条件仍满足：同一 alert instance id 继续 FIRING，不新建实例、不发假新告警"
+      - "解冻且条件不满足：走正常 RECOVERED 并通知"
+      - "告警历史留 FROZEN / UNFROZEN 事件"
+      - "暂停前区间的历史在保留期内照常可查；暂停期空窗按缺桶呈现，不补 0"
+    pages: []
+    operations: [pauseInstanceCollection, resumeInstanceCollection]
+    crosscut: [BUILTIN-1, BUILTIN-2]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "暂停冻结语义跨到告警域但归属采集域（21 号 D4），设为加深基线；不放入片②以免挤占其五条基线"
   - id: AC-07-F1
     slice: "07"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
+    title: "权限拒绝：暂停/恢复端点仅 PLATFORM_ADMIN"
+    layer: api
+    asserts:
+      - "只读运维、告警管理员调 pause/resume 得规定拒绝语义，非 500、非静默成功"
+      - "平台管理员调用成功"
+      - "UI 侧的「可见性不收窄、写能力收窄」由 AC-07-S2 的浏览器执行承载，不另起一次执行"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [pauseInstanceCollection, resumeInstanceCollection]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   - id: AC-07-F2
     slice: "07"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "空状态：暂停期图表显式「已暂停」，绝不冒充采集失败或数据库不可达"
+    layer: browser
+    asserts:
+      - "暂停期打开任意图表，渲染 COLLECTION_PAUSED 对应的「已暂停」文案"
+      - "文案不得为「采集失败」「数据库不可达」或任何其他 12 码的文案"
+      - "不渲染成 0（B6）"
+      - "实例列表「已暂停」标记带时长，超 7 天转警示色；导航角标计已暂停实例数"
+    pages: ["实例工作台/监控与报警/标准监控", "实例列表"]
+    operations: [getMetricSeries]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   - id: AC-07-F3
     slice: "07"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
-    pages: []
-    operations: []
+    title: "暂停期叠加目标库不可达：已暂停优先，能力模块显示最后一份快照并按有效期投影 UNKNOWN"
+    layer: api
+    asserts:
+      - "暂停中再停目标库容器，指标查询仍返回 COLLECTION_PAUSED，不翻成 DB_UNREACHABLE"
+      - "能力模块显示暂停前最后一份快照，超有效期后投影 UNKNOWN（片①既有语义，本片无特例）"
+      - "不因目标库不可达而自动解除暂停"
+    pages: ["实例工作台/采集管理/数据库连接与权限检查"]
+    operations: [getMetricSeries, listInstanceCapabilities]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   - id: AC-07-F4
     slice: "07"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
+    title: "平台自身故障期间暂停状态不丢、不误恢复、不污染目标侧"
+    layer: api
+    asserts:
+      - "注入平台库不可达后恢复，暂停状态仍生效（控制面单一真相源未被改写）"
+      - "该期间未产生 NO_DATA、未产生任何目标告警实例"
+      - "操作人/时间/原因留痕完好"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [pauseInstanceCollection]
+    crosscut: [INV-4]
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   # ── 片08 · 凭据与接入
   - id: AC-08-S1
     slice: "08"
@@ -588,72 +728,148 @@ entries:
     slice: "09"
     kind: S1
     baseline: true
-    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
-    layer: TBD
-    asserts: []
+    title: "平台健康成功路径：七事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
+    layer: api
+    asserts:
+      - "getPlatformHealth 返回总态 OK，七事实源齐全：服务端进程（版本+启动时间）、自带 PG、采集调度器、分区维护、证书、Agent 接入、磁盘水位"
+      - "快照含组装时间；事实层保留每源级别与细因"
+      - "结构化事件流中存在 60 秒汇总，字段形状符合约定"
+      - "秘密扫描全绿：无密码、密文、主密钥、Agent token、Authorization 头、DSN、原始 SQL、请求体"
+      - "快照随 60 秒节拍在内存重算，不写 metric_sample、不建平台运行事实表"
     pages: []
-    operations: []
+    operations: [getPlatformHealth, getSchedulerSummary, getPlatformVersion]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "journal 载体本身不在 acceptance 环境内验证，见 21 号 D5；本条断言结构化事件内容"
   - id: AC-09-F1
     slice: "09"
     kind: F1
     baseline: true
-    title: "权限拒绝：三档角色 × 写权限矩阵"
-    layer: TBD
-    asserts: []
+    title: "权限拒绝：诊断 API 全部端点仅 PLATFORM_ADMIN，且不返回伪装的空数据"
+    layer: api
+    asserts:
+      - "只读运维、告警管理员访问全部诊断 operationId 一律得明确拒绝语义"
+      - "拒绝不得表现为 200 + 空快照（伪装空数据即红）"
+      - "B3 角色全覆盖守卫覆盖全部新端点"
     pages: []
-    operations: []
-    crosscut: []
+    operations: [getPlatformHealth, getDiskWatermark, getSchedulerSummary, getPartitionMaintenance, getCertificateStatus, getKeyringStatus, getPlatformVersion]
+    crosscut: [INV-3]
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   - id: AC-09-F2
     slice: "09"
     kind: F2
     baseline: true
-    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
-    layer: TBD
+    title: "空状态：本片不产出 Unavailability 13 码"
+    layer: api
     asserts: []
     pages: []
     operations: []
     crosscut: []
-    status: pending
+    status: n-a
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "平台健康不复用 Unavailability 13 码（T14 非递归边界的直接后果：平台自身故障不得复用 NO_DATA 与目标侧空状态语义）。事实源取不到状态时投影平台四态的 UNKNOWN，不是 13 码。该 n-a 让出的保护由 AC-09-F6 补齐。"
   - id: AC-09-F3
     slice: "09"
     kind: F3
     baseline: true
-    title: "目标库不可达或能力不足：降级并给出原因"
-    layer: TBD
-    asserts: []
+    title: "依赖事实源降级：采集池饱和 → DEGRADED + 细因计数，与数据库事故可区分"
+    layer: api
+    asserts:
+      - "以真实并发压力制造采集池饱和（真实手段，非 mock）"
+      - "快照中采集调度器源为 DEGRADED，细因含 pending / skipped_backpressure 等计数"
+      - "调度停转时为 FAILED"
+      - "该 DEGRADED 不写 reachable=false、不制造目标侧故障表象"
     pages: []
-    operations: []
+    operations: [getPlatformHealth, getSchedulerSummary]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "条目内容由 #118 定稿"
   - id: AC-09-F4
     slice: "09"
     kind: F4
     baseline: true
-    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
-    layer: TBD
-    asserts: []
+    title: "平台库不可达：FAILED 快照 + 全站平台自身故障页 + 状态变化事件，且目标侧零污染"
+    layer: browser
+    asserts:
+      - "真停平台 PG 容器"
+      - "浏览器访问任意页面得到明确的「平台自身故障」页，绝不白屏、502 或一片「暂无数据」"
+      - "HTTP 层照常应答（09 D6 第 1 条）"
+      - "快照总态 FAILED，自带 PG 源为 FAILED"
+      - "结构化状态变化事件在故障发生时立即产出"
+      - "目标侧零新增告警实例、零 NO_DATA、metric_sample 零新增行（DB 层只读前后对比）"
+    pages: ["实例列表", "全局告警/当前告警"]
+    operations: [getPlatformHealth]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "故障页是「用户看到什么」，按 D3 判据必须上浏览器；本条是片⑨与目标域彻底隔离的主判据"
+  - id: AC-09-F5
+    slice: "09"
+    kind: F5
+    baseline: true
+    title: "磁盘紧急拒写：拒写生效可证，且旧分区与 30 天保留承诺前后完全一致"
+    layer: db
+    asserts:
+      - "注入前取 DB 只读基线：分区清单、最旧分区、保留配置"
+      - "调低紧急水位阈值至当前使用率之下（部署期配置项，走与生产相同的判定代码路径）"
+      - "新样本写入被拒；该任务在片①任务状态中可见失败，细因 = 磁盘紧急水位"
+      - "完整性水位停摆，缺数以可见的采集失败呈现而非样本静默消失"
+      - "快照总态 FAILED，磁盘源 FAILED"
+      - "注入后再取对比：分区清单与最旧分区完全一致，保留配置未变（绝不自动删旧分区、绝不缩短保留期）"
+      - "控制面小体量写入（处置留痕、配置）不在拒写范围"
+      - "级别回落需低于阈值 2 个百分点（滞回），不因边界抖动翻动快照"
     pages: []
-    operations: []
+    operations: [getDiskWatermark, getPlatformHealth, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
     owner_issue: 118
-    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+    reason: "S1 拍板验收判据原文「磁盘紧急拒写可证且不删旧数据」；本组唯一需要「注入前取基线、注入后取对比」的条目，设为加深基线"
+  - id: AC-09-F6
+    slice: "09"
+    kind: F6
+    baseline: true
+    title: "看不见不得伪装成没问题：任一事实源取不到状态 → 该源 UNKNOWN 且总态绝不为 OK"
+    layer: api
+    asserts:
+      - "使任一事实源查不到状态（真实手段：断其依赖）"
+      - "该源级别为 UNKNOWN，绝不为 OK"
+      - "总态按归并序 FAILED > UNKNOWN > DEGRADED > OK 计算，结果绝不为 OK"
+      - "归并只决定总态，事实层保留每源级别与细因"
+    pages: []
+    operations: [getPlatformHealth]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "补 AC-09-F2 记 n-a 所让出的保护（21 号 D6），设为加深基线"
+  - id: AC-09-F7
+    slice: "09"
+    kind: F7
+    baseline: true
+    title: "证书过期：预警窗内 DEGRADED 附可行动指引，过期后 FAILED"
+    layer: api
+    asserts:
+      - "签一张 20 秒后过期的测试证书（真过期，不改预警窗口）"
+      - "进入预警窗后证书源为 DEGRADED，附可行动指引"
+      - "过期后证书源为 FAILED，总态按归并序为 FAILED"
+      - "证书有效期可经 getCertificateStatus 读出"
+    pages: []
+    operations: [getCertificateStatus, getPlatformHealth]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "14 D6 四类故障注入的第四类，Q6 的七条里无归宿，补为加深基线"
   # ── 横切组（独立计分；每条必须同时有 A 栏表驱动单测与端到端断言）
   - id: INV-1
     slice: crosscut
