@@ -24,16 +24,24 @@
 | T4 | [06-metric-dictionary-and-collection-plan.md](06-metric-dictionary-and-collection-plan.md) | 字典口径编译进 Go，计划参数入库；采集一等公民是 Task；能力是封闭四态；PG13–17 矩阵与任务唯一产出测试属于 R3。 |
 | T6 | [07-api-contract-and-codegen.md](07-api-contract-and-codegen.md) | OpenAPI 按域拆分、`make gen` 唯一入口、生成物入库并做漂移门；时间绝对化；空状态 200 + 封闭 13 码；角色声明覆盖每个 `operationId`。 |
 | T7 | [08-frontend-stack-and-ui.md](08-frontend-stack-and-ui.md) | 三个状态桶，`domain/` 封闭清单；图表 `unavailability` 必填；枚举用 `assertNever`；轮询渲染用 `dataUpdatedAt`；TimeRangePicker 的骨架内联偏离见该文收口登记。 |
-| T8 | [09-packaging-and-deployment.md](09-packaging-and-deployment.md) | 离线 tar + 自建 PG17、socket-only、双架构与各自 glibc 下限；升级备控制面、回滚靠备份；时钟和磁盘容量是安装期硬门；整机宕机交外部基础设施。 |
+| T8 ⚠ | [09-packaging-and-deployment.md](09-packaging-and-deployment.md) | 离线 tar + 自建 PG17、socket-only、双架构与各自 glibc 下限；升级备控制面、回滚靠备份；时钟和磁盘容量是安装期硬门；整机宕机交外部基础设施。 |
 | T9 | [10-ai-guardrails-and-verification.md](10-ai-guardrails-and-verification.md) | `make check` / `make check-full` 两层闭环，现行快层预算为 **≤120 秒**；Docker 真 PG；A/B 护栏登记表、两份 `CLAUDE.md`、CI PR 门；RT-C 由人工 / R3 发布门接管。 |
 | T10 | [11-walking-skeleton-slice.md](11-walking-skeleton-slice.md) | 骨架只验证必须跑起来才能证伪的选型：两条采集通路、告警、认证、前端两级路由、分区和真实验收；不预摆 R3–R6 空壳。 |
 | T12 | [12-collection-concurrency-timeouts-and-backpressure.md](12-collection-concurrency-timeouts-and-backpressure.md) | 中央调度、探针/查询双槽、分层超时与背压；不补跑、不自动降频；采集源完整性水位；平台自身诊断边界移交 T14。 |
 | T13 | [13-credential-encryption-rotation-and-revocation.md](13-credential-encryption-rotation-and-revocation.md) | PG password 使用版本化 keyring + AES-256-GCM；Agent 显式登记、token 只存哈希；解密故障属于平台自身故障；秘密永不出站。 |
 | T14 | [14-platform-observability-and-diagnostics.md](14-platform-observability-and-diagnostics.md) | 平台健康独立四态，journal 是历史，诊断 API 是管理员入口；平台故障不进入目标告警或 `NO_DATA`；磁盘紧急时拒写新样本但不自动删旧数据或缩短保留。 |
-| T15 | [15-ci-and-release-pipeline.md](15-ci-and-release-pipeline.md) | GitHub Actions 是规范执行者；PR 门为 `make check`，默认分支为 `make check-full`；语义化 tag + 精确提交校验 + Environment 审批；四种原生架构/glibc 组合与长期 Release assets。 |
+| T15 ⚠ | [15-ci-and-release-pipeline.md](15-ci-and-release-pipeline.md) | GitHub Actions 是规范执行者；PR 门为 `make check`，默认分支为 `make check-full`；语义化 tag + 精确提交校验 + Environment 审批；四种原生架构/glibc 组合与长期 Release assets。 |
 
 ## 3. 收口注记
 
 - P0 已由 PR #34 合入 `9127f90`；本索引以 P0 回写后的文档为准，不复述地图正文中已过时的 T9 `≤90 秒`。
 - P1 首轮只落 PR 门与默认分支 / 手动 `check-full` workflow；四组合原生 runner、发布审批与 Release 归档仍交下游。
 - `docs/design/01-appendix-implemented.md` 尚未生成，已在 T4 文档登记为 R3 未兑现项。
+
+## 4. 被后续决策取代的部分
+
+> 本节只登记指针，不改写 §2 的原结论。带 ⚠ 的票表示其决策**部分被取代**，读到该行须一并读本节所指的记录。
+
+| 取代记录 | 取代了什么 | 决策票 |
+|---|---|---|
+| [18-v1-delivery-boundary-bs-binary.md](18-v1-delivery-boundary-bs-binary.md) · v1 交付边界：B/S 二进制直接运行验收 | **T8** 中依附「离线 tar 安装包」「自带并自建 PG17」「安装脚本」的全部结论（D1、D2、D4、D5、D8、D9.1、D10/D11 的执行者、§3 的 glibc 下限与 §12 交付物清单）；**T15** 中依附「四组合架构 × glibc + 长期 Release assets」的部分（D3.3、D4、D5）；地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 及决策票 #99–#102 的整条 macOS `.pkg` 首发路线。**T2 / T12 / T13 机制 / T14 不受影响**，见该文 §13 点名清单。 | [#106](https://github.com/liumingjian/dbs-monitor/issues/106)（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)） |
