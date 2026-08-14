@@ -12,10 +12,14 @@
 # C 组（#120，片05/06）定稿 4 条加深基线，硬底累加至 71 —— 出处与理由见
 # docs/design/23-v1-acceptance-entries-c.md D1/D2/D4/D8。
 # D 组（#121，片08 + 横切组）定稿 7 条加深基线，硬底累加至 78 —— 出处与理由见
-# docs/design/24-v1-acceptance-entries-d.md D2/D3。四票定稿完毕，硬底最终值 78。
+# docs/design/24-v1-acceptance-entries-d.md D2/D3。四票定稿完毕，片条目硬底 78。
+# 恢复门横切组 REC-1..10（#113）新增 10 条全基线，硬底 78 → 88、条目 81 → 91 —— 出处与
+# 理由见 docs/design/26-data-and-recovery-gate.md D1/D10。它是矩阵上第二个横切组，独立计分。
+# 新增 after 字段（26 号 D8）：只记执行序依赖，与 rides_on（搭车执行）语义不同，不得混用。
 # 横切条目新增 rides_on 字段（24 号 D7）：横切自带断言集与 test_ref 独立计分，
 # rides_on 只记账它搭在哪次执行现场上；crosscut 写在片条目上是覆盖维，两者不互为反向索引。
 # 执行序两条硬约束（24 号 D1/D14）：AC-08-S1 最先（全矩阵接入前置），AC-08-S7 最末（停 server 跑离线轮换）。
+# 执行序全序（26 号 D7）：AC-08-S1 最先 → 其余片条目 → REC-* → AC-08-S7 最末。
 # baseline: true 的条目不许 pending；n-a 必须写 reason。
 # 说明：实现落地前 baseline 条目以 pending 占位；v1 判定时 baseline 仍为 pending 即未达标。
 # test_ref 规范（#118 定）：值必须内含条目 ID 字面量 —— Go 用 TestAcceptance_AC_01_S1 形，
@@ -1519,3 +1523,184 @@ entries:
     test_ref: null
     owner_issue: 121
     reason: "独立执行一次；采集新鲜度阈值参数化到秒级是本条跑得完的前提，是 24 号 D15 外溢到实现的硬要求之一 —— 不参数化就只能直写历史样本，落进 D4 白名单，而四组定稿后 exceptions 全程为 []"
+
+  # ── 恢复门横切组 REC-1..10（26 号 D1）────────────────────────────────────
+  # 第二个横切组，独立计分，硬底 78 → 88、条目 81 → 91。
+  # 与 INV / BUILTIN 的差别：REC 组一律独立执行、rides_on 恒为 []（26 号 D8），
+  # 因为它的注入手段（杀进程、断库、灌 dump、停维护循环）会改变现场。
+  # REC-3 / REC-4 对片条目的依赖是执行序依赖，用新字段 after 记账，不塞进 rides_on。
+  # 执行序（26 号 D7）：AC-08-S1 最先 → 其余片条目 → REC-* → AC-08-S7 最末。
+  - id: REC-1
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "server 重启恢复：采集续采不补跑、未决告警不失忆、Agent 会话免重接入"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "重启前经业务 API 造出：进行中的采集、一条未恢复告警实例、一个已接入的 agent"
+      - "真杀 server 进程并重启（真实手段，不发信号模拟）"
+      - "调度器按最新意图续采：重启窗口不补跑、不造占位样本"
+      - "未恢复告警实例 ID 与首次触发时间保持，连续触发计数不重置，不谎报 RECOVERED"
+      - "Agent token 仍有效、无需重新接入；重启窗口的缺数按 T14 不进 NO_DATA"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 D7「库是自描述的、无外部隐藏状态」在进程侧的唯一验收面。连接池刻意不进断言集（26 号 D5.1）——纯进程内实现细节，重启后必然重建，外部无可观测语义，不是漏了"
+  - id: REC-2
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "agent 重启恢复：缺数是真缺数，按缺桶呈现不补 0、不进 NO_DATA"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "kill agent 真进程，等待超过一个采集周期后重启"
+      - "重启后自动恢复上报，无需重新接入"
+      - "重启窗口在图表上按缺桶呈现，绝不补 0（承 04 不补 0）"
+      - "该窗口不计入 NO_DATA：agent 侧中断是采集侧事实，不是目标库缺数"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "与 REC-1 分开而不合并（26 号 D5.2）：合成一条会让「谁重启导致的缺数」这个区分永远测不出来，而那正是 T14 要分开的两个域"
+  - id: REC-3
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "备份恢复链：pg_dump → 真空 PG restore → 起 server → 直接可用"
+    layer: api
+    rides_on: []
+    after: [all-slice-entries]
+    asserts:
+      - "语义覆盖门槛（非行数门槛，26 号 D4.2）：至少一个实例含加密凭据、一条含版本快照的规则、一条未恢复告警实例 + 其 AlertEvent、样本跨 ≥2 个分区"
+      - "数据全部由片条目跑完后自然存在，不额外造（exceptions 保持 []）"
+      - "灌进 compose 独立 profile 的 restore-target 空 PG 容器，不是平台库同实例的另一个 database"
+      - "server 配置指向新库重启后：配置 / 规则 / 未恢复告警 / 加密凭据 / 样本全经业务 API 可读"
+      - "带同一份 keyring 时密文可解，采集继续出点（keyring 正面，反面见 REC-4）"
+      - "DB 层只读对账：分区子表随 dump 一起还原，外键级联完整"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 §8 D7 三条承诺（库自描述、标准工具可备份、恢复后直接可用）的唯一端到端验收面。靶库必须是真空 PG 而非同实例 createdb（26 号 D7）——共用 initdb 参数 / locale / 扩展 / 角色会掩盖「自描述」最容易翻车的那部分"
+  - id: REC-4
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "keyring 与库分离：换一份或缺失必须明确失败，绝不生成新密钥"
+    layer: api
+    rides_on: []
+    after: [REC-3]
+    asserts:
+      - "在 REC-3 的恢复现场上换一份不匹配的 keyring：起 HTTP、健康 keyring 子系统 FAILED、解密类操作全部失败"
+      - "keyring 目录整个缺失时同样不拒绝启动（承 25 号 §5.3，不设快速失败例外）"
+      - "两种情形下 keyring 目录内均不出现任何新生成的 master-key-v*：绝不静默生成"
+      - "失败语义归平台自身故障，不出现 DB_UNREACHABLE / NO_DATA（承 T14）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "13 号 D7/D8「备份不含 keyring、遗失即不可恢复、无后门」在恢复链上的唯一验收面。与 AC-08-F4 按场景来源划界（26 号 D4.4）：AC-08-F4 管运行中的 keyring 故障（权限错、文件被改，库与密钥同机），本条管恢复链上的密钥—库分离（库来自备份、keyring 来自另一台机器）；AC-08-F4 一字不动"
+  - id: REC-5
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "迁移并发：两 server 进程同时冷启动，一个应用一个等锁，终态版本一致无部分应用"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "空库上同时拉起两个 server 进程（真实手段，不串行化）"
+      - "goose session locker 生效：一个进程应用迁移，另一个等待而非并发 CREATE TABLE"
+      - "DB 只读对账 goose 版本表：终态版本唯一、无重复行、无部分应用的中间态"
+      - "锁等待超时参数化到秒级；超时后按迁移执行失败处理（非零退出，见 REC-7）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "迁移并发语义的唯一验收面。一手事实：goose v3.24.3 已提供 WithSessionLocker，而 migrations/migrate.go 当前未启用，是裸并发（26 号 D2.1）；两份迁移均无 NO TRANSACTION，故部分应用只可能发生在多笔之间"
+  - id: REC-6
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "平台库不可达启动：HTTP 起、健康 FAILED、业务端点 503、库回来后补跑迁移自愈"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "停平台库容器后启动 server（真实手段）：进程不退出、HTTP 端口可达"
+      - "健康端点如实报 FAILED，平台自身故障可见"
+      - "业务端点一律 503 且响应体指名平台自身故障：绝不返回 13 码中任何一个（26 号 D3.3）"
+      - "本条不断「可登录」——登录依赖平台库，25 号 §5.2 那句说的是 keyring 坏而库好的场景"
+      - "平台库恢复后：后台自动重连并补跑迁移，业务面自愈，无需人工重启进程"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 §6 D5 第 1 条「不许把平台挂了渲染成没有数据」的唯一验收面。13 码是目标库的空状态词汇表，用它描述平台故障即两域混淆——那正是全矩阵九条 F4 存在的理由"
+  - id: REC-7
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "迁移执行失败：非零退出、拒绝对外服务、日志指名失败笔次"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "在库中制造与二进制预期不符的 schema 状态后启动 server"
+      - "进程非零退出，不监听 HTTP：绝不带着半个 schema 对外提供服务"
+      - "日志指名失败的迁移笔次与错误原文"
+      - "绝不降级成「起 HTTP + FAILED + 业务 503 继续运行」（26 号 D13 否决记录）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 §8 D7「绝不带着半个 schema 对外提供服务」的唯一验收面。与 REC-6 按失败性质两分而非按启动阶段（26 号 D3.2）：连不上库不拒启动，连上了但迁移执行失败拒启动"
+  - id: REC-8
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "分区生命周期肯定面：预建覆盖、DROP 非 DELETE、维护失败进健康事实源"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "分区跨度沿用 21 号 D7 参数化取值（1min）"
+      - "启动后预建覆盖面 = 当前 + 7 个跨度（04 D6 机制 1，幂等 CREATE TABLE IF NOT EXISTS）"
+      - "过期分区被 DROP 而不是 DELETE：对账 pg_class，子表整体消失而非留下空表（这是唯一能区分两者的观测点）"
+      - "维护循环失败时平台健康出现「分区维护」事实源，且 journal 有结构化 error（04 D6 机制 4 + 14 号 §2）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "04 §6 D6 机制 1/2/4 的唯一验收面。否定面（分区清单与最旧分区前后一致、绝不自动删旧分区、绝不缩短保留期）已由 AC-09-F5 断死，本条刻意不重复（26 号 D6）"
+  - id: REC-9
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "分区兜底：写入撞上无匹配分区 → 同步触发维护 → 重试一次成功"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "把分区维护间隔配成极大值使循环事实上停摆（部署期配置项，走与生产相同的判定代码路径）"
+      - "让时间走过预建边界，使真实采集写入撞上无匹配分区"
+      - "CopyFrom 失败被识别为「无匹配分区」→ 同步触发一次分区维护 → 重试一次成功"
+      - "该次采集最终成功出点，不表现为静默丢样本"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "04 §6 D6 机制 3 自称「凌晨炸的最后一道防线」，且是无人会手工验的那一类，故不降级为可 pending 的普通加深（26 号 D1）。手段定性为参数化而非模拟（26 号 D6.1）：否决 test-only 开关（往生产代码种测试分支）与 DB 层手工 DROP 未来分区（D4 禁止 DB 层写）"
+  - id: REC-10
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "进程并发：第二个 server 实例拿不到平台库 advisory lock，直接拒启动"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "已有 server 在跑时启动第二个实例：立即非零退出，不等待"
+      - "错误信息指名「已有 server 实例在运行」，与「正在迁移」可区分"
+      - "第一个实例不受影响，采集与 HTTP 面全程正常"
+      - "三把锁互相独立可证：rotate 锁 / 迁移锁 / 进程锁 ID 不同、行为不同（26 号 D2.3）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "双起 server 的后果（两套采集调度器、两套分区维护循环、两套通知发送）无其他拦截点；是 25 号 D5「轮换时忘了停 server」那把锁的对称扩展。否决三把锁合成一把——会让「正在迁移」与「已经在跑」退化成同一句错误信息"
