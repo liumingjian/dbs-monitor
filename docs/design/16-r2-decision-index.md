@@ -46,3 +46,11 @@
 |---|---|---|
 | [18-v1-delivery-boundary-bs-binary.md](18-v1-delivery-boundary-bs-binary.md) · v1 交付边界：B/S 二进制直接运行验收 | **T8** 中依附「离线 tar 安装包」「自带并自建 PG17」「安装脚本」的全部结论（D1、D2、D4、D5、D8、D9.1、D10/D11 的执行者、§3 的 glibc 下限与 §12 交付物清单）；**T15** 中依附「四组合架构 × glibc + 长期 Release assets」的部分（D3.3、D4、D5）；地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 及决策票 #99–#102 的整条 macOS `.pkg` 首发路线。**T2 / T12 / T13 机制 / T14 不受影响**，见该文 §13 点名清单。 | [#106](https://github.com/liumingjian/dbs-monitor/issues/106)（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)） |
 | [19-agent-distribution-and-upgrade.md](19-agent-distribution-and-upgrade.md) · Agent 分发与升级形态（无安装器） | **T8** D7 全条与 §8.1（安装脚本自举形态下的自分发、CA 指纹内嵌、plan B 依托 tar 包）、以及 T8 D11 时钟检查的执行者；载体全部改写为「接入设置页生成的安装命令 + 下载端点 + Agent 启动自检」。**「绝不自升级」「装要 root 跑不要 root」「信任根带外传递、全程无 `-k`」「编译期同源 / 运行期容一个大版本」四条原则保留。** | [#108](https://github.com/liumingjian/dbs-monitor/issues/108)（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)） |
+
+## 5. v1 投产路线新增的决策（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)）
+
+> 本节登记**不取代既有结论、纯新增**的决策文档。取代类记录仍在 §4。
+
+| 文档 | 决策 gist | 决策票 |
+|---|---|---|
+| [20-v1-acceptance-matrix.md](20-v1-acceptance-matrix.md) · v1 验收矩阵的骨架与判定规则 | 矩阵沿 spec 十片切（片⑩不出条目），页面树与 `operationId` 作覆盖维；每片 `S1` + `F1..F4` 五条基线，加七条横切（四不变式 + 三内置规则，独立计分、必须单测 + 端到端各一）= 52 条硬底，基线不许 `pending`；API 层为默认断言层，浏览器只覆盖 IA §6 五条关键路径 + B6，DB 层只读不写；**测试数据只许经业务 API 或真实采集管线产生**，禁止直插业务表（新增守卫 B11）与 `covered` 漂移门（B12）；载体为本文 + `test/acceptance/matrix.yaml`，执行入口 `make acceptance`（进 `check-full`，不进 `check`），环境为平台库 / 目标库两个 PG + 真 Agent 真实接入；时间参数化不伪造、故障用真实手段不 mock。 | [#111](https://github.com/liumingjian/dbs-monitor/issues/111)（地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105)） |

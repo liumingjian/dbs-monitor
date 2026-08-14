@@ -1,0 +1,741 @@
+# v1 验收矩阵 · 骨架
+#
+# 规则与字段定义：docs/design/20-v1-acceptance-matrix.md（决策票 #111）
+# 本文件由 #111 生成骨架，逐条内容由 #118 / #119 / #120 / #121 填入。
+#
+# 硬底：九片 × 5 条基线（S1 + F1..F4）= 45 条，加 7 条横切 = 52 条。
+# baseline: true 的条目不许 pending；n-a 必须写 reason。
+# 片⑩（发布收口）不出条目，其内容归 #110 / #114。
+
+version: 1
+spec: docs/spec/mvp-master-spec.md
+rules: docs/design/20-v1-acceptance-matrix.md
+
+# D4 白名单：绕过业务 API 的数据准备，逐条登记理由。默认为空。
+exceptions: []
+
+entries:
+  # ── 片01 · 采集与指标全量
+  - id: AC-01-S1
+    slice: "01"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-01-F1
+    slice: "01"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-01-F2
+    slice: "01"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-01-F3
+    slice: "01"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-01-F4
+    slice: "01"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  # ── 片02 · 告警规则与评估
+  - id: AC-02-S1
+    slice: "02"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-02-F1
+    slice: "02"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-02-F2
+    slice: "02"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-02-F3
+    slice: "02"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-02-F4
+    slice: "02"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  # ── 片03 · 告警处置与性能事件
+  - id: AC-03-S1
+    slice: "03"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-03-F1
+    slice: "03"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-03-F2
+    slice: "03"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-03-F3
+    slice: "03"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-03-F4
+    slice: "03"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  # ── 片04 · 通知与告警设置区
+  - id: AC-04-S1
+    slice: "04"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-04-F1
+    slice: "04"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-04-F2
+    slice: "04"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-04-F3
+    slice: "04"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  - id: AC-04-F4
+    slice: "04"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "骨架票 #111 只登记基线位置，内容待 #119 填入"
+  # ── 片05 · 观察面
+  - id: AC-05-S1
+    slice: "05"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-05-F1
+    slice: "05"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-05-F2
+    slice: "05"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-05-F3
+    slice: "05"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-05-F4
+    slice: "05"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  # ── 片06 · 增强监控
+  - id: AC-06-S1
+    slice: "06"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-06-F1
+    slice: "06"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-06-F2
+    slice: "06"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-06-F3
+    slice: "06"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  - id: AC-06-F4
+    slice: "06"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "骨架票 #111 只登记基线位置，内容待 #120 填入"
+  # ── 片07 · 采集管理页
+  - id: AC-07-S1
+    slice: "07"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-07-F1
+    slice: "07"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-07-F2
+    slice: "07"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-07-F3
+    slice: "07"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-07-F4
+    slice: "07"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  # ── 片08 · 凭据与接入
+  - id: AC-08-S1
+    slice: "08"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: AC-08-F1
+    slice: "08"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: AC-08-F2
+    slice: "08"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: AC-08-F3
+    slice: "08"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: AC-08-F4
+    slice: "08"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  # ── 片09 · 平台可观测性
+  - id: AC-09-S1
+    slice: "09"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：配置 → 真实采集/评估 → 可见"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-09-F1
+    slice: "09"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 写权限矩阵"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-09-F2
+    slice: "09"
+    kind: F2
+    baseline: true
+    title: "空状态：落在封闭 13 码之一，且不渲染成 0"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-09-F3
+    slice: "09"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：降级并给出原因"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  - id: AC-09-F4
+    slice: "09"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不污染目标告警、不计入 NO_DATA"
+    layer: TBD
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "骨架票 #111 只登记基线位置，内容待 #118 填入"
+  # ── 横切组（独立计分；每条必须同时有 A 栏表驱动单测与端到端断言）
+  - id: INV-1
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "告警状态五档，压制是正交轴"
+    unit_test: A1        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: TBD               # 端到端面的主断言层
+    asserts: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: INV-2
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "实例健康 = 未恢复告警最坏归并 + 已暂停 override，单一来源"
+    unit_test: A5        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: TBD               # 端到端面的主断言层
+    asserts: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: INV-3
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "三档全局角色：可见性不收窄、写能力收窄、凭据永不回显"
+    unit_test: B7        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: TBD               # 端到端面的主断言层
+    asserts: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: INV-4
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "三条内置采集状态规则不可删不可停，严重级别下限 warning"
+    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: TBD               # 端到端面的主断言层
+    asserts: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: BUILTIN-1
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "内置采集状态规则 1"
+    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: TBD               # 端到端面的主断言层
+    asserts: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: BUILTIN-2
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "内置采集状态规则 2"
+    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: TBD               # 端到端面的主断言层
+    asserts: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
+  - id: BUILTIN-3
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "内置采集状态规则 3"
+    unit_test: A9        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: TBD               # 端到端面的主断言层
+    asserts: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "骨架票 #111 只登记基线位置，内容待 #121 填入"
