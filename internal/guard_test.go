@@ -306,7 +306,7 @@ func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Makefile: %v", err)
 	}
-	checkFull := requireMakeTarget(t, string(makefile), "check-full")
+	checkFull := requireMakeTarget(t, string(makefile), "_check-full")
 	for _, required := range []string{"$(MAKE) check-pg-matrix", "$(MAKE) check-sqlc-vet"} {
 		if !strings.Contains(checkFull, required) {
 			t.Errorf("check-full is missing %q", required)
@@ -318,7 +318,7 @@ func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
 		t.Fatalf("read check-full workflow: %v", err)
 	}
 	contents := string(workflow)
-	for _, required := range []string{"name: check-full", "      - main", "  workflow_dispatch:", "      - run: make check-full"} {
+	for _, required := range []string{"name: check-full", "      - main", "  workflow_dispatch:", "      - run: make _check-full"} {
 		if !strings.Contains(contents, required) {
 			t.Errorf("check-full workflow is missing %q", required)
 		}

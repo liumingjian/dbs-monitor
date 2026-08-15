@@ -54,7 +54,7 @@ func TestMain(m *testing.M) {
 	} else {
 		fmt.Printf("acceptance result: %s\n", resultPath)
 	}
-	os.Exit(code)
+	os.Exit(acceptanceReport.exitCode(code))
 }
 
 func TestAcceptance_AC_08_S1(t *testing.T) {

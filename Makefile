@@ -22,7 +22,7 @@ BUILD_LDFLAGS := -X main.version=$(BUILD_VERSION) -X main.commitSHA=$(CANDIDATE_
 # Keep tag-derived values out of shell source; the shell reads them as environment data.
 export BUILD_LDFLAGS
 
-.PHONY: gen dev-up dev-down build check check-full acceptance check-pg-matrix check-snapshot-matrix check-sqlc-vet
+.PHONY: gen dev-up dev-down build check check-full _check-full acceptance release-evidence check-vulnerabilities check-pg-matrix check-snapshot-matrix check-sqlc-vet
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml
@@ -45,6 +45,7 @@ build:
 	cd web && npm run build
 	go build -ldflags "$$BUILD_LDFLAGS" -tags embed_web -o dbs-monitor-server ./cmd/monitor-server
 	go build -ldflags "$$BUILD_LDFLAGS" -o dbs-monitor-agent ./cmd/monitor-agent
+	sha256sum dbs-monitor-server dbs-monitor-agent > SHA256SUMS
 
 check:
 	sh scripts/check-toolchain.sh
@@ -55,14 +56,33 @@ check:
 	cd web && npm run lint
 	cd web && npm test -- --run
 
-check-full: check acceptance
+check-full: _check-full acceptance
+
+_check-full: check
 	$(MAKE) build
 	sh scripts/check-e2e.sh
 	$(MAKE) check-sqlc-vet
 	$(MAKE) check-pg-matrix
+	$(MAKE) check-vulnerabilities
 
 acceptance:
 	sh test/acceptance/run.sh
+
+release-evidence: check-pg-matrix
+	PG13_URL=postgres://monitored:monitored@localhost:55433/monitored?sslmode=disable \
+	PG14_URL=postgres://monitored:monitored@localhost:55434/monitored?sslmode=disable \
+	PG15_URL=postgres://monitored:monitored@localhost:55435/monitored?sslmode=disable \
+	PG16_URL=postgres://monitored:monitored@localhost:55436/monitored?sslmode=disable \
+	PG17_URL=postgres://monitored:monitored@localhost:55437/monitored?sslmode=disable \
+	go run ./cmd/pg-range-evidence -candidate-sha "$(CANDIDATE_SHA)" -output results/pg-range-evidence.json
+
+check-vulnerabilities:
+	@mkdir -p results
+	@status=0; \
+	go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./... > results/govulncheck.txt 2>&1 || status=$$?; \
+	cat results/govulncheck.txt; \
+	(cd web && npm audit --json > ../results/npm-audit.json) || echo "npm audit reported findings (report-only)"; \
+	exit $$status
 
 check-sqlc-vet:
 	@database=dbs_monitor_sqlc_vet_$$$$; \

@@ -64,6 +64,18 @@ func TestAcceptanceResultRetainsEveryMatrixEntry(t *testing.T) {
 	}
 }
 
+func TestAcceptanceResultFailsWhileBaselineEntriesArePending(t *testing.T) {
+	matrix := loadMatrix(t, "matrix.yaml")
+	report := newResult(matrix, "0123456789012345678901234567890123456789")
+
+	if report.Summary.BaselinePassed {
+		t.Fatal("pending baseline entries produced a passing acceptance result")
+	}
+	if report.exitCode(0) == 0 {
+		t.Fatal("pending baseline entries did not make acceptance blocking")
+	}
+}
+
 func TestAcceptanceResultSerializesVerdictInputs(t *testing.T) {
 	matrix := loadMatrix(t, "matrix.yaml")
 	report := newResult(matrix, "0123456789012345678901234567890123456789")

@@ -1,0 +1,126 @@
+name: release-gate
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated release tag to re-evaluate
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate candidate and archived decision
+        id: validate
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = process.env.RELEASE_TAG;
+            const match = /^v\d+\.\d+\.\d+(-rc\.\d+)?$/.exec(tag);
+            if (!match) {
+              core.setFailed(`unsupported release tag: ${tag}`);
+              return;
+            }
+
+            const permission = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: context.actor });
+            if (!['admin', 'maintain', 'write'].includes(permission.data.permission)) {
+              core.setFailed(`release gate actor ${context.actor} is not a maintainer`);
+              return;
+            }
+
+            const ref = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+            if (ref.data.object.type !== 'tag') {
+              core.setFailed(`${tag} is not an annotated tag`);
+              return;
+            }
+            const annotated = await github.rest.git.getTag({ owner, repo, tag_sha: ref.data.object.sha });
+            if (annotated.data.object.type !== 'commit') {
+              core.setFailed(`${tag} does not resolve directly to a commit`);
+              return;
+            }
+            const candidate = annotated.data.object.sha;
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner, repo, workflow_id: 'check-full.yml', head_sha: candidate, status: 'success', per_page: 100,
+            });
+            const checkFull = runs.data.workflow_runs.find(run => run.conclusion === 'success' && run.head_sha === candidate);
+            if (!checkFull) {
+              core.setFailed(`candidate ${candidate} has no successful check-full run`);
+              return;
+            }
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({ owner, repo, run_id: checkFull.id, per_page: 100 });
+            const vulnerabilityReport = artifacts.data.artifacts.find(artifact =>
+              artifact.name === `vulnerability-reports-${candidate}` && !artifact.expired
+            );
+            if (!vulnerabilityReport) {
+              core.setFailed(`check-full run ${checkFull.id} has no readable vulnerability report`);
+              return;
+            }
+
+            const repository = await github.rest.repos.get({ owner, repo });
+            let files;
+            try {
+              const validation = await github.rest.repos.getContent({
+                owner, repo, path: 'docs/validation', ref: repository.data.default_branch,
+              });
+              files = Array.isArray(validation.data) ? validation.data : [];
+            } catch (error) {
+              if (error.status === 404) files = [];
+              else throw error;
+            }
+
+            const reports = [];
+            for (const file of files.filter(file => file.type === 'file' && file.name.endsWith('.json'))) {
+              const response = await github.rest.repos.getContent({
+                owner, repo, path: file.path, ref: repository.data.default_branch,
+              });
+              const report = JSON.parse(Buffer.from(response.data.content, response.data.encoding).toString('utf8'));
+              if (report.candidate_sha === candidate) reports.push(report);
+            }
+            const formal = reports.filter(report =>
+              report.profile === 'final' && report.provisional === false && ['GO', 'NO-GO'].includes(report.verdict)
+            );
+            if (formal.length === 0) {
+              core.setFailed(`candidate ${candidate} has not been formally evaluated; PROVISIONAL-PASS is insufficient`);
+              return;
+            }
+            const goReport = formal.find(report => report.verdict === 'GO');
+            if (!match[1] && !goReport) {
+              core.setFailed(`formal tag ${tag} requires verdict GO`);
+              return;
+            }
+            const verdict = goReport ? 'GO' : formal[0].verdict;
+            core.setOutput('candidate', candidate);
+            core.setOutput('check_full_run_id', String(checkFull.id));
+            core.summary
+              .addHeading('Release gate')
+              .addTable([
+                [{ data: 'Tag', header: true }, { data: 'Candidate', header: true }, { data: 'Verdict', header: true }],
+                [tag, candidate, verdict],
+              ])
+              .write();
+      - name: Read archived vulnerability reports
+        uses: actions/download-artifact@v4
+        with:
+          name: vulnerability-reports-${{ steps.validate.outputs.candidate }}
+          path: results/vulnerability-reports
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.validate.outputs.check_full_run_id }}
+      - name: Verify archived vulnerability reports
+        run: |
+          test -s results/vulnerability-reports/govulncheck.txt
+          test -s results/vulnerability-reports/npm-audit.json

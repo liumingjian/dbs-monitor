@@ -6,7 +6,7 @@ tls_dir=$(mktemp -d)
 project=dbs-monitor-acceptance
 
 cleanup() {
-  docker compose -p "$project" --profile acceptance down --volumes --remove-orphans >/dev/null 2>&1 || true
+  docker compose -p "$project" down --volumes --remove-orphans >/dev/null 2>&1 || true
   rm -rf "$tls_dir"
 }
 trap cleanup EXIT INT TERM
@@ -26,7 +26,8 @@ chmod 0600 "$tls_dir/server.key"
 cd "$root"
 export ACCEPTANCE_PLATFORM_TLS_DIR="$tls_dir"
 docker compose -p "$project" --profile acceptance down --volumes --remove-orphans >/dev/null 2>&1 || true
-docker compose -p "$project" --profile acceptance up -d --wait acceptance-platform acceptance-target
+docker compose -p "$project" --profile acceptance --profile restore --profile smtp --profile webhook \
+  up -d --wait acceptance-platform acceptance-target restore-target smtp-sink webhook-sink
 
 ACCEPTANCE_CANDIDATE_SHA="$(git rev-parse HEAD)" \
 ACCEPTANCE_PLATFORM_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55442/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt" \
