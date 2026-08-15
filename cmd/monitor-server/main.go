@@ -129,10 +129,11 @@ func run(ctx context.Context) error {
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
 	retryDelay := time.Second
+	recovering := false
 	for {
 		ready, err := preparePlatformDatabase(
 			ctx, platform, connectionString, credentialDirectory,
-			config.MigrationLockWaitTimeout, health, log.Default(),
+			config.MigrationLockWaitTimeout, recovering, health, log.Default(),
 		)
 		if err != nil {
 			return err
@@ -140,7 +141,8 @@ func run(ctx context.Context) error {
 		if ready {
 			break
 		}
-		log.Printf("monitor-server: platform database unavailable; retrying startup in %s", retryDelay)
+		recovering = true
+		log.Printf("monitor-server: platform database not ready; retrying startup in %s", retryDelay)
 		timer := time.NewTimer(retryDelay)
 		select {
 		case <-ctx.Done():

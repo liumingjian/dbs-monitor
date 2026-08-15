@@ -44,6 +44,7 @@ func preparePlatformDatabase(
 	connectionString string,
 	credentialDirectory string,
 	lockWaitTimeout time.Duration,
+	recovering bool,
 	health *platformhealth.Store,
 	logger *log.Logger,
 ) (bool, error) {
@@ -52,7 +53,10 @@ func preparePlatformDatabase(
 		health.Update(time.Now().UTC(), platformhealth.DatabaseSource(err))
 		return false, nil
 	}
-	if err := report.FatalError(); err != nil {
+	retry, err := handlePlatformDatabasePreflightFailure(
+		report, recovering, health, logger, time.Now().UTC(),
+	)
+	if retry || err != nil {
 		return false, err
 	}
 
