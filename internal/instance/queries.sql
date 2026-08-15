@@ -38,6 +38,9 @@ RETURNING id, name, host, port, database_name, username, created_at;
 -- name: DeleteInstance :exec
 DELETE FROM instance WHERE id = $1;
 
+-- name: HasEncryptedCredentials :one
+SELECT EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NOT NULL);
+
 -- name: ListCollectionTargets :many
 SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version
 FROM instance

@@ -62,12 +62,12 @@ cpu_count=$(getconf _NPROCESSORS_ONLN)
 if ! id dbsmon >/dev/null 2>&1; then
   useradd --system --home-dir "$install_root" --shell /usr/sbin/nologin dbsmon
 fi
-mkdir -p "$install_root" "$install_root/bin" "$install_root/etc" "$install_root/run" "$install_root/certs" "$data_dir"
+mkdir -p "$install_root" "$install_root/bin" "$install_root/etc/credentials" "$install_root/run" "$install_root/certs" "$data_dir"
 cp -a "$(dirname "$0")/bin/." "$install_root/bin/"
 rm -rf "$install_root/pgsql"
 cp -a "$(dirname "$0")/pgsql" "$install_root/pgsql"
 chown -R dbsmon:dbsmon "$install_root" "$data_dir"
-chmod 0700 "$install_root/run" "$install_root/certs" "$data_dir"
+chmod 0700 "$install_root/run" "$install_root/certs" "$install_root/etc/credentials" "$data_dir"
 
 if [ ! -s "$data_dir/PG_VERSION" ]; then
   runuser -u dbsmon -- "$install_root/pgsql/bin/initdb" -D "$data_dir" --locale=C --encoding=UTF8 --auth-local=peer --auth-host=reject

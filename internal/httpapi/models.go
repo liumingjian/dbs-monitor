@@ -41,6 +41,7 @@ type Instance struct {
 	Port               int32
 	DatabaseName       string
 	Username           string
+	Password           string
 	AgentTokenHash     []byte
 	CreatedAt          pgtype.Timestamptz
 	PasswordCiphertext []byte

@@ -133,6 +133,17 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 	return i, err
 }
 
+const hasEncryptedCredentials = `-- name: HasEncryptedCredentials :one
+SELECT EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NOT NULL)
+`
+
+func (q *Queries) HasEncryptedCredentials(ctx context.Context) (bool, error) {
+	row := q.db.QueryRow(ctx, hasEncryptedCredentials)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listCollectionTargets = `-- name: ListCollectionTargets :many
 SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version
 FROM instance

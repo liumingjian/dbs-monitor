@@ -40,7 +40,7 @@ func main() {
 
 func run(ctx context.Context) error {
 	connectionString := env("DATABASE_URL", "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable")
-	credentialDirectory := env("CREDENTIALS_DIR", "/opt/dbs-monitor/etc/credentials")
+	credentialDirectory := env("CREDENTIALS_DIR", "/etc/dbs-monitor/credentials")
 	pool, err := pgxpool.New(ctx, connectionString)
 	if err != nil {
 		return fmt.Errorf("open platform database: %w", err)
@@ -52,14 +52,20 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
+	if _, err := migrations.Up(ctx, migrationDB); err != nil {
 		migrationDB.Close()
 		return err
 	}
 	migrationDB.Close()
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	hasEncryptedCredentials, err := instance.New(platform).HasEncryptedCredentials(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("inspect encrypted instance credentials: %w", err)
+	}
+	keyring, keyringErr := instance.OpenCredentialKeyring(credentialDirectory, hasEncryptedCredentials)
+	if keyringErr != nil {
+		log.Printf("credential keyring failed: %v", keyringErr)
+	} else if keyring.Generated() {
+		log.Printf("credential keyring generated: directory=%q version=%d", credentialDirectory, keyring.CurrentVersion())
 	}
 	if err := metric.EnsurePartitions(ctx, platform, time.Now()); err != nil {
 		return err
