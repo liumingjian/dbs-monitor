@@ -17,6 +17,7 @@ const defaultServerConfigPath = "/etc/dbs-monitor/config.yaml"
 type serverConfig struct {
 	PartitionSpan                time.Duration
 	PartitionMaintenanceInterval time.Duration
+	AlertHistoryRetention        time.Duration
 	RepeatIntervalMinimum        time.Duration
 	SnapshotTruncationLimit      int
 	CollectionFreshnessThreshold time.Duration
@@ -31,6 +32,7 @@ type serverConfig struct {
 type rawServerConfig struct {
 	PartitionSpan                *string `yaml:"partition_span"`
 	PartitionMaintenanceInterval *string `yaml:"partition_maintenance_interval"`
+	AlertHistoryRetention        *string `yaml:"alert_history_retention"`
 	RepeatIntervalMinimum        *string `yaml:"repeat_interval_minimum"`
 	SnapshotTruncationLimit      *int    `yaml:"snapshot_truncation_limit"`
 	CollectionFreshnessThreshold *string `yaml:"collection_freshness_threshold"`
@@ -46,6 +48,7 @@ func defaultServerConfig() serverConfig {
 	return serverConfig{
 		PartitionSpan:                24 * time.Hour,
 		PartitionMaintenanceInterval: time.Hour,
+		AlertHistoryRetention:        90 * 24 * time.Hour,
 		RepeatIntervalMinimum:        15 * time.Minute,
 		SnapshotTruncationLimit:      100,
 		CollectionFreshnessThreshold: 10 * time.Minute,
@@ -94,6 +97,7 @@ func loadServerConfig(path string) (serverConfig, bool, error) {
 	}{
 		{name: "partition_span", value: raw.PartitionSpan, target: &config.PartitionSpan},
 		{name: "partition_maintenance_interval", value: raw.PartitionMaintenanceInterval, target: &config.PartitionMaintenanceInterval},
+		{name: "alert_history_retention", value: raw.AlertHistoryRetention, target: &config.AlertHistoryRetention},
 		{name: "repeat_interval_minimum", value: raw.RepeatIntervalMinimum, target: &config.RepeatIntervalMinimum},
 		{name: "collection_freshness_threshold", value: raw.CollectionFreshnessThreshold, target: &config.CollectionFreshnessThreshold},
 		{name: "migration_lock_wait_timeout", value: raw.MigrationLockWaitTimeout, target: &config.MigrationLockWaitTimeout},
