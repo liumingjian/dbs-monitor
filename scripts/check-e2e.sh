@@ -57,20 +57,31 @@ instance_id=$(node -e 'process.stdout.write(JSON.stringify({name:"T11 smoke inst
   --data-binary @- \
   | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).instance.id))")
 
-from=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)
-to=$(date -u -d '1 minute' +%Y-%m-%dT%H:%M:%SZ)
-series_ready=0
+series_from=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)
+series_to=$(date -u -d '1 minute' +%Y-%m-%dT%H:%M:%SZ)
+samples_ready=0
 for _ in $(seq 1 80); do
   if curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" -b "$cookie_file" --get \
-    --data-urlencode 'metric=pg.tps' --data-urlencode "from=$from" --data-urlencode "to=$to" --data-urlencode 'step=raw' \
+    --data-urlencode 'metric=pg.tps' \
+    --data-urlencode "from=$series_from" \
+    --data-urlencode "to=$series_to" \
+    --data-urlencode 'step=raw' \
     "https://127.0.0.1:18443/api/v1/instances/$instance_id/metrics/series" \
-    | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => { const metric = JSON.parse(body).metrics[0]; process.exit(metric.series.some(series => series.points.length > 0) ? 0 : 1) })"; then
-    series_ready=1
+    | node -e '
+let body = ""
+process.stdin.on("data", (chunk) => { body += chunk })
+process.stdin.on("end", () => {
+  const metric = JSON.parse(body).metrics[0]
+  const hasPoints = metric.series.some((series) => series.points.length > 0)
+  process.exit(hasPoints ? 0 : 1)
+})
+'; then
+    samples_ready=1
     break
   fi
   sleep 0.25
 done
-if [ "$series_ready" -ne 1 ]; then
+if [ "$samples_ready" -ne 1 ]; then
   echo "real pg.tps samples did not arrive" >&2
   cat "$server_log" >&2
   exit 1

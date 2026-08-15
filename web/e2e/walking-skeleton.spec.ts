@@ -10,10 +10,15 @@ test('[AC-01-S1] real pg_stat_database samples reach a chart and keep URL and qu
 
   await expect(page).toHaveURL(/\/instances$/)
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
-  await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '查看监控' }).click()
+  await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: /监控$/ }).click()
 
-  await page.getByLabel('指标').click()
-  await page.getByText('TPS (pg.tps)', { exact: true }).click()
+  const metricSelect = page.getByLabel('指标')
+  await metricSelect.click()
+  // TPS follows the three connection metrics in the non-searchable select.
+  await metricSelect.press('ArrowDown')
+  await metricSelect.press('ArrowDown')
+  await metricSelect.press('ArrowDown')
+  await metricSelect.press('Enter')
   await expect(page).toHaveURL((url) => url.searchParams.get('metric') === 'pg.tps')
 
   const chart = page.getByRole('figure', { name: 'TPS趋势' })
