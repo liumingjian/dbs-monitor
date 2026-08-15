@@ -21,7 +21,8 @@ INSERT INTO alert_rule (
     no_data_policy, scope, evaluation_interval_seconds,
     enabled, version, created_by, updated_by, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $18)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1,
+        sqlc.arg(actor_id), sqlc.arg(actor_id), sqlc.arg(created_at), sqlc.arg(created_at))
 RETURNING *;
 
 -- name: UpdateAlertRule :one

@@ -63,16 +63,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	}
 	server := httptest.NewTLSServer(httpapi.NewHandler(platform, currentClock, keyring).Routes())
 	defer server.Close()
-	jar, _ := cookiejar.New(nil)
-	client := server.Client()
-	client.Jar = jar
-	login := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
-		"username": "admin", "password": "correct horse battery staple",
-	}, "")
-	login.Body.Close()
-	if login.StatusCode != http.StatusNoContent {
-		t.Fatalf("login status = %d, want 204", login.StatusCode)
-	}
+	client := loginAlertTestUser(t, server, "admin", "correct horse battery staple")
 
 	targetID := createAlertTestInstance(t, ctx, pool, keyring, "target")
 	otherID := createAlertTestInstance(t, ctx, pool, keyring, "out-of-scope")
@@ -117,8 +108,9 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("created rule = %+v, want id and version 1", createdRule)
 	}
 	var adminID, createdBy, updatedBy, createdVersionBy uuid.UUID
+	var adminPasswordHash []byte
 	var createdAt, updatedAt, createdVersionAt time.Time
-	if err := pool.QueryRow(ctx, `SELECT id FROM app_user WHERE username = 'admin'`).Scan(&adminID); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT id, password_hash FROM app_user WHERE username = 'admin'`).Scan(&adminID, &adminPasswordHash); err != nil {
 		t.Fatalf("read rule actor: %v", err)
 	}
 	if createdRule.CreatedBy == nil || *createdRule.CreatedBy != adminID ||
@@ -171,8 +163,15 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
 
+	editorID := uuid.New()
+	if _, err := pool.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role)
+		VALUES ($1, 'rule-editor', $2, 'ALERT_ADMIN')`, editorID, adminPasswordHash); err != nil {
+		t.Fatalf("create rule editor: %v", err)
+	}
+	editorClient := loginAlertTestUser(t, server, "rule-editor", "correct horse battery staple")
+
 	ruleInput["name"] = "High active connections v2"
-	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/alert-rules/"+createdRule.ID.String(), ruleInput, "")
+	updated := requestJSON(t, editorClient, http.MethodPut, server.URL+"/api/v1/alert-rules/"+createdRule.ID.String(), ruleInput, "")
 	defer updated.Body.Close()
 	if updated.StatusCode != http.StatusOK {
 		t.Fatalf("update rule status = %d, want 200", updated.StatusCode)
@@ -187,23 +186,24 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("updated rule = %+v, error = %v", updatedRule, err)
 	}
 	if updatedRule.CreatedBy == nil || *updatedRule.CreatedBy != adminID ||
-		updatedRule.UpdatedBy == nil || *updatedRule.UpdatedBy != adminID || !updatedRule.UpdatedAt.Equal(currentClock.now) {
-		t.Fatalf("updated rule API attribution = %+v, want actor %s at %s", updatedRule, adminID, currentClock.now)
+		updatedRule.UpdatedBy == nil || *updatedRule.UpdatedBy != editorID || !updatedRule.UpdatedAt.Equal(currentClock.now) {
+		t.Fatalf("updated rule API attribution = %+v, want creator %s and editor %s at %s",
+			updatedRule, adminID, editorID, currentClock.now)
 	}
-	var semanticUpdatedBy, updatedVersionBy uuid.UUID
-	var semanticUpdatedAt, updatedVersionAt time.Time
+	var storedUpdatedBy, versionCreatedBy uuid.UUID
+	var storedUpdatedAt, versionCreatedAt time.Time
 	if err := pool.QueryRow(ctx, `SELECT rule.updated_by, rule.updated_at, version.created_by, version.created_at
 		FROM alert_rule rule
 		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = 2
 		WHERE rule.id = $1`, createdRule.ID).Scan(
-		&semanticUpdatedBy, &semanticUpdatedAt, &updatedVersionBy, &updatedVersionAt,
+		&storedUpdatedBy, &storedUpdatedAt, &versionCreatedBy, &versionCreatedAt,
 	); err != nil {
 		t.Fatalf("read updated rule attribution: %v", err)
 	}
-	if semanticUpdatedBy != adminID || updatedVersionBy != adminID ||
-		!semanticUpdatedAt.Equal(currentClock.now) || !updatedVersionAt.Equal(currentClock.now) {
+	if storedUpdatedBy != editorID || versionCreatedBy != editorID ||
+		!storedUpdatedAt.Equal(currentClock.now) || !versionCreatedAt.Equal(currentClock.now) {
 		t.Fatalf("updated rule attribution = actors %s/%s at %s/%s, want %s at %s",
-			semanticUpdatedBy, updatedVersionBy, semanticUpdatedAt, updatedVersionAt, adminID, currentClock.now)
+			storedUpdatedBy, versionCreatedBy, storedUpdatedAt, versionCreatedAt, editorID, currentClock.now)
 	}
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
 
@@ -337,6 +337,23 @@ func alertRuleInput(instanceID uuid.UUID) map[string]any {
 		"scope": "INSTANCES", "instance_ids": []uuid.UUID{instanceID},
 		"evaluation_interval_seconds": 30, "enabled": true,
 	}
+}
+
+func loginAlertTestUser(t *testing.T, server *httptest.Server, username, password string) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("create cookie jar: %v", err)
+	}
+	client := &http.Client{Transport: server.Client().Transport, Jar: jar}
+	response := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
+		"username": username, "password": password,
+	}, "")
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("login %q status = %d, want 204", username, response.StatusCode)
+	}
+	return client
 }
 
 func createAlertTestInstance(t *testing.T, ctx context.Context, pool *pgxpool.Pool, keyring *instance.CredentialKeyring, name string) uuid.UUID {

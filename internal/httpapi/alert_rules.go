@@ -71,7 +71,7 @@ func (handler *Handler) CreateAlertRule(ctx context.Context, request api.CreateA
 			Scope:                     string(input.Scope),
 			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
 			Enabled:                   input.Enabled,
-			CreatedBy:                 actorID,
+			ActorID:                   actorID,
 			CreatedAt:                 now,
 		})
 		if err != nil {
@@ -428,22 +428,21 @@ func toAPIAlertRule(rule alerting.AlertRule, scopedInstanceIDs []pgtype.UUID) ap
 		Version:                   int(rule.Version),
 		CreatedAt:                 rule.CreatedAt.Time,
 		UpdatedAt:                 rule.UpdatedAt.Time,
-	}
-	if rule.CreatedBy.Valid {
-		value := openapi_types.UUID(rule.CreatedBy.Bytes)
-		result.CreatedBy = &value
-	}
-	if rule.UpdatedBy.Valid {
-		value := openapi_types.UUID(rule.UpdatedBy.Bytes)
-		result.UpdatedBy = &value
-	}
-	if rule.EnabledUpdatedBy.Valid {
-		value := openapi_types.UUID(rule.EnabledUpdatedBy.Bytes)
-		result.EnabledUpdatedBy = &value
+		CreatedBy:                 toOptionalAPIUUID(rule.CreatedBy),
+		UpdatedBy:                 toOptionalAPIUUID(rule.UpdatedBy),
+		EnabledUpdatedBy:          toOptionalAPIUUID(rule.EnabledUpdatedBy),
 	}
 	if rule.EnabledUpdatedAt.Valid {
 		value := rule.EnabledUpdatedAt.Time
 		result.EnabledUpdatedAt = &value
 	}
 	return result
+}
+
+func toOptionalAPIUUID(id pgtype.UUID) *openapi_types.UUID {
+	if !id.Valid {
+		return nil
+	}
+	value := openapi_types.UUID(id.Bytes)
+	return &value
 }

@@ -83,7 +83,8 @@ INSERT INTO alert_rule (
     no_data_policy, scope, evaluation_interval_seconds,
     enabled, version, created_by, updated_by, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $18)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1,
+        $17, $17, $18, $18)
 RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, created_by, updated_by
 `
 
@@ -104,7 +105,7 @@ type CreateAlertRuleParams struct {
 	Scope                     string
 	EvaluationIntervalSeconds int32
 	Enabled                   bool
-	CreatedBy                 pgtype.UUID
+	ActorID                   pgtype.UUID
 	CreatedAt                 pgtype.Timestamptz
 }
 
@@ -126,7 +127,7 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		arg.Scope,
 		arg.EvaluationIntervalSeconds,
 		arg.Enabled,
-		arg.CreatedBy,
+		arg.ActorID,
 		arg.CreatedAt,
 	)
 	var i AlertRule
