@@ -93,11 +93,12 @@ func OpenCredentialKeyring(directory string, hasEncryptedCredentials bool) (*Cre
 		keyring.fault = err
 		return keyring, err
 	}
-	missingCode := CredentialFaultCurrentKey
-	if matches, globErr := filepath.Glob(filepath.Join(directory, credentialKeyFilenamePattern)); globErr == nil && len(matches) == 0 {
-		missingCode = CredentialFaultMissingKey
+	matches, globErr := filepath.Glob(filepath.Join(directory, credentialKeyFilenamePattern))
+	missingKeyCode := CredentialFaultCurrentKey
+	if globErr == nil && len(matches) == 0 {
+		missingKeyCode = CredentialFaultMissingKey
 	}
-	key, err := readCredentialKey(directory, version, missingCode)
+	key, err := readCredentialKey(directory, version, missingKeyCode)
 	if err != nil {
 		keyring.fault = err
 		return keyring, err
@@ -127,8 +128,7 @@ func initializeCredentialKeyring(directory string, hasEncryptedCredentials bool)
 	if info.Mode().Perm() != 0o700 {
 		return false, &CredentialFault{Code: CredentialFaultKeyPermissions}
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid == 0 || stat.Uid != uint32(os.Geteuid()) {
+	if !credentialOwnerIsValid(info) {
 		return false, &CredentialFault{Code: CredentialFaultKeyOwner}
 	}
 	if hasEncryptedCredentials {
@@ -206,15 +206,15 @@ func generateInitialCredentialKeyring(directory string) (bool, error) {
 	if err != nil {
 		return false, &CredentialFault{Code: CredentialFaultMissingKey}
 	}
-	written := false
+	keyPersisted := false
 	defer func() {
 		file.Close()
-		if !written {
+		if !keyPersisted {
 			os.Remove(keyPath)
 		}
 	}()
 	encodedKey := base64.StdEncoding.EncodeToString(key) + "\n"
-	if writtenBytes, err := file.WriteString(encodedKey); err != nil || writtenBytes != len(encodedKey) {
+	if bytesWritten, err := file.WriteString(encodedKey); err != nil || bytesWritten != len(encodedKey) {
 		return false, &CredentialFault{Code: CredentialFaultMissingKey}
 	}
 	if err := file.Sync(); err != nil {
@@ -223,7 +223,7 @@ func generateInitialCredentialKeyring(directory string) (bool, error) {
 	if err := file.Close(); err != nil {
 		return false, &CredentialFault{Code: CredentialFaultMissingKey}
 	}
-	written = true
+	keyPersisted = true
 	if err := writeCurrentCredentialKeyVersion(directory, 1); err != nil {
 		return false, err
 	}
@@ -235,8 +235,8 @@ func readCurrentCredentialKeyVersion(directory string) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
-	line := strings.TrimSuffix(string(contents), "\n")
-	if line == "" || strings.ContainsAny(line, "\r\n") {
+	line, ok := parseCredentialLine(contents)
+	if !ok {
 		return 0, &CredentialFault{Code: CredentialFaultCurrentKey}
 	}
 	value, err := strconv.ParseInt(line, 10, 32)
@@ -287,8 +287,8 @@ func readCredentialKey(directory string, version int32, missingCode CredentialFa
 	if err != nil {
 		return nil, err
 	}
-	line := strings.TrimSuffix(string(contents), "\n")
-	if line == "" || strings.ContainsAny(line, "\r\n") {
+	line, ok := parseCredentialLine(contents)
+	if !ok {
 		return nil, &CredentialFault{Code: CredentialFaultKeyLength}
 	}
 	key, err := base64.StdEncoding.DecodeString(line)
@@ -306,8 +306,7 @@ func readCredentialFile(path string, missingCode CredentialFaultCode) ([]byte, e
 	if info.Mode().Perm() != 0o600 {
 		return nil, &CredentialFault{Code: CredentialFaultKeyPermissions}
 	}
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid == 0 || stat.Uid != uint32(os.Geteuid()) {
+	if !credentialOwnerIsValid(info) {
 		return nil, &CredentialFault{Code: CredentialFaultKeyOwner}
 	}
 	contents, err := os.ReadFile(path)
@@ -315,6 +314,16 @@ func readCredentialFile(path string, missingCode CredentialFaultCode) ([]byte, e
 		return nil, &CredentialFault{Code: missingCode}
 	}
 	return contents, nil
+}
+
+func parseCredentialLine(contents []byte) (string, bool) {
+	line := strings.TrimSuffix(string(contents), "\n")
+	return line, line != "" && !strings.ContainsAny(line, "\r\n")
+}
+
+func credentialOwnerIsValid(info os.FileInfo) bool {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stat.Uid != 0 && stat.Uid == uint32(os.Geteuid())
 }
 
 func credentialKeyFilename(version int32) string {
