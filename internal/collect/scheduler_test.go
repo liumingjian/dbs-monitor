@@ -33,6 +33,24 @@ func TestInitialPhaseIsStableAndDistributed(t *testing.T) {
 	}
 }
 
+func TestInitialDueDistinguishesCapabilityAndCollectionTasks(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	instanceID := "00000000-0000-0000-0000-000000000001"
+	collectionTask := metric.Task{ID: metric.TaskProbe, Interval: 5 * time.Second}
+	collectionRun := scheduledRun{
+		key:      taskKey{instanceID: instanceID, taskID: metric.TaskProbe},
+		task:     collectionTask,
+		interval: collectionTask.Interval,
+	}
+
+	if got := initialDue(now, scheduledRun{task: capabilitySnapshotTask}); !got.Equal(now) {
+		t.Fatalf("initial capability due = %s, want %s", got, now)
+	}
+	if got := initialDue(now, collectionRun); !got.After(now) {
+		t.Fatalf("initial collection due = %s, want staggered after %s", got, now)
+	}
+}
+
 func TestFailureBackoffCapsAtSixtySecondsAndExcludesProbe(t *testing.T) {
 	tests := []struct {
 		name     string

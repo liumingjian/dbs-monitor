@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 const instanceName = 'T11 smoke instance'
 
-test('standard monitoring workbench renders 22 charts and keeps controls in URL state', async ({ page }) => {
+test('[AC-01-S1] standard monitoring renders real pg_stat_database samples and keeps controls in URL state', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('用户名').fill('admin')
   await page.getByLabel('密码').fill('t11-playwright-password')
@@ -20,6 +20,12 @@ test('standard monitoring workbench renders 22 charts and keeps controls in URL 
   await expect(page.getByRole('region', { name: '资源指标' }).locator('.metric-card')).toHaveCount(5)
   await expect(page.getByRole('region', { name: '数据库指标' }).locator('.metric-card')).toHaveCount(12)
   await expect(page.getByRole('region', { name: '复制指标' }).locator('.metric-card')).toHaveCount(5)
+
+  const tpsCard = page.locator('.metric-card').filter({ has: page.getByText('TPS', { exact: true }) })
+  const tpsChart = tpsCard.getByRole('figure', { name: 'TPS趋势' })
+  await expect(tpsChart).toBeVisible()
+  await tpsChart.getByText('查看数据表').click()
+  await expect(tpsChart.locator('tbody tr').first()).toBeVisible()
 
   const cpuCard = page.locator('.metric-card').filter({ has: page.getByText('CPU', { exact: true }) })
   const cpuChart = cpuCard.getByRole('figure', { name: 'CPU趋势' })
@@ -73,7 +79,7 @@ test('standard monitoring workbench renders 22 charts and keeps controls in URL 
   await page.getByRole('button', { name: '应用时间范围' }).click()
   await rangeRequest
   await expect(page).toHaveURL((url) => url.searchParams.get('from') === from && url.searchParams.get('to') === to)
-  await expect(cpuChart).toBeVisible()
+  await expect(tpsChart).toBeVisible()
 
   await page.goto(`/instances/not-used/monitoring?from=last-hour&to=bad&step=10m`)
   await expect(page.getByText('时间范围必须是绝对 RFC3339 时间')).toBeVisible()
