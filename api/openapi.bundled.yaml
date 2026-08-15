@@ -1664,8 +1664,12 @@ paths:
             schema:
               $ref: '#/components/schemas/AgentReport'
       responses:
-        '204':
+        '200':
           description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentReportAccepted'
         '400':
           description: Report rejected because of clock skew or Agent version
           content:
@@ -4259,6 +4263,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentMetric'
+    AgentReportAccepted:
+      type: object
+      required:
+        - server_version
+      properties:
+        server_version:
+          type: string
+          minLength: 1
+          description: Version of the server that accepted the report.
     AgentRegistrationState:
       type: string
       enum:

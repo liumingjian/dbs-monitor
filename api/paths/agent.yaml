@@ -11,7 +11,11 @@
         application/json:
           schema: { $ref: ../components/schemas/agent.yaml#/AgentReport }
     responses:
-      '204': { description: Accepted }
+      '200':
+        description: Accepted
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/agent.yaml#/AgentReportAccepted }
       '401':
         description: Invalid token
         content:

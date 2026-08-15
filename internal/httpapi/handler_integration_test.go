@@ -738,6 +738,15 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("rotated Agent token status = %d, want old token rejected with 401", oldToken.StatusCode)
 	}
 	oldToken.Body.Close()
+	alertUpdatedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
+		(instance_id, metric_id, status, updated_at, rule_id, rule_version, severity, rule_snapshot)
+		SELECT $1, rule.metric_id, 'OK', $2, rule.id, rule.version, rule.severity, version.snapshot
+		FROM alert_rule rule
+		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = rule.version
+		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`, instanceID, alertUpdatedAt); err != nil {
+		t.Fatalf("seed alert state: %v", err)
+	}
 	skewed := report(time.Now().Add(-31*time.Second), "2.4.0", agentToken, nil)
 	if skewed.StatusCode != http.StatusBadRequest {
 		t.Fatalf("skewed timestamp status = %d, want 400", skewed.StatusCode)
@@ -762,16 +771,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("old version message = %q", oldVersionError.Error.Message)
 	}
 	assertAgentState(t, ctx, pool, instanceID, "1.99.0", "AGENT_VERSION_TOO_OLD", "版本过旧，需升级")
-
-	alertUpdatedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
-	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
-		(instance_id, metric_id, status, updated_at, rule_id, rule_version, severity, rule_snapshot)
-		SELECT $1, rule.metric_id, 'OK', $2, rule.id, rule.version, rule.severity, version.snapshot
-		FROM alert_rule rule
-		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = rule.version
-		WHERE rule.id = '00000000-0000-0000-0000-000000000061'`, instanceID, alertUpdatedAt); err != nil {
-		t.Fatalf("seed alert state: %v", err)
-	}
+	assertAlertEvaluationUnchanged(t, ctx, pool, instanceID, alertUpdatedAt)
 	now := time.Now().UTC()
 	backfill := []map[string]any{
 		{"timestamp": now.Add(-90 * time.Second).Format(time.RFC3339Nano), "metrics": metricsWithIOPS(9)},
@@ -779,8 +779,15 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		{"timestamp": now.Add(-5*time.Minute - time.Second).Format(time.RFC3339Nano), "metrics": hostMetrics},
 	}
 	accepted := report(now, "2.4.0", agentToken, backfill)
-	if accepted.StatusCode != http.StatusNoContent {
-		t.Fatalf("valid report status = %d, want 204", accepted.StatusCode)
+	if accepted.StatusCode != http.StatusOK {
+		t.Fatalf("valid report status = %d, want 200", accepted.StatusCode)
+	}
+	var acceptedBody api.AgentReportAccepted
+	if err := json.NewDecoder(accepted.Body).Decode(&acceptedBody); err != nil {
+		t.Fatalf("decode accepted report response: %v", err)
+	}
+	if acceptedBody.ServerVersion != "3.0.0" {
+		t.Fatalf("server_version = %q, want 3.0.0", acceptedBody.ServerVersion)
 	}
 	accepted.Body.Close()
 	reportedRegistration := getResponse(t, client, registrationURL)
@@ -869,8 +876,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		"metrics":       []map[string]any{},
 	}, agentToken)
 	recovered.Body.Close()
-	if recovered.StatusCode != http.StatusNoContent {
-		t.Fatalf("post-emergency Agent heartbeat status = %d, want 204", recovered.StatusCode)
+	if recovered.StatusCode != http.StatusOK {
+		t.Fatalf("post-emergency Agent heartbeat status = %d, want 200", recovered.StatusCode)
 	}
 	hostSeriesURL, err := url.Parse(fmt.Sprintf("%s/api/v1/instances/%s/metrics/series", server.URL, instanceID))
 	if err != nil {
@@ -916,13 +923,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 			}
 		}
 	}
-	var unchanged time.Time
-	if err := pool.QueryRow(ctx, "SELECT updated_at FROM alert_instance WHERE instance_id = $1", instanceID).Scan(&unchanged); err != nil {
-		t.Fatalf("read alert state after backfill: %v", err)
-	}
-	if !unchanged.Equal(alertUpdatedAt) {
-		t.Fatalf("backfill changed alert evaluation state at %s, want %s", unchanged, alertUpdatedAt)
-	}
+	assertAlertEvaluationUnchanged(t, ctx, pool, instanceID, alertUpdatedAt)
 
 	instanceResponse := getResponse(t, client, server.URL+"/api/v1/instances/"+instanceID)
 	defer instanceResponse.Body.Close()

@@ -416,6 +416,12 @@ type AgentReport struct {
 	Timestamp  time.Time          `json:"timestamp"`
 }
 
+// AgentReportAccepted defines model for AgentReportAccepted.
+type AgentReportAccepted struct {
+	// ServerVersion Version of the server that accepted the report.
+	ServerVersion string `json:"server_version"`
+}
+
 // AgentSample defines model for AgentSample.
 type AgentSample struct {
 	Metrics   []AgentMetric `json:"metrics"`
@@ -3797,12 +3803,13 @@ type ReportAgentMetricsResponseObject interface {
 	VisitReportAgentMetricsResponse(w http.ResponseWriter) error
 }
 
-type ReportAgentMetrics204Response struct {
-}
+type ReportAgentMetrics200JSONResponse AgentReportAccepted
 
-func (response ReportAgentMetrics204Response) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
+func (response ReportAgentMetrics200JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type ReportAgentMetrics400JSONResponse Error

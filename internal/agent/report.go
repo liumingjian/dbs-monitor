@@ -3,7 +3,9 @@ package agent
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -186,12 +188,28 @@ func (service *Service) RunOnce(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("report Agent metrics: %w", err)
 	}
-	if response.StatusCode() != http.StatusNoContent {
+	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
 		if response.JSON400 != nil {
 			return fmt.Errorf("report Agent metrics: %s", response.JSON400.Error.Message)
 		}
 		return fmt.Errorf("report Agent metrics: server returned %s", response.Status())
 	}
+	if agentMajorVersionBehind(service.version, response.JSON200.ServerVersion) {
+		log.Printf("warning: Agent version %s is behind server version %s; upgrade recommended", service.version, response.JSON200.ServerVersion)
+	}
 	service.buffer.acknowledge()
 	return nil
+}
+
+func agentMajorVersionBehind(agentVersion, serverVersion string) bool {
+	agentMajor, agentOK := parseMajorVersion(agentVersion)
+	serverMajor, serverOK := parseMajorVersion(serverVersion)
+	return agentOK && serverOK && agentMajor < serverMajor
+}
+
+func parseMajorVersion(version string) (int, bool) {
+	version = strings.TrimPrefix(version, "v")
+	majorText, _, _ := strings.Cut(version, ".")
+	major, err := strconv.Atoi(majorText)
+	return major, err == nil && major >= 0
 }

@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -94,9 +97,37 @@ func TestReportBufferKeepsOnlyFiveMinutesInMemory(t *testing.T) {
 	}
 }
 
-func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
+func TestAgentMajorVersionBehind(t *testing.T) {
+	tests := []struct {
+		name   string
+		agent  string
+		server string
+		want   bool
+	}{
+		{name: "server major is newer", agent: "1.2.3", server: "2.0.0", want: true},
+		{name: "same major", agent: "2.4.0", server: "2.0.0", want: false},
+		{name: "Agent major is newer", agent: "3.0.0", server: "2.4.0", want: false},
+		{name: "optional v prefix", agent: "v1.2.3", server: "v2.0.0", want: true},
+		{name: "invalid Agent version", agent: "dev", server: "2.0.0", want: false},
+		{name: "invalid server version", agent: "1.2.3", server: "dev", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := agentMajorVersionBehind(tt.agent, tt.server); got != tt.want {
+				t.Fatalf("agentMajorVersionBehind(%q, %q) = %v, want %v", tt.agent, tt.server, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestServiceBackfillsUnacknowledgedSampleAndWarnsAfterReconnect(t *testing.T) {
 	requests := 0
 	var received api.AgentReport
+	var logs bytes.Buffer
+	previousOutput := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previousOutput) })
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests++
 		if err := json.NewDecoder(request.Body).Decode(&received); err != nil {
@@ -108,7 +139,12 @@ func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
 			writer.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		writer.WriteHeader(http.StatusNoContent)
+		writer.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(writer).Encode(map[string]any{
+			"server_version": "2.0.0", "unknown_future_field": true,
+		}); err != nil {
+			t.Errorf("encode Agent report response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -130,5 +166,8 @@ func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
 	}
 	if received.Backfill == nil || len(*received.Backfill) != 1 || !(*received.Backfill)[0].Timestamp.Equal(now) {
 		t.Fatalf("backfill = %+v, want failed sample at %s", received.Backfill, now)
+	}
+	if !strings.Contains(logs.String(), "Agent version 1.2.3 is behind server version 2.0.0") {
+		t.Fatalf("Agent logs = %q, want version upgrade warning", logs.String())
 	}
 }

@@ -1005,7 +1005,7 @@ func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.Repo
 			return nil, err
 		}
 	}
-	return api.ReportAgentMetrics204Response{}, nil
+	return api.ReportAgentMetrics200JSONResponse{ServerVersion: handler.serverVersion}, nil
 }
 
 func agentReportHasClockSkew(report api.AgentReport, now time.Time) bool {
