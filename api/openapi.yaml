@@ -103,6 +103,8 @@ paths:
     $ref: paths/performance-events.yaml#/~1api~1v1~1performance-events~1{id}
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
+  /api/v1/agent/download:
+    $ref: paths/agent-download.yaml#/~1api~1v1~1agent~1download
   /api/v1/instances/{id}/agent/registration:
     $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1registration
   /api/v1/instances/{id}/agent/token/rotation:
@@ -279,6 +281,8 @@ components:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
     AgentReport:
       $ref: components/schemas/agent.yaml#/AgentReport
+    AgentReportAccepted:
+      $ref: components/schemas/agent.yaml#/AgentReportAccepted
     AgentRegistration:
       $ref: components/schemas/agent.yaml#/AgentRegistration
     AgentTokenIssued:

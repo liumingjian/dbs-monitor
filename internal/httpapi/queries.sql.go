@@ -467,6 +467,21 @@ func (q *Queries) GetCurrentUser(ctx context.Context, id pgtype.UUID) (GetCurren
 	return i, err
 }
 
+const getInstanceIDByAgentTokenHash = `-- name: GetInstanceIDByAgentTokenHash :one
+SELECT id
+FROM instance
+WHERE agent_token_hash = $1
+  AND agent_expected
+  AND agent_token_revoked_at IS NULL
+`
+
+func (q *Queries) GetInstanceIDByAgentTokenHash(ctx context.Context, agentTokenHash []byte) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getInstanceIDByAgentTokenHash, agentTokenHash)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getLatestQueryStatisticsSnapshot = `-- name: GetLatestQueryStatisticsSnapshot :one
 SELECT sampled_at
 FROM query_statistics_snapshot

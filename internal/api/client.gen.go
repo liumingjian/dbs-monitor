@@ -95,6 +95,9 @@ type ClientInterface interface {
 
 	ReportAgentMetrics(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DownloadAgentBinary request
+	DownloadAgentBinary(ctx context.Context, params *DownloadAgentBinaryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAlertDetail request
 	GetAlertDetail(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -408,6 +411,18 @@ func (c *Client) ReportAgentMetricsWithBody(ctx context.Context, contentType str
 
 func (c *Client) ReportAgentMetrics(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReportAgentMetricsRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DownloadAgentBinary(ctx context.Context, params *DownloadAgentBinaryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDownloadAgentBinaryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1762,6 +1777,51 @@ func NewReportAgentMetricsRequestWithBody(server string, contentType string, bod
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDownloadAgentBinaryRequest generates requests for DownloadAgentBinary
+func NewDownloadAgentBinaryRequest(server string, params *DownloadAgentBinaryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/agent/download")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "arch", runtime.ParamLocationQuery, params.Arch); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -5050,6 +5110,9 @@ type ClientWithResponsesInterface interface {
 
 	ReportAgentMetricsWithResponse(ctx context.Context, body ReportAgentMetricsJSONRequestBody, reqEditors ...RequestEditorFn) (*ReportAgentMetricsResponse, error)
 
+	// DownloadAgentBinaryWithResponse request
+	DownloadAgentBinaryWithResponse(ctx context.Context, params *DownloadAgentBinaryParams, reqEditors ...RequestEditorFn) (*DownloadAgentBinaryResponse, error)
+
 	// GetAlertDetailWithResponse request
 	GetAlertDetailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDetailResponse, error)
 
@@ -5367,6 +5430,30 @@ func (r ReportAgentMetricsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ReportAgentMetricsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DownloadAgentBinaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *Error
+	JSON401      *Error
+	JSON503      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r DownloadAgentBinaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DownloadAgentBinaryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7209,6 +7296,15 @@ func (c *ClientWithResponses) ReportAgentMetricsWithResponse(ctx context.Context
 	return ParseReportAgentMetricsResponse(rsp)
 }
 
+// DownloadAgentBinaryWithResponse request returning *DownloadAgentBinaryResponse
+func (c *ClientWithResponses) DownloadAgentBinaryWithResponse(ctx context.Context, params *DownloadAgentBinaryParams, reqEditors ...RequestEditorFn) (*DownloadAgentBinaryResponse, error) {
+	rsp, err := c.DownloadAgentBinary(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDownloadAgentBinaryResponse(rsp)
+}
+
 // GetAlertDetailWithResponse request returning *GetAlertDetailResponse
 func (c *ClientWithResponses) GetAlertDetailWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertDetailResponse, error) {
 	rsp, err := c.GetAlertDetail(ctx, id, reqEditors...)
@@ -8195,6 +8291,46 @@ func ParseReportAgentMetricsResponse(rsp *http.Response) (*ReportAgentMetricsRes
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDownloadAgentBinaryResponse parses an HTTP response from a DownloadAgentBinaryWithResponse call
+func ParseDownloadAgentBinaryResponse(rsp *http.Response) (*DownloadAgentBinaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DownloadAgentBinaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON503 = &dest
 
 	}
 

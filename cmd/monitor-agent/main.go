@@ -59,21 +59,28 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
 	dataPath := os.Getenv("PGDATA")
 	if dataPath == "" {
 		dataPath = "/"
 	}
 	service := agent.NewService(client, cfg, version, dataPath)
+	return runService(ctx, service)
+}
+
+func runService(ctx context.Context, service *agent.Service) error {
+	if err := service.RunOnce(ctx, time.Now().UTC()); err != nil {
+		return fmt.Errorf("Agent startup check: %w", err)
+	}
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 	for {
-		if err := service.RunOnce(ctx, time.Now().UTC()); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-		}
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
+			if err := service.RunOnce(ctx, time.Now().UTC()); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
 		}
 	}
 }

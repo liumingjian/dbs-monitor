@@ -3,11 +3,19 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/liumingjian/dbs-monitor/internal/agent"
+	"github.com/liumingjian/dbs-monitor/internal/api"
 )
 
 func TestRunCommandRejectsUnsupportedArguments(t *testing.T) {
@@ -78,5 +86,28 @@ func TestConfiguredAgentTokenReportsFileReadFailure(t *testing.T) {
 	_, err := configuredAgentToken()
 	if err == nil || !strings.Contains(err.Error(), "read Agent token file") {
 		t.Fatalf("configuredAgentToken() error = %v, want Agent token file read error", err)
+	}
+}
+
+func TestRunServiceRefusesStartupWhenInitialReportFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(writer).Encode(map[string]any{
+			"server_version": "1.0.0",
+			"server_time":    time.Now().UTC().Add(6 * time.Second),
+		}); err != nil {
+			t.Errorf("encode Agent report response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client, err := api.NewClientWithResponses(server.URL)
+	if err != nil {
+		t.Fatalf("create Agent API client: %v", err)
+	}
+	service := agent.NewService(client, agent.Config{Instance: uuid.New()}, "1.0.0", "/")
+	err = runService(context.Background(), service)
+	if err == nil || !strings.Contains(err.Error(), "clock differs from the platform by more than 5 seconds") {
+		t.Fatalf("runService() error = %v, want initial clock check failure", err)
 	}
 }

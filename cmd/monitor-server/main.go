@@ -228,6 +228,9 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := distribution.HealthError(); err != nil {
+		log.Printf("Agent distribution unavailable: %v", err)
+	}
 	sessionConfig := httpapi.SessionConfig{
 		AbsoluteTTL: config.SessionAbsoluteTTL,
 		IdleTTL:     config.SessionIdleTTL,

@@ -16,7 +16,10 @@ import (
 	gopsutilnet "github.com/shirou/gopsutil/v4/net"
 )
 
-const maxBackfillAge = 5 * time.Minute
+const (
+	maxBackfillAge        = 5 * time.Minute
+	startupClockSkewLimit = 5 * time.Second
+)
 
 type sample struct {
 	sampledAt time.Time
@@ -194,11 +197,19 @@ func (service *Service) RunOnce(ctx context.Context, now time.Time) error {
 		}
 		return fmt.Errorf("report Agent metrics: server returned %s", response.Status())
 	}
+	if clockSkewExceedsStartupLimit(now, response.JSON200.ServerTime) {
+		return fmt.Errorf("clock differs from the platform by more than 5 seconds")
+	}
 	if agentMajorVersionBehind(service.version, response.JSON200.ServerVersion) {
 		log.Printf("warning: Agent version %s is behind server version %s; upgrade recommended", service.version, response.JSON200.ServerVersion)
 	}
 	service.buffer.acknowledge()
 	return nil
+}
+
+func clockSkewExceedsStartupLimit(agentTime, serverTime time.Time) bool {
+	offset := agentTime.Sub(serverTime)
+	return offset > startupClockSkewLimit || offset < -startupClockSkewLimit
 }
 
 func agentMajorVersionBehind(agentVersion, serverVersion string) bool {

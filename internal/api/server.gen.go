@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -322,6 +323,12 @@ const (
 	VERSIONUNSUPPORTED Unavailability = "VERSION_UNSUPPORTED"
 )
 
+// Defines values for DownloadAgentBinaryParamsArch.
+const (
+	Linuxamd64 DownloadAgentBinaryParamsArch = "linux/amd64"
+	Linuxarm64 DownloadAgentBinaryParamsArch = "linux/arm64"
+)
+
 // Defines values for GetMetricSeriesParamsMetric.
 const (
 	GetMetricSeriesParamsMetricAgentStatus                       GetMetricSeriesParamsMetric = "agent.status"
@@ -420,6 +427,9 @@ type AgentReport struct {
 
 // AgentReportAccepted defines model for AgentReportAccepted.
 type AgentReportAccepted struct {
+	// ServerTime Server time used by the Agent startup clock check.
+	ServerTime time.Time `json:"server_time"`
+
 	// ServerVersion Version of the server that accepted the report.
 	ServerVersion string `json:"server_version"`
 }
@@ -1308,6 +1318,14 @@ type WebhookTargetInput struct {
 	Url          string  `json:"url"`
 }
 
+// DownloadAgentBinaryParams defines parameters for DownloadAgentBinary.
+type DownloadAgentBinaryParams struct {
+	Arch DownloadAgentBinaryParamsArch `form:"arch" json:"arch"`
+}
+
+// DownloadAgentBinaryParamsArch defines parameters for DownloadAgentBinary.
+type DownloadAgentBinaryParamsArch string
+
 // ListCurrentAlertsParams defines parameters for ListCurrentAlerts.
 type ListCurrentAlertsParams struct {
 	InstanceId    *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
@@ -1461,6 +1479,9 @@ type ServerInterface interface {
 
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/agent/download)
+	DownloadAgentBinary(w http.ResponseWriter, r *http.Request, params DownloadAgentBinaryParams)
 
 	// (GET /api/v1/alert-instances/{id})
 	GetAlertDetail(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1723,6 +1744,46 @@ func (siw *ServerInterfaceWrapper) ReportAgentMetrics(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReportAgentMetrics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadAgentBinary operation middleware
+func (siw *ServerInterfaceWrapper) DownloadAgentBinary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AgentTokenScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DownloadAgentBinaryParams
+
+	// ------------- Required query parameter "arch" -------------
+
+	if paramValue := r.URL.Query().Get("arch"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "arch"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "arch", r.URL.Query(), &params.Arch)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "arch", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadAgentBinary(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3740,6 +3801,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/api/agent/v1/report", wrapper.ReportAgentMetrics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/agent/download", wrapper.DownloadAgentBinary)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}", wrapper.GetAlertDetail)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.GetAlertDisposition)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.UpdateAlertDisposition)
@@ -3855,6 +3917,60 @@ type ReportAgentMetrics401JSONResponse Error
 func (response ReportAgentMetrics401JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DownloadAgentBinaryRequestObject struct {
+	Params DownloadAgentBinaryParams
+}
+
+type DownloadAgentBinaryResponseObject interface {
+	VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error
+}
+
+type DownloadAgentBinary200ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response DownloadAgentBinary200ApplicationoctetStreamResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type DownloadAgentBinary400JSONResponse Error
+
+func (response DownloadAgentBinary400JSONResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DownloadAgentBinary401JSONResponse Error
+
+func (response DownloadAgentBinary401JSONResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DownloadAgentBinary503JSONResponse Error
+
+func (response DownloadAgentBinary503JSONResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -5857,6 +5973,9 @@ type StrictServerInterface interface {
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(ctx context.Context, request ReportAgentMetricsRequestObject) (ReportAgentMetricsResponseObject, error)
 
+	// (GET /api/v1/agent/download)
+	DownloadAgentBinary(ctx context.Context, request DownloadAgentBinaryRequestObject) (DownloadAgentBinaryResponseObject, error)
+
 	// (GET /api/v1/alert-instances/{id})
 	GetAlertDetail(ctx context.Context, request GetAlertDetailRequestObject) (GetAlertDetailResponseObject, error)
 
@@ -6151,6 +6270,32 @@ func (sh *strictHandler) ReportAgentMetrics(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReportAgentMetricsResponseObject); ok {
 		if err := validResponse.VisitReportAgentMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DownloadAgentBinary operation middleware
+func (sh *strictHandler) DownloadAgentBinary(w http.ResponseWriter, r *http.Request, params DownloadAgentBinaryParams) {
+	var request DownloadAgentBinaryRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DownloadAgentBinary(ctx, request.(DownloadAgentBinaryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DownloadAgentBinary")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DownloadAgentBinaryResponseObject); ok {
+		if err := validResponse.VisitDownloadAgentBinaryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

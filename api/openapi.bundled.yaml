@@ -1705,6 +1705,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/agent/download:
+    get:
+      tags:
+        - agent
+      operationId: downloadAgentBinary
+      x-required-role: AGENT
+      security:
+        - agentToken: []
+      parameters:
+        - name: arch
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - linux/amd64
+              - linux/arm64
+      responses:
+        '200':
+          description: Agent binary for the requested architecture
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Unsupported architecture
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Agent binary distribution is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/instances/{id}/agent/registration:
     parameters:
       - name: id
@@ -3757,6 +3800,20 @@ components:
           description: Unacknowledged samples from the Agent's five-minute in-memory window.
           items:
             $ref: '#/components/schemas/AgentSample'
+    AgentReportAccepted:
+      type: object
+      required:
+        - server_version
+        - server_time
+      properties:
+        server_version:
+          type: string
+          minLength: 1
+          description: Version of the server that accepted the report.
+        server_time:
+          type: string
+          format: date-time
+          description: Server time used by the Agent startup clock check.
     AgentRegistration:
       type: object
       required:
@@ -4299,15 +4356,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AgentMetric'
-    AgentReportAccepted:
-      type: object
-      required:
-        - server_version
-      properties:
-        server_version:
-          type: string
-          minLength: 1
-          description: Version of the server that accepted the report.
     AgentRegistrationState:
       type: string
       enum:

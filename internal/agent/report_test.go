@@ -97,6 +97,29 @@ func TestReportBufferKeepsOnlyFiveMinutesInMemory(t *testing.T) {
 	}
 }
 
+func TestClockSkewExceedsStartupLimit(t *testing.T) {
+	serverTime := time.Unix(1_000, 0)
+	tests := []struct {
+		name      string
+		agentTime time.Time
+		want      bool
+	}{
+		{name: "same time", agentTime: serverTime, want: false},
+		{name: "positive limit is accepted", agentTime: serverTime.Add(startupClockSkewLimit), want: false},
+		{name: "negative limit is accepted", agentTime: serverTime.Add(-startupClockSkewLimit), want: false},
+		{name: "positive skew exceeds limit", agentTime: serverTime.Add(startupClockSkewLimit + time.Nanosecond), want: true},
+		{name: "negative skew exceeds limit", agentTime: serverTime.Add(-startupClockSkewLimit - time.Nanosecond), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := clockSkewExceedsStartupLimit(tt.agentTime, serverTime); got != tt.want {
+				t.Fatalf("clockSkewExceedsStartupLimit(%s, %s) = %v, want %v", tt.agentTime, serverTime, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestAgentMajorVersionBehind(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -141,7 +164,9 @@ func TestServiceBackfillsUnacknowledgedSampleAndWarnsAfterReconnect(t *testing.T
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(writer).Encode(map[string]any{
-			"server_version": "2.0.0", "unknown_future_field": true,
+			"server_version":       "2.0.0",
+			"server_time":          received.Timestamp,
+			"unknown_future_field": true,
 		}); err != nil {
 			t.Errorf("encode Agent report response: %v", err)
 		}
@@ -169,5 +194,29 @@ func TestServiceBackfillsUnacknowledgedSampleAndWarnsAfterReconnect(t *testing.T
 	}
 	if !strings.Contains(logs.String(), "Agent version 1.2.3 is behind server version 2.0.0") {
 		t.Fatalf("Agent logs = %q, want version upgrade warning", logs.String())
+	}
+}
+
+func TestServiceRejectsStartupClockSkewOverFiveSeconds(t *testing.T) {
+	now := time.Now().UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(writer).Encode(map[string]any{
+			"server_version": "1.2.3",
+			"server_time":    now.Add(6 * time.Second),
+		}); err != nil {
+			t.Errorf("encode Agent report response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client, err := api.NewClientWithResponses(server.URL)
+	if err != nil {
+		t.Fatalf("create Agent API client: %v", err)
+	}
+	service := NewService(client, Config{Instance: uuid.New()}, "1.2.3", "/")
+	err = service.RunOnce(context.Background(), now)
+	if err == nil || !strings.Contains(err.Error(), "clock differs from the platform by more than 5 seconds") {
+		t.Fatalf("startup report error = %v, want explicit clock skew failure", err)
 	}
 }

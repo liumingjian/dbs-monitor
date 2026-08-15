@@ -98,6 +98,13 @@ WHERE id = $1
   AND agent_token_hash IS NOT NULL
   AND agent_token_revoked_at IS NULL;
 
+-- name: GetInstanceIDByAgentTokenHash :one
+SELECT id
+FROM instance
+WHERE agent_token_hash = $1
+  AND agent_expected
+  AND agent_token_revoked_at IS NULL;
+
 -- name: GetCollectionPause :one
 SELECT collection_paused, collection_pause_updated_by,
        collection_pause_updated_at, collection_pause_reason

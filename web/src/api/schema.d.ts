@@ -759,6 +759,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadAgentBinary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/agent/registration": {
         parameters: {
             query?: never;
@@ -1666,6 +1682,15 @@ export interface components {
             /** @description Unacknowledged samples from the Agent's five-minute in-memory window. */
             backfill?: components["schemas"]["AgentSample"][];
         };
+        AgentReportAccepted: {
+            /** @description Version of the server that accepted the report. */
+            server_version: string;
+            /**
+             * Format: date-time
+             * @description Server time used by the Agent startup clock check.
+             */
+            server_time: string;
+        };
         AgentRegistration: {
             state: components["schemas"]["AgentRegistrationState"];
             agent_expected: boolean;
@@ -1877,10 +1902,6 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
             metrics: components["schemas"]["AgentMetric"][];
-        };
-        AgentReportAccepted: {
-            /** @description Version of the server that accepted the report. */
-            server_version: string;
         };
         /** @enum {string} */
         AgentRegistrationState: "NEVER_REGISTERED" | "EXPECTED_ONLINE" | "REVOKED" | "DISABLED";
@@ -3858,6 +3879,55 @@ export interface operations {
             };
             /** @description Invalid token */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    downloadAgentBinary: {
+        parameters: {
+            query: {
+                arch: "linux/amd64" | "linux/arm64";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent binary for the requested architecture */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Unsupported architecture */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Agent binary distribution is unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

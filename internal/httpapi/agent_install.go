@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/sha256"
 	_ "embed"
 	"encoding/hex"
@@ -9,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/liumingjian/dbs-monitor/internal/api"
 )
 
 //go:embed agent-install.sh
@@ -18,6 +21,30 @@ type AgentDistribution struct {
 	CAPath          string
 	BinaryDirectory string
 	CAFingerprint   string
+}
+
+func (distribution AgentDistribution) HealthError() error {
+	if distribution.BinaryDirectory == "" {
+		return fmt.Errorf("AGENT_BINARY_DIR is not configured")
+	}
+	directoryInfo, err := os.Stat(distribution.BinaryDirectory)
+	if err != nil {
+		return fmt.Errorf("AGENT_BINARY_DIR is unavailable: %w", err)
+	}
+	if !directoryInfo.IsDir() {
+		return fmt.Errorf("AGENT_BINARY_DIR is not a directory")
+	}
+	for _, architecture := range []string{"amd64", "arm64"} {
+		binaryPath := filepath.Join(distribution.BinaryDirectory, "dbs-monitor-agent-linux-"+architecture)
+		binaryInfo, err := os.Stat(binaryPath)
+		if err != nil {
+			return fmt.Errorf("AGENT_BINARY_DIR is missing the linux/%s binary: %w", architecture, err)
+		}
+		if !binaryInfo.Mode().IsRegular() || binaryInfo.Mode().Perm()&0111 == 0 {
+			return fmt.Errorf("AGENT_BINARY_DIR linux/%s binary is not an executable regular file", architecture)
+		}
+	}
+	return nil
 }
 
 func LoadAgentDistribution(caPath, binaryDirectory string) (AgentDistribution, error) {
@@ -33,8 +60,34 @@ func LoadAgentDistribution(caPath, binaryDirectory string) (AgentDistribution, e
 	return AgentDistribution{
 		CAPath:          caPath,
 		BinaryDirectory: binaryDirectory,
-		CAFingerprint: hex.EncodeToString(fingerprint[:]),
+		CAFingerprint:   hex.EncodeToString(fingerprint[:]),
 	}, nil
+}
+
+func (handler *Handler) DownloadAgentBinary(_ context.Context, request api.DownloadAgentBinaryRequestObject) (api.DownloadAgentBinaryResponseObject, error) {
+	var architecture string
+	switch request.Params.Arch {
+	case api.Linuxamd64:
+		architecture = "amd64"
+	case api.Linuxarm64:
+		architecture = "arm64"
+	default:
+		return api.DownloadAgentBinary400JSONResponse(errorBody(api.VALIDATIONFAILED, "unsupported Agent architecture")), nil
+	}
+	if handler.agentDistribution == nil || handler.agentDistribution.HealthError() != nil {
+		return api.DownloadAgentBinary503JSONResponse(errorBody(api.INTERNAL, "AGENT_BINARY_DIR is unavailable or incomplete")), nil
+	}
+	binaryPath := filepath.Join(handler.agentDistribution.BinaryDirectory, "dbs-monitor-agent-linux-"+architecture)
+	binaryFile, err := os.Open(binaryPath)
+	if err != nil {
+		return api.DownloadAgentBinary503JSONResponse(errorBody(api.INTERNAL, "Agent binary distribution is unavailable")), nil
+	}
+	binaryInfo, err := binaryFile.Stat()
+	if err != nil {
+		binaryFile.Close()
+		return nil, err
+	}
+	return api.DownloadAgentBinary200ApplicationoctetStreamResponse{Body: binaryFile, ContentLength: binaryInfo.Size()}, nil
 }
 
 func (handler *Handler) registerAgentDistributionRoutes(mux *http.ServeMux) {
@@ -48,20 +101,5 @@ func (handler *Handler) registerAgentDistributionRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /api/agent/install/ca.crt", func(writer http.ResponseWriter, request *http.Request) {
 		http.ServeFile(writer, request, handler.agentDistribution.CAPath)
-	})
-	mux.HandleFunc("GET /api/agent/install/dbs-monitor-agent/{arch}", func(writer http.ResponseWriter, request *http.Request) {
-		arch := request.PathValue("arch")
-		if arch != "amd64" && arch != "arm64" {
-			http.NotFound(writer, request)
-			return
-		}
-		path := filepath.Join(handler.agentDistribution.BinaryDirectory, "dbs-monitor-agent-linux-"+arch)
-		if _, err := os.Stat(path); err != nil {
-			http.NotFound(writer, request)
-			return
-		}
-		writer.Header().Set("Content-Type", "application/octet-stream")
-		writer.Header().Set("Content-Disposition", "attachment; filename=dbs-monitor-agent")
-		http.ServeFile(writer, request, path)
 	})
 }
