@@ -11,12 +11,17 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 )
 
-func TestLoginPersistsConcurrentSessionsWithHostCookie(t *testing.T) {
+func TestMultipleSessionLifecycleWithHostCookie(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
+	const (
+		username    = "admin"
+		oldPassword = "correct horse battery staple"
+		newPassword = "new horse battery staple"
+	)
 	platform := openUserTestDatabase(t, ctx)
-	if err := SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
+	if err := SeedAdmin(ctx, platform, username, oldPassword); err != nil {
 		t.Fatalf("seed administrator: %v", err)
 	}
 	server := httptest.NewTLSServer(NewHandler(platform, clock.Real{}, nil).Routes())
@@ -25,22 +30,14 @@ func TestLoginPersistsConcurrentSessionsWithHostCookie(t *testing.T) {
 	clients := []*http.Client{userTestClient(t, server), userTestClient(t, server)}
 	for index, client := range clients {
 		response := userJSONRequest(t, client, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
-			"username": "admin", "password": "correct horse battery staple",
+			"username": username, "password": oldPassword,
 		})
 		if response.StatusCode != http.StatusNoContent {
 			response.Body.Close()
 			t.Fatalf("login %d status = %d, want 204", index+1, response.StatusCode)
 		}
-		cookies := response.Cookies()
+		assertHostSessionCookie(t, response, 0)
 		response.Body.Close()
-		if len(cookies) != 1 {
-			t.Fatalf("login %d cookies = %d, want 1", index+1, len(cookies))
-		}
-		cookie := cookies[0]
-		if cookie.Name != "__Host-dbs_monitor_session" || cookie.Path != "/" || cookie.Domain != "" ||
-			!cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode {
-			t.Fatalf("login %d cookie = %+v, want __Host- cookie with Path=/, Secure, HttpOnly, SameSite=Strict, and no Domain", index+1, cookie)
-		}
 	}
 
 	var sessionCount int
@@ -54,26 +51,42 @@ func TestLoginPersistsConcurrentSessionsWithHostCookie(t *testing.T) {
 		assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusOK)
 	}
 
-	assertUserStatus(t, userJSONRequest(t, clients[0], http.MethodPut, server.URL+"/api/v1/password", map[string]any{
-		"old_password": "correct horse battery staple", "new_password": "new horse battery staple",
+	currentSession, otherSession := clients[0], clients[1]
+	assertUserStatus(t, userJSONRequest(t, currentSession, http.MethodPut, server.URL+"/api/v1/password", map[string]any{
+		"old_password": oldPassword, "new_password": newPassword,
 	}), http.StatusNoContent)
-	assertUserStatus(t, userJSONRequest(t, clients[0], http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusOK)
-	assertUserStatus(t, userJSONRequest(t, clients[1], http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusUnauthorized)
+	assertUserStatus(t, userJSONRequest(t, currentSession, http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusOK)
+	assertUserStatus(t, userJSONRequest(t, otherSession, http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusUnauthorized)
 
 	wrongMediaType, err := http.NewRequest(http.MethodPost, server.URL+"/api/v1/logout", bytes.NewBufferString("{}"))
 	if err != nil {
 		t.Fatalf("create non-JSON logout request: %v", err)
 	}
 	wrongMediaType.Header.Set("Content-Type", "text/plain")
-	wrongMediaTypeResponse, err := clients[0].Do(wrongMediaType)
+	wrongMediaTypeResponse, err := currentSession.Do(wrongMediaType)
 	if err != nil {
 		t.Fatalf("send non-JSON logout request: %v", err)
 	}
 	assertUserStatus(t, wrongMediaTypeResponse, http.StatusUnsupportedMediaType)
-	assertUserStatus(t, userJSONRequest(t, clients[0], http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusOK)
+	assertUserStatus(t, userJSONRequest(t, currentSession, http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusOK)
 
-	assertUserStatus(t, userJSONRequest(t, clients[0], http.MethodPost, server.URL+"/api/v1/logout", map[string]any{}), http.StatusNoContent)
-	assertUserStatus(t, userJSONRequest(t, clients[0], http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusUnauthorized)
+	logoutResponse := userJSONRequest(t, currentSession, http.MethodPost, server.URL+"/api/v1/logout", map[string]any{})
+	assertUserStatus(t, logoutResponse, http.StatusNoContent)
+	assertHostSessionCookie(t, logoutResponse, -1)
+	assertUserStatus(t, userJSONRequest(t, currentSession, http.MethodGet, server.URL+"/api/v1/me", nil), http.StatusUnauthorized)
+}
+
+func assertHostSessionCookie(t *testing.T, response *http.Response, wantMaxAge int) {
+	t.Helper()
+	cookies := response.Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("response cookies = %d, want 1", len(cookies))
+	}
+	cookie := cookies[0]
+	if cookie.Name != "__Host-dbs_monitor_session" || cookie.Path != "/" || cookie.Domain != "" ||
+		!cookie.HttpOnly || !cookie.Secure || cookie.SameSite != http.SameSiteStrictMode || cookie.MaxAge != wantMaxAge {
+		t.Fatalf("session cookie = %+v, want __Host- cookie with Path=/, Secure, HttpOnly, SameSite=Strict, no Domain, and MaxAge=%d", cookie, wantMaxAge)
+	}
 }
 
 func TestSessionConfiguredAbsoluteAndIdleDeadlines(t *testing.T) {
@@ -83,22 +96,22 @@ func TestSessionConfiguredAbsoluteAndIdleDeadlines(t *testing.T) {
 	}{
 		{
 			name: "absolute deadline is not extended by activity",
-			exercise: func(t *testing.T, currentClock *sessionTestClock, client *http.Client, address string) {
+			exercise: func(t *testing.T, currentClock *sessionTestClock, client *http.Client, serverURL string) {
 				for range 4 {
 					currentClock.Advance(20 * time.Second)
-					assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, address+"/api/v1/me", nil), http.StatusOK)
+					assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, serverURL+"/api/v1/me", nil), http.StatusOK)
 				}
 				currentClock.Advance(10 * time.Second)
-				assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, address+"/api/v1/me", nil), http.StatusUnauthorized)
+				assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, serverURL+"/api/v1/me", nil), http.StatusUnauthorized)
 			},
 		},
 		{
 			name: "idle deadline is extended only by activity",
-			exercise: func(t *testing.T, currentClock *sessionTestClock, client *http.Client, address string) {
+			exercise: func(t *testing.T, currentClock *sessionTestClock, client *http.Client, serverURL string) {
 				currentClock.Advance(29 * time.Second)
-				assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, address+"/api/v1/me", nil), http.StatusOK)
+				assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, serverURL+"/api/v1/me", nil), http.StatusOK)
 				currentClock.Advance(30 * time.Second)
-				assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, address+"/api/v1/me", nil), http.StatusUnauthorized)
+				assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, serverURL+"/api/v1/me", nil), http.StatusUnauthorized)
 			},
 		},
 	}

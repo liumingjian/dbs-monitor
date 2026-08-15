@@ -245,7 +245,9 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 }
 
 const deleteOtherUserSessions = `-- name: DeleteOtherUserSessions :exec
-DELETE FROM user_session WHERE user_id = $1 AND token_hash <> $2
+DELETE FROM user_session
+WHERE user_id = $1
+  AND token_hash <> $2
 `
 
 type DeleteOtherUserSessionsParams struct {
@@ -259,7 +261,8 @@ func (q *Queries) DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUs
 }
 
 const deleteSession = `-- name: DeleteSession :exec
-DELETE FROM user_session WHERE token_hash = $1
+DELETE FROM user_session
+WHERE token_hash = $1
 `
 
 func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
@@ -576,7 +579,10 @@ func (q *Queries) GetRecentSessionSnapshot(ctx context.Context, arg GetRecentSes
 }
 
 const getUserForLogin = `-- name: GetUserForLogin :one
-SELECT id, password_hash, role FROM app_user WHERE username = $1 AND enabled FOR SHARE
+SELECT id, password_hash, role
+FROM app_user
+WHERE username = $1 AND enabled
+FOR SHARE
 `
 
 type GetUserForLoginRow struct {
@@ -621,7 +627,10 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id pgtype.UUID) (GetUser
 }
 
 const getUserPassword = `-- name: GetUserPassword :one
-SELECT password_hash FROM app_user WHERE id = $1 AND enabled FOR UPDATE
+SELECT password_hash
+FROM app_user
+WHERE id = $1 AND enabled
+FOR UPDATE
 `
 
 func (q *Queries) GetUserPassword(ctx context.Context, id pgtype.UUID) ([]byte, error) {

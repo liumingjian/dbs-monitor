@@ -105,7 +105,7 @@ func TestAcceptanceRoleFixturesAreHarnessConsumable(t *testing.T) {
 		"alert_admin":    "ALERT_ADMIN",
 		"viewer":         "READONLY",
 	}
-	usernames := make(map[string]bool, len(wantRoles))
+	seenUsernames := make(map[string]bool, len(wantRoles))
 	for fixtureName, wantRole := range wantRoles {
 		fixture, exists := fixtures.LongLived[fixtureName]
 		if !exists {
@@ -115,10 +115,10 @@ func TestAcceptanceRoleFixturesAreHarnessConsumable(t *testing.T) {
 		if fixture.Role != wantRole {
 			t.Errorf("role fixture %q role = %q, want %q", fixtureName, fixture.Role, wantRole)
 		}
-		if fixture.Username == "" || usernames[fixture.Username] {
+		if fixture.Username == "" || seenUsernames[fixture.Username] {
 			t.Errorf("role fixture %q username = %q, want a unique non-empty username", fixtureName, fixture.Username)
 		}
-		usernames[fixture.Username] = true
+		seenUsernames[fixture.Username] = true
 	}
 	if len(fixtures.LongLived) != len(wantRoles) {
 		t.Errorf("long-lived role fixture count = %d, want %d", len(fixtures.LongLived), len(wantRoles))

@@ -164,7 +164,8 @@ func (handler *Handler) ChangeOwnPassword(ctx context.Context, request api.Chang
 			return err
 		}
 		return queries.DeleteOtherUserSessions(ctx, DeleteOtherUserSessionsParams{
-			UserID: currentUserID, TokenHash: authenticatedSessionHash(ctx),
+			UserID:    currentUserID,
+			TokenHash: authenticatedSessionHash(ctx),
 		})
 	})
 	if errors.Is(err, errInvalidOwnPassword) {
@@ -252,7 +253,7 @@ func authenticatedUserID(ctx context.Context) uuid.UUID {
 }
 
 func authenticatedSessionHash(ctx context.Context) []byte {
-	return ctx.Value(authenticatedSessionKey{}).([]byte)
+	return ctx.Value(authenticatedSessionHashKey{}).([]byte)
 }
 
 func databaseUserID(id uuid.UUID) pgtype.UUID {

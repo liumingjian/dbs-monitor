@@ -50,7 +50,7 @@ var errInvalidLogin = errors.New("invalid login")
 
 type authenticatedAgentKey struct{}
 type authenticatedUserKey struct{}
-type authenticatedSessionKey struct{}
+type authenticatedSessionHashKey struct{}
 
 type SessionConfig struct {
 	AbsoluteTTL time.Duration
@@ -91,9 +91,16 @@ func NewHandlerWithDialer(platform *db.Pool, currentClock clock.Clock, keyring *
 
 func NewHandlerWithPlatformHealth(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store) *Handler {
 	return &Handler{
-		platform: platform, clock: currentClock, keyring: keyring, dialer: dialer,
-		serverVersion: serverVersion, health: health,
-		sessionConfig: SessionConfig{AbsoluteTTL: defaultSessionAbsoluteTTL, IdleTTL: defaultSessionIdleTTL},
+		platform:      platform,
+		clock:         currentClock,
+		keyring:       keyring,
+		dialer:        dialer,
+		serverVersion: serverVersion,
+		health:        health,
+		sessionConfig: SessionConfig{
+			AbsoluteTTL: defaultSessionAbsoluteTTL,
+			IdleTTL:     defaultSessionIdleTTL,
+		},
 	}
 }
 
@@ -105,16 +112,14 @@ func NewHandlerWithAgentDistribution(platform *db.Pool, currentClock clock.Clock
 }
 
 func NewHandlerWithPlatformHealthAndAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store, distribution AgentDistribution) *Handler {
-	return NewHandlerWithPlatformHealthAndAgentDistributionAndSessionConfig(
-		platform, currentClock, keyring, dialer, serverVersion, health, distribution,
-		SessionConfig{AbsoluteTTL: defaultSessionAbsoluteTTL, IdleTTL: defaultSessionIdleTTL},
-	)
-}
-
-func NewHandlerWithPlatformHealthAndAgentDistributionAndSessionConfig(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store, distribution AgentDistribution, sessionConfig SessionConfig) *Handler {
 	handler := NewHandlerWithPlatformHealth(platform, currentClock, keyring, dialer, serverVersion, health)
 	handler.caFingerprint = distribution.CAFingerprint
 	handler.agentDistribution = &distribution
+	return handler
+}
+
+func NewHandlerWithPlatformHealthAndAgentDistributionAndSessionConfig(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store, distribution AgentDistribution, sessionConfig SessionConfig) *Handler {
+	handler := NewHandlerWithPlatformHealthAndAgentDistribution(platform, currentClock, keyring, dialer, serverVersion, health, distribution)
 	handler.sessionConfig = sessionConfig
 	return handler
 }
@@ -135,7 +140,7 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 		return nil, err
 	}
 	now := handler.clock.Now().UTC()
-	expires := now.Add(handler.sessionConfig.AbsoluteTTL)
+	expiresAt := now.Add(handler.sessionConfig.AbsoluteTTL)
 	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := New(tx)
 		user, err := queries.GetUserForLogin(ctx, request.Body.Username)
@@ -151,7 +156,7 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 		return queries.CreateSession(ctx, CreateSessionParams{
 			TokenHash: tokenHash,
 			UserID:    user.ID,
-			ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true},
+			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 			CreatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		})
 	})
@@ -161,22 +166,29 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 	if err != nil {
 		return nil, err
 	}
-	cookie := (&http.Cookie{
-		Name: sessionCookieName, Value: token, Path: "/", Expires: expires,
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
-	}).String()
-	return api.CreateSession204Response{Headers: api.CreateSession204ResponseHeaders{SetCookie: cookie}}, nil
+	cookie := newSessionCookie(token, expiresAt)
+	return api.CreateSession204Response{Headers: api.CreateSession204ResponseHeaders{SetCookie: cookie.String()}}, nil
 }
 
 func (handler *Handler) DeleteSession(ctx context.Context, _ api.DeleteSessionRequestObject) (api.DeleteSessionResponseObject, error) {
 	if err := New(handler.platform).DeleteSession(ctx, authenticatedSessionHash(ctx)); err != nil {
 		return nil, err
 	}
-	cookie := (&http.Cookie{
-		Name: sessionCookieName, Path: "/", MaxAge: -1, Expires: time.Unix(1, 0).UTC(),
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
-	}).String()
-	return api.DeleteSession204Response{Headers: api.DeleteSession204ResponseHeaders{SetCookie: cookie}}, nil
+	cookie := newSessionCookie("", time.Unix(1, 0).UTC())
+	cookie.MaxAge = -1
+	return api.DeleteSession204Response{Headers: api.DeleteSession204ResponseHeaders{SetCookie: cookie.String()}}, nil
+}
+
+func newSessionCookie(value string, expiresAt time.Time) *http.Cookie {
+	return &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    value,
+		Path:     "/",
+		Expires:  expiresAt,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
 }
 
 func (handler *Handler) GetPlatformHealth(context.Context, api.GetPlatformHealthRequestObject) (api.GetPlatformHealthResponseObject, error) {
@@ -1213,7 +1225,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			return nil, nil
 		}
 		authenticatedContext := context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes))
-		authenticatedContext = context.WithValue(authenticatedContext, authenticatedSessionKey{}, hash[:])
+		authenticatedContext = context.WithValue(authenticatedContext, authenticatedSessionHashKey{}, hash[:])
 		response, err := next(authenticatedContext, writer, request, value)
 		var credentialFault *instance.CredentialFault
 		if errors.As(err, &credentialFault) {

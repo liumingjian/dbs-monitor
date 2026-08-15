@@ -7,10 +7,16 @@ VALUES ($1, $2, $3, 'PLATFORM_ADMIN')
 ON CONFLICT (username) DO NOTHING;
 
 -- name: GetUserForLogin :one
-SELECT id, password_hash, role FROM app_user WHERE username = $1 AND enabled FOR SHARE;
+SELECT id, password_hash, role
+FROM app_user
+WHERE username = $1 AND enabled
+FOR SHARE;
 
 -- name: GetUserPassword :one
-SELECT password_hash FROM app_user WHERE id = $1 AND enabled FOR UPDATE;
+SELECT password_hash
+FROM app_user
+WHERE id = $1 AND enabled
+FOR UPDATE;
 
 -- name: CreateSession :exec
 INSERT INTO user_session (token_hash, user_id, expires_at, created_at, last_seen_at)
@@ -28,7 +34,8 @@ WHERE session.user_id = u.id
 RETURNING u.id, u.role;
 
 -- name: DeleteSession :exec
-DELETE FROM user_session WHERE token_hash = $1;
+DELETE FROM user_session
+WHERE token_hash = $1;
 
 -- name: GetCurrentUser :one
 SELECT id, username, role, enabled, created_at
@@ -79,7 +86,9 @@ WHERE id = $1;
 DELETE FROM user_session WHERE user_id = $1;
 
 -- name: DeleteOtherUserSessions :exec
-DELETE FROM user_session WHERE user_id = $1 AND token_hash <> $2;
+DELETE FROM user_session
+WHERE user_id = $1
+  AND token_hash <> $2;
 
 -- name: GetAgentTokenHash :one
 SELECT agent_token_hash
