@@ -82,8 +82,8 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 	if input.Enabled != existing.Enabled {
 		return api.UpdateAlertRule400JSONResponse(alertRuleValidationError([]fieldError{{field: "enabled", message: "must be changed through the enablement endpoint"}})), nil
 	}
-	if existing.BuiltinIdentifier.Valid && input.Severity == api.Info {
-		return api.UpdateAlertRule400JSONResponse(errorBody(api.BUILTINRULESEVERITYTOOLOW, "built-in collection rules must remain warning or critical")), nil
+	if code := alerting.BuiltinRuleRestriction(existing.BuiltinIdentifier.String, alerting.BuiltinRuleChange{Severity: &input.Severity}); code != "" {
+		return api.UpdateAlertRule400JSONResponse(errorBody(code, "built-in collection rules must remain warning or critical")), nil
 	}
 	if existing.BuiltinIdentifier.Valid && input.MetricId != existing.MetricID {
 		return api.UpdateAlertRule400JSONResponse(alertRuleValidationError([]fieldError{{field: "metric_id", message: "cannot be changed for a built-in rule"}})), nil
@@ -156,8 +156,8 @@ func (handler *Handler) UpdateAlertRuleEnabled(ctx context.Context, request api.
 	if err != nil {
 		return nil, err
 	}
-	if existing.BuiltinIdentifier.Valid && !request.Body.Enabled {
-		return api.UpdateAlertRuleEnabled400JSONResponse(errorBody(api.BUILTINRULEDISABLEFORBIDDEN, "built-in collection rules cannot be disabled")), nil
+	if code := alerting.BuiltinRuleRestriction(existing.BuiltinIdentifier.String, alerting.BuiltinRuleChange{Enabled: &request.Body.Enabled}); code != "" {
+		return api.UpdateAlertRuleEnabled400JSONResponse(errorBody(code, "built-in collection rules cannot be disabled")), nil
 	}
 	rule, err := queries.SetAlertRuleEnabled(ctx, alerting.SetAlertRuleEnabledParams{
 		ID:               pgtype.UUID{Bytes: request.Id, Valid: true},
@@ -192,8 +192,8 @@ func (handler *Handler) DeleteAlertRule(ctx context.Context, request api.DeleteA
 	if err != nil {
 		return nil, err
 	}
-	if rule.BuiltinIdentifier.Valid {
-		return api.DeleteAlertRule409JSONResponse(errorBody(api.BUILTINRULEDELETEFORBIDDEN, "built-in collection rules cannot be deleted")), nil
+	if code := alerting.BuiltinRuleRestriction(rule.BuiltinIdentifier.String, alerting.BuiltinRuleChange{Delete: true}); code != "" {
+		return api.DeleteAlertRule409JSONResponse(errorBody(code, "built-in collection rules cannot be deleted")), nil
 	}
 	if _, err := queries.DeleteAlertRule(ctx, ruleID); err != nil {
 		return nil, err
