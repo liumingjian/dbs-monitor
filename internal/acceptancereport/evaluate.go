@@ -116,17 +116,22 @@ type Report struct {
 	ReasonCodes  []ReasonCode    `json:"reason_codes"`
 }
 
-var allowedNA = map[string]bool{
-	"AC-03-F2": true,
-	"AC-04-F2": true,
-	"AC-05-S4": true,
-	"AC-08-F2": true,
-	"AC-09-F2": true,
+const (
+	matrixEntryCount    = 104
+	matrixBaselineCount = 101
+)
+
+var allowedMatrixNA = map[string]struct{}{
+	"AC-03-F2": {},
+	"AC-04-F2": {},
+	"AC-05-S4": {},
+	"AC-08-F2": {},
+	"AC-09-F2": {},
 }
 
-var allowedPending = map[string]bool{
-	"AC-03-F6": true,
-	"AC-08-S8": true,
+var allowedMatrixPending = map[string]struct{}{
+	"AC-03-F6": {},
+	"AC-08-S8": {},
 }
 
 // Evaluate derives the only verdict from already-loaded evidence.
@@ -155,9 +160,8 @@ func Evaluate(input Input) Decision {
 		reasons.add(ReasonGitHubActions)
 	}
 
-	failure := reasons.hasFailure()
 	verdict := VerdictGo
-	if failure {
+	if reasons.hasFailure() {
 		verdict = VerdictNoGo
 	} else if provisional {
 		verdict = VerdictProvisionalPass
@@ -172,7 +176,8 @@ func evaluateFinalRounds(input Input, reasons reasonSet) {
 	}
 	first, second := input.Rounds[0], input.Rounds[1]
 	for _, round := range input.Rounds {
-		if !hasJSONData(round.Environment) || round.StartedAt.IsZero() || round.FinishedAt.IsZero() || !round.FinishedAt.After(round.StartedAt) {
+		timingValid := !round.StartedAt.IsZero() && !round.FinishedAt.IsZero() && round.FinishedAt.After(round.StartedAt)
+		if !hasJSONData(round.Environment) || !timingValid {
 			reasons.add(ReasonRoundsInvalid)
 		}
 	}
@@ -182,11 +187,11 @@ func evaluateFinalRounds(input Input, reasons reasonSet) {
 }
 
 func evaluateEvidence(profile Profile, candidateSHA string, evidence Evidence, reasons reasonSet) {
-	required := []*Block{evidence.Matrix, evidence.PGRange, evidence.RTC}
+	requiredEvidence := []*Block{evidence.Matrix, evidence.PGRange, evidence.RTC}
 	if profile == ProfileFinal {
-		required = []*Block{evidence.Package, evidence.CheckFull, evidence.Matrix, evidence.PGRange, evidence.RTC, evidence.LinuxNative}
+		requiredEvidence = []*Block{evidence.Package, evidence.CheckFull, evidence.Matrix, evidence.PGRange, evidence.RTC, evidence.LinuxNative}
 	}
-	for _, block := range required {
+	for _, block := range requiredEvidence {
 		if block == nil {
 			reasons.add(ReasonEvidenceMissing)
 			continue
@@ -196,67 +201,79 @@ func evaluateEvidence(profile Profile, candidateSHA string, evidence Evidence, r
 		}
 	}
 
-	for _, block := range []*Block{evidence.Package, evidence.CheckFull, evidence.Matrix, evidence.PGRange, evidence.LinuxNative} {
+	hardGateEvidence := []*Block{evidence.Package, evidence.CheckFull, evidence.Matrix, evidence.PGRange, evidence.LinuxNative}
+	for _, block := range hardGateEvidence {
 		if block == nil {
 			continue
 		}
+		isMatrix := block == evidence.Matrix
 		if block.Result != "" && normalizeStatus(block.Result) != StatusPass {
 			reasons.add(ReasonHardGateFailed)
 		}
-		if block != evidence.Matrix && block.Result == "" && len(block.Entries) == 0 {
+		if !isMatrix && block.Result == "" && len(block.Entries) == 0 {
 			reasons.add(ReasonHardGateFailed)
 		}
 		for _, entry := range block.Entries {
 			status := normalizeStatus(entry.Status)
-			matrixNA := block == evidence.Matrix && status == StatusNA && allowedNA[entry.ID]
-			required := block != evidence.Matrix || entry.Baseline
-			if required && status != StatusPass && !matrixNA {
+			_, allowsNA := allowedMatrixNA[entry.ID]
+			isAllowedMatrixNA := isMatrix && status == StatusNA && allowsNA
+			isRequired := !isMatrix || entry.Baseline
+			if isRequired && status != StatusPass && !isAllowedMatrixNA {
 				reasons.add(ReasonHardGateFailed)
 			}
 		}
 	}
 
-	if evidence.Matrix != nil {
-		if !completeMatrix(evidence.Matrix.Entries) {
-			reasons.add(ReasonEvidenceMissing)
-		}
-		if len(evidence.Matrix.Exceptions) > 0 {
-			reasons.add(ReasonUnexpectedMatrixState)
-		}
-		for _, entry := range evidence.Matrix.Entries {
-			switch normalizeStatus(entry.Status) {
-			case StatusPending:
-				if !allowedPending[entry.ID] || entry.Baseline {
-					reasons.add(ReasonUnexpectedMatrixState)
-				}
-			case StatusNA:
-				if !allowedNA[entry.ID] {
-					reasons.add(ReasonUnexpectedMatrixState)
-				}
-			}
-		}
-	}
+	evaluateMatrix(evidence.Matrix, reasons)
 	if evidence.RTC != nil && !hasJSONData(evidence.RTC.Summary) {
 		reasons.add(ReasonRTCDataMissing)
 	}
 }
 
-func completeMatrix(entries []Entry) bool {
-	if len(entries) != 104 {
+func evaluateMatrix(matrix *Block, reasons reasonSet) {
+	if matrix == nil {
+		return
+	}
+	if !matrixIsComplete(matrix.Entries) {
+		reasons.add(ReasonEvidenceMissing)
+	}
+	if len(matrix.Exceptions) > 0 {
+		reasons.add(ReasonUnexpectedMatrixState)
+	}
+	for _, entry := range matrix.Entries {
+		switch normalizeStatus(entry.Status) {
+		case StatusPending:
+			_, allowed := allowedMatrixPending[entry.ID]
+			if !allowed || entry.Baseline {
+				reasons.add(ReasonUnexpectedMatrixState)
+			}
+		case StatusNA:
+			if _, allowed := allowedMatrixNA[entry.ID]; !allowed {
+				reasons.add(ReasonUnexpectedMatrixState)
+			}
+		}
+	}
+}
+
+func matrixIsComplete(entries []Entry) bool {
+	if len(entries) != matrixEntryCount {
 		return false
 	}
 	baselineCount := 0
-	ids := make(map[string]bool, len(entries))
+	ids := make(map[string]struct{}, len(entries))
 	for _, entry := range entries {
-		if entry.ID == "" || ids[entry.ID] {
+		if entry.ID == "" {
 			return false
 		}
-		ids[entry.ID] = true
+		if _, duplicate := ids[entry.ID]; duplicate {
+			return false
+		}
+		ids[entry.ID] = struct{}{}
 		if entry.Baseline {
 			baselineCount++
 		}
 	}
-	return baselineCount == 101
+	return baselineCount == matrixBaselineCount
 }
 
 func hasJSONData(contents json.RawMessage) bool {
@@ -278,8 +295,13 @@ func hasJSONData(contents json.RawMessage) bool {
 }
 
 func evaluateManualReview(review *ManualReview, reasons reasonSet) {
-	if review == nil || strings.TrimSpace(review.Operator) == "" || review.At.IsZero() || review.Result == "" ||
-		len(review.ScreenshotIndex) == 0 || review.ResidualRisks == nil {
+	if review == nil {
+		reasons.add(ReasonManualResultMissing)
+		return
+	}
+	complete := strings.TrimSpace(review.Operator) != "" && !review.At.IsZero() && review.Result != "" &&
+		len(review.ScreenshotIndex) > 0 && review.ResidualRisks != nil
+	if !complete {
 		reasons.add(ReasonManualResultMissing)
 		return
 	}
@@ -289,20 +311,21 @@ func evaluateManualReview(review *ManualReview, reasons reasonSet) {
 }
 
 func normalizeStatus(status Status) Status {
-	switch strings.ToLower(string(status)) {
+	normalized := strings.ToLower(string(status))
+	switch normalized {
 	case "pass", "passed":
 		return StatusPass
 	case "fail", "failed":
 		return StatusFail
 	default:
-		return Status(strings.ToLower(string(status)))
+		return Status(normalized)
 	}
 }
 
-type reasonSet map[ReasonCode]bool
+type reasonSet map[ReasonCode]struct{}
 
 func (reasons reasonSet) add(reason ReasonCode) {
-	reasons[reason] = true
+	reasons[reason] = struct{}{}
 }
 
 func (reasons reasonSet) hasFailure() bool {
@@ -315,7 +338,7 @@ func (reasons reasonSet) hasFailure() bool {
 }
 
 func (reasons reasonSet) list() []ReasonCode {
-	order := []ReasonCode{
+	order := [...]ReasonCode{
 		ReasonEvidenceMissing,
 		ReasonEvidenceSHAMismatch,
 		ReasonHardGateFailed,
@@ -328,7 +351,7 @@ func (reasons reasonSet) list() []ReasonCode {
 	}
 	result := make([]ReasonCode, 0, len(reasons))
 	for _, reason := range order {
-		if reasons[reason] {
+		if _, exists := reasons[reason]; exists {
 			result = append(result, reason)
 		}
 	}

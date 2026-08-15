@@ -86,10 +86,10 @@ func generate(manifestPath, outputPath string, githubActions bool) error {
 		return fmt.Errorf("unsupported report profile %q", input.Profile)
 	}
 
-	base := filepath.Dir(manifestPath)
+	manifestDirectory := filepath.Dir(manifestPath)
 	rounds := make([]acceptancereport.Round, 0, len(input.Rounds))
 	for _, source := range input.Rounds {
-		round, err := loadRound(base, source)
+		round, err := loadRound(manifestDirectory, source)
 		if err != nil {
 			return fmt.Errorf("round %d: %w", source.Sequence, err)
 		}
@@ -144,11 +144,11 @@ func readManifest(path string) (manifest, error) {
 	return result, nil
 }
 
-func loadRound(base string, source roundManifest) (acceptancereport.Round, error) {
+func loadRound(manifestDirectory string, source roundManifest) (acceptancereport.Round, error) {
 	evidence := acceptancereport.Evidence{}
-	loads := []struct {
-		path   string
-		target **acceptancereport.Block
+	evidenceFiles := []struct {
+		reference   string
+		destination **acceptancereport.Block
 	}{
 		{source.Evidence.Package, &evidence.Package},
 		{source.Evidence.CheckFull, &evidence.CheckFull},
@@ -157,23 +157,23 @@ func loadRound(base string, source roundManifest) (acceptancereport.Round, error
 		{source.Evidence.RTC, &evidence.RTC},
 		{source.Evidence.LinuxNative, &evidence.LinuxNative},
 	}
-	for _, load := range loads {
-		if load.path == "" {
+	for _, file := range evidenceFiles {
+		if file.reference == "" {
 			continue
 		}
-		block, err := loadBlock(base, load.path)
+		block, err := loadBlock(manifestDirectory, file.reference)
 		if err != nil {
 			return acceptancereport.Round{}, err
 		}
-		*load.target = block
+		*file.destination = block
 	}
-	var manual *acceptancereport.ManualReview
+	var manualReview *acceptancereport.ManualReview
 	if source.ManualReview != "" {
-		loaded, err := loadManualReview(base, source.ManualReview)
+		review, err := loadManualReview(manifestDirectory, source.ManualReview)
 		if err != nil {
 			return acceptancereport.Round{}, err
 		}
-		manual = &loaded
+		manualReview = &review
 	}
 	return acceptancereport.Round{
 		Sequence:     source.Sequence,
@@ -183,7 +183,7 @@ func loadRound(base string, source roundManifest) (acceptancereport.Round, error
 		FinishedAt:   source.FinishedAt,
 		Environment:  source.Environment,
 		Evidence:     evidence,
-		ManualReview: manual,
+		ManualReview: manualReview,
 	}, nil
 }
 
@@ -277,25 +277,27 @@ func artifactPath(base, reference string) (string, error) {
 }
 
 func normalizeStatus(status acceptancereport.Status) acceptancereport.Status {
-	switch strings.ToLower(string(status)) {
+	normalized := strings.ToLower(string(status))
+	switch normalized {
 	case "pass", "passed":
 		return acceptancereport.StatusPass
 	case "fail", "failed":
 		return acceptancereport.StatusFail
 	default:
-		return acceptancereport.Status(strings.ToLower(string(status)))
+		return acceptancereport.Status(normalized)
 	}
 }
 
 func requireEOF(decoder *json.Decoder) error {
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		if err == nil {
-			return errors.New("multiple JSON values")
-		}
-		return err
+	err := decoder.Decode(&extra)
+	if err == io.EOF {
+		return nil
 	}
-	return nil
+	if err == nil {
+		return errors.New("multiple JSON values")
+	}
+	return err
 }
 
 func isValidationArchive(path string) bool {
