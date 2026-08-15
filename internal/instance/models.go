@@ -32,6 +32,7 @@ type CollectionTaskConfig struct {
 	TaskID          string
 	IntervalSeconds int32
 	UpdatedAt       pgtype.Timestamptz
+	UpdatedBy       pgtype.UUID
 }
 
 type Instance struct {

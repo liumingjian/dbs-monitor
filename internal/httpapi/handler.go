@@ -28,6 +28,11 @@ import (
 const sessionCookie = "dbs_monitor_session"
 
 type authenticatedAgentKey struct{}
+type authenticatedUserKey struct{}
+
+type authenticatedUser struct {
+	id pgtype.UUID
+}
 
 type Handler struct {
 	platform *db.Pool
@@ -164,8 +169,12 @@ func (handler *Handler) UpdateCollectionTaskInterval(ctx context.Context, reques
 		return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	actor, ok := ctx.Value(authenticatedUserKey{}).(authenticatedUser)
+	if !ok {
+		return nil, errors.New("authenticated user is missing")
+	}
 	if err := metric.New(handler.platform).SetTaskInterval(ctx, metric.SetTaskIntervalParams{
-		InstanceID: instanceID, TaskID: request.TaskId, IntervalSeconds: int32(request.Body.IntervalSeconds),
+		InstanceID: instanceID, TaskID: request.TaskId, IntervalSeconds: int32(request.Body.IntervalSeconds), UpdatedBy: actor.id,
 	}); err != nil {
 		return nil, err
 	}
@@ -419,7 +428,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			return nil, nil
 		}
 		hash := sha256.Sum256([]byte(cookie.Value))
-		role, err := New(handler.platform).GetSessionRole(ctx, GetSessionRoleParams{
+		principal, err := New(handler.platform).GetSessionPrincipal(ctx, GetSessionPrincipalParams{
 			TokenHash: hash[:], ExpiresAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 		})
 		if err != nil {
@@ -431,11 +440,12 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		if roleRank(role) < roleRank(required) {
+		if roleRank(principal.Role) < roleRank(required) {
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		return next(ctx, writer, request, value)
+		user := authenticatedUser{id: principal.ID}
+		return next(context.WithValue(ctx, authenticatedUserKey{}, user), writer, request, value)
 	}
 }
 

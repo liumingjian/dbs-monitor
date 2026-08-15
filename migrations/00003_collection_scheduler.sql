@@ -1,4 +1,7 @@
 -- +goose Up
+ALTER TABLE collection_task_config
+    ADD COLUMN updated_by uuid REFERENCES app_user(id);
+
 CREATE TABLE instance_collection_task_state (
     instance_id uuid NOT NULL REFERENCES instance(id) ON DELETE CASCADE,
     task_id text NOT NULL CHECK (task_id <> ''),

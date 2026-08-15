@@ -13,8 +13,8 @@ SELECT id, password_hash, role FROM app_user WHERE username = $1;
 INSERT INTO user_session (token_hash, user_id, expires_at)
 VALUES ($1, $2, $3);
 
--- name: GetSessionRole :one
-SELECT u.role
+-- name: GetSessionPrincipal :one
+SELECT u.id, u.role
 FROM user_session session
 JOIN app_user u ON u.id = session.user_id
 WHERE session.token_hash = $1 AND session.expires_at > $2;

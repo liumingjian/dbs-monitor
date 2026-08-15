@@ -152,6 +152,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("4-second interval update status = %d, want 400", belowFloor.StatusCode)
 	}
 	belowFloor.Body.Close()
+	intervalUpdateStarted := time.Now().UTC()
 	updatedInterval := requestJSON(t, client, http.MethodPut, tasksURL+"/pg.stat_activity", map[string]any{"interval_seconds": 7}, "")
 	if updatedInterval.StatusCode != http.StatusOK {
 		t.Fatalf("7-second interval update status = %d, want 200", updatedInterval.StatusCode)
@@ -167,11 +168,19 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("updated interval = %d, want 7", updatedTask.IntervalSeconds)
 	}
 	var persistedInterval int
-	if err := pool.QueryRow(ctx, `SELECT interval_seconds FROM collection_task_config WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, createBody.Instance.ID).Scan(&persistedInterval); err != nil {
+	var updatedBy, adminID uuid.UUID
+	var updatedAt time.Time
+	if err := pool.QueryRow(ctx, "SELECT id FROM app_user WHERE username = 'admin'").Scan(&adminID); err != nil {
+		t.Fatalf("read admin id: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT interval_seconds, updated_by, updated_at FROM collection_task_config WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, createBody.Instance.ID).Scan(&persistedInterval, &updatedBy, &updatedAt); err != nil {
 		t.Fatalf("read persisted collection interval: %v", err)
 	}
 	if persistedInterval != 7 {
 		t.Fatalf("persisted interval = %d, want 7", persistedInterval)
+	}
+	if updatedBy != adminID || updatedAt.Before(intervalUpdateStarted) {
+		t.Fatalf("interval attribution = actor %s at %s, want actor %s at or after %s", updatedBy, updatedAt, adminID, intervalUpdateStarted)
 	}
 
 	seriesURL := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.total&from=%s&to=%s&step=raw",

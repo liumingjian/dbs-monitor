@@ -77,23 +77,28 @@ func (q *Queries) GetInstanceAlertStatus(ctx context.Context, instanceID pgtype.
 	return status, err
 }
 
-const getSessionRole = `-- name: GetSessionRole :one
-SELECT u.role
+const getSessionPrincipal = `-- name: GetSessionPrincipal :one
+SELECT u.id, u.role
 FROM user_session session
 JOIN app_user u ON u.id = session.user_id
 WHERE session.token_hash = $1 AND session.expires_at > $2
 `
 
-type GetSessionRoleParams struct {
+type GetSessionPrincipalParams struct {
 	TokenHash []byte
 	ExpiresAt pgtype.Timestamptz
 }
 
-func (q *Queries) GetSessionRole(ctx context.Context, arg GetSessionRoleParams) (string, error) {
-	row := q.db.QueryRow(ctx, getSessionRole, arg.TokenHash, arg.ExpiresAt)
-	var role string
-	err := row.Scan(&role)
-	return role, err
+type GetSessionPrincipalRow struct {
+	ID   pgtype.UUID
+	Role string
+}
+
+func (q *Queries) GetSessionPrincipal(ctx context.Context, arg GetSessionPrincipalParams) (GetSessionPrincipalRow, error) {
+	row := q.db.QueryRow(ctx, getSessionPrincipal, arg.TokenHash, arg.ExpiresAt)
+	var i GetSessionPrincipalRow
+	err := row.Scan(&i.ID, &i.Role)
+	return i, err
 }
 
 const getUserForLogin = `-- name: GetUserForLogin :one
