@@ -1144,8 +1144,8 @@ entries:
     pages: ["实例工作台/接入设置"]
     operations: [deleteInstance]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "TestAcceptance_AC_08_S6"
     owner_issue: 121
     reason: "S1 拍板判据的实例页一半，升加深基线；三层各自都可能单独坏掉，且「移除」字面成立与「历史归因不悬空」是一对相反方向的约束（24 号 D2）"
   - id: AC-08-S7
