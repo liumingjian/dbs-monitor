@@ -110,6 +110,51 @@ services:
       timeout: 3s
       retries: 30
 
+  acceptance-platform:
+    image: postgres:17
+    profiles: [acceptance]
+    entrypoint: ["sh", "/acceptance-postgres-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/server.key
+    environment:
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    volumes:
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+      - ./test/acceptance/postgres-tls-entrypoint.sh:/acceptance-postgres-entrypoint.sh:ro
+      - ./test/acceptance/fixtures/platform-init.sql:/docker-entrypoint-initdb.d/platform-init.sql:ro
+    ports: ["55442:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  acceptance-target:
+    image: postgres:17
+    profiles: [acceptance]
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+    environment:
+      POSTGRES_DB: monitored
+      POSTGRES_USER: monitored
+      POSTGRES_PASSWORD: monitored
+    volumes:
+      - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
+    ports: ["55447:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
   restore-target:
     image: postgres:17
     profiles: [restore]

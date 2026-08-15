@@ -22,7 +22,7 @@ BUILD_LDFLAGS := -X main.version=$(BUILD_VERSION) -X main.commitSHA=$(CANDIDATE_
 # Keep tag-derived values out of shell source; the shell reads them as environment data.
 export BUILD_LDFLAGS
 
-.PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix check-sqlc-vet
+.PHONY: gen dev-up dev-down build check check-full acceptance check-pg-matrix check-snapshot-matrix check-sqlc-vet
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml
@@ -55,11 +55,14 @@ check:
 	cd web && npm run lint
 	cd web && npm test -- --run
 
-check-full: check
+check-full: check acceptance
 	$(MAKE) build
 	sh scripts/check-e2e.sh
 	$(MAKE) check-sqlc-vet
 	$(MAKE) check-pg-matrix
+
+acceptance:
+	sh test/acceptance/run.sh
 
 check-sqlc-vet:
 	@database=dbs_monitor_sqlc_vet_$$$$; \
