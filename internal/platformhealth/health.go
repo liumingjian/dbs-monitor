@@ -118,6 +118,7 @@ type SourceSnapshot struct {
 	Version               *string    `json:"version,omitempty"`
 	StartedAt             *time.Time `json:"started_at,omitempty"`
 	ExpiresAt             *time.Time `json:"expires_at,omitempty"`
+	ValidityDaysRemaining *int       `json:"validity_days_remaining,omitempty"`
 	ProbeCapacity         *int       `json:"probe_capacity,omitempty"`
 	ProbeActive           *int       `json:"probe_active,omitempty"`
 	QueryCapacity         *int       `json:"query_capacity,omitempty"`
@@ -206,17 +207,23 @@ func SchedulerSource(facts SchedulerFacts) SourceSnapshot {
 }
 
 func CertificateSource(now time.Time, expiresAt *time.Time) SourceSnapshot {
-	result := SourceSnapshot{Source: SourceTLS, Status: StatusUnknown, Code: "CERTIFICATE_UNAVAILABLE"}
+	result := SourceSnapshot{Source: SourceTLSCertificate, Status: StatusDegraded, Code: "CERTIFICATE_UNAVAILABLE"}
 	if expiresAt == nil {
 		return result
 	}
+	now = now.UTC()
 	expires := expiresAt.UTC()
 	result.ExpiresAt = &expires
+	daysRemaining := int(math.Ceil(expires.Sub(now).Hours() / 24))
+	if daysRemaining < 0 {
+		daysRemaining = 0
+	}
+	result.ValidityDaysRemaining = &daysRemaining
 	switch {
-	case !now.UTC().Before(expires):
+	case !now.Before(expires):
 		result.Status = StatusDegraded
 		result.Code = "CERTIFICATE_EXPIRED"
-	case !expires.After(now.UTC().Add(30 * 24 * time.Hour)):
+	case !expires.After(now.Add(30 * 24 * time.Hour)):
 		result.Status = StatusDegraded
 		result.Code = "CERTIFICATE_EXPIRING"
 	default:
@@ -393,8 +400,8 @@ func (store *Store) RejectSampleWrites() bool {
 }
 
 func (store *Store) assemble(now time.Time) Snapshot {
-	if certificate := store.sources[SourceTLS]; certificate.ExpiresAt != nil {
-		store.sources[SourceTLS] = CertificateSource(now, certificate.ExpiresAt)
+	if certificate := store.sources[SourceTLSCertificate]; certificate.ExpiresAt != nil {
+		store.sources[SourceTLSCertificate] = CertificateSource(now, certificate.ExpiresAt)
 	}
 	sources := make([]SourceSnapshot, 0, len(sourceOrder))
 	statuses := make([]Status, 0, len(sourceOrder))

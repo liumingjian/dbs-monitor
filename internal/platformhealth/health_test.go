@@ -148,17 +148,17 @@ func TestSourceClassifications(t *testing.T) {
 		{
 			name:   "certificate unavailable",
 			got:    CertificateSource(now, nil),
-			source: SourceTLS, status: StatusUnknown, code: "CERTIFICATE_UNAVAILABLE",
+			source: SourceTLSCertificate, status: StatusDegraded, code: "CERTIFICATE_UNAVAILABLE",
 		},
 		{
 			name:   "certificate warning window",
 			got:    CertificateSource(now, timePointer(now.Add(30*24*time.Hour))),
-			source: SourceTLS, status: StatusDegraded, code: "CERTIFICATE_EXPIRING",
+			source: SourceTLSCertificate, status: StatusDegraded, code: "CERTIFICATE_EXPIRING",
 		},
 		{
 			name:   "certificate expired",
 			got:    CertificateSource(now, timePointer(now.Add(-time.Second))),
-			source: SourceTLS, status: StatusDegraded, code: "CERTIFICATE_EXPIRED",
+			source: SourceTLSCertificate, status: StatusDegraded, code: "CERTIFICATE_EXPIRED",
 		},
 		{
 			name:   "credential keyring unavailable",
@@ -203,6 +203,41 @@ func TestSourceClassifications(t *testing.T) {
 	saturated := SchedulerSource(SchedulerFacts{Pending: 3, SkippedBackpressure: 7})
 	if saturated.Pending == nil || *saturated.Pending != 3 || saturated.SkippedBackpressure == nil || *saturated.SkippedBackpressure != 7 {
 		t.Fatalf("scheduler detail = %+v, want pending=3 skipped_backpressure=7", saturated)
+	}
+}
+
+func TestCertificateSourceReportsRemainingValidityWithoutFailedState(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name          string
+		expiresAt     *time.Time
+		wantRemaining *int
+	}{
+		{name: "unavailable"},
+		{name: "valid", expiresAt: timePointer(now.Add(365 * 24 * time.Hour)), wantRemaining: intPointer(365)},
+		{name: "expiring", expiresAt: timePointer(now.Add(20 * 24 * time.Hour)), wantRemaining: intPointer(20)},
+		{name: "expired", expiresAt: timePointer(now.Add(-time.Second)), wantRemaining: intPointer(0)},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := CertificateSource(now, test.expiresAt)
+			if source.Status == StatusFailed {
+				t.Fatalf("certificate status = %s, TLS facts must not use FAILED", source.Status)
+			}
+			if test.wantRemaining == nil {
+				if source.ValidityDaysRemaining != nil {
+					t.Fatalf("validity days remaining = %d, want unavailable", *source.ValidityDaysRemaining)
+				}
+				return
+			}
+			if source.ValidityDaysRemaining == nil {
+				t.Fatalf("validity days remaining is unavailable, want %d", *test.wantRemaining)
+			}
+			if got := *source.ValidityDaysRemaining; got != *test.wantRemaining {
+				t.Fatalf("validity days remaining = %d, want %d", got, *test.wantRemaining)
+			}
+		})
 	}
 }
 
@@ -272,7 +307,7 @@ func TestPublishSummaryEmitsCertificateLevelChange(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 2 || !strings.Contains(lines[0], `"event":"platform_health_change"`) ||
-		!strings.Contains(lines[0], `"source":"TLS"`) || !strings.Contains(lines[0], `"status":"DEGRADED"`) {
+		!strings.Contains(lines[0], `"source":"TLS_CERTIFICATE"`) || !strings.Contains(lines[0], `"status":"DEGRADED"`) {
 		t.Fatalf("certificate transition journal = %q, want change event followed by summary", output.String())
 	}
 }

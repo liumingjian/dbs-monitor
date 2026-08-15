@@ -1153,6 +1153,7 @@ type PlatformHealthSourceSnapshot struct {
 	Source                PlatformHealthSource `json:"source"`
 	StartedAt             *time.Time           `json:"started_at,omitempty"`
 	Status                PlatformHealthStatus `json:"status"`
+	ValidityDaysRemaining *int                 `json:"validity_days_remaining,omitempty"`
 	Version               *string              `json:"version,omitempty"`
 }
 

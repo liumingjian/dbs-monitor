@@ -34,6 +34,16 @@ func TestFocusedDiagnosticsReadOnlyInMemorySources(t *testing.T) {
 	assertDiagnosticSource(t, "certificate", certificateResponse, certificateErr, api.HealthSourceTLSCertificate)
 	assertDiagnosticSource(t, "keyring", keyringResponse, keyringErr, api.HealthSourceCredentialKeyring)
 	assertDiagnosticSource(t, "platform", platformResponse, platformErr, api.HealthSourceServerProcess)
+	certificate, ok := certificateResponse.(api.GetCertificateDiagnostics200JSONResponse)
+	if !ok {
+		t.Fatalf("get certificate diagnostics returned %T", certificateResponse)
+	}
+	if certificate.ValidityDaysRemaining == nil {
+		t.Fatal("certificate validity days remaining is unavailable, want 15")
+	}
+	if got := *certificate.ValidityDaysRemaining; got != 15 {
+		t.Fatalf("certificate validity days remaining = %d, want 15", got)
+	}
 }
 
 func assertDiagnosticSource(t *testing.T, name string, response any, responseErr error, want api.PlatformHealthSource) {

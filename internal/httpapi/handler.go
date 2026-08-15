@@ -170,6 +170,7 @@ func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.Platfor
 		Version:               source.Version,
 		StartedAt:             source.StartedAt,
 		ExpiresAt:             source.ExpiresAt,
+		ValidityDaysRemaining: source.ValidityDaysRemaining,
 		ProbeCapacity:         source.ProbeCapacity,
 		ProbeActive:           source.ProbeActive,
 		QueryCapacity:         source.QueryCapacity,
