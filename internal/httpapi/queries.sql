@@ -48,8 +48,8 @@ FROM app_user
 ORDER BY username;
 
 -- name: CreateUser :one
-INSERT INTO app_user (id, username, password_hash, role)
-VALUES ($1, $2, $3, $4)
+INSERT INTO app_user (id, username, password_hash, role, created_by)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, username, role, enabled, created_at;
 
 -- name: LockEnabledPlatformAdmins :many
@@ -67,13 +67,17 @@ FOR UPDATE;
 
 -- name: SetUserEnabled :one
 UPDATE app_user
-SET enabled = $2
+SET enabled = $2,
+    enabled_updated_by = $3,
+    enabled_updated_at = $4
 WHERE id = $1
 RETURNING id, username, role, enabled, created_at;
 
 -- name: SetUserRole :one
 UPDATE app_user
-SET role = $2
+SET role = $2,
+    role_updated_by = $3,
+    role_updated_at = $4
 WHERE id = $1
 RETURNING id, username, role, enabled, created_at;
 

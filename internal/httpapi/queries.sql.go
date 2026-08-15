@@ -206,8 +206,8 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO app_user (id, username, password_hash, role)
-VALUES ($1, $2, $3, $4)
+INSERT INTO app_user (id, username, password_hash, role, created_by)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, username, role, enabled, created_at
 `
 
@@ -216,6 +216,7 @@ type CreateUserParams struct {
 	Username     string
 	PasswordHash []byte
 	Role         string
+	CreatedBy    pgtype.UUID
 }
 
 type CreateUserRow struct {
@@ -232,6 +233,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		arg.Username,
 		arg.PasswordHash,
 		arg.Role,
+		arg.CreatedBy,
 	)
 	var i CreateUserRow
 	err := row.Scan(
@@ -1369,14 +1371,18 @@ func (q *Queries) SetCollectionPause(ctx context.Context, arg SetCollectionPause
 
 const setUserEnabled = `-- name: SetUserEnabled :one
 UPDATE app_user
-SET enabled = $2
+SET enabled = $2,
+    enabled_updated_by = $3,
+    enabled_updated_at = $4
 WHERE id = $1
 RETURNING id, username, role, enabled, created_at
 `
 
 type SetUserEnabledParams struct {
-	ID      pgtype.UUID
-	Enabled bool
+	ID               pgtype.UUID
+	Enabled          bool
+	EnabledUpdatedBy pgtype.UUID
+	EnabledUpdatedAt pgtype.Timestamptz
 }
 
 type SetUserEnabledRow struct {
@@ -1388,7 +1394,12 @@ type SetUserEnabledRow struct {
 }
 
 func (q *Queries) SetUserEnabled(ctx context.Context, arg SetUserEnabledParams) (SetUserEnabledRow, error) {
-	row := q.db.QueryRow(ctx, setUserEnabled, arg.ID, arg.Enabled)
+	row := q.db.QueryRow(ctx, setUserEnabled,
+		arg.ID,
+		arg.Enabled,
+		arg.EnabledUpdatedBy,
+		arg.EnabledUpdatedAt,
+	)
 	var i SetUserEnabledRow
 	err := row.Scan(
 		&i.ID,
@@ -1421,14 +1432,18 @@ func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams
 
 const setUserRole = `-- name: SetUserRole :one
 UPDATE app_user
-SET role = $2
+SET role = $2,
+    role_updated_by = $3,
+    role_updated_at = $4
 WHERE id = $1
 RETURNING id, username, role, enabled, created_at
 `
 
 type SetUserRoleParams struct {
-	ID   pgtype.UUID
-	Role string
+	ID            pgtype.UUID
+	Role          string
+	RoleUpdatedBy pgtype.UUID
+	RoleUpdatedAt pgtype.Timestamptz
 }
 
 type SetUserRoleRow struct {
@@ -1440,7 +1455,12 @@ type SetUserRoleRow struct {
 }
 
 func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) (SetUserRoleRow, error) {
-	row := q.db.QueryRow(ctx, setUserRole, arg.ID, arg.Role)
+	row := q.db.QueryRow(ctx, setUserRole,
+		arg.ID,
+		arg.Role,
+		arg.RoleUpdatedBy,
+		arg.RoleUpdatedAt,
+	)
 	var i SetUserRoleRow
 	err := row.Scan(
 		&i.ID,

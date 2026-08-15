@@ -29,7 +29,9 @@ var packageLayers = map[string]int{
 	"internal/notify":           1,
 	"internal/pgconn":           0,
 	"internal/platformdb":       1,
+	"internal/platformevent":    1,
 	"internal/platformhealth":   1,
+	"internal/securitymodel":    0,
 	"test/acceptance":           3,
 }
 

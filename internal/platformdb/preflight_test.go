@@ -89,6 +89,7 @@ func TestPlatformObjectAllowlistCoversMigrationObjects(t *testing.T) {
 	for _, name := range []string{
 		"goose_db_version", "goose_db_version_id_seq", "metric_series_series_id_seq",
 		"alert_event_id_seq", "notification_attempt_id_seq", "notification_policy_channel_id_seq",
+		"platform_event_id_seq",
 	} {
 		if !allowedRelations[name] {
 			t.Errorf("generated platform relation %q is absent from preflight allowlist", name)

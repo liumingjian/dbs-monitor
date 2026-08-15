@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +15,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/notify"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 )
 
 const masterKeyRotationLockID int64 = 0x524f5441 // "ROTA"
@@ -54,6 +57,12 @@ func runMasterKeyRotationCommand(ctx context.Context) (returnedErr error) {
 	result, err := rotateCredentialKeyring(ctx, &db.Pool{Pool: pool}, credentialDirectory)
 	if err != nil {
 		return err
+	}
+	if err := platformevent.Record(ctx, pool, platformevent.Event{
+		Kind: platformevent.MasterKeyRotated, OccurredAt: time.Now().UTC(),
+		ActorSubject: fmt.Sprintf("uid:%d", os.Geteuid()),
+	}); err != nil {
+		return fmt.Errorf("record master key rotation actor: %w", err)
 	}
 	log.Printf("rotated %d credentials to master key v%d", result.CredentialsRotated, result.KeyVersion)
 	return nil
