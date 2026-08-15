@@ -171,6 +171,10 @@ export interface components {
             timestamp: string;
             metrics: components["schemas"]["AgentMetric"][];
         };
+        AgentReportAccepted: {
+            /** @description Version of the server that accepted the report. */
+            server_version: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -377,11 +381,13 @@ export interface operations {
         };
         responses: {
             /** @description Accepted */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["AgentReportAccepted"];
+                };
             };
             /** @description Report rejected because of clock skew or Agent version */
             400: {

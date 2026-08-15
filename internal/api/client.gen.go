@@ -700,6 +700,7 @@ type ClientWithResponsesInterface interface {
 type ReportAgentMetricsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	JSON200      *AgentReportAccepted
 	JSON400      *Error
 	JSON401      *Error
 }
@@ -992,6 +993,13 @@ func ParseReportAgentMetricsResponse(rsp *http.Response) (*ReportAgentMetricsRes
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AgentReportAccepted
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

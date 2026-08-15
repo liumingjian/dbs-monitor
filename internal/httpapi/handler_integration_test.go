@@ -201,6 +201,11 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("wrong token status = %d, want 401", wrong.StatusCode)
 	}
 	wrong.Body.Close()
+	alertUpdatedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
+	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
+		(instance_id, metric_id, status, updated_at) VALUES ($1, 'pg.connection.total', 'OK', $2)`, createBody.Instance.ID, alertUpdatedAt); err != nil {
+		t.Fatalf("seed alert state: %v", err)
+	}
 	skewed := report(time.Now().Add(-31*time.Second), "2.4.0", createBody.AgentToken, nil)
 	if skewed.StatusCode != http.StatusBadRequest {
 		t.Fatalf("skewed timestamp status = %d, want 400", skewed.StatusCode)
@@ -225,12 +230,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("old version message = %q", oldVersionError.Error.Message)
 	}
 	assertAgentState(t, ctx, pool, createBody.Instance.ID, "1.99.0", "AGENT_VERSION_TOO_OLD", "版本过旧，需升级")
-
-	alertUpdatedAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Microsecond)
-	if _, err := pool.Exec(ctx, `INSERT INTO alert_instance
-		(instance_id, metric_id, status, updated_at) VALUES ($1, 'pg.connection.total', 'OK', $2)`, createBody.Instance.ID, alertUpdatedAt); err != nil {
-		t.Fatalf("seed alert state: %v", err)
-	}
+	assertAlertUnchanged(t, ctx, pool, createBody.Instance.ID, alertUpdatedAt)
 	now := time.Now().UTC()
 	backfill := []map[string]any{
 		{"timestamp": now.Add(-90 * time.Second).Format(time.RFC3339Nano), "metrics": metricsWithIOPS(9)},
@@ -238,8 +238,17 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		{"timestamp": now.Add(-5*time.Minute - time.Second).Format(time.RFC3339Nano), "metrics": hostMetrics},
 	}
 	accepted := report(now, "2.4.0", createBody.AgentToken, backfill)
-	if accepted.StatusCode != http.StatusNoContent {
-		t.Fatalf("valid report status = %d, want 204", accepted.StatusCode)
+	if accepted.StatusCode != http.StatusOK {
+		t.Fatalf("valid report status = %d, want 200", accepted.StatusCode)
+	}
+	var acceptedBody struct {
+		ServerVersion string `json:"server_version"`
+	}
+	if err := json.NewDecoder(accepted.Body).Decode(&acceptedBody); err != nil {
+		t.Fatalf("decode accepted report response: %v", err)
+	}
+	if acceptedBody.ServerVersion != "3.0.0" {
+		t.Fatalf("server_version = %q, want 3.0.0", acceptedBody.ServerVersion)
 	}
 	accepted.Body.Close()
 
@@ -313,13 +322,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	assertAgentState(t, ctx, pool, createBody.Instance.ID, "2.4.0", "", "")
 
-	var unchanged time.Time
-	if err := pool.QueryRow(ctx, "SELECT updated_at FROM alert_instance WHERE instance_id = $1", createBody.Instance.ID).Scan(&unchanged); err != nil {
-		t.Fatalf("read alert state after backfill: %v", err)
-	}
-	if !unchanged.Equal(alertUpdatedAt) {
-		t.Fatalf("backfill changed alert evaluation state at %s, want %s", unchanged, alertUpdatedAt)
-	}
+	assertAlertUnchanged(t, ctx, pool, createBody.Instance.ID, alertUpdatedAt)
 
 	instanceResponse := getResponse(t, client, server.URL+"/api/v1/instances/"+createBody.Instance.ID)
 	defer instanceResponse.Body.Close()
@@ -331,6 +334,20 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	if instanceBody.AgentVersion == nil || *instanceBody.AgentVersion != "2.4.0" {
 		t.Fatalf("instance agent_version = %v, want 2.4.0", instanceBody.AgentVersion)
+	}
+}
+
+func assertAlertUnchanged(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID string, updatedAt time.Time) {
+	t.Helper()
+	var status string
+	var noDataCount int
+	var gotUpdatedAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT status, no_data_count, updated_at FROM alert_instance WHERE instance_id = $1`, instanceID).
+		Scan(&status, &noDataCount, &gotUpdatedAt); err != nil {
+		t.Fatalf("read alert state after Agent report: %v", err)
+	}
+	if status != "OK" || noDataCount != 0 || !gotUpdatedAt.Equal(updatedAt) {
+		t.Fatalf("alert state = (%q, %d, %s), want (OK, 0, %s)", status, noDataCount, gotUpdatedAt, updatedAt)
 	}
 }
 
