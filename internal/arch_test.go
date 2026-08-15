@@ -26,6 +26,7 @@ var packageLayers = map[string]int{
 	"internal/metric":         1,
 	"internal/notify":         1,
 	"internal/pgconn":         0,
+	"internal/platformdb":     1,
 	"internal/platformhealth": 1,
 }
 

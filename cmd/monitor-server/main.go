@@ -30,6 +30,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformdb"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 	"github.com/liumingjian/dbs-monitor/migrations"
 	webassets "github.com/liumingjian/dbs-monitor/web"
@@ -94,6 +95,14 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+	preflightReport, err := platformdb.Check(ctx, platform)
+	if err != nil {
+		return err
+	}
+	if err := preflightReport.FatalError(); err != nil {
+		return err
+	}
+	reportPlatformDatabasePreflight(preflightReport, health, log.Default(), time.Now().UTC())
 
 	rotationLock, err := acquireMasterKeyRotationLock(ctx, pool)
 	if err != nil {

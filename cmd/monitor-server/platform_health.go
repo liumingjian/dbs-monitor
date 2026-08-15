@@ -29,7 +29,11 @@ func reportConfigPermissions(
 }
 
 func refreshPlatformDatabaseHealth(ctx context.Context, platform *db.Pool, health *platformhealth.Store, now time.Time) {
-	health.Update(now, platformhealth.DatabaseSource(platform.Ping(ctx)))
+	err := platform.Ping(ctx)
+	if err == nil && health.Source(platformhealth.SourcePlatformDatabase).Status == platformhealth.StatusDegraded {
+		return
+	}
+	health.Update(now, platformhealth.DatabaseSource(err))
 }
 
 func platformFailureHandler(next http.Handler, health *platformhealth.Store) http.Handler {

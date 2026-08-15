@@ -13,6 +13,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestPlatformDatabasePreflightRunsBeforeMigrations(t *testing.T) {
+	mainSource, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "cmd", "monitor-server", "main.go"))
+	if err != nil {
+		t.Fatalf("read monitor server startup: %v", err)
+	}
+	contents := string(mainSource)
+	preflight := strings.Index(contents, "platformdb.Check(ctx, platform)")
+	migration := strings.Index(contents, "migrations.Up(ctx, migrationDB, credentialDirectory)")
+	if preflight < 0 || migration < 0 || preflight >= migration {
+		t.Fatalf("platform database preflight must run after connection and before migrations")
+	}
+}
+
 func TestComposeAcceptanceProfilesAndNonRootServer(t *testing.T) {
 	contents, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "compose.yaml"))
 	if err != nil {
