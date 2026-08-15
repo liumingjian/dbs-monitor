@@ -1,0 +1,19 @@
+[Unit]
+Description=DBS Monitor Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dbs-monitor-agent
+Group=dbs-monitor-agent
+EnvironmentFile=/etc/dbs-monitor-agent/agent.env
+Environment=AGENT_TOKEN_FILE=/etc/dbs-monitor-agent/token
+ExecStart=/opt/dbs-monitor-agent/bin/dbs-monitor-agent
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
