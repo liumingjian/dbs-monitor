@@ -18,9 +18,12 @@ import (
 )
 
 const (
-	issue60AdminPassword = "acceptance-admin-password"
-	issue60S1TestRef     = "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S1"
-	issue60S2TestRef     = "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S2"
+	issue60AdminPassword    = "acceptance-admin-password"
+	issue60ConditionTimeout = 45 * time.Second
+
+	// The production guard resolves these matrix references by scanning test source.
+	issue60S1TestRef = "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S1"
+	issue60S2TestRef = "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S2"
 )
 
 type issue60Runtime struct {
@@ -28,7 +31,7 @@ type issue60Runtime struct {
 	baseURL     string
 	caPath      string
 	agentBinary string
-	work        string
+	workDir     string
 }
 
 func TestAcceptance_AC_01_S1(t *testing.T) {
@@ -36,21 +39,24 @@ func TestAcceptance_AC_01_S1(t *testing.T) {
 		t.Skip("ACCEPTANCE_PLATFORM_DATABASE_URL is required for AC-01-S1")
 	}
 	started := time.Now()
-	defer recordIssue60Result(t, "AC-01-S1", "real Task samples and all three derived metrics were readable", started)()
+	defer recordIssue60Result(t, "AC-01-S1", "real Task samples and all three derived metrics were readable", started)
 
 	runtime := startIssue60Runtime(t, 18448)
 	instanceID := createIssue60Instance(t, runtime.client, "AC-01-S1 target", "monitored", "monitored", issue60TargetPort(t))
 	setIssue60TaskIntervals(t, runtime.client, instanceID)
 	startIssue60Agent(t, runtime, instanceID)
 
-	wantMetrics := []metric.MetricID{
+	derivedMetricIDs := []metric.MetricID{
 		metric.MetricAvailabilityReachable,
 		metric.MetricCollectorLastSuccessTime,
 		metric.MetricAgentStatus,
 	}
-	eventuallyIssue60(t, 45*time.Second, func() (bool, string) {
+	eventuallyIssue60(t, issue60ConditionTimeout, func() (bool, string) {
 		states, err := runtime.client.ListCollectionTaskStatesWithResponse(context.Background(), instanceID)
-		if err != nil || states.StatusCode() != http.StatusOK || states.JSON200 == nil {
+		if err != nil {
+			return false, fmt.Sprintf("collection task states unavailable: error=%v", err)
+		}
+		if states.StatusCode() != http.StatusOK || states.JSON200 == nil {
 			return false, fmt.Sprintf("collection task states unavailable: status=%d error=%v", states.StatusCode(), err)
 		}
 		if len(*states.JSON200) != len(metric.Tasks) {
@@ -61,13 +67,13 @@ func TestAcceptance_AC_01_S1(t *testing.T) {
 				return false, fmt.Sprintf("task %s has not completed", state.TaskId)
 			}
 		}
-		series, detail := readIssue60Metrics(runtime.client, instanceID, wantMetrics, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
-		if series == nil {
+		metricsByID, detail := readIssue60Metrics(runtime.client, instanceID, derivedMetricIDs, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
+		if metricsByID == nil {
 			return false, detail
 		}
-		for _, metricID := range wantMetrics {
-			item := series[metricID]
-			if !issue60HasPoints(item) {
+		for _, metricID := range derivedMetricIDs {
+			item := metricsByID[metricID]
+			if !item.hasPoints {
 				return false, fmt.Sprintf("derived metric %s has no points: %s", metricID, issue60Outcome(item))
 			}
 		}
@@ -80,7 +86,7 @@ func TestAcceptance_AC_01_S2(t *testing.T) {
 		t.Skip("ACCEPTANCE_PLATFORM_DATABASE_URL is required for AC-01-S2")
 	}
 	started := time.Now()
-	defer recordIssue60Result(t, "AC-01-S2", "whole dictionary reconciled and eleven real unavailability conditions were observed", started)()
+	defer recordIssue60Result(t, "AC-01-S2", "whole dictionary reconciled and eleven real unavailability conditions were observed", started)
 
 	runtime := startIssue60Runtime(t, 18449)
 	admin := openIssue60Target(t, "monitored", "monitored", "monitored")
@@ -92,36 +98,37 @@ func TestAcceptance_AC_01_S2(t *testing.T) {
 	startIssue60Agent(t, runtime, healthyID)
 
 	capabilities := waitForIssue60Capabilities(t, runtime.client, healthyID)
-	var reconciled map[metric.MetricID]issue60MetricResult
-	eventuallyIssue60(t, 45*time.Second, func() (bool, string) {
-		found, detail := readIssue60Metrics(runtime.client, healthyID, issue60DictionaryIDs(), time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
-		if found == nil {
+	dictionaryIDs := issue60DictionaryIDs()
+	var reconciledMetrics map[metric.MetricID]issue60MetricResult
+	eventuallyIssue60(t, issue60ConditionTimeout, func() (bool, string) {
+		metricsByID, detail := readIssue60Metrics(runtime.client, healthyID, dictionaryIDs, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
+		if metricsByID == nil {
 			return false, detail
 		}
 		for _, declaration := range metric.Metrics {
-			item, exists := found[declaration.ID]
+			item, exists := metricsByID[declaration.ID]
 			if !exists {
 				return false, fmt.Sprintf("dictionary metric %s is absent from API response", declaration.ID)
 			}
 			wantReason, blocked := issue60CapabilityReason(declaration.ID, capabilities)
 			if blocked {
-				if !item.HasReason || item.Unavailability != wantReason || issue60HasPoints(item) {
+				if item.unavailability == nil || *item.unavailability != wantReason || item.hasPoints {
 					return false, fmt.Sprintf("metric %s outcome=%s want=%s", declaration.ID, issue60Outcome(item), wantReason)
 				}
 				continue
 			}
-			if !issue60HasPoints(item) || item.HasReason {
+			if !item.hasPoints || item.unavailability != nil {
 				return false, fmt.Sprintf("applicable metric %s has no real sample: %s", declaration.ID, issue60Outcome(item))
 			}
 		}
-		reconciled = found
+		reconciledMetrics = metricsByID
 		return true, ""
 	})
 
 	produced := map[api.Unavailability]bool{}
-	for _, item := range reconciled {
-		if item.HasReason {
-			produced[item.Unavailability] = true
+	for _, item := range reconciledMetrics {
+		if item.unavailability != nil {
+			produced[*item.unavailability] = true
 		}
 	}
 
@@ -136,7 +143,10 @@ func TestAcceptance_AC_01_S2(t *testing.T) {
 
 	unreachableID := createIssue60Instance(t, runtime.client, "AC-01-S2 unreachable", "monitored", "monitored", 1)
 	queryStats, err := runtime.client.GetQueryStatisticsSnapshotWithResponse(context.Background(), unreachableID)
-	if err != nil || queryStats.StatusCode() != http.StatusOK || queryStats.JSON200 == nil || queryStats.JSON200.Unavailability == nil {
+	if err != nil {
+		t.Fatalf("read feature-disabled query statistics: error=%v", err)
+	}
+	if queryStats.StatusCode() != http.StatusOK || queryStats.JSON200 == nil || queryStats.JSON200.Unavailability == nil {
 		t.Fatalf("read feature-disabled query statistics: status=%d body=%s error=%v", queryStats.StatusCode(), queryStats.Body, err)
 	}
 	produced[*queryStats.JSON200.Unavailability] = true
@@ -190,36 +200,34 @@ func TestAcceptance_AC_01_S2(t *testing.T) {
 	}
 }
 
-func recordIssue60Result(t *testing.T, entryID, passedMessage string, started time.Time) func() {
-	return func() {
-		status, message := resultPassed, passedMessage
-		if t.Failed() {
-			status, message = resultFailed, "issue 60 acceptance failed; see go test output"
-		}
-		acceptanceReport.record(entryID, status, message, time.Since(started))
+func recordIssue60Result(t *testing.T, entryID, passedMessage string, started time.Time) {
+	status, message := resultPassed, passedMessage
+	if t.Failed() {
+		status, message = resultFailed, "issue 60 acceptance failed; see go test output"
 	}
+	acceptanceReport.record(entryID, status, message, time.Since(started))
 }
 
 func startIssue60Runtime(t *testing.T, port int) issue60Runtime {
 	t.Helper()
 	root := repositoryRoot(t)
-	work := t.TempDir()
-	serverBinary := filepath.Join(work, "dbs-monitor-server")
-	agentBinary := filepath.Join(work, "dbs-monitor-agent")
+	workDir := t.TempDir()
+	serverBinary := filepath.Join(workDir, "dbs-monitor-server")
+	agentBinary := filepath.Join(workDir, "dbs-monitor-agent")
 	buildBinary(t, root, serverBinary, "./cmd/monitor-server")
 	buildBinary(t, root, agentBinary, "./cmd/monitor-agent")
 
-	certDirectory := filepath.Join(work, "certs")
-	keyDirectory := filepath.Join(work, "credentials")
-	agentBinaryDirectory := filepath.Join(work, "agent-binaries")
+	certDirectory := filepath.Join(workDir, "certs")
+	keyDirectory := filepath.Join(workDir, "credentials")
+	agentBinaryDirectory := filepath.Join(workDir, "agent-binaries")
 	for _, directory := range []string{certDirectory, keyDirectory, agentBinaryDirectory} {
 		if err := os.Mkdir(directory, 0o700); err != nil {
 			t.Fatalf("create %s: %v", directory, err)
 		}
 	}
-	configPath := writeServerConfig(t, work, os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL"), keyDirectory, agentBinaryDirectory)
+	configPath := writeServerConfig(t, workDir, os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL"), keyDirectory, agentBinaryDirectory)
 	baseURL := fmt.Sprintf("https://127.0.0.1:%d", port)
-	server := startProcess(t, "issue-60 server", serverBinary, filepath.Join(work, "server.log"), []string{
+	server := startProcess(t, "issue-60 server", serverBinary, filepath.Join(workDir, "server.log"), []string{
 		"DBS_MONITOR_CONFIG_FILE=" + configPath,
 		"INITIAL_ADMIN_PASSWORD=" + issue60AdminPassword,
 		fmt.Sprintf("LISTEN_ADDR=127.0.0.1:%d", port),
@@ -231,12 +239,15 @@ func startIssue60Runtime(t *testing.T, port int) issue60Runtime {
 	login, err := client.CreateSessionWithResponse(context.Background(), api.CreateSessionJSONRequestBody{
 		Username: "admin", Password: issue60AdminPassword,
 	})
-	if err != nil || login.StatusCode() != http.StatusNoContent {
+	if err != nil {
+		t.Fatalf("login through generated client: %v", err)
+	}
+	if login.StatusCode() != http.StatusNoContent {
 		t.Fatalf("login through generated client: status=%d body=%s error=%v", login.StatusCode(), login.Body, err)
 	}
 	return issue60Runtime{
 		client: client, baseURL: baseURL, caPath: filepath.Join(certDirectory, "ca.crt"),
-		agentBinary: agentBinary, work: work,
+		agentBinary: agentBinary, workDir: workDir,
 	}
 }
 
@@ -245,7 +256,10 @@ func createIssue60Instance(t *testing.T, client *api.ClientWithResponses, name, 
 	created, err := client.CreateInstanceWithResponse(context.Background(), api.InstanceCreateInput{
 		Name: name, Host: "127.0.0.1", Port: port, Database: database, Username: username, Password: "monitored",
 	})
-	if err != nil || created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
+	if err != nil {
+		t.Fatalf("create %s through generated client: %v", name, err)
+	}
+	if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
 		t.Fatalf("create %s through generated client: status=%d body=%s error=%v", name, created.StatusCode(), created.Body, err)
 	}
 	return created.JSON201.Instance.Id
@@ -255,7 +269,10 @@ func setIssue60TaskIntervals(t *testing.T, client *api.ClientWithResponses, inst
 	t.Helper()
 	for _, task := range metric.Tasks {
 		response, err := client.UpdateCollectionTaskIntervalWithResponse(context.Background(), instanceID, string(task.ID), api.CollectionTaskIntervalInput{IntervalSeconds: 5})
-		if err != nil || response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+		if err != nil {
+			t.Fatalf("set task %s interval: %v", task.ID, err)
+		}
+		if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
 			t.Fatalf("set task %s interval: status=%d body=%s error=%v", task.ID, response.StatusCode(), response.Body, err)
 		}
 	}
@@ -264,7 +281,10 @@ func setIssue60TaskIntervals(t *testing.T, client *api.ClientWithResponses, inst
 func registerIssue60Agent(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID) string {
 	t.Helper()
 	registered, err := client.RegisterAgentWithResponse(context.Background(), instanceID)
-	if err != nil || registered.StatusCode() != http.StatusOK || registered.JSON200 == nil || registered.JSON200.AgentToken == nil {
+	if err != nil {
+		t.Fatalf("register Agent: %v", err)
+	}
+	if registered.StatusCode() != http.StatusOK || registered.JSON200 == nil || registered.JSON200.AgentToken == nil {
 		t.Fatalf("register Agent: status=%d body=%s error=%v", registered.StatusCode(), registered.Body, err)
 	}
 	return *registered.JSON200.AgentToken
@@ -272,11 +292,11 @@ func registerIssue60Agent(t *testing.T, client *api.ClientWithResponses, instanc
 
 func startIssue60Agent(t *testing.T, runtime issue60Runtime, instanceID uuid.UUID) {
 	t.Helper()
-	tokenPath := filepath.Join(runtime.work, "agent-token-"+instanceID.String())
+	tokenPath := filepath.Join(runtime.workDir, "agent-token-"+instanceID.String())
 	if err := os.WriteFile(tokenPath, []byte(registerIssue60Agent(t, runtime.client, instanceID)+"\n"), 0o600); err != nil {
 		t.Fatalf("write Agent token: %v", err)
 	}
-	startProcess(t, "issue-60 Agent", runtime.agentBinary, filepath.Join(runtime.work, "agent-"+instanceID.String()+".log"), []string{
+	startProcess(t, "issue-60 Agent", runtime.agentBinary, filepath.Join(runtime.workDir, "agent-"+instanceID.String()+".log"), []string{
 		"SERVER_URL=" + runtime.baseURL,
 		"INSTANCE_ID=" + instanceID.String(),
 		"AGENT_TOKEN_FILE=" + tokenPath,
@@ -326,12 +346,8 @@ func prepareIssue60Targets(t *testing.T, admin *pgx.Conn) {
 }
 
 type issue60MetricResult struct {
-	Series []struct {
-		Labels map[string]string `json:"labels"`
-		Points [][]*float64      `json:"points"`
-	} `json:"series"`
-	Unavailability api.Unavailability
-	HasReason      bool
+	hasPoints      bool
+	unavailability *api.Unavailability
 }
 
 func issue60DictionaryIDs() []metric.MetricID {
@@ -342,24 +358,33 @@ func issue60DictionaryIDs() []metric.MetricID {
 	return ids
 }
 
-func readIssue60Metrics(client *api.ClientWithResponses, instanceID uuid.UUID, ids []metric.MetricID, from, to time.Time) (map[metric.MetricID]issue60MetricResult, string) {
-	requested := make([]api.GetMetricSeriesParamsMetric, 0, len(ids))
-	for _, id := range ids {
-		requested = append(requested, api.GetMetricSeriesParamsMetric(id))
+func readIssue60Metrics(client *api.ClientWithResponses, instanceID uuid.UUID, metricIDs []metric.MetricID, from, to time.Time) (map[metric.MetricID]issue60MetricResult, string) {
+	requested := make([]api.GetMetricSeriesParamsMetric, 0, len(metricIDs))
+	for _, metricID := range metricIDs {
+		requested = append(requested, api.GetMetricSeriesParamsMetric(metricID))
 	}
 	step := api.Raw
 	response, err := client.GetMetricSeriesWithResponse(context.Background(), instanceID, &api.GetMetricSeriesParams{
 		Metric: requested, From: from.UTC(), To: to.UTC(), Step: &step,
 	})
-	if err != nil || response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+	if err != nil {
+		return nil, fmt.Sprintf("metric series unavailable: error=%v", err)
+	}
+	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
 		return nil, fmt.Sprintf("metric series unavailable: status=%d body=%s error=%v", response.StatusCode(), response.Body, err)
 	}
-	if len(response.JSON200.Metrics) != len(ids) {
-		return nil, fmt.Sprintf("metric count=%d want=%d", len(response.JSON200.Metrics), len(ids))
+	if len(response.JSON200.Metrics) != len(metricIDs) {
+		return nil, fmt.Sprintf("metric count=%d want=%d", len(response.JSON200.Metrics), len(metricIDs))
 	}
-	result := make(map[metric.MetricID]issue60MetricResult, len(ids))
+	resultsByID := make(map[metric.MetricID]issue60MetricResult, len(metricIDs))
 	for _, item := range response.JSON200.Metrics {
-		found := issue60MetricResult{Series: item.Series}
+		result := issue60MetricResult{}
+		for _, series := range item.Series {
+			if len(series.Points) > 0 {
+				result.hasPoints = true
+				break
+			}
+		}
 		if !item.Unavailability.IsSpecified() {
 			return nil, fmt.Sprintf("metric %s omitted required unavailability", item.Metric)
 		}
@@ -368,31 +393,22 @@ func readIssue60Metrics(client *api.ClientWithResponses, instanceID uuid.UUID, i
 			if getErr != nil {
 				return nil, fmt.Sprintf("metric %s unavailability: %v", item.Metric, getErr)
 			}
-			found.Unavailability, found.HasReason = code, true
+			result.unavailability = &code
 		}
-		if issue60HasPoints(found) && found.HasReason {
-			return nil, fmt.Sprintf("metric %s has both points and reason %s", item.Metric, found.Unavailability)
+		if result.hasPoints && result.unavailability != nil {
+			return nil, fmt.Sprintf("metric %s has both points and reason %s", item.Metric, *result.unavailability)
 		}
-		result[metric.MetricID(item.Metric)] = found
+		resultsByID[metric.MetricID(item.Metric)] = result
 	}
-	return result, ""
-}
-
-func issue60HasPoints(item issue60MetricResult) bool {
-	for _, series := range item.Series {
-		if len(series.Points) > 0 {
-			return true
-		}
-	}
-	return false
+	return resultsByID, ""
 }
 
 func issue60Outcome(item issue60MetricResult) string {
-	if issue60HasPoints(item) {
+	if item.hasPoints {
 		return "points"
 	}
-	if item.HasReason {
-		return string(item.Unavailability)
+	if item.unavailability != nil {
+		return string(*item.unavailability)
 	}
 	return "neither points nor reason"
 }
@@ -402,7 +418,10 @@ func waitForIssue60Capabilities(t *testing.T, client *api.ClientWithResponses, i
 	var result map[metric.CapabilityID]api.CapabilityStatus
 	eventuallyIssue60(t, 30*time.Second, func() (bool, string) {
 		response, err := client.ListCapabilitySnapshotWithResponse(context.Background(), instanceID)
-		if err != nil || response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+		if err != nil {
+			return false, fmt.Sprintf("capability snapshot unavailable: error=%v", err)
+		}
+		if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
 			return false, fmt.Sprintf("capability snapshot unavailable: status=%d error=%v", response.StatusCode(), err)
 		}
 		states := make(map[metric.CapabilityID]api.CapabilityStatus, len(*response.JSON200))
@@ -446,47 +465,50 @@ func issue60CapabilityReason(metricID metric.MetricID, capabilities map[metric.C
 
 func readIssue60MetricCode(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID, metricID metric.MetricID, from, to time.Time) api.Unavailability {
 	t.Helper()
-	series, detail := readIssue60Metrics(client, instanceID, []metric.MetricID{metricID}, from, to)
-	if series == nil {
+	metricsByID, detail := readIssue60Metrics(client, instanceID, []metric.MetricID{metricID}, from, to)
+	if metricsByID == nil {
 		t.Fatal(detail)
 	}
-	found := series[metricID]
-	if !found.HasReason || issue60HasPoints(found) {
-		t.Fatalf("metric %s outcome=%s, want only an unavailability", metricID, issue60Outcome(found))
+	result := metricsByID[metricID]
+	if result.unavailability == nil || result.hasPoints {
+		t.Fatalf("metric %s outcome=%s, want only an unavailability", metricID, issue60Outcome(result))
 	}
-	return found.Unavailability
+	return *result.unavailability
 }
 
 func waitForIssue60MetricCode(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID, metricID metric.MetricID, want api.Unavailability) {
 	t.Helper()
-	eventuallyIssue60(t, 45*time.Second, func() (bool, string) {
+	eventuallyIssue60(t, issue60ConditionTimeout, func() (bool, string) {
 		now := time.Now().UTC()
-		series, detail := readIssue60Metrics(client, instanceID, []metric.MetricID{metricID}, now.Add(time.Second), now.Add(2*time.Second))
-		if series == nil {
+		metricsByID, detail := readIssue60Metrics(client, instanceID, []metric.MetricID{metricID}, now.Add(time.Second), now.Add(2*time.Second))
+		if metricsByID == nil {
 			return false, detail
 		}
-		found := series[metricID]
-		return found.HasReason && found.Unavailability == want, fmt.Sprintf("metric %s outcome=%s want=%s", metricID, issue60Outcome(found), want)
+		result := metricsByID[metricID]
+		return result.unavailability != nil && *result.unavailability == want, fmt.Sprintf("metric %s outcome=%s want=%s", metricID, issue60Outcome(result), want)
 	})
 }
 
 func waitForIssue60MetricPoints(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID, metricID metric.MetricID) {
 	t.Helper()
-	eventuallyIssue60(t, 45*time.Second, func() (bool, string) {
-		series, detail := readIssue60Metrics(client, instanceID, []metric.MetricID{metricID}, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
-		if series == nil {
+	eventuallyIssue60(t, issue60ConditionTimeout, func() (bool, string) {
+		metricsByID, detail := readIssue60Metrics(client, instanceID, []metric.MetricID{metricID}, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))
+		if metricsByID == nil {
 			return false, detail
 		}
-		found := series[metricID]
-		return issue60HasPoints(found) && !found.HasReason, fmt.Sprintf("metric %s outcome=%s want=points", metricID, issue60Outcome(found))
+		result := metricsByID[metricID]
+		return result.hasPoints && result.unavailability == nil, fmt.Sprintf("metric %s outcome=%s want=points", metricID, issue60Outcome(result))
 	})
 }
 
 func waitForIssue60QueryStatisticsCode(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID, want api.Unavailability) {
 	t.Helper()
-	eventuallyIssue60(t, 45*time.Second, func() (bool, string) {
+	eventuallyIssue60(t, issue60ConditionTimeout, func() (bool, string) {
 		response, err := client.GetQueryStatisticsSnapshotWithResponse(context.Background(), instanceID)
-		if err != nil || response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+		if err != nil {
+			return false, fmt.Sprintf("query statistics unavailable: error=%v", err)
+		}
+		if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
 			return false, fmt.Sprintf("query statistics unavailable: status=%d error=%v", response.StatusCode(), err)
 		}
 		if response.JSON200.Unavailability == nil {
@@ -501,9 +523,11 @@ func eventuallyIssue60(t *testing.T, timeout time.Duration, check func() (bool, 
 	deadline := time.Now().Add(timeout)
 	lastDetail := "condition was not evaluated"
 	for time.Now().Before(deadline) {
-		if ok, detail := check(); ok {
+		ok, detail := check()
+		if ok {
 			return
-		} else if detail != "" {
+		}
+		if detail != "" {
 			lastDetail = detail
 		}
 		time.Sleep(250 * time.Millisecond)
