@@ -79,8 +79,8 @@ func TestCreateDiagnosticBundleContainsEndpointSnapshots(t *testing.T) {
 	config := defaultServerConfig()
 	config.PlatformDatabaseURL = "postgres://dbs_monitor:platform-db-password-issue-75@platform-db:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full"
 
-	if err := createDiagnosticBundleWithInputTruncation(
-		output, []byte(journal), now, "linux-systemd", diagnosticBundleMaxBytes, false,
+	if err := createDiagnosticBundleWithOptions(
+		output, []byte(journal), now, "linux-systemd", diagnosticBundleMaxBytes,
 		diagnosticBundleOptions{Config: &config},
 	); err != nil {
 		t.Fatalf("create diagnostic bundle: %v", err)
@@ -173,8 +173,8 @@ func TestCreateDiagnosticBundleRejectsConfiguredPlatformDatabasePassword(t *test
 	config := defaultServerConfig()
 	config.PlatformDatabaseURL = "postgres://dbs_monitor:" + platformPassword + "@platform-db:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full"
 
-	err := createDiagnosticBundleWithInputTruncation(
-		output, journal, time.Now(), "linux-systemd", diagnosticBundleMaxBytes, false,
+	err := createDiagnosticBundleWithOptions(
+		output, journal, time.Now(), "linux-systemd", diagnosticBundleMaxBytes,
 		diagnosticBundleOptions{Config: &config},
 	)
 	if err == nil || !strings.Contains(err.Error(), "configured secret") {

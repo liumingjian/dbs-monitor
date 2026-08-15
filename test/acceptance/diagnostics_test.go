@@ -46,12 +46,13 @@ func TestAcceptance_AC_09_F1(t *testing.T) {
 	users := []struct {
 		username string
 		role     api.Role
+		client   *api.ClientWithResponses
 	}{
 		{username: "diagnostic-readonly", role: api.READONLY},
 		{username: "diagnostic-alert-admin", role: api.ALERTADMIN},
 	}
-	nonAdmins := make([]*api.ClientWithResponses, 0, len(users))
-	for _, user := range users {
+	for index := range users {
+		user := &users[index]
 		created, err := admin.CreateUserWithResponse(ctx, api.UserCreateInput{Username: user.username, Role: user.role})
 		if err != nil {
 			t.Fatalf("create %s through API: %v", user.role, err)
@@ -59,9 +60,8 @@ func TestAcceptance_AC_09_F1(t *testing.T) {
 		if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
 			t.Fatalf("create %s status/body = %d/%s", user.role, created.StatusCode(), created.Body)
 		}
-		client := diagnosticAcceptanceClient(t, server)
-		loginDiagnosticAcceptanceUser(t, ctx, client, user.username, created.JSON201.InitialPassword)
-		nonAdmins = append(nonAdmins, client)
+		user.client = diagnosticAcceptanceClient(t, server)
+		loginDiagnosticAcceptanceUser(t, ctx, user.client, user.username, created.JSON201.InitialPassword)
 	}
 
 	operations := diagnosticAcceptanceOperations()
@@ -73,13 +73,13 @@ func TestAcceptance_AC_09_F1(t *testing.T) {
 		if status != http.StatusOK {
 			t.Errorf("administrator %s status = %d, want 200", operation.name, status)
 		}
-		for index, client := range nonAdmins {
-			status, err := operation.call(ctx, client)
+		for _, user := range users {
+			status, err := operation.call(ctx, user.client)
 			if err != nil {
-				t.Fatalf("%s %s: %v", users[index].role, operation.name, err)
+				t.Fatalf("%s %s: %v", user.role, operation.name, err)
 			}
 			if status != http.StatusForbidden {
-				t.Errorf("%s %s status = %d, want explicit 403", users[index].role, operation.name, status)
+				t.Errorf("%s %s status = %d, want explicit 403", user.role, operation.name, status)
 			}
 		}
 	}
