@@ -73,8 +73,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 
 	health := platformhealth.NewStore("3.0.0", time.Now().Add(-time.Hour), log.New(io.Discard, "", 0))
+	dialer := &countingTargetDialer{}
 	server := httptest.NewTLSServer(httpapi.NewHandlerWithPlatformHealth(
-		platform, clock.Real{}, keyring, monitorpg.DirectDialer{}, "3.0.0", health,
+		platform, clock.Real{}, keyring, dialer, "3.0.0", health,
 	).Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)
@@ -235,7 +236,14 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if failedMetadata.StatusCode != http.StatusBadRequest {
 		t.Fatalf("failed metadata update status = %d, want 400", failedMetadata.StatusCode)
 	}
+	var failedMetadataBody api.Error
+	if err := json.NewDecoder(failedMetadata.Body).Decode(&failedMetadataBody); err != nil {
+		t.Fatalf("decode failed metadata update: %v", err)
+	}
 	failedMetadata.Body.Close()
+	if failedMetadataBody.Error.Code != api.NETWORKUNREACHABLE {
+		t.Fatalf("failed metadata update code = %q, want %q", failedMetadataBody.Error.Code, api.NETWORKUNREACHABLE)
+	}
 	var storedName string
 	var storedPort int
 	if err := pool.QueryRow(ctx, "SELECT name, port FROM instance WHERE id = $1", instanceID).Scan(&storedName, &storedPort); err != nil {
@@ -245,6 +253,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("metadata after failed update = %q:%d, want target:%d", storedName, storedPort, instanceInput.Port)
 	}
 
+	dialCountBeforeDisplayUpdate := dialer.calls
 	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+instanceID, api.InstanceMetadataInput{
 		Name:     "renamed target",
 		Host:     instanceInput.Host,
@@ -255,6 +264,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("update instance status = %d, want 200", updated.StatusCode)
 	}
 	updated.Body.Close()
+	if dialer.calls != dialCountBeforeDisplayUpdate {
+		t.Fatalf("display-only metadata update dialed target %d times, want 0", dialer.calls-dialCountBeforeDisplayUpdate)
+	}
 	var updatedCiphertext []byte
 	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, instanceID).
 		Scan(&updatedCiphertext, &credentialVersion); err != nil {
@@ -1028,13 +1040,25 @@ func assertCreateRejected(t *testing.T, ctx context.Context, client *http.Client
 	if body.Error.Code != wantCode {
 		t.Fatalf("create rejection code = %q, want %q", body.Error.Code, wantCode)
 	}
-	var count int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM instance").Scan(&count); err != nil {
-		t.Fatalf("count rejected instances: %v", err)
+	var instanceCount, identityCount, collectionConfigCount int
+	if err := pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM instance),
+		(SELECT count(*) FROM instance_identity),
+		(SELECT count(*) FROM instance_collection_config)`).Scan(&instanceCount, &identityCount, &collectionConfigCount); err != nil {
+		t.Fatalf("count onboarding rows after rejected create: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("instance count after rejected create = %d, want 0", count)
+	if instanceCount != 0 || identityCount != 0 || collectionConfigCount != 0 {
+		t.Fatalf("rows after rejected create: instances = %d, identities = %d, collection configs = %d; want all 0", instanceCount, identityCount, collectionConfigCount)
 	}
+}
+
+type countingTargetDialer struct {
+	calls int
+}
+
+func (dialer *countingTargetDialer) Dial(ctx context.Context, config *pgx.ConnConfig) (*monitorpg.TargetConn, error) {
+	dialer.calls++
+	return (monitorpg.DirectDialer{}).Dial(ctx, config)
 }
 
 func assertAgentState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID, version, code, message string) {
