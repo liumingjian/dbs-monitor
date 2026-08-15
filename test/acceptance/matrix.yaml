@@ -317,10 +317,10 @@ entries:
     pages: []
     operations: [ackAlert, ignoreAlert, listAlertEvents, getAlertInstance]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/alert_disposition_test.go::TestAcceptance_AC_03_S1"
     owner_issue: 119
-    reason: "条目内容由 #119 定稿"
+    reason: "#76 经生成客户端与真实采集/评估管线覆盖处置切换、留痕、恢复及新生命周期"
   - id: AC-03-S2
     slice: "03"
     kind: S2
