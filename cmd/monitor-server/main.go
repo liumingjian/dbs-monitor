@@ -67,6 +67,15 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+	rotationLock, err := acquireMasterKeyRotationLock(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("reserve server master key rotation lock: %w", err)
+	}
+	defer func() {
+		if err := rotationLock.Release(); err != nil {
+			log.Printf("monitor-server: %v", err)
+		}
+	}()
 
 	migrationDB, err := migrations.Open(connectionString)
 	if err != nil {
