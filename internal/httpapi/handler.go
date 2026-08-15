@@ -625,7 +625,10 @@ func (handler *Handler) UpdateCollectionTaskInterval(ctx context.Context, reques
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
 	if err := metric.New(handler.platform).SetTaskInterval(ctx, metric.SetTaskIntervalParams{
-		InstanceID: instanceID, TaskID: request.TaskId, IntervalSeconds: int32(request.Body.IntervalSeconds),
+		InstanceID:      instanceID,
+		TaskID:          request.TaskId,
+		IntervalSeconds: int32(request.Body.IntervalSeconds),
+		UpdatedBy:       databaseUserID(authenticatedUserID(ctx)),
 	}); err != nil {
 		return nil, err
 	}

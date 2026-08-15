@@ -168,6 +168,7 @@ type CollectionTaskConfig struct {
 	TaskID          string
 	IntervalSeconds int32
 	UpdatedAt       pgtype.Timestamptz
+	UpdatedBy       pgtype.UUID
 }
 
 type Instance struct {
@@ -303,6 +304,28 @@ type MaintenanceWindow struct {
 type MaintenanceWindowInstance struct {
 	MaintenanceWindowID pgtype.UUID
 	InstanceID          pgtype.UUID
+}
+
+type InstanceCollectionConnectionState struct {
+	InstanceID          pgtype.UUID
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
+}
+
+type InstanceCollectionTaskState struct {
+	InstanceID          pgtype.UUID
+	TaskID              string
+	LastDueAt           pgtype.Timestamptz
+	LastStartedAt       pgtype.Timestamptz
+	LastFinishedAt      pgtype.Timestamptz
+	LastSuccessAt       pgtype.Timestamptz
+	LastResult          pgtype.Text
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
 }
 
 type MetricSample struct {

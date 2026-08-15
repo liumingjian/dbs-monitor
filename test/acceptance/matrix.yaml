@@ -1,0 +1,1932 @@
+# v1 验收矩阵 · 骨架
+#
+# 规则与字段定义：docs/design/20-v1-acceptance-matrix.md（决策票 #111）
+# 本文件由 #111 生成骨架，逐条内容由 #118 / #119 / #120 / #121 填入。
+#
+# 硬底：九片 × 5 条基线（S1 + F1..F4）= 45 条，加 7 条横切，加逐条票定稿的加深基线。
+# A 组（#118，片01/07/09）定稿 8 条加深基线，硬底因此为 60 —— 出处与理由见
+# docs/design/21-v1-acceptance-entries-a.md D1/D2/D4/D6。B/C/D 组（#119/#120/#121）
+# 若再定加深基线，同样只增不减，各自在自己的决策记录里交代。
+# B 组（#119，片02/03/04）定稿 7 条加深基线，硬底累加至 67 —— 出处与理由见
+# docs/design/22-v1-acceptance-entries-b.md D1–D7。
+# C 组（#120，片05/06）定稿 4 条加深基线，硬底累加至 71 —— 出处与理由见
+# docs/design/23-v1-acceptance-entries-c.md D1/D2/D4/D8。
+# D 组（#121，片08 + 横切组）定稿 7 条加深基线，硬底累加至 78 —— 出处与理由见
+# docs/design/24-v1-acceptance-entries-d.md D2/D3。四票定稿完毕，片条目硬底 78。
+# 恢复门横切组 REC-1..10（#113）新增 10 条全基线，硬底 78 → 88、条目 81 → 91 —— 出处与
+# 理由见 docs/design/26-data-and-recovery-gate.md D1/D10。它是矩阵上第二个横切组，独立计分。
+# 外部前置 PG 的前置校验（#116）追加 REC-11..13 进同一横切组（不开第三组），硬底 88 → 91、
+# 条目 91 → 94 —— 出处与理由见 docs/design/30-external-postgres-prerequisites.md D11。
+# 新增 after 字段（26 号 D8）：只记执行序依赖，与 rides_on（搭车执行）语义不同，不得混用。
+# 横切条目新增 rides_on 字段（24 号 D7）：横切自带断言集与 test_ref 独立计分，
+# rides_on 只记账它搭在哪次执行现场上；crosscut 写在片条目上是覆盖维，两者不互为反向索引。
+# 执行序两条硬约束（24 号 D1/D14）：AC-08-S1 最先（全矩阵接入前置），AC-08-S7 最末（停 server 跑离线轮换）。
+# 生产安全边界横切组 SEC-1..10（#112）是矩阵上第三个横切组，10 条全基线，独立计分，
+# 硬底 91 → 101、条目 94 → 104 —— 出处与理由见 docs/design/29-production-security-boundary.md D8。
+# 不并进 REC 组：REC 的组名语义是恢复门（26 号 D1），安全边界不同轴，并进去会让组名说谎。
+# 执行序全序（26 号 D7，经 29 号 D8.2 改写）：AC-08-S1 最先 → 其余片条目 → REC-* → SEC-* → AC-08-S7 最末。
+# SEC 组内 SEC-3/4/5 要求 server 以不同证书或配置重启，用 after 压到组尾。
+# baseline: true 的条目不许 pending；n-a 必须写 reason。
+# 说明：实现落地前 baseline 条目以 pending 占位；v1 判定时 baseline 仍为 pending 即未达标。
+# test_ref 规范（#118 定）：值必须内含条目 ID 字面量 —— Go 用 TestAcceptance_AC_01_S1 形，
+# Playwright 用 [AC-07-F2] 前缀形，使 B12 漂移门退化为单条 grep。
+# 片⑩（发布收口）不出条目，其内容归 #110 / #114。
+
+version: 1
+spec: docs/spec/mvp-master-spec.md
+rules: docs/design/20-v1-acceptance-matrix.md
+
+# D4 白名单：绕过业务 API 的数据准备，逐条登记理由。默认为空。
+exceptions: []
+
+entries:
+  # ── 片01 · 采集与指标全量
+  - id: AC-01-S1
+    slice: "01"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：经业务 API 建实例 → 真实 Task 采集 → 指标序列出点"
+    layer: api
+    asserts:
+      - "实例经 createInstance 创建，全程无业务表直写（B11）"
+      - "≤2×采集周期内 metric_sample 出现该实例的真实样本（由真实 Task 产出）"
+      - "getMetricSeries 返回绝对时间桶，无补 0 桶"
+      - "collector.last_success_time 完整性水位随全部当期义务满足而推进"
+    pages: ["实例工作台/监控与报警/标准监控"]
+    operations: [createInstance, getMetricSeries, listInstanceCollectionTasks]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿；实现归片①实现票，届时置 covered 并填 test_ref"
+  - id: AC-01-S2
+    slice: "01"
+    kind: S2
+    baseline: true
+    title: "全字典对账：每项 P0 指标要么有真实样本，要么显式降级到封闭 13 码，无第三种结局"
+    layer: api
+    asserts:
+      - "遍历 R1 字典全部 P0 指标，逐项二分判定：有真实样本 OR 带封闭 13 码之一的显式降级"
+      - "不存在既无样本又无原因码的指标（第三种结局即红）"
+      - "降级项的码与该指标所属 Task.Requires 的能力快照事实一致，不得自相矛盾"
+      - "指标枚举由字典单一来源生成，与 OpenAPI 枚举一致"
+    pages: []
+    operations: [getMetricSeries, listInstanceCapabilities]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "S1 拍板验收判据原文（片①Further Notes），按 21 号 D1 设为加深基线，不许 pending 落地后必须 covered"
+  - id: AC-01-F1
+    slice: "01"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 任务采样周期写端点"
+    layer: api
+    asserts:
+      - "三档角色账号一律经用户管理 API 创建（D9），不直插 user 表"
+      - "只读运维、告警管理员调 updateCollectionTaskInterval 得规定拒绝语义，非 500、非静默成功"
+      - "平台管理员调用成功，且 UI 读回的周期恒等于配置值"
+    pages: []
+    operations: [updateCollectionTaskInterval]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-01-F2
+    slice: "01"
+    kind: F2
+    baseline: true
+    title: "空状态用户可见路径：IA §6.5 从空图表一路走到采集管理的受影响指标"
+    layer: browser
+    asserts:
+      - "空图表渲染 13 码之一的原因文案，绝不渲染成 0（B6）"
+      - "缺桶不补 0，曲线断开而非落到零线"
+      - "dataUpdatedAt 数据新鲜度可见（B6）"
+      - "时间范围与筛选走 search params 往返（B6）"
+      - "从空图表可跳转至采集管理页，并定位到受影响指标行（IA §6.5 全路径）"
+    pages: ["实例工作台/监控与报警/标准监控", "实例工作台/采集管理/指标采集状态"]
+    operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "本组唯一命中 IA §6 关键路径的条目（§6.5），按 21 号 D3 由本条承载整条路径"
+  - id: AC-01-F3
+    slice: "01"
+    kind: F3
+    baseline: true
+    title: "能力不足降级：真实回收 pg_monitor → MISSING + 修复指引 + 影响 N 项指标"
+    layer: api
+    asserts:
+      - "以真实 SQL 回收监控账号的 pg_monitor 角色（真实手段，非 mock、非直改状态表）"
+      - "能力快照 role.pg_monitor = MISSING 且 Class=fixable，附 FixHint"
+      - "「影响 N 项指标」沿 Task.Requires 反查得出，无第二张映射表"
+      - "受影响指标序列返回 PERMISSION_DENIED，不得表现为「有数据但全零」"
+    pages: []
+    operations: [listInstanceCapabilities, getMetricSeries]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-01-F4
+    slice: "01"
+    kind: F4
+    baseline: true
+    title: "平台自身故障不污染目标侧：平台库不可达期间零告警实例、零 NO_DATA、零样本"
+    layer: api
+    asserts:
+      - "注入平台库不可达（真停平台 PG 容器，与 AC-09-F4 同一手法）"
+      - "目标实例侧零新增告警实例、零 NO_DATA"
+      - "metric_sample 该实例零新增行（DB 层只读计数，前后对比）"
+      - "平台库恢复后采集继续，不补跑、不造占位样本"
+    pages: []
+    operations: [getMetricSeries]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-01-F5
+    slice: "01"
+    kind: F5
+    baseline: true
+    title: "目标库不可达：DB_UNREACHABLE + 能力快照整份 UNKNOWN（不是空清单、不是 MISSING）"
+    layer: api
+    asserts:
+      - "真停目标库容器（真实手段）"
+      - "指标序列返回 DB_UNREACHABLE"
+      - "能力快照整份投影 UNKNOWN，绝不反推为 MISSING，绝不呈现为空清单"
+      - "探针 reachable=false 与「平台过载跳过」在任务状态上可区分（跳过不写 reachable=false）"
+    pages: []
+    operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "能力四态的 UNKNOWN 态与不可达故障合并进 F3 会变成两次执行；按 21 号 D2 拆出并设为加深基线"
+  - id: AC-01-F6
+    slice: "01"
+    kind: F6
+    baseline: true
+    title: "结构性不适用：主库上的复制延迟与无 slot，均为 NOT_APPLICABLE 而非 0"
+    layer: api
+    asserts:
+      - "主库实例上复制延迟类指标返回 NOT_APPLICABLE_ROLE 并附 NAReason，不报错、不空白"
+      - "无 replication slot 时呈现「不适用」，与真实积压 0 字节严格可区分"
+      - "topo.has_replication / topo.has_slot 能力 Class=structural，不进配置缺失待办"
+    pages: []
+    operations: [getMetricSeries, listInstanceCapabilities]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "同 AC-01-F5，四态的 NOT_APPLICABLE 态独立成条，加深基线不许 pending"
+  # ── 片02 · 告警规则与评估
+  - id: AC-02-S1
+    slice: "02"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：自建规则跑通 OK → PENDING → FIRING → RECOVERED，含强制滞回"
+    layer: api
+    asserts:
+      - "经 createAlertRule 建单指标单条件规则（触发阈值 3、恢复阈值 1、consecutive_count 2），全程无业务表直写（B11）"
+      - "对目标库真实开 5 条连接，pg.connection.total 由真实采集管线越过阈值（不直插样本）"
+      - "状态序列 OK → PENDING → FIRING，PENDING 需连续 2 个评估周期，单次抖动不进 PENDING"
+      - "断到 1 条连接：越过独立恢复阈值后才 RECOVERED；触发阈值与恢复阈值之间的取值不产生任何状态迁移（滞回成立）"
+      - "AlertEvent 序列 PENDING_STARTED → FIRED → RECOVERED 齐全，各带 rule_version 与规则快照字段"
+      - "同一去重键（rule_id + resource_id + metric_dimension）未恢复前只有一条告警实例"
+    pages: ["实例工作台/监控与报警/告警规则"]
+    operations: [createAlertRule, listAlertRules, listAlertInstances, listAlertEvents]
+    crosscut: [INV-1]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿；实现归片②实现票，届时置 covered 并填 test_ref"
+  - id: AC-02-S2
+    slice: "02"
+    kind: S2
+    baseline: true
+    title: "规则版本快照：下一次评估生效、重置未完成计数、不回放不重算"
+    layer: api
+    asserts:
+      - "对一条 FIRING 中的规则改阈值：产生新 version，实例 ID 与首次触发时间保持不变"
+      - "新配置从下一次评估起生效，保存瞬间不重算、不回放历史"
+      - "未完成的触发 / 恢复计数被重置，不带着旧计数跨版本累加"
+      - "告警实例与事件记录的 rule_version 与保存后的新版本一致；历史事件仍指向其当时的版本"
+      - "启停不产生新版本快照，但记录操作人与时间；停用期间存量未恢复实例原地保留、不评估、不谎报 RECOVERED，重启用后延续同一实例"
+      - "内置三规则改阈值 / severity（warning|critical）成功；删除、停用、降为 info 被 4xx + 封闭错误码拒绝（语义归属 INV-4，此处只引用一次）"
+    pages: ["实例工作台/监控与报警/告警规则"]
+    operations: [updateAlertRule, toggleAlertRule, listAlertRuleVersions, deleteAlertRule]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板验收判据原文「ADR-03 全语义可走通」，按 21 号 D1 设为加深基线，不许 pending"
+  - id: AC-02-F1
+    slice: "02"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 规则写端点（写权限 = 告警管理员）"
+    layer: api
+    asserts:
+      - "三档角色账号一律经用户管理 API 创建（20 号 D9），不直插 user 表"
+      - "只读运维调 createAlertRule / updateAlertRule / toggleAlertRule / deleteAlertRule 得规定拒绝语义，非 500、非静默成功"
+      - "告警管理员与平台管理员（按包含关系）调用成功"
+      - "三档角色读端点全部可达：可见性不收窄"
+    pages: []
+    operations: [createAlertRule, updateAlertRule, toggleAlertRule, deleteAlertRule, listAlertRules]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿"
+  - id: AC-02-F2
+    slice: "02"
+    kind: F2
+    baseline: true
+    title: "空状态：规则所需能力不满足 / 指标无样本，落封闭 13 码且不渲染成 0"
+    layer: api
+    asserts:
+      - "规则列表的「所需能力是否满足」在能力缺失时为假，并带原因，不呈现为满足"
+      - "指标无样本时告警详情原样透传片①产出的封闭 13 码之一，不造第二来源"
+      - "无样本区间不出现补 0 的桶（T2 不补 0 + B6）"
+      - "该状态不等同于「条件不满足」：规则不因缺数推进任何状态转换，未完成计数清零"
+    pages: ["实例工作台/监控与报警/告警规则"]
+    operations: [listAlertRules, getAlertInstance, getMetricSeries]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿"
+  - id: AC-02-F3
+    slice: "02"
+    kind: F3
+    baseline: true
+    title: "目标库不可达：FIRING 中转 NO_DATA，不恢复、不关闭、仍计一条未恢复告警"
+    layer: api
+    asserts:
+      - "真停目标库容器（真实手段，非 mock）；缺数连续 2 个评估周期后进入 NO_DATA"
+      - "实例 ID 与首次触发时间保持，生命周期不中断，仍计一条未恢复告警"
+      - "绝不转 RECOVERED —— 数据库不可达擦不掉已知问题"
+      - "NO_DATA_ENTERED / NO_DATA_EXITED 事件齐全；NO_DATA 本身不产生通知"
+      - "目标库恢复后回到 state_before_no_data，计数从零重新累计，不回放缺数期间"
+      - "no_data_policy = ignore 的规则在同一缺数下不进 NO_DATA，与 mark_no_data 严格可区分"
+    pages: []
+    operations: [listAlertInstances, listAlertEvents]
+    crosscut: [INV-1]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿；片②的 F3 由 NO_DATA 路径承载，能力不足面归片① AC-01-F3/F5/F6"
+  - id: AC-02-F4
+    slice: "02"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：断平台库期间不得把目标实例判成 NO_DATA、不得产生告警实例"
+    layer: api
+    asserts:
+      - "真断平台库连接（真实手段）；目标库全程健康、真实采集管线仍在产出"
+      - "平台库恢复后：不存在因平台故障新建的告警实例，既有实例未被推进到 NO_DATA"
+      - "平台故障期间的缺口不计入 NO_DATA 门槛计数（T14：平台自身故障不进入目标告警或 NO_DATA）"
+      - "恢复后不回放、不补评估平台故障期间的时间轴"
+      - "该故障以平台四态呈现（归片⑨ AC-09-F4），不落到任何目标实例的告警面"
+    pages: []
+    operations: [listAlertInstances, getPlatformHealth]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿；与 AC-01-F4 / AC-09-F4 手段同源、断言点不同，分工见 docs/design/22-v1-acceptance-entries-b.md D4"
+  # ── 片03 · 告警处置与性能事件
+  - id: AC-03-S1
+    slice: "03"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：确认 ⇄ 忽略可相互切换且每次操作追加留痕"
+    layer: api
+    asserts:
+      - "对一条 FIRING 告警确认（备注可选）→ 忽略（五档原因码必选）→ 再确认，三次操作全部成功"
+      - "忽略选 OTHER 时补充说明必填，缺失即 400 VALIDATION_FAILED + field_errors"
+      - "AlertEvent 追加三条处置事件，记录操作人、时间、操作前后处置状态，旧记录不被覆盖"
+      - "处置事件保存规则版本、指标值、阈值、评估时间等快照字段，规则改版后处置历史仍自解释"
+      - "处置不触发恢复、不停止评估、不停用规则：处置后该实例仍按恢复条件正常 RECOVERED"
+      - "恢复后再次触发是新实例，disposition 回到 NONE，不继承旧的已确认"
+    pages: []
+    operations: [ackAlert, ignoreAlert, listAlertEvents, getAlertInstance]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿"
+  - id: AC-03-S2
+    slice: "03"
+    kind: S2
+    baseline: true
+    title: "触发现场快照：首次 FIRING 采一次不重采，截断契约成立，永不含 SQL 文本"
+    layer: api
+    asserts:
+      - "在目标库真造阻塞现场（真事务 + 真锁等待，含三层递归阻塞链），触发锁等待类规则"
+      - "快照只在首次进入 FIRING 时采一次；后续评估、数值更新、处置变化均不重采（比对 captured_at 恒定）"
+      - "会话上限参数化至 5：超限时优先保留直接命中对象与完整阻塞链，记录原始匹配数与截断标识"
+      - "快照字段沿 03 §4.5，含 PID / 等待事件 / 时长；全字段扫描断言不含任何 SQL 文本"
+      - "一个告警实例至多一份快照；FIRED 事件与事件详情引用同一份，不复制数据"
+    pages: []
+    operations: [getAlertSnapshot, getAlertInstance]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板验收判据原文「快照首次 FIRING 采一次、截断契约成立」，按 21 号 D1 设为加深基线，不许 pending"
+  - id: AC-03-S3
+    slice: "03"
+    kind: S3
+    baseline: true
+    title: "性能事件页签四模块与 IA §6.4 告警处理全路径，事件处置写回同一条告警"
+    layer: browser
+    asserts:
+      - "IA §6.4 整条路径：告警详情 → 触发条件 / 触发值 / 阈值 / 持续时长 / 规则版本可见 → 是否 NO_DATA 或维护窗口可见 → 跳性能事件 → 确认或忽略 → 恢复记录可追"
+      - "性能事件页签四模块（触发中 / 已恢复 / 已确认已忽略 / 事件详情）按告警实例投影筛选，不存第二份状态"
+      - "事件详情展示按事件类型的只读知识模板（原因摘要 + 建议动作），以告警上下文填充"
+      - "事件详情引用的快照标注「告警触发时现场」，不得呈现为当前状态"
+      - "在事件页做确认 / 忽略后，回到告警详情看到同一处置状态（两处永不分叉）"
+      - "跳转带上下文：事件详情 → 标准监控（instance_id / metric_id / 时间范围）、事件详情 → 告警详情（alert_instance_id）"
+    pages: ["实例工作台/性能事件", "实例工作台/监控与报警/告警详情"]
+    operations: [listPerformanceEvents, getPerformanceEvent, ackAlert, ignoreAlert]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板判据「事件列表与详情可用」，加深基线；IA §6.4 整条关键路径由本条一条承载（22 号 D3），#120 的告警详情页骨架条目不重复走 §6.4"
+  - id: AC-03-F1
+    slice: "03"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 处置写端点"
+    layer: api
+    asserts:
+      - "只读运维调 ackAlert / ignoreAlert 得规定拒绝语义，非 500、非静默成功"
+      - "告警管理员与平台管理员调用成功"
+      - "只读运维仍可读到全部处置摘要与处置历史：可见性不收窄、写能力收窄"
+    pages: []
+    operations: [ackAlert, ignoreAlert, listAlertEvents]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿"
+  - id: AC-03-F2
+    slice: "03"
+    kind: F2
+    baseline: true
+    title: "空状态：本片不产出 Unavailability 13 码"
+    layer: api
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: n-a
+    test_ref: null
+    owner_issue: 119
+    reason: "处置、快照与性能事件都不是指标序列面，不产出封闭 13 码；告警历史时间筛选超出 90 天保留界时是自然空集，spec 片③ Further Notes 明确不新增 Unavailability 码（承 07 D7.e）。属 20 号 D6.5「该语义在本片不存在」的正当 n-a，非「暂时测不了」。让出的保护由 AC-03-F5 补齐。"
+  - id: AC-03-F3
+    slice: "03"
+    kind: F3
+    baseline: true
+    title: "目标库不可达：快照采集失败不影响告警触发，失败原因可见而非空白"
+    layer: api
+    asserts:
+      - "在快照采集窗口内真停目标库容器（真实手段，非 mock）"
+      - "告警照常触发、状态照常转入 FIRING、FIRED 事件照常写入"
+      - "快照结果为「失败」并带失败原因，详情展示原因而非空白"
+      - "失败即终态：后续评估不补采（比对快照记录不变）"
+      - "不表现为「有数据但全零」，也不表现为「该类型不适用」"
+    pages: []
+    operations: [getAlertSnapshot, listAlertInstances]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿"
+  - id: AC-03-F4
+    slice: "03"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不得写出处置事件、不得伪造快照失败记录（证据面不被污染）"
+    layer: api
+    asserts:
+      - "真断平台库连接期间发起处置请求：请求失败且不产生半截处置事件"
+      - "平台库恢复后：处置状态与事件序列与故障前完全一致，无幽灵事件"
+      - "平台故障不得使既有快照被改写为「失败」，快照结果保持原值"
+      - "该故障不污染目标实例告警面、不计入 NO_DATA"
+    pages: []
+    operations: [ackAlert, listAlertEvents, getAlertSnapshot]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿；与 AC-02-F4 / AC-09-F4 手段同源、断言点不同，分工见 22 号 D4"
+  - id: AC-03-F5
+    slice: "03"
+    kind: F5
+    baseline: true
+    title: "快照三态严格可区分，空集是值不是 error"
+    layer: api
+    asserts:
+      - "成功 / 失败（带原因）/ 该类型不适用，三态在契约上严格可区分"
+      - "不适用类型（不可达、Agent 离线、主机资源、复制 / WAL / slot 类）返回明确的「该类型不采集现场快照」，绝不冒充「失败」"
+      - "失败绝不冒充「空白」或「不适用」"
+      - "三态一律以带结果的值返回，不用 404、不用 error"
+      - "告警历史时间筛选超出保留界为空集，同样是值不是 error，且不渲染成 0"
+    pages: []
+    operations: [getAlertSnapshot, listAlertInstances]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "补回 AC-03-F2 记 n-a 让出的保护（22 号 D2），加深基线不许 pending"
+  - id: AC-03-F6
+    slice: "03"
+    kind: F6
+    baseline: false
+    title: "告警历史清理：已恢复实例连同事件与快照级联删除，未恢复实例永不清理"
+    layer: db
+    asserts:
+      - "保留期参数化至 2 分钟（部署期配置项，走与生产相同的判定代码路径）"
+      - "清理前取 DB 只读基线：告警实例、AlertEvent、快照行数"
+      - "已恢复且过期的实例连同其全部 AlertEvent 与快照被删除（外键级联）"
+      - "同期未恢复的实例及其事件与快照仍在（承 02 §3.4：不做基于时长的自动关闭）"
+      - "清理不触碰任何未过期实例"
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 未拍板此判据，按 21 号 D1 的纪律不擅自升为加深基线；但它是片③唯一会删数据的路径，不设即留覆盖真空。B 组唯一一条允许 pending 的普通加深，兑现归片③清理循环实现票。"
+  # ── 片04 · 通知与告警设置区
+  - id: AC-04-S1
+    slice: "04"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：真实评估触发 → 真收端收到邮件与 Webhook → 留痕契约一致"
+    layer: api
+    asserts:
+      - "compose 内起本地 SMTP sink 与 Webhook 回环接收端（被测系统之外的真实网络对端，非 mock、非进程内 httptest）"
+      - "经 API 建联系人 → 建通知策略 → 规则绑定；策略为空的规则回显「默认策略（继承）」"
+      - "真实评估进入 FIRING 后：SMTP sink 真收到邮件，Webhook 收端真收到载荷与 HMAC 签名头"
+      - "恢复时默认收到恢复通知（notify_on_recovery 默认开启）"
+      - "发送发生在评估事务提交之后（以收端观察时序断言，提交前收端零投递）"
+      - "每次尝试留痕（告警实例、事件类型、渠道、目标、时间、结果、失败原因、重试次数）；listNotificationsByAlert 与收端观测一致"
+      - "NOTIFICATION_SENT 事件进入告警事件历史"
+      - "全部通知域响应扫描：不存在 password / secret 类秘密字段（B7），非「返回掩码字符串」而是字段不存在"
+      - "repeat 下限参数化至 30s：未确认的告警按 repeat_interval 重复通知；确认后重复通知停止，触发 / 恢复通知不受影响"
+    pages: []
+    operations: [createContact, createNotificationPolicy, putSmtpConfig, createWebhookTarget, listNotificationsByAlert]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿；「凭据永不回显」在片④只并入本条 asserts（22 号 D6），INV-3 的端到端面引用本次执行"
+  - id: AC-04-S2
+    slice: "04"
+    kind: S2
+    baseline: true
+    title: "维护窗口：窗口期只压通知不断评估，结束不补发"
+    layer: api
+    asserts:
+      - "经 createMaintenanceWindow 建窗口（多选实例 + 起止 + 原因），窗口期内真实制造 FIRING"
+      - "评估照常：告警实例与事件照常生成更新，历史无空洞"
+      - "收端零投递：窗口期内不发出任何触发 / 重复通知"
+      - "窗口内产生或更新的告警实例与事件带维护窗口标记与窗口引用，并落 MAINTENANCE_SUPPRESSED 事件"
+      - "窗口结束瞬间不补发、不排队重放、不发摘要；仍未恢复的告警由下一个 repeat_interval 自然接管"
+      - "提前结束窗口后压制立即解除，同样不补发"
+      - "压制只影响通知，不影响评估、状态与页面可见性（ADR-07 统一律）"
+    pages: []
+    operations: [createMaintenanceWindow, endMaintenanceWindowEarly, listMaintenanceWindows, listAlertEvents]
+    crosscut: [INV-1]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板验收判据原文「窗口期只压通知不断评估」，按 21 号 D1 设为加深基线；与 INV-1 的分工见 22 号 D5（本条断维护窗口这一种压制来源的端到端事实，INV-1 断压制作为正交轴不改变五状态，引用不计入横切达标）"
+  - id: AC-04-S3
+    slice: "04"
+    kind: S3
+    baseline: true
+    title: "告警设置区四页齐：可见性不收窄、写能力收窄、秘密以「已设置 / 未设置」呈现"
+    layer: browser
+    asserts:
+      - "顶层区「告警设置」四页（通知渠道 / 联系人 / 通知策略 / 维护窗口）全部可达"
+      - "通知渠道页同页承载 SMTP 单例表单与 Webhook 目标列表两区块，含失败摘要与可展开的最近失败记录"
+      - "只读运维：四页全部可见，写控件置灰并注明所需角色，入口不隐藏"
+      - "SMTP 密码与 Webhook 密钥呈现为「已设置 / 未设置」，而非回显掩码字符串；任何角色都读不回明文"
+      - "存在未清除的渠道失败时，「通知渠道」页签导航角标出现；角标不产生告警实例、不影响实例健康"
+    pages: ["告警设置/通知渠道", "告警设置/联系人", "告警设置/通知策略", "告警设置/维护窗口"]
+    operations: [getSmtpConfig, listWebhookTargets, listContacts, listNotificationPolicies, listMaintenanceWindows, getChannelFailureSummary]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "S1 拍板判据「告警设置区四页齐」，纯呈现语义按 20 号 D3 必须上浏览器，加深基线不许 pending"
+  - id: AC-04-F1
+    slice: "04"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 告警设置四页写端点（含维护窗口提前结束）"
+    layer: api
+    asserts:
+      - "只读运维调渠道配置写入、Webhook 目标 CRUD、测试发送 / 测试请求、联系人与组 CRUD、策略 CRUD、维护窗口 CRUD 与提前结束，全部得规定拒绝语义"
+      - "告警管理员与平台管理员调用成功"
+      - "被拒绝时非 500、非静默成功；读端点对三档角色全部可达"
+    pages: []
+    operations: [putSmtpConfig, testSmtpDelivery, createWebhookTarget, createContact, createNotificationPolicy, createMaintenanceWindow, endMaintenanceWindowEarly]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿"
+  - id: AC-04-F2
+    slice: "04"
+    kind: F2
+    baseline: true
+    title: "空状态：本片不产出 Unavailability 13 码"
+    layer: api
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: n-a
+    test_ref: null
+    owner_issue: 119
+    reason: "通知域不是指标序列面，渠道 / 联系人 / 策略 / 窗口的空集与未配置态都不映射封闭 13 码。属 20 号 D6.5「该语义在本片不存在」的正当 n-a，非「暂时测不了」。让出的保护由 AC-04-F5 补齐。"
+  - id: AC-04-F3
+    slice: "04"
+    kind: F3
+    baseline: true
+    title: "外部依赖不可用：通知出口不可达 → 三次指数退避后留终态失败，失败可见"
+    layer: api
+    asserts:
+      - "真停 SMTP sink 容器、Webhook 收端固定返 5xx（真实手段，非 mock）"
+      - "固定 3 次指数退避（退避封顶参数化至 5s），第 3 次后记终态失败，不无限重试"
+      - "每次尝试均留痕，重试次数与时序可核对"
+      - "NOTIFICATION_FAILED 事件进入告警事件历史"
+      - "渠道页失败摘要出现最近失败次数与最后一次失败原因，导航角标出现"
+      - "失败不产生新的告警实例、不进状态机、不影响实例健康（不做「通知失败本身产生告警」的递归）"
+    pages: ["告警设置/通知渠道"]
+    operations: [listNotificationsByAlert, getChannelFailureSummary, listAlertEvents]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "F3「外部依赖不可用」在通知域的语义映射：通知的外部依赖是出口而非被监控库，语义映射的记账见 22 号 D2；S1 判据「失败三次退避留终态」由本条承载"
+  - id: AC-04-F4
+    slice: "04"
+    kind: F4
+    baseline: true
+    title: "平台自身故障：不得发出通知，也不得丢失已排队的待发通知与退避进度"
+    layer: api
+    asserts:
+      - "真断平台库连接 / 重启 server 进程（真实手段）"
+      - "故障期间收端零投递"
+      - "恢复后：故障前已排队的待发通知仍被发出，收端确实收到（待发通知落表而非内存队列的验收面）"
+      - "退避进度与未尽的 repeat 义务跨进程重启不丢、不重置为第 1 次"
+      - "平台自身故障不产生目标实例告警、不计入 NO_DATA"
+    pages: []
+    operations: [listNotificationsByAlert]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "条目内容由 #119 定稿；与 AC-02-F4 / AC-03-F4 / AC-09-F4 手段同源、断言点不同，分工见 22 号 D4"
+  - id: AC-04-F5
+    slice: "04"
+    kind: F5
+    baseline: true
+    title: "渠道未配置：是「未设置」不是 error，且绝不静默"
+    layer: api
+    asserts:
+      - "SMTP 未配置且无 Webhook 目标时触发一条告警：不 500、不 404，配置读端点返回「未设置」的值"
+      - "该次通知义务不被静默丢弃：留痕表出现一条无可用出口的失败记录，带明确原因"
+      - "渠道页失败摘要与导航角标据此可见 —— 用户能回答「这条告警为什么没通知到我」"
+      - "评估与告警状态不受影响：无出口不影响 FIRING 与 RECOVERED"
+      - "装机 seed 的全局默认策略始终存在且不可删除，三条内置规则天然有通知归属，不存在静默事故窗口"
+    pages: ["告警设置/通知渠道"]
+    operations: [getSmtpConfig, listWebhookTargets, listNotificationsByAlert, getChannelFailureSummary]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 119
+    reason: "补回 AC-04-F2 记 n-a 让出的保护（22 号 D2），加深基线不许 pending"
+  # ── 片05 · 观察面
+  - id: AC-05-S1
+    slice: "05"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：IA §6.1 日常巡检，实例列表三层信息契约 → 总览 → 标准监控"
+    layer: browser
+    asserts:
+      - "IA §6.1 整条路径：实例列表 → 实例总览 → 可用性/资源/负载/复制/告警摘要 → 进标准监控 → 看异常指标趋势"
+      - "实例列表按三层信息契约呈现：主状态（四档 + 已暂停 override）→ 归因行（规则名 + 当前值）→ C/W/I 计数与五种正交标记"
+      - "Agent 状态、最近采集时间、数据新鲜度是独立展示列，不参与健康计算（「库有问题」与「采集有问题」可区分）"
+      - "筛选与排序齐备且默认视图不隐藏任何实例；已暂停显示暂停时长，超 7 天转警示色"
+      - "实例总览置顶复用同一主状态与归因行，列表与总览的判定永不打架"
+      - "标准监控三组指标区（资源 5 / 数据库 12 / 复制 5）出真实曲线，时间范围、粒度、列数、光标联动可用"
+    pages: ["实例列表", "实例工作台/实例总览", "实例工作台/监控与报警/标准监控"]
+    operations: [listInstancesHealth, getInstanceOverview, getMetricSeries]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "IA §6.1 由本条承载整条路径（23 号 D1）；三层信息契约的呈现面在此，投影正确性归 AC-05-S5"
+  - id: AC-05-S2
+    slice: "05"
+    kind: S2
+    baseline: true
+    title: "IA §6.2 CPU 或连接数异常排障：跳转自动定位触发时间并继承时间范围"
+    layer: browser
+    asserts:
+      - "IA §6.2 整条路径：总览异常卡片 → 告警详情或标准监控 → 定位异常开始时间 → 会话与阻塞 → 筛选活跃会话/长事务/等待事件 → 会话详情 → 回看关联指标"
+      - "从告警跳标准监控自动定位触发时间范围；从标准监控跳会话与阻塞继承时间范围（03 §5.1 全表、§5.2 七项上下文）"
+      - "时间一律绝对 RFC3339 且全部进 URL search params，链接贴给同事打开是同一屏"
+      - "会话详情不展示 SQL 文本，只给 PID / query_start / 数据库 / 数据库用户等原生线索，定位字段可复制并带时效性提示"
+      - "告警详情骨架只断自身列表与详情骨架，不重复走 IA §6.4（22 号 D9 单向约定）"
+    pages: ["实例工作台/实例总览", "实例工作台/监控与报警/标准监控", "实例工作台/会话与阻塞/活跃会话", "实例工作台/会话与阻塞/会话详情"]
+    operations: [getInstanceOverview, getMetricSeries, getInstanceSessions, getSessionDetail]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "IA §6.2 由本条承载（23 号 D1）；上下文继承是本条独有断言点，否决与 §6.3 合并"
+  - id: AC-05-S3
+    slice: "05"
+    kind: S3
+    baseline: true
+    title: "IA §6.3 锁等待与阻塞排障：锁等待 → 阻塞链 → 阻塞源会话详情，全页无 SQL 文本"
+    layer: browser
+    asserts:
+      - "IA §6.3 整条路径：总览/告警 → 会话与阻塞 → 锁等待列表 → 阻塞链 → 阻塞源会话详情 → PID/用户/数据库/客户端/持续时间 → 关联指标趋势"
+      - "在目标库真造三层递归阻塞链（真事务真锁等待，可与 AC-03-S2 共用同一次现场准备，执行不合并）"
+      - "只展示最近一次成功采集的瞬时态，明示采集时间与新鲜度，不把旧快照当实时"
+      - "全页渲染文本与 API 响应全字段扫描：不含任何 SQL 文本（原文/脱敏/截断摘要一律没有），无「SQL ID」统称，无按 PID/queryid 搜索入口"
+      - "首版只读：页面不出现 kill / cancel / 批量终止入口"
+      - "命名固定「长查询采样记录」「查询统计排行」，不出现「慢 SQL 明细」类名称"
+    pages: ["实例工作台/会话与阻塞/锁等待", "实例工作台/会话与阻塞/阻塞链", "实例工作台/会话与阻塞/会话详情", "实例工作台/会话与阻塞/长查询采样记录"]
+    operations: [getInstanceSessions, getBlockingChains, getSessionDetail, listLongQuerySamples]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "IA §6.3 由本条承载（23 号 D1）；无 SQL 文本全扫是只读断言，不进 D4 白名单（23 号 D10）"
+  - id: AC-05-S4
+    slice: "05"
+    kind: S4
+    baseline: false
+    title: "AntD 交互观感门（50 行实例列表首次渲染 + 标准监控 22 图切换时间范围）"
+    layer: browser
+    asserts: []
+    pages: ["实例列表", "实例工作台/监控与报警/标准监控"]
+    operations: []
+    crosscut: []
+    status: n-a
+    test_ref: null
+    owner_issue: 115
+    reason: "人工观感判定项，无机器阈值，不可自动判定，按 20 号 D6.5 不得伪装成 covered；人工判定归 #115 真实 Linux 验收会话执行，结论回写骨架欠账第 4 条；实测卡顿即触发 11 §9 二类（结构型）停下、开 wayfinder 票交回 HITL，不得自行换库（ECharts 卡顿有 uPlot 预写后备，走一类预授权路径）"
+  - id: AC-05-S5
+    slice: "05"
+    kind: S5
+    baseline: true
+    title: "实例健康归并全语义由真实告警事实驱动，服务端聚合投影口径不失真"
+    layer: api
+    asserts:
+      - "四类事实全部经业务 API 真实产生：片②真规则触发、片③真忽略、片④真维护窗口、片⑦真暂停，无一条直插业务表"
+      - "判定顺序：已暂停 override → critical/warning 取最高 → 从未成功采集为未知 → 否则正常"
+      - "已忽略退出归并：不进主状态、不计入 C/W/I、不进归因行，但告警列表仍可见"
+      - "info 不染色；纯 info 时归因行展示最早那条 info"
+      - "「未知」一次性单调：唯一入口是从未成功采集，首采成功后永不再回（此后失联由内置规则染色，不变灰）"
+      - "归因行取最坏级别中首次触发最早者，不堆叠多行"
+      - "绿色永不等于「什么都没有」：计数为 0 也不隐藏已忽略与配置缺失标记"
+      - "结构性不适用与配置缺失不产生告警、不进健康"
+      - "实例列表与实例总览置顶块读同一投影，口径不分叉"
+    pages: []
+    operations: [listInstancesHealth, getInstanceOverview]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "A5 纯函数单测证明算得对，证明不了它被接进投影路径；归并入参跨片②③④⑦，接线错则全平台健康失真——按 21 号 D1 升为加深基线，理由见 23 号 D4"
+  - id: AC-05-F1
+    slice: "05"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：观察面读取面无收窄，且不出现可用的写入口"
+    layer: api
+    asserts:
+      - "三档角色账号一律经用户管理 API 创建（20 号 D9），不直插 user 表"
+      - "三档角色在实例列表、实例总览、会话与阻塞、全局告警两列表所见实例集合与字段完全一致（可见性不收窄）"
+      - "观察面不出现任何可用的写入口（暂停归片⑦、处置归片③、规则归片②）"
+      - "只读运维对全部观察面读端点调用成功，非 403、非静默降级"
+    pages: ["实例列表", "全局告警/当前告警", "全局告警/告警历史", "实例工作台/会话与阻塞/活跃会话"]
+    operations: [listInstancesHealth, getInstanceOverview, getInstanceSessions, listActiveAlerts, listAlertHistory]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "全矩阵唯一一条断「读取面无收窄」的条目，覆盖页面最多，不可由 AC-01-F1 / AC-07-S2 / AC-03-F1 / AC-04-F1 推得（23 号 D7）"
+  - id: AC-05-F2
+    slice: "05"
+    kind: F2
+    baseline: true
+    title: "空状态：片①能产出的 11 码逐码由真实后端条件驱动，200 + 码且不补 0"
+    layer: api
+    asserts:
+      - "逐码制造真实后端条件，驱动出片①能产出的 11 个 Unavailability 码，每码至少一次真实产出"
+      - "全部空状态一律 200 + 码，不走 error 路径（07 §8.3）"
+      - "空状态是值不是 error：缺桶不出现在结果里，绝不补 0"
+      - "码值属封闭 13 码表，不出现表外码；同一场景不产生两个自相矛盾的码"
+    pages: []
+    operations: [getMetricSeries, listInstanceCapabilities, getQueryStatsRanking]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "S1 判据「13 码空状态由后端真实驱动」的广度面（23 号 D2）。范围按 S1 跨片原则对账：本条驱动片①产出的 11 码；COLLECTION_PAUSED 的产生条件归片⑦（UI 面已由 AC-07-F2 覆盖）；VERSION_UNSUPPORTED 在 P0 无产生者；13 码全表对账归片⑩（#110/#114）——不是漏两码"
+  - id: AC-05-F3
+    slice: "05"
+    kind: F3
+    baseline: true
+    title: "目标库不可达或能力不足：查询统计排行五态严格可区分，绝不表现为空表"
+    layer: api
+    asserts:
+      - "查询统计排行五态严格可区分：未启用 / 权限不足 / 暂时不可用 / 统计已重置 / 区间内无记录"
+      - "任一不可用态绝不表现为空表或「暂无数据」，页面只说明能力状态与排查方向"
+      - "不提供启用扩展 / 提权按钮（03 §4.5）"
+      - "真停目标库容器后，会话与阻塞页降级并明示最近一次成功采集时间与新鲜度，不把旧快照当实时"
+      - "降级不表现为「有数据但全零」"
+    pages: ["实例工作台/会话与阻塞/查询统计排行", "实例工作台/会话与阻塞/活跃会话"]
+    operations: [getQueryStatsRanking, getInstanceSessions]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "「统计已重置」与「区间内无记录」两态在片①完全没有对象，不可由 AC-01-F3 推得（23 号 D8）"
+  - id: AC-05-F4
+    slice: "05"
+    kind: F4
+    baseline: true
+    title: "平台自身故障不污染健康证据面：实例不得翻绿、未恢复告警不得被擦掉"
+    layer: api
+    asserts:
+      - "注入平台库不可达（真停平台 PG 容器，与 AC-01-F4 / AC-09-F4 同一手法）"
+      - "期间实例列表不得把实例主状态改写为「正常」或「无数据」，不得擦掉未恢复告警"
+      - "平台自身故障表现为平台侧不可用（09 D6），而非目标实例状态的变化"
+      - "恢复后归因行、C/W/I 计数与正交标记与故障前一致：不回放、不重算出第二个结论"
+    pages: ["实例列表"]
+    operations: [listInstancesHealth]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "「绿色是最危险的谎」是观察面独有的下游语义，AC-01-F4（零样本零告警）与 AC-09-F4（不白屏不 502）都断不到（23 号 D7）"
+  - id: AC-05-F5
+    slice: "05"
+    kind: F5
+    baseline: true
+    title: "13 码在观察面各页面均有文案与去向链接，COLLECTION_PAUSED 不冒充别的码"
+    layer: browser
+    asserts:
+      - "11 码 × 观察面各页面：每码渲染专属文案，且带 03 §7.2 规定的去向链接（如「无权限 → 采集管理」）"
+      - "COLLECTION_PAUSED 绝不渲染成「采集失败」或「数据库不可达」"
+      - "空状态壳组件对 13 码穷尽（assertNever），无兜底文案吞码"
+      - "任一码的空状态均不渲染成 0，曲线断开而非落到零线"
+    pages: ["实例工作台/监控与报警/标准监控", "实例工作台/会话与阻塞/查询统计排行", "实例工作台/实例总览"]
+    operations: [getMetricSeries, getQueryStatsRanking]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "S1 判据「13 码空状态由后端真实驱动」的 UI 覆盖面（23 号 D2）；与 AC-01-F2 的界是「码的广度」对「一个码的整条路径 + B6 四项」，加深基线不许 pending"
+  # ── 片06 · 增强监控
+  - id: AC-06-S1
+    slice: "06"
+    kind: S1
+    baseline: true
+    title: "端到端成功路径：开页即基线四要素，曲线是真实 5 秒原始点"
+    layer: browser
+    asserts:
+      - "打开增强监控页签零配置即得基线四要素：最近 30 分钟窗口 / 5 秒粒度（step=raw）/ 平均值聚合 / 两列布局"
+      - "曲线数据来自片①共用管线的真实 5 秒样本，原始点距 5 秒，响应回传实际粒度"
+      - "五个控件可用：指标管理（候选集来自字典 EnhancedCandidate，27 项）、时间选择、聚合方式、布局切换、指标含义与详情"
+      - "页签始终可见、无需开通或启用任何东西；不是标准监控的粒度选项而是并列页签"
+      - "打开本页不向目标库发起任何额外查询（读的全是已采样本）"
+      - "页面静态说明高频监控的资源代价，文案不暗示「打开页面才采集」"
+      - "时间窗口进 URL search params，链接可分享；dataUpdatedAt 随轮询前进"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, getMetricDetail]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "S1 判据「基线四要素可用」；30 分钟是查询窗口下界不是等待时长，无需真等 30 分钟（23 号 D9）"
+  - id: AC-06-F1
+    slice: "06"
+    kind: F1
+    baseline: true
+    title: "权限：页签对全部角色可见性不收窄，且本页无任何写端点"
+    layer: api
+    asserts:
+      - "三档角色会话各打开增强页：页签可见、数据一致、无「需要更高权限」提示、无降级"
+      - "本页涉及的全部 operationId 在 OpenAPI 里没有一条写语义的 x-required-role 条目"
+      - "页面不出现任何启停 / 开通 / 套餐类入口（ADR-04 冻结否决项）"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, getMetricDetail]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "不记 n-a：权限语义在本片存在（ADR-09 可见性不收窄）；第二条断言是「本页无写面」这条本片决策的唯一验收面，守的是页面职责边界（23 号 D6）"
+  - id: AC-06-F2
+    slice: "06"
+    kind: F2
+    baseline: true
+    title: "空状态：5 秒粒度下秒级空隙保持空隙，不补 0、不插值、不重用旧值"
+    layer: api
+    asserts:
+      - "窗口内存在真实采集空隙时，缺桶不出现在结果里（不补 0）"
+      - "不插值、不重用旧值：相邻点之间的空隙在响应里就是缺失，不是零值也不是重复值"
+      - "整窗无样本时返回 200 + 封闭 13 码之一，不返回空数组冒充「有数据但全零」"
+      - "毛刺与缺数不被编造的数据抹平：真实采集值原样返回，无平滑"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries]
+    crosscut: [INV-2]
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "5 秒粒度是全矩阵对「不补 0」最锋利的一次执行；#121 的 INV-2 端到端面可引用本条，引用不改变横切独立计分"
+  - id: AC-06-F3
+    slice: "06"
+    kind: F3
+    baseline: true
+    title: "能力不足或目标库不可达：逐图局部降级，且点距随周期配置如实变化"
+    layer: browser
+    asserts:
+      - "真回收能力（或真停目标库容器）后，只有受影响的那张图降级并显示原因，其余图照常出曲线——模块永不整体消失"
+      - "降级原因码属封闭 13 码，经领域图表组件的必填 unavailability 入参渲染，不造第二套呈现、不引入通用 Badge"
+      - "能力四态在页面可见，降级不表现为「有数据但全零」"
+      - "经片⑦周期配置入口把任务周期由 5s 调到 10s 后，同一张图原始点距如实变为 10s，响应回传的实际粒度跟着变，页面不谎称仍是 5 秒"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "S1 判据「能力不足局部降级并显示原因」；user story 14「配置与呈现不分裂」并入本条同一次执行，不单设条目（23 号 D5/D9）"
+  - id: AC-06-F4
+    slice: "06"
+    kind: F4
+    baseline: true
+    title: "平台自我保护细因与目标库故障在呈现上可区分，跳过不冒充数据库故障"
+    layer: browser
+    asserts:
+      - "真造背压与退避（并发压满采集池 / 触发保护性退避），页面对该指标显示 COLLECTION_FAILED 并区分平台侧细因 SKIPPED_BACKPRESSURE 与 BACKOFF"
+      - "平台自我保护造成的秒级空隙绝不渲染成「数据库不可达」或「采集配置错误」（12 §5.3 的展示层兑现）"
+      - "同一页面上目标库侧故障与平台侧自我保护两类原因用户可区分，不混为一谈"
+      - "增强页不引入第二套判定：不产生新评估、不产生新告警、不影响健康归并"
+    pages: ["实例工作台/监控与报警/增强监控"]
+    operations: [getMetricSeries, listInstanceCollectionTasks]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 120
+    reason: "本条显式不断 NO_DATA 豁免：12 号 D7 明文「背压跳过不推进完整性水位，连续缺数照常进 NO_DATA」，该口径优先于 T14 的一般表述——T14 管的是平台故障（目标库根本没被观测），背压是按设计主动放弃观测，缺数是事实，掩盖它才是错的（23 号 D5）"
+  # ── 片07 · 采集管理页
+  - id: AC-07-S1
+    slice: "07"
+    kind: S1
+    baseline: true
+    title: "暂停端到端：开关 → 调度器停调度 → 水位不推进 → COLLECTION_PAUSED → 恢复后从最新意图续采"
+    layer: api
+    asserts:
+      - "pauseInstanceCollection 后该实例全部任务不再被调度"
+      - "完整性水位不推进（不因暂停而虚假前进，也不判为采集失败）"
+      - "指标序列与最新值查询一律 200 + COLLECTION_PAUSED"
+      - "操作人与时间系统自动必录，可经暂停状态读取契约读回；原因选填"
+      - "resumeInstanceCollection 后从最新意图开始采集，不补跑暂停期"
+      - "Agent 全程不知情：照常 push，agent.status 保持 online，但样本一并不写"
+    pages: ["实例工作台/采集管理/采集配置"]
+    operations: [pauseInstanceCollection, resumeInstanceCollection, getMetricSeries, listInstanceCollectionTasks]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-07-S2
+    slice: "07"
+    kind: S2
+    baseline: true
+    title: "配置缺失待办三态四情形：不报假绿、永不隐藏、正向空状态带最近检查时间"
+    layer: browser
+    asserts:
+      - "可修复缺失（MISSING/fixable）：出条目，带影响指标计数与文字修复指引，无一键修复按钮"
+      - "结构性不适用（NOT_APPLICABLE）：不进清单，仅在能力模块显示「不适用」+ NAReason，措辞区别于「缺失」"
+      - "查不到（UNKNOWN，含快照过期投影）：进清单且排最前，绝不降级为「就绪」"
+      - "全部就绪：显式正向空状态，且必须带能力快照 observed_at 的最近检查时间"
+      - "四种情形下模块均不隐藏"
+      - "D9 的那条 UI 断言并入本次执行：采集配置模块对非平台管理员置灰并说明所需角色，入口不隐藏（可见性不收窄、写能力收窄）"
+    pages: ["实例工作台/采集管理/配置缺失待办", "实例工作台/采集管理/扩展 / 插件能力", "实例工作台/采集管理/采集配置"]
+    operations: [listInstanceCapabilities]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "S1 拍板验收判据原文（片⑦Further Notes），按 21 号 D1 设为加深基线"
+  - id: AC-07-S3
+    slice: "07"
+    kind: S3
+    baseline: true
+    title: "冻结/解冻告警语义：不转 RECOVERED、解冻不回放、延续同一实例、暂停期历史照常可查"
+    layer: api
+    asserts:
+      - "暂停前置一条 FIRING 告警（经真实评估产生，非直插）"
+      - "暂停后该告警状态原地保留、不转 RECOVERED、不发任何通知"
+      - "告警列表仍可见并带 PAUSED 正交标记"
+      - "暂停期不产生 NO_DATA，暂停实例不产生任何新告警实例"
+      - "解冻且条件仍满足：同一 alert instance id 继续 FIRING，不新建实例、不发假新告警"
+      - "解冻且条件不满足：走正常 RECOVERED 并通知"
+      - "告警历史留 FROZEN / UNFROZEN 事件"
+      - "暂停前区间的历史在保留期内照常可查；暂停期空窗按缺桶呈现，不补 0"
+    pages: []
+    operations: [pauseInstanceCollection, resumeInstanceCollection]
+    crosscut: [BUILTIN-1, BUILTIN-2]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "暂停冻结语义跨到告警域但归属采集域（21 号 D4），设为加深基线；不放入片②以免挤占其五条基线"
+  - id: AC-07-F1
+    slice: "07"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：暂停/恢复端点仅 PLATFORM_ADMIN"
+    layer: api
+    asserts:
+      - "只读运维、告警管理员调 pause/resume 得规定拒绝语义，非 500、非静默成功"
+      - "平台管理员调用成功"
+      - "UI 侧的「可见性不收窄、写能力收窄」由 AC-07-S2 的浏览器执行承载，不另起一次执行"
+    pages: []
+    operations: [pauseInstanceCollection, resumeInstanceCollection]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-07-F2
+    slice: "07"
+    kind: F2
+    baseline: true
+    title: "空状态：暂停期图表显式「已暂停」，绝不冒充采集失败或数据库不可达"
+    layer: browser
+    asserts:
+      - "暂停期打开任意图表，渲染 COLLECTION_PAUSED 对应的「已暂停」文案"
+      - "文案不得为「采集失败」「数据库不可达」或任何其他 12 码的文案"
+      - "不渲染成 0（B6）"
+      - "实例列表「已暂停」标记带时长，超 7 天转警示色；导航角标计已暂停实例数"
+    pages: ["实例工作台/监控与报警/标准监控", "实例列表"]
+    operations: [getMetricSeries]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-07-F3
+    slice: "07"
+    kind: F3
+    baseline: true
+    title: "暂停期叠加目标库不可达：已暂停优先，能力模块显示最后一份快照并按有效期投影 UNKNOWN"
+    layer: api
+    asserts:
+      - "暂停中再停目标库容器，指标查询仍返回 COLLECTION_PAUSED，不翻成 DB_UNREACHABLE"
+      - "能力模块显示暂停前最后一份快照，超有效期后投影 UNKNOWN（片①既有语义，本片无特例）"
+      - "不因目标库不可达而自动解除暂停"
+    pages: ["实例工作台/采集管理/数据库连接与权限检查"]
+    operations: [getMetricSeries, listInstanceCapabilities]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-07-F4
+    slice: "07"
+    kind: F4
+    baseline: true
+    title: "平台自身故障期间暂停状态不丢、不误恢复、不污染目标侧"
+    layer: api
+    asserts:
+      - "注入平台库不可达后恢复，暂停状态仍生效（控制面单一真相源未被改写）"
+      - "该期间未产生 NO_DATA、未产生任何目标告警实例"
+      - "操作人/时间/原因留痕完好"
+    pages: []
+    operations: [pauseInstanceCollection]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  # ── 片08 · 凭据与接入
+  # 执行序硬约束（24 号 D14）：AC-08-S1 必须最先执行（全矩阵接入前置），
+  # AC-08-S7 必须最后执行（停 server 跑离线轮换，污染后续状态）。其余条目顺序自由。
+  - id: AC-08-S1
+    slice: "08"
+    kind: S1
+    baseline: true
+    title: "接入前置主干：创建即验 → 凭据密文落库 → 登记 Agent 一次性拿 token → 真进程上报 → 可见"
+    layer: api
+    asserts:
+      - "首启 admin 由 INITIAL_ADMIN_PASSWORD 引导，三档角色账号一律经用户管理 API 创建（20 号 D9），不直插 user 表"
+      - "创建实例走创建即验：连接测试 + 版本门（被监控 PG ≥13）都过才落库"
+      - "凭据以密文落库：password_ciphertext 非空、password_key_version 非空，请求响应均不含明文"
+      - "登记 Agent（enrollAgent）在一次性响应中拿到 token 明文，token 落盘 0600，服务端只存 SHA-256"
+      - "cmd/monitor-agent 以真进程运行、走真实 token 接入，不预置任何行（20 号 D7）"
+      - "agent 真实上报后指标经业务 API 可见，全链路无直插业务表"
+    pages: ["实例列表", "实例工作台/接入设置"]
+    operations: [createInstance, testInstanceConnection, enrollAgent, reportAgentMetrics, createUser]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "本条同时是 make acceptance 的 setup 阶段与全矩阵的执行前置（24 号 D1）；安装命令、CA 指纹钉扎、unit 写入、安装期时钟自检不在本条射程，显式移交 #110"
+  - id: AC-08-S2
+    slice: "08"
+    kind: S2
+    baseline: true
+    title: "迁移一：明文 password 列与旧读写路径一次性删除"
+    layer: db
+    asserts:
+      - "迁移后 instance 表无 password 明文列，且全库查询扫不出任何明文口令"
+      - "password_ciphertext / password_key_version 两列存在且对全部实例非空"
+      - "keyring 只在「不存在且库中无加密凭据」时生成一次，重启不替换、不新增版本"
+    pages: []
+    operations: []
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据「两笔迁移完成且旧路径删除」的第一笔，按 21 号 D1 升加深基线；全矩阵唯一一条 DB 层只读断言——API 层永远看不见明文列是否还在（24 号 D2）"
+  - id: AC-08-S3
+    slice: "08"
+    kind: S3
+    baseline: true
+    title: "迁移二：B7 例外从创建实例响应迁至登记/轮换，一次性回显关闭后不可再读"
+    layer: browser
+    asserts:
+      - "创建实例 201 响应不含 agent_token 字段（B7 唯一例外已迁走）"
+      - "登记/轮换成功后弹窗一次性显示 token 明文，含复制按钮与「关闭后不再显示」警示"
+      - "关闭弹窗后页面无任何再次读取控件，刷新后不再出现"
+      - "再次调用登记端点只会换发新 token，绝不回显旧 token"
+      - "用户初始口令/重置口令同一断言形状成立（一次性回显、无二次读取路径）"
+      - "PG 凭据区 password 字段掩码呈现，无任何查看控件"
+    pages: ["实例工作台/接入设置", "用户管理/用户列表"]
+    operations: [enrollAgent, rotateAgentToken, createUser, resetUserPassword]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据的第二笔迁移，升加深基线；片⑧唯一一条浏览器条目（24 号 D13）——vitest 证明不了真实一次性响应被接进弹窗、也证明不了刷新后拿不回来，spec 的 vitest 那条仍照做，两者不互相顶替"
+  - id: AC-08-S4
+    slice: "08"
+    kind: S4
+    baseline: true
+    title: "Agent 生命周期四态可区分：从未登记 / 应在线 / 已吊销 / 已停用，吊销 ≠ 停用"
+    layer: api
+    asserts:
+      - "四态由持久化事实（是否期待 / 令牌哈希 / 签发时间 / 吊销时间 / 首次登记时间）判定，不靠 agent_token_hash IS NULL 猜"
+      - "轮换提交后旧 token 立即被拒（401），新 token 立即可用"
+      - "吊销后 agent_expected 仍为 true、实例继续显示离线"
+      - "停用后 host.* 与 Agent 离线规则结构性不适用，历史样本保留"
+      - "停用后重新启用必须重新登记签发新 token，旧 token 不复活"
+    pages: ["实例工作台/接入设置"]
+    operations: [enrollAgent, rotateAgentToken, revokeAgentToken, disableAgent, reenableAgent]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "四态是片⑦呈现的读取契约来源（24 号 D2）；一旦塌成布尔判断，片⑦全线错而片⑦自己测不出，故升加深基线"
+  - id: AC-08-S5
+    slice: "08"
+    kind: S5
+    baseline: true
+    title: "用户管理两页语义：一次性口令、只停用不删除、启用态平台管理员 ≥1 并发守卫"
+    layer: api
+    asserts:
+      - "创建用户输入仅用户名 + 角色，初始口令服务端随机生成并一次性回显"
+      - "停用立即断登录并废全部会话；用户不可删除、用户名不可改不回收，历史处置留痕仍可归因"
+      - "自改口令须验旧口令，最小长度 12 字符"
+      - "并发两笔「停用/降级最后两名平台管理员之一」至多一笔提交成功，另一笔被拒并说明原因（真库并发事务）"
+      - "任何用户不得停用或降级自己，被拒时说明原因"
+    pages: ["用户管理/用户列表"]
+    operations: [listUsers, createUser, updateUserRole, deactivateUser, resetUserPassword, changeOwnPassword]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据「S2 定稿的两页语义全落地」的用户页一半，升加深基线；本条的状态变更类断言一律用带条目 ID 前缀的一次性账号（24 号 D11），不碰三个长期角色账号"
+  - id: AC-08-S6
+    slice: "08"
+    kind: S6
+    baseline: true
+    title: "移除实例三层分收：配置立删、未恢复告警连带关闭留痕、样本随 TTL 不同步删"
+    layer: api
+    asserts:
+      - "输入实例名双确认后，实例、采集计划、凭据密文、Agent 登记与令牌立删，采集即刻停止"
+      - "该实例全部未恢复告警连带关闭并留痕关闭原因，告警历史与处置留痕保留"
+      - "时序样本不同步删除，随 30 天分区 TTL 过期"
+      - "重接为新实例、不继承任何历史"
+    pages: ["实例工作台/接入设置"]
+    operations: [deleteInstance]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "S1 拍板判据的实例页一半，升加深基线；三层各自都可能单独坏掉，且「移除」字面成立与「历史归因不悬空」是一对相反方向的约束（24 号 D2）"
+  - id: AC-08-S7
+    slice: "08"
+    kind: S7
+    baseline: true
+    title: "主密钥离线轮换：停 server → 轮换 → 重启 → 密文仍可解，中断可重跑"
+    layer: api
+    asserts:
+      - "轮换后全部 password_key_version 为 vN+1，旧版本零引用"
+      - "重启后密文仍可解、采集正常恢复出点"
+      - "旧 key 在无引用后清理；仍有引用时不得删旧 key（反向断言）"
+      - "轮换执行到一半 kill 掉后重跑，结果与一次跑完一致"
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "13 号 D7/D8 整条承诺（备份不含 keyring、遗失即不可恢复、无后门）在自动化面上的唯一验收面，故不降级为可 pending 的普通加深；执行序必须最末（24 号 D14），停 server 跑离线命令是产品承诺的形态，不停 server 跑等于验收一个不存在的形态"
+  - id: AC-08-S8
+    slice: "08"
+    kind: S8
+    baseline: false
+    title: "Agent 二进制下载端点鉴权：Agent token 鉴权、无 token 401、非法 arch 被拒"
+    layer: api
+    asserts:
+      - "downloadAgentBinary 需 Agent token 鉴权，无 token / 错 token 返回 401"
+      - "arch 参数仅接受受支持取值，非法值被拒且不落 500"
+      - "agent_binary_dir 缺失或二进制不齐时，端点返回明确失败而非 404 沉默，且该缺失进入健康事实源（27 号 D9）"
+    pages: ["实例工作台/接入设置"]
+    operations: [downloadAgentBinary]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "19 号决策后新增的 HTTP 面，不在片⑧ spec 的 S1 验收判据内，按 21 号 D1 准入不够格升基线 —— 全矩阵第二条允许 pending 的普通加深（第一条是 22 号的 90 天清理），两条都进 Go/No-Go 的 pending 清单；安装脚本本体归 #110。27 号 D11 补入第三条断言：agent 二进制由部署时放入 agent_binary_dir（我方不发布二进制，D2/D9），因此「目录缺失」是真实可达的运行态，是本票唯一有产品语义的产出；条目数与硬底不变"
+  - id: AC-08-F1
+    slice: "08"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：三档角色 × 两类写面（接触秘密全归平台管理员，元数据编辑归告警管理员）"
+    layer: api
+    asserts:
+      - "平台管理员专属面（创建实例、更新 PG 凭据、Agent 五操作、移除实例、用户管理全部写操作）× 三档角色：仅平台管理员成功，其余拿到规定拒绝语义而非 500 或静默成功"
+      - "元数据编辑面（updateInstance）× 三档角色：告警管理员成功，只读运维被拒"
+      - "三档角色对本片全部读端点可见性不收窄，无权控件置灰并说明所需角色"
+      - "本片全部新端点均声明 x-required-role（B3 自动覆盖）"
+    pages: ["实例工作台/接入设置", "用户管理/用户列表"]
+    operations: [createInstance, updateInstance, updateInstanceCredential, enrollAgent, rotateAgentToken, revokeAgentToken, disableAgent, reenableAgent, deleteInstance, listUsers, createUser, updateUserRole, deactivateUser, resetUserPassword]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "一条覆盖两类写面，不拆两条：20 号 D6.2 的粒度取向 + D9 规定的「三种角色各跑一遍」本就是同一次执行（24 号 D6）；INV-3 的「写能力收窄」端到端面搭在本条执行上"
+  - id: AC-08-F2
+    slice: "08"
+    kind: F2
+    baseline: true
+    title: "空状态：本片无时序读取面"
+    layer: api
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: n-a
+    test_ref: null
+    owner_issue: 121
+    reason: "片⑧不产时序、无观测面。VERSION_UNSUPPORTED 是接入即拒（写操作的失败分类）不是空状态码，塞进 F2 会稀释「封闭 13 码 = 观测面不可用性」这个概念本身，故归 F3（24 号 D3）；空状态保护由 AC-08-F5 补回"
+  - id: AC-08-F3
+    slice: "08"
+    kind: F3
+    baseline: true
+    title: "创建即验三类分类原因：网络不通 / 认证失败 / 版本 <13，且三类都不落库"
+    layer: api
+    asserts:
+      - "停目标库容器或指向不存在的 host:port → 不可达类分类原因，非 500、非静默成功"
+      - "给错 username/password → 认证失败类分类原因，错误映射服从 13 号 D9 稳定映射"
+      - "对真实 postgres:12 实例接入 → 封闭码 VERSION_UNSUPPORTED，接入即拒"
+      - "三类请求返回后库里均不存在该实例行（「库里永远不存在从未连通过的实例」的唯一验收面）"
+      - "编辑同构重测：host/port/database 改动用库内既存凭据重测，失败保留原值原密文"
+    pages: ["实例列表", "实例工作台/接入设置"]
+    operations: [createInstance, testInstanceConnection, updateInstance, updateInstanceCredential]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "版本门用真实 postgres:12 容器（compose 独立 profile，不进默认启动集），不 mock 版本号——20 号 D8 明令；本条使 VERSION_UNSUPPORTED 有了唯一产生者，闭合 23 号 D2 在 AC-05-F2 里记的「无产生者」缺口（24 号 D4）"
+  - id: AC-08-F4
+    slice: "08"
+    kind: F4
+    baseline: true
+    title: "keyring 类故障是平台自身故障：不降格为 DB_UNREACHABLE、不计入 NO_DATA、绝不静默生成新密钥"
+    layer: api
+    asserts:
+      - "把 master-key-vN chmod 成错误权限（或让 current 悬空）后，该实例凭据读取被拒并诊断为平台自身故障"
+      - "该实例不产生 DB_UNREACHABLE 告警、不计入 NO_DATA（T14 硬约束）"
+      - "恢复权限并重启后 keyring 目录内文件数与版本号与故障前完全一致——平台绝不静默生成新密钥"
+    pages: []
+    operations: []
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "真实手段改文件权限，不注入错误、不 mock；第三条断言单列不与第一条合并——静默生成新密钥是无声的秘密丢失，前两条可以同时全绿（24 号 D5）；暴露面（平台健康四态 / journal / 诊断 API）归片⑨的 AC-09-*，本条只断故障事实产生且不污染"
+  - id: AC-08-F5
+    slice: "08"
+    kind: F5
+    baseline: true
+    title: "新接入实例在首个采集周期完成前落 NO_DATA，不是 0、不是空数组、不是 200 空对象"
+    layer: api
+    asserts:
+      - "创建即验通过后、首个采集周期完成前，观测面落 NO_DATA 或对应封闭码"
+      - "不渲染成 0、不返回空数组冒充有数据、不返回 200 空对象"
+    pages: ["实例列表", "实例工作台/总览"]
+    operations: [listInstancesHealth, getMetricSeries]
+    crosscut: [INV-1]
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "补回 AC-08-F2 记 n-a 让出的空状态保护，故升加深基线（24 号 D3）；全矩阵唯一覆盖「刚接入、还没有任何样本」这个时刻的条目——AC-05-F2 的 11 码逐码驱动跑在已有数据的实例上，跑不到这个窗口"
+  # ── 片09 · 平台可观测性
+  - id: AC-09-S1
+    slice: "09"
+    kind: S1
+    baseline: true
+    title: "平台健康成功路径：七事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
+    layer: api
+    asserts:
+      - "getPlatformHealth 返回总态 OK，七事实源齐全：服务端进程（版本+启动时间）、自带 PG、采集调度器、分区维护、证书、Agent 接入、磁盘水位"
+      - "快照含组装时间；事实层保留每源级别与细因"
+      - "结构化事件流中存在 60 秒汇总，字段形状符合约定"
+      - "秘密扫描全绿：无密码、密文、主密钥、Agent token、Authorization 头、DSN、原始 SQL、请求体"
+      - "快照随 60 秒节拍在内存重算，不写 metric_sample、不建平台运行事实表"
+    pages: []
+    operations: [getPlatformHealth, getSchedulerSummary, getPlatformVersion]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "journal 载体本身不在 acceptance 环境内验证，见 21 号 D5；本条断言结构化事件内容"
+  - id: AC-09-F1
+    slice: "09"
+    kind: F1
+    baseline: true
+    title: "权限拒绝：诊断 API 全部端点仅 PLATFORM_ADMIN，且不返回伪装的空数据"
+    layer: api
+    asserts:
+      - "只读运维、告警管理员访问全部诊断 operationId 一律得明确拒绝语义"
+      - "拒绝不得表现为 200 + 空快照（伪装空数据即红）"
+      - "B3 角色全覆盖守卫覆盖全部新端点"
+    pages: []
+    operations: [getPlatformHealth, getDiskWatermark, getSchedulerSummary, getPartitionMaintenance, getCertificateStatus, getKeyringStatus, getPlatformVersion]
+    crosscut: [INV-3]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-09-F2
+    slice: "09"
+    kind: F2
+    baseline: true
+    title: "空状态：本片不产出 Unavailability 13 码"
+    layer: api
+    asserts: []
+    pages: []
+    operations: []
+    crosscut: []
+    status: n-a
+    test_ref: null
+    owner_issue: 118
+    reason: "平台健康不复用 Unavailability 13 码（T14 非递归边界的直接后果：平台自身故障不得复用 NO_DATA 与目标侧空状态语义）。事实源取不到状态时投影平台四态的 UNKNOWN，不是 13 码。该 n-a 让出的保护由 AC-09-F6 补齐。"
+  - id: AC-09-F3
+    slice: "09"
+    kind: F3
+    baseline: true
+    title: "依赖事实源降级：采集池饱和 → DEGRADED + 细因计数，与数据库事故可区分"
+    layer: api
+    asserts:
+      - "以真实并发压力制造采集池饱和（真实手段，非 mock）"
+      - "快照中采集调度器源为 DEGRADED，细因含 pending / skipped_backpressure 等计数"
+      - "调度停转时为 FAILED"
+      - "该 DEGRADED 不写 reachable=false、不制造目标侧故障表象"
+    pages: []
+    operations: [getPlatformHealth, getSchedulerSummary]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "条目内容由 #118 定稿"
+  - id: AC-09-F4
+    slice: "09"
+    kind: F4
+    baseline: true
+    title: "平台库不可达：FAILED 快照 + 全站平台自身故障页 + 状态变化事件，且目标侧零污染"
+    layer: browser
+    asserts:
+      - "真停平台 PG 容器"
+      - "浏览器访问任意页面得到明确的「平台自身故障」页，绝不白屏、502 或一片「暂无数据」"
+      - "HTTP 层照常应答（09 D6 第 1 条）"
+      - "快照总态 FAILED，自带 PG 源为 FAILED"
+      - "结构化状态变化事件在故障发生时立即产出"
+      - "目标侧零新增告警实例、零 NO_DATA、metric_sample 零新增行（DB 层只读前后对比）"
+    pages: ["实例列表", "全局告警/当前告警"]
+    operations: [getPlatformHealth]
+    crosscut: [INV-4]
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "故障页是「用户看到什么」，按 D3 判据必须上浏览器；本条是片⑨与目标域彻底隔离的主判据"
+  - id: AC-09-F5
+    slice: "09"
+    kind: F5
+    baseline: true
+    title: "磁盘紧急拒写：拒写生效可证，且旧分区与 30 天保留承诺前后完全一致"
+    layer: db
+    asserts:
+      - "注入前取 DB 只读基线：分区清单、最旧分区、保留配置"
+      - "调低紧急水位阈值至当前使用率之下（部署期配置项，走与生产相同的判定代码路径）"
+      - "新样本写入被拒；该任务在片①任务状态中可见失败，细因 = 磁盘紧急水位"
+      - "完整性水位停摆，缺数以可见的采集失败呈现而非样本静默消失"
+      - "快照总态 FAILED，磁盘源 FAILED"
+      - "注入后再取对比：分区清单与最旧分区完全一致，保留配置未变（绝不自动删旧分区、绝不缩短保留期）"
+      - "控制面小体量写入（处置留痕、配置）不在拒写范围"
+      - "级别回落需低于阈值 2 个百分点（滞回），不因边界抖动翻动快照"
+    pages: []
+    operations: [getDiskWatermark, getPlatformHealth, listInstanceCollectionTasks]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "S1 拍板验收判据原文「磁盘紧急拒写可证且不删旧数据」；本组唯一需要「注入前取基线、注入后取对比」的条目，设为加深基线"
+  - id: AC-09-F6
+    slice: "09"
+    kind: F6
+    baseline: true
+    title: "看不见不得伪装成没问题：任一事实源取不到状态 → 该源 UNKNOWN 且总态绝不为 OK"
+    layer: api
+    asserts:
+      - "使任一事实源查不到状态（真实手段：断其依赖）"
+      - "该源级别为 UNKNOWN，绝不为 OK"
+      - "总态按归并序 FAILED > UNKNOWN > DEGRADED > OK 计算，结果绝不为 OK"
+      - "归并只决定总态，事实层保留每源级别与细因"
+    pages: []
+    operations: [getPlatformHealth]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "补 AC-09-F2 记 n-a 所让出的保护（21 号 D6），设为加深基线"
+  - id: AC-09-F7
+    slice: "09"
+    kind: F7
+    baseline: true
+    title: "证书过期：预警窗内 DEGRADED 附可行动指引，过期后 FAILED"
+    layer: api
+    asserts:
+      - "签一张 20 秒后过期的测试证书（真过期，不改预警窗口）"
+      - "进入预警窗后证书源为 DEGRADED，附可行动指引"
+      - "过期后证书源为 FAILED，总态按归并序为 FAILED"
+      - "证书有效期可经 getCertificateStatus 读出"
+    pages: []
+    operations: [getCertificateStatus, getPlatformHealth]
+    crosscut: []
+    status: pending
+    test_ref: null
+    owner_issue: 118
+    reason: "14 D6 四类故障注入的第四类，Q6 的七条里无归宿，补为加深基线"
+  # ── 横切组（独立计分；每条必须同时有 A 栏表驱动单测与端到端断言）
+  # 挂载形态（24 号 D7）：横切条目自带 asserts 与 test_ref，达标由它自己证明，与承载执行是否绿无关；
+  # rides_on 显式记账它搭在哪次执行上。rides_on 写在横切条目（执行编排），
+  # crosscut 写在片条目（覆盖维，不计分），两者不是互为反向索引。
+  - id: INV-1
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "告警状态五档，压制是正交轴"
+    unit_test: A1        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: api
+    rides_on: [AC-02-S1, AC-02-F3, AC-07-S3]
+    asserts:
+      - "状态字段取值封闭于五档（OK / PENDING / FIRING / NO_DATA / RECOVERED），全程不出现第六个字面量"
+      - "确认 / 维护窗口 / 已暂停三个标记与状态字段正交：标记变化不改变状态"
+      - "状态迁移不清除已置上的正交标记"
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "端到端面搭在片②的四态迁移、转 NO_DATA 与片⑦的冻结三次执行上（24 号 D8）；引用不计入承载条目的达标，本条自带断言集独立计分"
+  - id: INV-2
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "实例健康 = 未恢复告警最坏归并 + 已暂停 override，单一来源"
+    unit_test: A5        # A/B 栏登记表中的对应项（docs/design/10 §3.2）
+    layer: api
+    rides_on: [AC-05-S5]
+    asserts:
+      - "「未恢复告警最坏级别 × 已暂停」四种组合逐一断出的健康值全部正确"
+      - "不存在第二个端点返回与之矛盾的健康值（单一来源）"
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "纠正 23 号 §14 给本票的提示（24 号 D8）：INV-2 是健康归并 override，不是「不补 0」（不补 0 是 T2 口径，不在四不变式内），AC-06-F2 断的是 5 秒空隙保持空隙，与本条无语义交集、搭不上；天然承载面是 23 号自设的 AC-05-S5，其现场（真规则触发 / 真忽略 / 真维护窗口 / 真暂停）恰是本条四种组合所需的全部输入。按纪律 23 号一字不动，纠正只落在 24 号与本 reason"
+  - id: INV-3
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "三档全局角色：可见性不收窄、写能力收窄、凭据永不回显"
+    unit_test: A10       # 24 号 D10 新增：三档角色 × 页面 × 写操作的可见性/写能力判定表
+    layer: api
+    rides_on: [AC-08-S1, AC-05-F1, AC-08-F1]
+    asserts:
+      - "可见性不收窄：三档角色所见实例集合与字段完全一致（搭 AC-05-F1 现场）"
+      - "写能力收窄：接触秘密的动作仅平台管理员成功（搭 AC-08-F1 现场）"
+      - "凭据永不回显：创建实例 201 / 实例详情 / 凭据更新三处响应体全文正则扫描，命中口令明文、密文 base64、password_key_version、完整 DSN 即红"
+      - "一次性回显只出现一次：同一 token / 初始口令第二次读取端点拿不到，只能换发新的"
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "unit_test 由骨架预填的 B7 改为新增 A10（24 号 D10）——B 栏是结构守卫，扫 schema 只证明「声明齐全」，一份把所有端点都声明成 viewer 的 spec 能让 B3 全绿，顶不了表驱动判定；B7 退回结构守卫侧的分工：B7 管「schema 里不许声明」（含本片例外从创建实例迁至登记/轮换，先红后绿），本条管「真实响应体里确实没有」。用全文正则而非字段白名单，因为要防的是意料之外的字段（24 号 D12）"
+  - id: INV-4
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "三条内置采集状态规则不可删不可停，严重级别下限 warning"
+    unit_test: A11       # 24 号 D10 新增：三条内置规则的受限语义判定表（存在 / 启用 / severity 下限）
+    layer: api
+    rides_on: [AC-02-S2]
+    asserts:
+      - "三条规则装机即存在，删除请求被 4xx + 封闭错误码拒绝"
+      - "停用请求被拒，三条规则启用态不可变更"
+      - "severity 改 info 被拒；warning / critical 之间可自由改；阈值与通知策略可改"
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "unit_test 由骨架预填的 A9（枚举码 golden）改为新增 A11（24 号 D10）；本条断受限语义，BUILTIN-1..3 断「真的会点着」——两者不重复，见 24 号 D9"
+  - id: BUILTIN-1
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "内置规则「数据库不可达」（pg.availability.reachable）被真实故障打到 FIRING"
+    unit_test: A11       # 与 INV-4 共用受限语义判定表；端到端面不同（24 号 D10）
+    layer: api
+    rides_on: [AC-01-F5]
+    asserts:
+      - "停目标库容器后，该内置规则真实进入 FIRING（不是只躺在规则表里）"
+      - "默认严重级别 critical，实例健康随之按 INV-2 归并"
+      - "目标库恢复后按滞回语义恢复，不残留未恢复告警"
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "按三条规则切而非按受限语义切（24 号 D9）：受限语义已由 INV-4 覆盖，重复切会让横切组两条断同一件事；「规则在表里但从来没被评估过」是最典型的改坏了没人看得出来，INV-4 全绿与它从未触发可以同时成立"
+  - id: BUILTIN-2
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "内置规则「Agent 离线」（agent.status）被真实故障打到 FIRING"
+    unit_test: A11       # 与 INV-4 共用受限语义判定表；端到端面不同（24 号 D10）
+    layer: api
+    rides_on: []
+    asserts:
+      - "kill agent 真进程后，该内置规则真实进入 FIRING"
+      - "默认严重级别 critical"
+      - "Agent 停用（非吊销）时该规则结构性不适用，不产生离线告警（承 AC-08-S4 的四态语义）"
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "现场与片⑦的 Agent 离线执行可复用，但吊销 / 停用两态的区分只有本条与 AC-08-S4 覆盖，故 rides_on 留空、独立执行一次（24 号 D9）"
+  - id: BUILTIN-3
+    slice: crosscut
+    kind: crosscut
+    baseline: true
+    title: "内置规则「数据过期」（collector.last_success_time）被真实故障打到 FIRING"
+    unit_test: A11       # 与 INV-4 共用受限语义判定表；端到端面不同（24 号 D10）
+    layer: api
+    rides_on: []
+    asserts:
+      - "停采集使新鲜度超阈值后，该内置规则真实进入 FIRING"
+      - "默认严重级别 warning（下限即默认，改 info 被拒由 INV-4 覆盖）"
+      - "采集恢复后按滞回语义恢复"
+    status: pending
+    test_ref: null
+    owner_issue: 121
+    reason: "独立执行一次；采集新鲜度阈值参数化到秒级是本条跑得完的前提，是 24 号 D15 外溢到实现的硬要求之一 —— 不参数化就只能直写历史样本，落进 D4 白名单，而四组定稿后 exceptions 全程为 []"
+
+  # ── 恢复门横切组 REC-1..10（26 号 D1）────────────────────────────────────
+  # 第二个横切组，独立计分，硬底 78 → 88、条目 81 → 91。
+  # 与 INV / BUILTIN 的差别：REC 组一律独立执行、rides_on 恒为 []（26 号 D8），
+  # 因为它的注入手段（杀进程、断库、灌 dump、停维护循环）会改变现场。
+  # REC-3 / REC-4 对片条目的依赖是执行序依赖，用新字段 after 记账，不塞进 rides_on。
+  # 执行序（26 号 D7）：AC-08-S1 最先 → 其余片条目 → REC-* → AC-08-S7 最末。
+  - id: REC-1
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "server 重启恢复：采集续采不补跑、未决告警不失忆、Agent 会话免重接入"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "重启前经业务 API 造出：进行中的采集、一条未恢复告警实例、一个已接入的 agent"
+      - "真杀 server 进程并重启（真实手段，不发信号模拟）"
+      - "调度器按最新意图续采：重启窗口不补跑、不造占位样本"
+      - "未恢复告警实例 ID 与首次触发时间保持，连续触发计数不重置，不谎报 RECOVERED"
+      - "Agent token 仍有效、无需重新接入；重启窗口的缺数按 T14 不进 NO_DATA"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 D7「库是自描述的、无外部隐藏状态」在进程侧的唯一验收面。连接池刻意不进断言集（26 号 D5.1）——纯进程内实现细节，重启后必然重建，外部无可观测语义，不是漏了"
+  - id: REC-2
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "agent 重启恢复：缺数是真缺数，按缺桶呈现不补 0、不进 NO_DATA"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "kill agent 真进程，等待超过一个采集周期后重启"
+      - "重启后自动恢复上报，无需重新接入"
+      - "重启窗口在图表上按缺桶呈现，绝不补 0（承 04 不补 0）"
+      - "该窗口不计入 NO_DATA：agent 侧中断是采集侧事实，不是目标库缺数"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "与 REC-1 分开而不合并（26 号 D5.2）：合成一条会让「谁重启导致的缺数」这个区分永远测不出来，而那正是 T14 要分开的两个域"
+  - id: REC-3
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "备份恢复链：pg_dump → 真空 PG restore → 起 server → 直接可用"
+    layer: api
+    rides_on: []
+    after: [all-slice-entries]
+    asserts:
+      - "语义覆盖门槛（非行数门槛，26 号 D4.2）：至少一个实例含加密凭据、一条含版本快照的规则、一条未恢复告警实例 + 其 AlertEvent、样本跨 ≥2 个分区"
+      - "数据全部由片条目跑完后自然存在，不额外造（exceptions 保持 []）"
+      - "灌进 compose 独立 profile 的 restore-target 空 PG 容器，不是平台库同实例的另一个 database"
+      - "server 配置指向新库重启后：配置 / 规则 / 未恢复告警 / 加密凭据 / 样本全经业务 API 可读"
+      - "带同一份 keyring 时密文可解，采集继续出点（keyring 正面，反面见 REC-4）"
+      - "DB 层只读对账：分区子表随 dump 一起还原，外键级联完整"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 §8 D7 三条承诺（库自描述、标准工具可备份、恢复后直接可用）的唯一端到端验收面。靶库必须是真空 PG 而非同实例 createdb（26 号 D7）——共用 initdb 参数 / locale / 扩展 / 角色会掩盖「自描述」最容易翻车的那部分"
+  - id: REC-4
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "keyring 与库分离：换一份或缺失必须明确失败，绝不生成新密钥"
+    layer: api
+    rides_on: []
+    after: [REC-3]
+    asserts:
+      - "在 REC-3 的恢复现场上换一份不匹配的 keyring：起 HTTP、健康 keyring 子系统 FAILED、解密类操作全部失败"
+      - "keyring 目录整个缺失时同样不拒绝启动（承 25 号 §5.3，不设快速失败例外）"
+      - "两种情形下 keyring 目录内均不出现任何新生成的 master-key-v*：绝不静默生成"
+      - "失败语义归平台自身故障，不出现 DB_UNREACHABLE / NO_DATA（承 T14）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "13 号 D7/D8「备份不含 keyring、遗失即不可恢复、无后门」在恢复链上的唯一验收面。与 AC-08-F4 按场景来源划界（26 号 D4.4）：AC-08-F4 管运行中的 keyring 故障（权限错、文件被改，库与密钥同机），本条管恢复链上的密钥—库分离（库来自备份、keyring 来自另一台机器）；AC-08-F4 一字不动"
+  - id: REC-5
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "迁移并发：两 server 进程同时冷启动，一个应用一个等锁，终态版本一致无部分应用"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "空库上同时拉起两个 server 进程（真实手段，不串行化）"
+      - "goose session locker 生效：一个进程应用迁移，另一个等待而非并发 CREATE TABLE"
+      - "DB 只读对账 goose 版本表：终态版本唯一、无重复行、无部分应用的中间态"
+      - "锁等待超时参数化到秒级；超时后按迁移执行失败处理（非零退出，见 REC-7）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "迁移并发语义的唯一验收面。一手事实：goose v3.24.3 已提供 WithSessionLocker，而 migrations/migrate.go 当前未启用，是裸并发（26 号 D2.1）；两份迁移均无 NO TRANSACTION，故部分应用只可能发生在多笔之间"
+  - id: REC-6
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "平台库不可达启动：HTTP 起、健康 FAILED、业务端点 503、库回来后补跑迁移自愈"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "停平台库容器后启动 server（真实手段）：进程不退出、HTTP 端口可达"
+      - "健康端点如实报 FAILED，平台自身故障可见"
+      - "业务端点一律 503 且响应体指名平台自身故障：绝不返回 13 码中任何一个（26 号 D3.3）"
+      - "本条不断「可登录」——登录依赖平台库，25 号 §5.2 那句说的是 keyring 坏而库好的场景"
+      - "平台库恢复后：后台自动重连并补跑迁移，业务面自愈，无需人工重启进程"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 §6 D5 第 1 条「不许把平台挂了渲染成没有数据」的唯一验收面。13 码是目标库的空状态词汇表，用它描述平台故障即两域混淆——那正是全矩阵九条 F4 存在的理由"
+  - id: REC-7
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "迁移执行失败：非零退出、拒绝对外服务、日志指名失败笔次"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "在库中制造与二进制预期不符的 schema 状态后启动 server"
+      - "进程非零退出，不监听 HTTP：绝不带着半个 schema 对外提供服务"
+      - "日志指名失败的迁移笔次与错误原文"
+      - "绝不降级成「起 HTTP + FAILED + 业务 503 继续运行」（26 号 D13 否决记录）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "18 号 §8 D7「绝不带着半个 schema 对外提供服务」的唯一验收面。与 REC-6 按失败性质两分而非按启动阶段（26 号 D3.2）：连不上库不拒启动，连上了但迁移执行失败拒启动"
+  - id: REC-8
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "分区生命周期肯定面：预建覆盖、DROP 非 DELETE、维护失败进健康事实源"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "分区跨度沿用 21 号 D7 参数化取值（1min）"
+      - "启动后预建覆盖面 = 当前 + 7 个跨度（04 D6 机制 1，幂等 CREATE TABLE IF NOT EXISTS）"
+      - "过期分区被 DROP 而不是 DELETE：对账 pg_class，子表整体消失而非留下空表（这是唯一能区分两者的观测点）"
+      - "维护循环失败时平台健康出现「分区维护」事实源，且 journal 有结构化 error（04 D6 机制 4 + 14 号 §2）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "04 §6 D6 机制 1/2/4 的唯一验收面。否定面（分区清单与最旧分区前后一致、绝不自动删旧分区、绝不缩短保留期）已由 AC-09-F5 断死，本条刻意不重复（26 号 D6）"
+  - id: REC-9
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "分区兜底：写入撞上无匹配分区 → 同步触发维护 → 重试一次成功"
+    layer: db
+    rides_on: []
+    after: []
+    asserts:
+      - "把分区维护间隔配成极大值使循环事实上停摆（部署期配置项，走与生产相同的判定代码路径）"
+      - "让时间走过预建边界，使真实采集写入撞上无匹配分区"
+      - "CopyFrom 失败被识别为「无匹配分区」→ 同步触发一次分区维护 → 重试一次成功"
+      - "该次采集最终成功出点，不表现为静默丢样本"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "04 §6 D6 机制 3 自称「凌晨炸的最后一道防线」，且是无人会手工验的那一类，故不降级为可 pending 的普通加深（26 号 D1）。手段定性为参数化而非模拟（26 号 D6.1）：否决 test-only 开关（往生产代码种测试分支）与 DB 层手工 DROP 未来分区（D4 禁止 DB 层写）"
+  - id: REC-10
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "进程并发：第二个 server 实例拿不到平台库 advisory lock，直接拒启动"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "已有 server 在跑时启动第二个实例：立即非零退出，不等待"
+      - "错误信息指名「已有 server 实例在运行」，与「正在迁移」可区分"
+      - "第一个实例不受影响，采集与 HTTP 面全程正常"
+      - "三把锁互相独立可证：rotate 锁 / 迁移锁 / 进程锁 ID 不同、行为不同（26 号 D2.3）"
+    status: pending
+    test_ref: null
+    owner_issue: 113
+    reason: "双起 server 的后果（两套采集调度器、两套分区维护循环、两套通知发送）无其他拦截点；是 25 号 D5「轮换时忘了停 server」那把锁的对称扩展。否决三把锁合成一把——会让「正在迁移」与「已经在跑」退化成同一句错误信息"
+  - id: REC-11
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "前置校验硬门反面：平台库不合格 → 非零退出、日志指名具体项"
+    layer: db
+    rides_on: []
+    after: [REC-10]
+    asserts:
+      - "指向非 17 平台库（compose 非 17 profile）→ server 非零退出，日志指名「平台库主版本不是 17」"
+      - "指向 schema 内预置了非平台对象的库 → 非零退出，日志指名该项（拦「配置指错库」）"
+      - "两种情形下均未创建任何平台表、未写入 goose 版本表——不带着不合格的库对外服务"
+      - "无任何配置项或命令行开关可跳过该校验（27 号 D9）"
+    status: pending
+    test_ref: null
+    owner_issue: 116
+    reason: "27 号 D1 钉死 PG17 与 D3.1 硬门清单的唯一验收面。不断这条则硬门与建议无法区分，而钉死 17 的全部理由（sqlc 解析器固定 PG17，make gen 的护栏才为真）当场落空。schema 洁净那条断的是「配置指错到客户业务库」，比版本更能救命。与 REC-6（库不可达）、REC-7（迁移执行失败）判据不同、不重叠"
+  - id: REC-12
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "前置校验告警档正面：不合规但可用 → 起得来、DEGRADED、事件含该项"
+    layer: api
+    rides_on: []
+    after: [REC-11]
+    asserts:
+      - "平台库 locale 非 C/POSIX 或同实例存在其他非系统 database → server 正常启动"
+      - "健康为 DEGRADED（非 FAILED、非 OK），平台事件中含该具体项，绝不静默"
+      - "业务端点全部可用，不返回 503、不返回 13 码"
+    status: pending
+    test_ref: null
+    owner_issue: 116
+    reason: "27 号 D3.2 的唯一验收面，守的是反向失效——告警档悄悄升级成硬门同样是产品事故（客户的库跑得好好的却起不来），而这类回归没有任何其他拦截点。locale 只影响 instance.name 的展示排序，同实例多库是 D2 承诺面与断言面之差额，两者都不构成正确性问题"
+  - id: REC-13
+    slice: crosscut
+    kind: rec
+    baseline: true
+    title: "自愈路径上前置校验失败：不退出进程、FAILED 指名项、退避重试"
+    layer: api
+    rides_on: []
+    after: [REC-12]
+    asserts:
+      - "复用 REC-6 现场：库不可达启动 → HTTP 起、健康 FAILED、业务端点 503"
+      - "库回来后（换成一个不合格的库）自愈路径上前置校验失败 → 进程不退出"
+      - "健康保持 FAILED 并指名具体校验项，平台事件记录该次失败"
+      - "退避重试而非忙等；换回合格的库后自愈成功、补跑迁移、健康转 OK"
+    status: pending
+    test_ref: null
+    owner_issue: 116
+    reason: "27 号 D3.4 那道缝的唯一验收面：26 号 D5 的后台自愈路径上进程已在对外 503，无处可「拒启动」。不定死这一格，实现只有两种坏收场——自愈路径跳过校验（硬门半途失效）或调 os.Exit（杀掉一个正在服务的进程）。REC-11 断「必须退出」、本条断「必须不退出」，互斥，合并会让断言互相打架，而这恰是实现最容易写错的地方"
+  # ── 横切组三 · 生产安全边界（#112，29 号 D8）
+  - id: SEC-1
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "安全头六项无条件输出，且 /api/* 与静态资源两条 handler 链都发"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "对 /api/v1/* 任一端点断六项头齐全，取值逐字对齐 B13 golden"
+      - "对静态资源（/、/assets/*）断同一组头齐全且取值一致"
+      - "对 Agent 上报端点同样输出（无条件 = 不按客户端类型分叉）"
+      - "HSTS 取值恰为 max-age=31536000：不含 preload、不含 includeSubDomains"
+      - "CSP 的 script-src 不含 'unsafe-inline' / 'unsafe-eval'"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D1.3：现状 cmd/monitor-server/main.go 按 /api/ 前缀分叉成两条 handler 链，只在一条上挂中间件是最典型的漏法且症状极隐蔽（页面能开、接口能通、只扫 API 报绿）。与 B13 分工：B13 断取值逐字（防手滑删行照绿），本条断真的发出来了且两条链都发"
+  - id: SEC-2
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "TLS 下限 1.3：1.2 握手被拒、1.3 通过，自签证书开箱可用"
+    layer: api
+    rides_on: []
+    after: []
+    asserts:
+      - "以 MaxVersion=TLS1.2 的客户端握手：被拒绝"
+      - "以 TLS1.3 客户端握手：成功，且能完成一次业务 API 调用"
+      - "首次启动自动生成的自签证书直接可用，全程钉扎 CA 指纹、无 -k（承 19 号）"
+      - "不对密码套件作任何断言（29 号 D2：不列举即不承诺）"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D2。现状 main.go 的 MinVersion=TLS12 是 Go 默认值不是决策；交付目标 linux/amd64+arm64、客户端只有现代浏览器与我方 agent，无需迁就老客户端。刻意不断套件——断了就等于承诺一份会随 Go 版本过时的清单"
+  - id: SEC-3
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "证书已过期：不拒启动，tls 子系统 DEGRADED 且平台事件显式"
+    layer: api
+    rides_on: []
+    after: [SEC-1, SEC-2]
+    asserts:
+      - "以 fixtures 中已过期的证书/私钥启动 server：进程不退出、HTTP 面可用"
+      - "健康快照中 tls 子系统 = DEGRADED（第九个子系统，29 号 D3）"
+      - "平台事件含一条指名「证书已过期」的记录，绝不静默"
+      - "tls 子系统不存在 FAILED 取值：整机健康不因证书过期被最坏归并判死"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D3。与 25 号 D4 同构——证书过期时服务本身完全健康，拒启动会把计划内的换证逾期直接升级成「监控平台整个看不见」，而看不见的第一个后果就是没人知道证书到期了。手段是真放一张过期证书（客户自备证书路径本就支持），不加 test-only 开关、不新造配置项（承 26 号 D9）。与 AC-09-F7 同注入手段、两个断言点，不合并：本条断平台自身健康事实源如实降级，AC-09-F7 断它不污染目标库告警与 NO_DATA"
+  - id: SEC-4
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "证书临近到期（<30 天）：DEGRADED 预警，且与已过期状态可区分"
+    layer: api
+    rides_on: []
+    after: [SEC-3]
+    asserts:
+      - "以 fixtures 中 20 天后到期的证书启动：进程正常、HTTP 面可用"
+      - "tls 子系统 = DEGRADED，事件内容指名「剩余有效期不足 30 天」并带剩余天数"
+      - "该事件与 SEC-3 的「已过期」事件内容可区分，不是同一句话"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D3。预警与已过期同为 DEGRADED，若事件内容不可区分则预警等于没有——运维看到 DEGRADED 却不知道还剩几天。与 SEC-3 分开而不合并：合并后「还有 20 天」和「已经过期」会退化成同一条断言，而这两种处境的动作完全不同"
+  - id: SEC-5
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "会话过期两条腿：绝对有效期与空闲有效期（TTL 参数化 90s / 30s）"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "session_absolute_ttl=90s 时：持续活动的会话在 90s 后仍被拒（绝对上限不被活动续期）"
+      - "session_idle_ttl=30s 时：静默 30s 后的会话被拒，静默期内每 10s 请求一次则不过期"
+      - "过期会话的请求返回鉴权失败，不返回 13 码、不返回业务数据"
+      - "两个 TTL 均为部署期配置项（29 号 D4.2），非编译期常量"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D4.2。单轮 ≤10 分钟（21 号 D7）下 12h/2h 不可直接验，参数化不是模拟——调小后跑的是同一段代码，做法同 22 号对 repeat_interval 的处置。不可配就等于「过期」这条腿永远测不到，因此 TTL 可配是外溢实现硬要求而非实现自由"
+  - id: SEC-6
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "会话即时失效三面：登出、用户被停用、口令重置吊销其它会话"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "登出后原 cookie 立即失效（不等 TTL）"
+      - "用户被停用后其全部在用会话立即失效（17 号 D2 的硬要求）"
+      - "口令自改或被管理员重置后，该用户其它会话全部失效、当前会话可继续"
+      - "并发会话不受限制：同一用户两个会话可同时存在并各自工作"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D4.1/D4.2。这三面正是「服务端会话表而非无状态 JWT」这条决策的唯一验收面——JWT 做不到即时失效除非再加吊销表。并发不限制一并断死：限制并发会在双人值班或一人两处盯屏时把人锁在门外，而这是监控平台"
+  - id: SEC-7
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "cookie 四属性齐全，且响应体全文无会话令牌"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "登录响应的 Set-Cookie 使用 __Host- 前缀"
+      - "含 HttpOnly、Secure、SameSite=Strict 三项属性"
+      - "登录及后续任一响应的 body 全文正则扫描：不含会话令牌值"
+      - "会话令牌不出现在 URL、查询参数或任何自定义响应头中"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D4.2/D4.3。全文正则而非字段白名单，防的是意料之外的字段（同 24 号 D11「凭据永不回显」的第三层做法）。__Host- 前缀强制 Secure + Path=/ + 无 Domain，正好匹配单 host 部署；SameSite=Strict 是「不引入 CSRF token」那条推理的前提之一，它一旦松动本条即刻变红"
+  - id: SEC-8
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "审计可归因端到端三项：登录失败 / 用户停用 / 凭据更新"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "登录失败留下事件，主体为尝试的用户名；事件全文不含口令任何形式"
+      - "停用用户留下带 actor 的记录；被守卫拒绝的停用尝试同样留痕"
+      - "凭据更新留下带 actor 的记录，且记录中不含凭据明文（承 13 号）"
+      - "三项记录均可被全部登录用户只读检索（29 号 D5.1）"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D5.2。十一项登记表的完整性由 A12 表驱动单测承担——「有没有漏登记一项」是表驱动判定不是执行判定，端到端逐项跑十一次既贵又证明不了第十二项被忘了。这三项取三种最容易漏的形状：登录失败无 actor 主体（易被实现成匿名丢弃）、用户停用有守卫（易在拒绝路径上漏留痕）、凭据更新接触秘密（易连带把秘密写进留痕）"
+  - id: SEC-9
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "server 进程以非 root 专用系统用户运行"
+    layer: api
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "运行中的 server 进程 uid ≠ 0"
+      - "凭据目录归该用户所有且为 0600 / 0700（承 25 号 D3）"
+      - "该用户对 /etc/dbs-monitor 之外无写权限"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D6，本票在最小权限上出的唯一一条——平台库权限归 #116（两票同写就是第二份真相），目标库权限已由 00 号 M1 冻结、片①能力四态覆盖。环境要求：compose 中 server 必须以非 root 跑，否则本条恒绿，是一条自欺条目"
+  - id: SEC-10
+    slice: crosscut
+    kind: sec
+    baseline: true
+    title: "CSP 不破功能：关键路径浏览器 console 无 CSP violation"
+    layer: browser
+    rides_on: []
+    after: [SEC-1]
+    asserts:
+      - "走一条关键路径（登录 → 实例列表 → 实例工作台图表）"
+      - "全程 console 无任何 CSP violation 报告"
+      - "AntD 组件样式正常渲染、ECharts 图表正常出图"
+    status: pending
+    test_ref: null
+    owner_issue: 112
+    reason: "29 号 D8.1，本组唯一浏览器条目。CSP 在真实世界的失败模式是砸自己的页面而不是被绕过——style-src 放行 'unsafe-inline' 这个取舍（29 号 D1.1，AntD 6.5.3 cssinjs 运行时注入 style）到底够不够，只有这一条能证明。img-src 带 data: 同样只在这里被真实使用（ECharts 导出）"

@@ -1,29 +1,11 @@
-x-monitored: &monitored
-  profiles: [matrix]
-  command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
-  environment:
-    POSTGRES_DB: monitored
-    POSTGRES_USER: monitored
-    POSTGRES_PASSWORD: monitored
-  volumes:
-    - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
-  healthcheck:
-    test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
-    interval: 1s
-    timeout: 3s
-    retries: 30
-
 services:
   postgres:
     image: postgres:17
-    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_DB: dbs_monitor
       POSTGRES_USER: dbs_monitor
       POSTGRES_PASSWORD: dbs_monitor
       POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
-    volumes:
-      - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
     ports:
       - "55432:5432"
     healthcheck:
@@ -33,50 +15,49 @@ services:
       retries: 30
 
   monitored-pg13:
-    <<: *monitored
     image: postgres:13
+    profiles: [matrix]
+    environment: &monitored-env
+      POSTGRES_DB: monitored
+      POSTGRES_USER: monitored
+      POSTGRES_PASSWORD: monitored
     ports: ["55433:5432"]
   monitored-pg14:
-    <<: *monitored
     image: postgres:14
+    profiles: [matrix]
+    environment: *monitored-env
     ports: ["55434:5432"]
   monitored-pg15:
-    <<: *monitored
     image: postgres:15
+    profiles: [matrix]
+    environment: *monitored-env
     ports: ["55435:5432"]
   monitored-pg16:
-    <<: *monitored
     image: postgres:16
+    profiles: [matrix]
+    environment: *monitored-env
     ports: ["55436:5432"]
   monitored-pg17:
-    <<: *monitored
     image: postgres:17
+    profiles: [matrix]
+    environment: *monitored-env
     ports: ["55437:5432"]
 
-  monitored-pg17-replica:
-    <<: *monitored
+  # 备份恢复链（REC-3 / REC-4）的 restore 靶库：必须是真空 PG，不是平台库同实例的
+  # 另一个 database —— 共用 initdb 参数 / locale / 扩展 / 角色会掩盖「库是自描述的」
+  # 最容易翻车的那部分。见 docs/design/26-data-and-recovery-gate.md D7。
+  restore-target:
     image: postgres:17
+    profiles: [restore]
     environment:
-      PGPASSWORD: monitored
-    ports: ["55438:5432"]
-    depends_on:
-      monitored-pg17:
-        condition: service_healthy
-    entrypoint:
-      - bash
-      - -ec
-      - |
-        if [ ! -s "$$PGDATA/PG_VERSION" ]; then
-          until pg_isready -h monitored-pg17 -U monitored -d monitored; do sleep 1; done
-          gosu postgres pg_basebackup -h monitored-pg17 -D "$$PGDATA" -U monitored -Fp -Xs -R
-        fi
-        exec gosu postgres postgres
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    ports:
+      - "55438:5432"
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          'test "$$(psql -U monitored -d monitored -tAc ''SELECT status FROM pg_stat_wal_receiver'')" = streaming',
-        ]
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
       interval: 1s
       timeout: 3s
       retries: 30

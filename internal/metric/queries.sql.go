@@ -235,10 +235,11 @@ func (q *Queries) SetAgentMetricsEnabled(ctx context.Context, arg SetAgentMetric
 }
 
 const setTaskInterval = `-- name: SetTaskInterval :exec
-INSERT INTO collection_task_config (instance_id, task_id, interval_seconds, updated_at)
-VALUES ($1, $2, $3, now())
+INSERT INTO collection_task_config (instance_id, task_id, interval_seconds, updated_by, updated_at)
+VALUES ($1, $2, $3, $4, now())
 ON CONFLICT (instance_id, task_id)
 DO UPDATE SET interval_seconds = EXCLUDED.interval_seconds,
+              updated_by = EXCLUDED.updated_by,
               updated_at = EXCLUDED.updated_at
 `
 
@@ -246,10 +247,16 @@ type SetTaskIntervalParams struct {
 	InstanceID      pgtype.UUID
 	TaskID          string
 	IntervalSeconds int32
+	UpdatedBy       pgtype.UUID
 }
 
 func (q *Queries) SetTaskInterval(ctx context.Context, arg SetTaskIntervalParams) error {
-	_, err := q.db.Exec(ctx, setTaskInterval, arg.InstanceID, arg.TaskID, arg.IntervalSeconds)
+	_, err := q.db.Exec(ctx, setTaskInterval,
+		arg.InstanceID,
+		arg.TaskID,
+		arg.IntervalSeconds,
+		arg.UpdatedBy,
+	)
 	return err
 }
 

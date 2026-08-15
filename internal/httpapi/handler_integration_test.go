@@ -461,6 +461,79 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("persisted interval = %d, want 7", persistedInterval)
 	}
 
+	tasksURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/tasks", server.URL, createBody.Instance.ID)
+	tasks := getResponse(t, client, tasksURL)
+	if tasks.StatusCode != http.StatusOK {
+		t.Fatalf("collection task states status = %d, want 200", tasks.StatusCode)
+	}
+	var taskStates []struct {
+		TaskID          string `json:"task_id"`
+		IntervalSeconds int    `json:"interval_seconds"`
+	}
+	if err := json.NewDecoder(tasks.Body).Decode(&taskStates); err != nil {
+		t.Fatalf("decode collection task states: %v", err)
+	}
+	tasks.Body.Close()
+	if len(taskStates) != 8 {
+		t.Fatalf("collection task state count = %d, want 8", len(taskStates))
+	}
+
+	readOnlyToken := "read-only-token"
+	readOnlyHash := sha256.Sum256([]byte(readOnlyToken))
+	readOnlyID := uuid.New()
+	if _, err := pool.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role) VALUES ($1, 'reader', '\x00', 'READONLY')`, readOnlyID); err != nil {
+		t.Fatalf("create read-only user: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO user_session (token_hash, user_id, expires_at) VALUES ($1, $2, now() + interval '1 hour')`, readOnlyHash[:], readOnlyID); err != nil {
+		t.Fatalf("create read-only session: %v", err)
+	}
+	readOnlyJar, _ := cookiejar.New(nil)
+	readOnlyClient := *client
+	readOnlyClient.Jar = readOnlyJar
+	serverURL, _ := url.Parse(server.URL)
+	readOnlyJar.SetCookies(serverURL, []*http.Cookie{{Name: "dbs_monitor_session", Value: readOnlyToken, Path: "/"}})
+	forbidden := requestJSON(t, &readOnlyClient, http.MethodPut, tasksURL+"/pg.stat_activity", map[string]any{"interval_seconds": 7}, "")
+	if forbidden.StatusCode != http.StatusForbidden {
+		t.Fatalf("read-only interval update status = %d, want 403", forbidden.StatusCode)
+	}
+	forbidden.Body.Close()
+
+	belowFloor := requestJSON(t, client, http.MethodPut, tasksURL+"/pg.stat_activity", map[string]any{"interval_seconds": 4}, "")
+	if belowFloor.StatusCode != http.StatusBadRequest {
+		t.Fatalf("4-second interval update status = %d, want 400", belowFloor.StatusCode)
+	}
+	belowFloor.Body.Close()
+	intervalUpdateStarted := time.Now().UTC()
+	updatedInterval := requestJSON(t, client, http.MethodPut, tasksURL+"/pg.stat_activity", map[string]any{"interval_seconds": 7}, "")
+	if updatedInterval.StatusCode != http.StatusOK {
+		t.Fatalf("7-second interval update status = %d, want 200", updatedInterval.StatusCode)
+	}
+	var updatedTask struct {
+		IntervalSeconds int `json:"interval_seconds"`
+	}
+	if err := json.NewDecoder(updatedInterval.Body).Decode(&updatedTask); err != nil {
+		t.Fatalf("decode updated collection interval: %v", err)
+	}
+	updatedInterval.Body.Close()
+	if updatedTask.IntervalSeconds != 7 {
+		t.Fatalf("updated interval = %d, want 7", updatedTask.IntervalSeconds)
+	}
+	var persistedInterval int
+	var updatedBy, adminID uuid.UUID
+	var updatedAt time.Time
+	if err := pool.QueryRow(ctx, "SELECT id FROM app_user WHERE username = 'admin'").Scan(&adminID); err != nil {
+		t.Fatalf("read admin id: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT interval_seconds, updated_by, updated_at FROM collection_task_config WHERE instance_id = $1 AND task_id = 'pg.stat_activity'`, createBody.Instance.ID).Scan(&persistedInterval, &updatedBy, &updatedAt); err != nil {
+		t.Fatalf("read persisted collection interval: %v", err)
+	}
+	if persistedInterval != 7 {
+		t.Fatalf("persisted interval = %d, want 7", persistedInterval)
+	}
+	if updatedBy != adminID || updatedAt.Before(intervalUpdateStarted) {
+		t.Fatalf("interval attribution = actor %s at %s, want actor %s at or after %s", updatedBy, updatedAt, adminID, intervalUpdateStarted)
+	}
+
 	seriesURL := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.total&from=%s&to=%s&step=raw",
 		server.URL, instanceID,
 		url.QueryEscape(time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)),
