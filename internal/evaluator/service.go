@@ -17,18 +17,18 @@ import (
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
-const defaultMaxTriggerSnapshotSessions = 100
+const defaultTriggerSnapshotSessionLimit = 100
 
 type Config struct {
-	MaxSessions int
+	TriggerSnapshotSessionLimit int
 }
 
 func DefaultConfig() Config {
-	return Config{MaxSessions: defaultMaxTriggerSnapshotSessions}
+	return Config{TriggerSnapshotSessionLimit: defaultTriggerSnapshotSessionLimit}
 }
 
 func (config Config) Validate() error {
-	if config.MaxSessions < 1 {
+	if config.TriggerSnapshotSessionLimit < 1 {
 		return errors.New("trigger snapshot session limit must be at least 1")
 	}
 	return nil

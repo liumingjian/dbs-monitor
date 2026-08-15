@@ -23,8 +23,8 @@ func TestEvaluationConfigFromEnvironment(t *testing.T) {
 			if (err != nil) != test.wantError {
 				t.Fatalf("evaluationConfigFromEnvironment() error = %v, want error %t", err, test.wantError)
 			}
-			if err == nil && config.MaxSessions != test.wantLimit {
-				t.Fatalf("trigger snapshot session limit = %d, want %d", config.MaxSessions, test.wantLimit)
+			if err == nil && config.TriggerSnapshotSessionLimit != test.wantLimit {
+				t.Fatalf("trigger snapshot session limit = %d, want %d", config.TriggerSnapshotSessionLimit, test.wantLimit)
 			}
 		})
 	}

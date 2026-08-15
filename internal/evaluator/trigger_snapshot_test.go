@@ -11,14 +11,14 @@ import (
 
 func TestTriggerSnapshotConfigValidatesSessionLimit(t *testing.T) {
 	config := DefaultConfig()
-	if config.MaxSessions != 100 {
-		t.Fatalf("default trigger snapshot session limit = %d, want 100", config.MaxSessions)
+	if config.TriggerSnapshotSessionLimit != 100 {
+		t.Fatalf("default trigger snapshot session limit = %d, want 100", config.TriggerSnapshotSessionLimit)
 	}
 	if err := config.Validate(); err != nil {
 		t.Fatalf("validate default trigger snapshot config: %v", err)
 	}
 
-	config.MaxSessions = 0
+	config.TriggerSnapshotSessionLimit = 0
 	if err := config.Validate(); err == nil {
 		t.Fatal("zero trigger snapshot session limit passed validation")
 	}

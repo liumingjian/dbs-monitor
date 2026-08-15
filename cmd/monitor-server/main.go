@@ -215,7 +215,7 @@ func evaluationConfigFromEnvironment() (evaluator.Config, error) {
 	if err != nil {
 		return evaluator.Config{}, fmt.Errorf("%s must be an integer", setting)
 	}
-	config.MaxSessions = parsed
+	config.TriggerSnapshotSessionLimit = parsed
 	if err := config.Validate(); err != nil {
 		return evaluator.Config{}, fmt.Errorf("%s: %w", setting, err)
 	}

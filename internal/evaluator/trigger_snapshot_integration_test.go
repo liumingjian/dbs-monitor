@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
@@ -150,7 +151,7 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 	}
 
 	snapshotConnections := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
-	service, err := NewWithConfig(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection, Config{MaxSessions: 5})
+	service, err := NewWithConfig(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection, Config{TriggerSnapshotSessionLimit: 5})
 	if err != nil {
 		t.Fatalf("configure evaluator: %v", err)
 	}
@@ -227,14 +228,14 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 	if err != nil {
 		t.Fatalf("log in with generated snapshot API client: %v", err)
 	}
-	if login.StatusCode() != 204 {
+	if login.StatusCode() != http.StatusNoContent {
 		t.Fatalf("snapshot API login status = %d, want 204", login.StatusCode())
 	}
 	snapshotResponse, err := apiClient.GetAlertTriggerSnapshotWithResponse(ctx, alertInstanceID)
 	if err != nil {
 		t.Fatalf("read snapshot with generated API client: %v", err)
 	}
-	if snapshotResponse.StatusCode() != 200 || snapshotResponse.JSON200 == nil ||
+	if snapshotResponse.StatusCode() != http.StatusOK || snapshotResponse.JSON200 == nil ||
 		snapshotResponse.JSON200.Result != api.TriggerSnapshotSuccess ||
 		snapshotResponse.JSON200.OriginalMatchCount != 6 || len(snapshotResponse.JSON200.Sessions) != 5 ||
 		!snapshotResponse.JSON200.Truncated {

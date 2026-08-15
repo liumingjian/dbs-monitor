@@ -93,7 +93,7 @@ func (service *Service) captureTriggerSnapshot(
 	}
 
 	sessions = markDirectTriggerSessions(scope, target.MetricID, target.Operator, target.Threshold, sessions)
-	selected, originalMatchCount, truncated := alerting.SelectTriggerSessions(scope, sessions, service.config.MaxSessions)
+	selected, originalMatchCount, truncated := alerting.SelectTriggerSessions(scope, sessions, service.config.TriggerSnapshotSessionLimit)
 	return triggerSnapshotCapture{
 		result:             triggerSnapshotResultSuccess,
 		originalMatchCount: int32(originalMatchCount),
