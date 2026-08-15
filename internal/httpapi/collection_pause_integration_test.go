@@ -147,16 +147,21 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		t.Fatalf("read capability snapshot before pause: %v", err)
 	}
 	const capabilityLockID = 650065
-	if _, err := admin.ExecContext(ctx, "SELECT pg_advisory_lock($1)", capabilityLockID); err != nil {
+	capabilityLock, err := admin.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("start capability probe lock transaction: %v", err)
+	}
+	defer capabilityLock.Rollback()
+	if _, err := capabilityLock.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", capabilityLockID); err != nil {
 		t.Fatalf("hold capability probe lock: %v", err)
 	}
-	probe := metric.Capabilities[0].Probe
-	metric.Capabilities[0].Probe = "SELECT pg_advisory_xact_lock(650065) IS NULL"
-	defer func() { metric.Capabilities[0].Probe = probe }()
+	originalProbe := metric.Capabilities[0].Probe
+	metric.Capabilities[0].Probe = fmt.Sprintf("SELECT pg_advisory_xact_lock(%d) IS NULL", capabilityLockID)
+	defer func() { metric.Capabilities[0].Probe = originalProbe }()
 	currentClock.Advance(metric.CapabilitySnapshotTTL + time.Second)
 	collectionDone := make(chan error, 1)
 	go func() { collectionDone <- collector.RunOnce(ctx) }()
-	waitForCapabilityProbe(t, ctx, admin)
+	waitForCapabilityProbe(t, ctx, admin, capabilityLockID)
 
 	pauseURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/pause", server.URL, instanceID)
 	paused := requestJSON(t, client, http.MethodPut, pauseURL, map[string]any{"paused": true, "reason": "planned retirement"}, "")
@@ -178,7 +183,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		pauseBody.UpdatedAt == nil || !pauseBody.UpdatedAt.Equal(currentClock.now) {
 		t.Fatalf("pause response = %+v", pauseBody)
 	}
-	if _, err := admin.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", capabilityLockID); err != nil {
+	if err := capabilityLock.Rollback(); err != nil {
 		t.Fatalf("release capability probe lock: %v", err)
 	}
 	if err := <-collectionDone; err != nil {
@@ -329,16 +334,17 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	}
 }
 
-func waitForCapabilityProbe(t *testing.T, ctx context.Context, admin *sql.DB) {
+func waitForCapabilityProbe(t *testing.T, ctx context.Context, admin *sql.DB, lockID int) {
 	t.Helper()
+	queryPattern := fmt.Sprintf("%%pg_advisory_xact_lock(%d)%%", lockID)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		var waiting bool
 		if err := admin.QueryRowContext(ctx, `SELECT EXISTS (
 			SELECT 1 FROM pg_stat_activity
-			WHERE query LIKE '%pg_advisory_xact_lock(650065)%'
+			WHERE query LIKE $1
 			  AND wait_event_type = 'Lock'
-		)`).Scan(&waiting); err != nil {
+		)`, queryPattern).Scan(&waiting); err != nil {
 			t.Fatalf("check blocked capability probe: %v", err)
 		}
 		if waiting {

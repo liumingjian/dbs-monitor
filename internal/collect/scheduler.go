@@ -304,13 +304,12 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 			run.dueAt = entry.nextDue
 			if replaced, exists := scheduler.pending.put(run); exists {
 				if isCapabilitySnapshotTask(replaced.task) {
-					_, err := scheduler.service.storeCapabilitySnapshot(
+					if _, err := scheduler.service.storeCapabilitySnapshotIfCollectionActive(
 						ctx,
 						replaced.target.ID,
 						scheduler.service.clock.Now().UTC(),
 						metric.UnknownCapabilityStates(),
-					)
-					if err != nil {
+					); err != nil {
 						log.Printf("record capability backpressure failed: instance_id=%s error=%v", replaced.key.instanceID, err)
 					} else {
 						scheduler.counts.skipped++

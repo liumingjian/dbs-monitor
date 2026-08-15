@@ -269,7 +269,7 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 		if isConnectionFailure(err) || errors.Is(taskCtx.Err(), context.DeadlineExceeded) {
 			service.invalidateQueryConnection(run.target.ID)
 		}
-		stored, storeErr := service.storeCapabilitySnapshot(ctx, run.target.ID, observedAt, metric.UnknownCapabilityStates())
+		stored, storeErr := service.storeCapabilitySnapshotIfCollectionActive(ctx, run.target.ID, observedAt, metric.UnknownCapabilityStates())
 		outcome.err = storeErr
 		if !stored && storeErr == nil {
 			outcome.result = resultSuccess
@@ -278,7 +278,7 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 		return outcome
 	}
 	states, complete := capability.ProbeSnapshot(taskCtx, conn)
-	stored, err := service.storeCapabilitySnapshot(ctx, run.target.ID, observedAt, states)
+	stored, err := service.storeCapabilitySnapshotIfCollectionActive(ctx, run.target.ID, observedAt, states)
 	if err != nil {
 		outcome.err = err
 	} else if complete || !stored {
@@ -288,7 +288,7 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 	return outcome
 }
 
-func (service *Service) storeCapabilitySnapshot(
+func (service *Service) storeCapabilitySnapshotIfCollectionActive(
 	ctx context.Context,
 	instanceID pgtype.UUID,
 	observedAt time.Time,
@@ -297,8 +297,11 @@ func (service *Service) storeCapabilitySnapshot(
 	stored := false
 	err := service.platform.InTx(ctx, func(tx pgx.Tx) error {
 		collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, instanceID)
-		if err != nil || !collectionActive {
+		if err != nil {
 			return err
+		}
+		if !collectionActive {
+			return nil
 		}
 		if err := capability.StoreSnapshot(ctx, tx, instanceID, observedAt, states); err != nil {
 			return err
