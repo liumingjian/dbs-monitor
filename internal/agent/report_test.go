@@ -97,7 +97,31 @@ func TestReportBufferKeepsOnlyFiveMinutesInMemory(t *testing.T) {
 	}
 }
 
-func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
+func TestAgentMajorVersionBehind(t *testing.T) {
+	tests := []struct {
+		name   string
+		agent  string
+		server string
+		want   bool
+	}{
+		{name: "server major is newer", agent: "1.2.3", server: "2.0.0", want: true},
+		{name: "same major", agent: "2.4.0", server: "2.0.0", want: false},
+		{name: "Agent major is newer", agent: "3.0.0", server: "2.4.0", want: false},
+		{name: "optional v prefix", agent: "v1.2.3", server: "v2.0.0", want: true},
+		{name: "invalid Agent version", agent: "dev", server: "2.0.0", want: false},
+		{name: "invalid server version", agent: "1.2.3", server: "dev", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := agentMajorVersionBehind(tt.agent, tt.server); got != tt.want {
+				t.Fatalf("agentMajorVersionBehind(%q, %q) = %v, want %v", tt.agent, tt.server, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestServiceBackfillsUnacknowledgedSampleAndWarnsAfterReconnect(t *testing.T) {
 	requests := 0
 	var received api.AgentReport
 	var logs bytes.Buffer

@@ -194,14 +194,14 @@ func (service *Service) RunOnce(ctx context.Context, now time.Time) error {
 		}
 		return fmt.Errorf("report Agent metrics: server returned %s", response.Status())
 	}
-	if agentMajorBehind(service.version, response.JSON200.ServerVersion) {
+	if agentMajorVersionBehind(service.version, response.JSON200.ServerVersion) {
 		log.Printf("warning: Agent version %s is behind server version %s; upgrade recommended", service.version, response.JSON200.ServerVersion)
 	}
 	service.buffer.acknowledge()
 	return nil
 }
 
-func agentMajorBehind(agentVersion, serverVersion string) bool {
+func agentMajorVersionBehind(agentVersion, serverVersion string) bool {
 	agentMajor, agentOK := parseMajorVersion(agentVersion)
 	serverMajor, serverOK := parseMajorVersion(serverVersion)
 	return agentOK && serverOK && agentMajor < serverMajor

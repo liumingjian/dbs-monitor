@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
@@ -230,7 +231,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("old version message = %q", oldVersionError.Error.Message)
 	}
 	assertAgentState(t, ctx, pool, createBody.Instance.ID, "1.99.0", "AGENT_VERSION_TOO_OLD", "版本过旧，需升级")
-	assertAlertUnchanged(t, ctx, pool, createBody.Instance.ID, alertUpdatedAt)
+	assertAlertEvaluationUnchanged(t, ctx, pool, createBody.Instance.ID, alertUpdatedAt)
 	now := time.Now().UTC()
 	backfill := []map[string]any{
 		{"timestamp": now.Add(-90 * time.Second).Format(time.RFC3339Nano), "metrics": metricsWithIOPS(9)},
@@ -241,9 +242,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if accepted.StatusCode != http.StatusOK {
 		t.Fatalf("valid report status = %d, want 200", accepted.StatusCode)
 	}
-	var acceptedBody struct {
-		ServerVersion string `json:"server_version"`
-	}
+	var acceptedBody api.AgentReportAccepted
 	if err := json.NewDecoder(accepted.Body).Decode(&acceptedBody); err != nil {
 		t.Fatalf("decode accepted report response: %v", err)
 	}
@@ -322,7 +321,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	assertAgentState(t, ctx, pool, createBody.Instance.ID, "2.4.0", "", "")
 
-	assertAlertUnchanged(t, ctx, pool, createBody.Instance.ID, alertUpdatedAt)
+	assertAlertEvaluationUnchanged(t, ctx, pool, createBody.Instance.ID, alertUpdatedAt)
 
 	instanceResponse := getResponse(t, client, server.URL+"/api/v1/instances/"+createBody.Instance.ID)
 	defer instanceResponse.Body.Close()
@@ -337,7 +336,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 }
 
-func assertAlertUnchanged(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID string, updatedAt time.Time) {
+func assertAlertEvaluationUnchanged(t *testing.T, ctx context.Context, pool *pgxpool.Pool, instanceID string, updatedAt time.Time) {
 	t.Helper()
 	var status string
 	var noDataCount int
