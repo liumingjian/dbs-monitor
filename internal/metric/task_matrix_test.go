@@ -3,6 +3,7 @@ package metric_test
 import (
 	"context"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -54,7 +55,7 @@ func TestPGStatStatementsDeclaration(t *testing.T) {
 			t.Errorf("pg_stat_statements query is missing %q", fragment)
 		}
 	}
-	if strings.Contains(task.SQL, "query::text") || strings.Contains(task.SQL, "query AS") {
+	if regexp.MustCompile(`(?i)\b(query|query_text|sql|sql_text)\b`).MatchString(task.SQL) {
 		t.Fatal("pg_stat_statements query selects SQL text")
 	}
 }
