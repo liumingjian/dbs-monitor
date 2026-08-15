@@ -97,13 +97,60 @@ func TestReportBufferKeepsOnlyFiveMinutesInMemory(t *testing.T) {
 	}
 }
 
-func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
+func TestClockSkewExceedsStartupLimit(t *testing.T) {
+	serverTime := time.Unix(1_000, 0)
+	tests := []struct {
+		name      string
+		agentTime time.Time
+		want      bool
+	}{
+		{name: "same time", agentTime: serverTime, want: false},
+		{name: "positive limit is accepted", agentTime: serverTime.Add(startupClockSkewLimit), want: false},
+		{name: "negative limit is accepted", agentTime: serverTime.Add(-startupClockSkewLimit), want: false},
+		{name: "positive skew exceeds limit", agentTime: serverTime.Add(startupClockSkewLimit + time.Nanosecond), want: true},
+		{name: "negative skew exceeds limit", agentTime: serverTime.Add(-startupClockSkewLimit - time.Nanosecond), want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := clockSkewExceedsStartupLimit(tt.agentTime, serverTime); got != tt.want {
+				t.Fatalf("clockSkewExceedsStartupLimit(%s, %s) = %v, want %v", tt.agentTime, serverTime, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAgentMajorVersionBehind(t *testing.T) {
+	tests := []struct {
+		name   string
+		agent  string
+		server string
+		want   bool
+	}{
+		{name: "server major is newer", agent: "1.2.3", server: "2.0.0", want: true},
+		{name: "same major", agent: "2.4.0", server: "2.0.0", want: false},
+		{name: "Agent major is newer", agent: "3.0.0", server: "2.4.0", want: false},
+		{name: "optional v prefix", agent: "v1.2.3", server: "v2.0.0", want: true},
+		{name: "invalid Agent version", agent: "dev", server: "2.0.0", want: false},
+		{name: "invalid server version", agent: "1.2.3", server: "dev", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := agentMajorVersionBehind(tt.agent, tt.server); got != tt.want {
+				t.Fatalf("agentMajorVersionBehind(%q, %q) = %v, want %v", tt.agent, tt.server, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestServiceBackfillsUnacknowledgedSampleAndWarnsAfterReconnect(t *testing.T) {
 	requests := 0
 	var received api.AgentReport
 	var logs bytes.Buffer
-	previousLogOutput := log.Writer()
+	previousOutput := log.Writer()
 	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(previousLogOutput) })
+	t.Cleanup(func() { log.SetOutput(previousOutput) })
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests++
 		if err := json.NewDecoder(request.Body).Decode(&received); err != nil {
@@ -117,8 +164,9 @@ func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
 		}
 		writer.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(writer).Encode(map[string]any{
-			"server_version": "2.0.0",
-			"server_time":    received.Timestamp,
+			"server_version":       "2.0.0",
+			"server_time":          received.Timestamp,
+			"unknown_future_field": true,
 		}); err != nil {
 			t.Errorf("encode Agent report response: %v", err)
 		}

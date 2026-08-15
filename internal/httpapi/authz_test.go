@@ -14,29 +14,25 @@ import (
 
 func TestEveryOperationDeclaresRequiredRole(t *testing.T) {
 	doc := loadSpec(t)
-	allowed := map[string]bool{
+	allowedRoles := map[string]bool{
 		"READONLY":       true,
 		"ALERT_ADMIN":    true,
 		"PLATFORM_ADMIN": true,
 		"AGENT":          true,
 	}
 
-	seen := map[string]string{}
+	operationLocations := map[string]string{}
 	specRoles := map[string]string{}
 	for path, item := range doc.Paths.Map() {
 		for method, operation := range item.Operations() {
-			if (operation.OperationID == "reportAgentMetrics" || operation.OperationID == "downloadAgentBinary") &&
-				(operation.Security == nil || len(*operation.Security) == 0) {
-				t.Errorf("agent operation %q has no bearer security", operation.OperationID)
-			}
 			if operation.OperationID == "" {
 				t.Errorf("%s %s has no operationId", method, path)
 				continue
 			}
-			if previous, exists := seen[operation.OperationID]; exists {
-				t.Errorf("duplicate operationId %q on %s %s and %s", operation.OperationID, method, path, previous)
+			if previousLocation, exists := operationLocations[operation.OperationID]; exists {
+				t.Errorf("duplicate operationId %q on %s %s and %s", operation.OperationID, method, path, previousLocation)
 			}
-			seen[operation.OperationID] = fmt.Sprintf("%s %s", method, path)
+			operationLocations[operation.OperationID] = fmt.Sprintf("%s %s", method, path)
 
 			value, ok := operation.Extensions["x-required-role"]
 			if !ok {
@@ -44,18 +40,18 @@ func TestEveryOperationDeclaresRequiredRole(t *testing.T) {
 				continue
 			}
 			role, ok := value.(string)
-			if !ok || !allowed[role] {
+			if !ok || !allowedRoles[role] {
 				t.Errorf("operation %q has invalid x-required-role %v", operation.OperationID, value)
 				continue
 			}
-			operationID := operation.OperationID
-			if operationID != "" {
-				operationID = strings.ToUpper(operationID[:1]) + operationID[1:]
+			if role == "AGENT" && (operation.Security == nil || len(*operation.Security) == 0) {
+				t.Errorf("agent operation %q has no bearer security", operation.OperationID)
 			}
+			operationID := strings.ToUpper(operation.OperationID[:1]) + operation.OperationID[1:]
 			specRoles[operationID] = role
 		}
 	}
-	if len(seen) == 0 {
+	if len(operationLocations) == 0 {
 		t.Fatal("spec has no operations")
 	}
 	if !reflect.DeepEqual(specRoles, httpapi.RequiredRoles) {

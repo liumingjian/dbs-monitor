@@ -27,20 +27,20 @@ func (distribution AgentDistribution) HealthError() error {
 	if distribution.BinaryDirectory == "" {
 		return fmt.Errorf("AGENT_BINARY_DIR is not configured")
 	}
-	directory, err := os.Stat(distribution.BinaryDirectory)
+	directoryInfo, err := os.Stat(distribution.BinaryDirectory)
 	if err != nil {
 		return fmt.Errorf("AGENT_BINARY_DIR is unavailable: %w", err)
 	}
-	if !directory.IsDir() {
+	if !directoryInfo.IsDir() {
 		return fmt.Errorf("AGENT_BINARY_DIR is not a directory")
 	}
 	for _, architecture := range []string{"amd64", "arm64"} {
-		path := filepath.Join(distribution.BinaryDirectory, "dbs-monitor-agent-linux-"+architecture)
-		binary, err := os.Stat(path)
+		binaryPath := filepath.Join(distribution.BinaryDirectory, "dbs-monitor-agent-linux-"+architecture)
+		binaryInfo, err := os.Stat(binaryPath)
 		if err != nil {
 			return fmt.Errorf("AGENT_BINARY_DIR is missing the linux/%s binary: %w", architecture, err)
 		}
-		if !binary.Mode().IsRegular() || binary.Mode().Perm()&0111 == 0 {
+		if !binaryInfo.Mode().IsRegular() || binaryInfo.Mode().Perm()&0111 == 0 {
 			return fmt.Errorf("AGENT_BINARY_DIR linux/%s binary is not an executable regular file", architecture)
 		}
 	}
@@ -77,17 +77,17 @@ func (handler *Handler) DownloadAgentBinary(_ context.Context, request api.Downl
 	if handler.agentDistribution == nil || handler.agentDistribution.HealthError() != nil {
 		return api.DownloadAgentBinary503JSONResponse(errorBody(api.INTERNAL, "AGENT_BINARY_DIR is unavailable or incomplete")), nil
 	}
-	path := filepath.Join(handler.agentDistribution.BinaryDirectory, "dbs-monitor-agent-linux-"+architecture)
-	binary, err := os.Open(path)
+	binaryPath := filepath.Join(handler.agentDistribution.BinaryDirectory, "dbs-monitor-agent-linux-"+architecture)
+	binaryFile, err := os.Open(binaryPath)
 	if err != nil {
 		return api.DownloadAgentBinary503JSONResponse(errorBody(api.INTERNAL, "Agent binary distribution is unavailable")), nil
 	}
-	info, err := binary.Stat()
+	binaryInfo, err := binaryFile.Stat()
 	if err != nil {
-		binary.Close()
+		binaryFile.Close()
 		return nil, err
 	}
-	return api.DownloadAgentBinary200ApplicationoctetStreamResponse{Body: binary, ContentLength: info.Size()}, nil
+	return api.DownloadAgentBinary200ApplicationoctetStreamResponse{Body: binaryFile, ContentLength: binaryInfo.Size()}, nil
 }
 
 func (handler *Handler) registerAgentDistributionRoutes(mux *http.ServeMux) {

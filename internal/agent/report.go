@@ -16,7 +16,10 @@ import (
 	gopsutilnet "github.com/shirou/gopsutil/v4/net"
 )
 
-const maxBackfillAge = 5 * time.Minute
+const (
+	maxBackfillAge        = 5 * time.Minute
+	startupClockSkewLimit = 5 * time.Second
+)
 
 type sample struct {
 	sampledAt time.Time
@@ -206,7 +209,7 @@ func (service *Service) RunOnce(ctx context.Context, now time.Time) error {
 
 func clockSkewExceedsStartupLimit(agentTime, serverTime time.Time) bool {
 	offset := agentTime.Sub(serverTime)
-	return offset > 5*time.Second || offset < -5*time.Second
+	return offset > startupClockSkewLimit || offset < -startupClockSkewLimit
 }
 
 func agentMajorVersionBehind(agentVersion, serverVersion string) bool {

@@ -761,10 +761,10 @@ func majorVersion(version string) (int, bool) {
 
 func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
 	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value interface{}) (interface{}, error) {
-		if operationID == "CreateSession" {
+		switch operationID {
+		case "CreateSession":
 			return next(ctx, writer, request, value)
-		}
-		if operationID == "ReportAgentMetrics" {
+		case "ReportAgentMetrics":
 			report := value.(api.ReportAgentMetricsRequestObject)
 			if report.Body == nil {
 				return badAgentRequest("report body is required"), nil
@@ -776,8 +776,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 				return unauthorizedAgent(), nil
 			}
 			return next(context.WithValue(ctx, authenticatedAgentKey{}, report.Body.InstanceId), writer, request, value)
-		}
-		if operationID == "DownloadAgentBinary" {
+		case "DownloadAgentBinary":
 			token := bearerToken(request.Header.Get("Authorization"))
 			if token == "" {
 				return unauthorizedAgentDownload(), nil
@@ -789,6 +788,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			}
 			return next(context.WithValue(ctx, authenticatedAgentKey{}, uuid.UUID(instanceID.Bytes)), writer, request, value)
 		}
+
 		cookie, err := request.Cookie(sessionCookie)
 		if err != nil {
 			writer.WriteHeader(http.StatusUnauthorized)
