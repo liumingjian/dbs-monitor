@@ -233,6 +233,7 @@ type AlertRule struct {
 	Aggregation               AlertAggregation     `json:"aggregation"`
 	ConsecutiveCount          int                  `json:"consecutive_count"`
 	CreatedAt                 time.Time            `json:"created_at"`
+	CreatedBy                 *openapi_types.UUID  `json:"created_by,omitempty"`
 	Enabled                   bool                 `json:"enabled"`
 	EnabledUpdatedAt          *time.Time           `json:"enabled_updated_at,omitempty"`
 	EnabledUpdatedBy          *openapi_types.UUID  `json:"enabled_updated_by,omitempty"`
@@ -250,6 +251,7 @@ type AlertRule struct {
 	Severity                  AlertSeverity        `json:"severity"`
 	Threshold                 float64              `json:"threshold"`
 	UpdatedAt                 time.Time            `json:"updated_at"`
+	UpdatedBy                 *openapi_types.UUID  `json:"updated_by,omitempty"`
 	Version                   int                  `json:"version"`
 	WindowSeconds             int                  `json:"window_seconds"`
 }

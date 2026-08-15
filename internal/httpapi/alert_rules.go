@@ -48,6 +48,7 @@ func (handler *Handler) CreateAlertRule(ctx context.Context, request api.CreateA
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
 	ruleID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	var createdRule alerting.AlertRule
@@ -70,13 +71,14 @@ func (handler *Handler) CreateAlertRule(ctx context.Context, request api.CreateA
 			Scope:                     string(input.Scope),
 			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
 			Enabled:                   input.Enabled,
+			CreatedBy:                 actorID,
 			CreatedAt:                 now,
 		})
 		if err != nil {
 			return err
 		}
 		createdRule = rule
-		return saveAlertRuleVersion(ctx, queries, rule, scopedInstanceIDs, now)
+		return saveAlertRuleVersion(ctx, queries, rule, scopedInstanceIDs, actorID, now)
 	})
 	if err != nil {
 		return nil, err
@@ -110,6 +112,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
 	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	var updated alerting.AlertRule
 	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
@@ -130,12 +133,13 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 			NoDataPolicy:              string(input.NoDataPolicy),
 			Scope:                     string(input.Scope),
 			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
+			UpdatedBy:                 actorID,
 			UpdatedAt:                 now,
 		})
 		if err != nil {
 			return err
 		}
-		return saveAlertRuleVersion(ctx, queries, updated, scopedInstanceIDs, now)
+		return saveAlertRuleVersion(ctx, queries, updated, scopedInstanceIDs, actorID, now)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.UpdateAlertRule404JSONResponse(errorBody(api.NOTFOUND, "alert rule not found")), nil
@@ -292,7 +296,14 @@ func (handler *Handler) validateAlertRuleInstances(ctx context.Context, rule api
 	return nil, nil
 }
 
-func saveAlertRuleVersion(ctx context.Context, queries *alerting.Queries, rule alerting.AlertRule, instanceIDs []pgtype.UUID, createdAt pgtype.Timestamptz) error {
+func saveAlertRuleVersion(
+	ctx context.Context,
+	queries *alerting.Queries,
+	rule alerting.AlertRule,
+	instanceIDs []pgtype.UUID,
+	actorID pgtype.UUID,
+	createdAt pgtype.Timestamptz,
+) error {
 	if err := replaceAlertRuleScope(ctx, queries, rule.ID, instanceIDs); err != nil {
 		return err
 	}
@@ -304,6 +315,7 @@ func saveAlertRuleVersion(ctx context.Context, queries *alerting.Queries, rule a
 		RuleID:    rule.ID,
 		Version:   rule.Version,
 		Snapshot:  snapshot,
+		CreatedBy: actorID,
 		CreatedAt: createdAt,
 	})
 }
@@ -416,6 +428,14 @@ func toAPIAlertRule(rule alerting.AlertRule, scopedInstanceIDs []pgtype.UUID) ap
 		Version:                   int(rule.Version),
 		CreatedAt:                 rule.CreatedAt.Time,
 		UpdatedAt:                 rule.UpdatedAt.Time,
+	}
+	if rule.CreatedBy.Valid {
+		value := openapi_types.UUID(rule.CreatedBy.Bytes)
+		result.CreatedBy = &value
+	}
+	if rule.UpdatedBy.Valid {
+		value := openapi_types.UUID(rule.UpdatedBy.Bytes)
+		result.UpdatedBy = &value
 	}
 	if rule.EnabledUpdatedBy.Valid {
 		value := openapi_types.UUID(rule.EnabledUpdatedBy.Bytes)

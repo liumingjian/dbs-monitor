@@ -56,7 +56,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}
-	currentClock := &fixedClock{now: time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)}
+	currentClock := &fixedClock{now: time.Now().UTC().Truncate(time.Second)}
 
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
@@ -102,15 +102,43 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("create rule status = %d, want 201", created.StatusCode)
 	}
 	var createdRule struct {
-		ID                       uuid.UUID `json:"id"`
-		Version                  int       `json:"version"`
-		RecoveryConsecutiveCount int       `json:"recovery_consecutive_count"`
+		ID                       uuid.UUID  `json:"id"`
+		Version                  int        `json:"version"`
+		RecoveryConsecutiveCount int        `json:"recovery_consecutive_count"`
+		CreatedBy                *uuid.UUID `json:"created_by"`
+		UpdatedBy                *uuid.UUID `json:"updated_by"`
+		CreatedAt                time.Time  `json:"created_at"`
+		UpdatedAt                time.Time  `json:"updated_at"`
 	}
 	if err := json.NewDecoder(created.Body).Decode(&createdRule); err != nil {
 		t.Fatalf("decode created rule: %v", err)
 	}
 	if createdRule.ID == uuid.Nil || createdRule.Version != 1 || createdRule.RecoveryConsecutiveCount != 2 {
 		t.Fatalf("created rule = %+v, want id and version 1", createdRule)
+	}
+	var adminID, createdBy, updatedBy, createdVersionBy uuid.UUID
+	var createdAt, updatedAt, createdVersionAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT id FROM app_user WHERE username = 'admin'`).Scan(&adminID); err != nil {
+		t.Fatalf("read rule actor: %v", err)
+	}
+	if createdRule.CreatedBy == nil || *createdRule.CreatedBy != adminID ||
+		createdRule.UpdatedBy == nil || *createdRule.UpdatedBy != adminID ||
+		!createdRule.CreatedAt.Equal(currentClock.now) || !createdRule.UpdatedAt.Equal(currentClock.now) {
+		t.Fatalf("created rule API attribution = %+v, want actor %s at %s", createdRule, adminID, currentClock.now)
+	}
+	if err := pool.QueryRow(ctx, `SELECT rule.created_by, rule.updated_by, rule.created_at, rule.updated_at,
+		version.created_by, version.created_at
+		FROM alert_rule rule
+		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = 1
+		WHERE rule.id = $1`, createdRule.ID).Scan(
+		&createdBy, &updatedBy, &createdAt, &updatedAt, &createdVersionBy, &createdVersionAt,
+	); err != nil {
+		t.Fatalf("read created rule attribution: %v", err)
+	}
+	if createdBy != adminID || updatedBy != adminID || createdVersionBy != adminID ||
+		!createdAt.Equal(currentClock.now) || !updatedAt.Equal(currentClock.now) || !createdVersionAt.Equal(currentClock.now) {
+		t.Fatalf("created rule attribution = actors %s/%s/%s at %s/%s/%s, want %s at %s",
+			createdBy, updatedBy, createdVersionBy, createdAt, updatedAt, createdVersionAt, adminID, currentClock.now)
 	}
 
 	seriesID := createAlertTestSeries(t, ctx, pool, targetID, currentClock.now)
@@ -150,10 +178,32 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("update rule status = %d, want 200", updated.StatusCode)
 	}
 	var updatedRule struct {
-		Version int `json:"version"`
+		Version   int        `json:"version"`
+		CreatedBy *uuid.UUID `json:"created_by"`
+		UpdatedBy *uuid.UUID `json:"updated_by"`
+		UpdatedAt time.Time  `json:"updated_at"`
 	}
 	if err := json.NewDecoder(updated.Body).Decode(&updatedRule); err != nil || updatedRule.Version != 2 {
 		t.Fatalf("updated rule = %+v, error = %v", updatedRule, err)
+	}
+	if updatedRule.CreatedBy == nil || *updatedRule.CreatedBy != adminID ||
+		updatedRule.UpdatedBy == nil || *updatedRule.UpdatedBy != adminID || !updatedRule.UpdatedAt.Equal(currentClock.now) {
+		t.Fatalf("updated rule API attribution = %+v, want actor %s at %s", updatedRule, adminID, currentClock.now)
+	}
+	var semanticUpdatedBy, updatedVersionBy uuid.UUID
+	var semanticUpdatedAt, updatedVersionAt time.Time
+	if err := pool.QueryRow(ctx, `SELECT rule.updated_by, rule.updated_at, version.created_by, version.created_at
+		FROM alert_rule rule
+		JOIN alert_rule_version version ON version.rule_id = rule.id AND version.version = 2
+		WHERE rule.id = $1`, createdRule.ID).Scan(
+		&semanticUpdatedBy, &semanticUpdatedAt, &updatedVersionBy, &updatedVersionAt,
+	); err != nil {
+		t.Fatalf("read updated rule attribution: %v", err)
+	}
+	if semanticUpdatedBy != adminID || updatedVersionBy != adminID ||
+		!semanticUpdatedAt.Equal(currentClock.now) || !updatedVersionAt.Equal(currentClock.now) {
+		t.Fatalf("updated rule attribution = actors %s/%s at %s/%s, want %s at %s",
+			semanticUpdatedBy, updatedVersionBy, semanticUpdatedAt, updatedVersionAt, adminID, currentClock.now)
 	}
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
 
@@ -171,7 +221,9 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if err := json.NewDecoder(disabled.Body).Decode(&disabledRule); err != nil {
 		t.Fatalf("decode disabled rule: %v", err)
 	}
-	if disabledRule.Enabled || disabledRule.Version != 2 || disabledRule.EnabledUpdatedBy == nil || disabledRule.EnabledUpdatedAt == nil {
+	if disabledRule.Enabled || disabledRule.Version != 2 || disabledRule.EnabledUpdatedBy == nil ||
+		*disabledRule.EnabledUpdatedBy != adminID || disabledRule.EnabledUpdatedAt == nil ||
+		!disabledRule.EnabledUpdatedAt.Equal(currentClock.now) {
 		t.Fatalf("disabled rule audit = %+v", disabledRule)
 	}
 

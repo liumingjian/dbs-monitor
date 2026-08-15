@@ -67,6 +67,8 @@ type AlertRule struct {
 	EvaluationIntervalSeconds int32
 	EnabledUpdatedBy          pgtype.UUID
 	EnabledUpdatedAt          pgtype.Timestamptz
+	CreatedBy                 pgtype.UUID
+	UpdatedBy                 pgtype.UUID
 }
 
 type AlertRuleEvaluationState struct {
@@ -86,6 +88,7 @@ type AlertRuleVersion struct {
 	Version   int32
 	Snapshot  []byte
 	CreatedAt pgtype.Timestamptz
+	CreatedBy pgtype.UUID
 }
 
 type AppUser struct {

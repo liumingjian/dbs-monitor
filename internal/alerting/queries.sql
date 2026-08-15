@@ -19,9 +19,9 @@ INSERT INTO alert_rule (
     recovery_operator, recovery_threshold, window_seconds,
     consecutive_count, recovery_consecutive_count, severity,
     no_data_policy, scope, evaluation_interval_seconds,
-    enabled, version, created_at, updated_at
+    enabled, version, created_by, updated_by, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $18)
 RETURNING *;
 
 -- name: UpdateAlertRule :one
@@ -41,7 +41,8 @@ SET name = $2,
     scope = $14,
     evaluation_interval_seconds = $15,
     version = version + 1,
-    updated_at = $16
+    updated_by = $16,
+    updated_at = $17
 WHERE id = $1
 RETURNING *;
 
@@ -61,8 +62,8 @@ INSERT INTO alert_rule_scope_instance (rule_id, instance_id)
 VALUES ($1, $2);
 
 -- name: CreateAlertRuleVersion :exec
-INSERT INTO alert_rule_version (rule_id, version, snapshot, created_at)
-VALUES ($1, $2, $3, $4);
+INSERT INTO alert_rule_version (rule_id, version, snapshot, created_by, created_at)
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: ListEvaluationTargets :many
 SELECT rule.id AS rule_id,

@@ -342,6 +342,10 @@ export interface components {
             enabled_updated_by?: string;
             /** Format: date-time */
             enabled_updated_at?: string;
+            /** Format: uuid */
+            created_by?: string;
+            /** Format: uuid */
+            updated_by?: string;
             version: number;
             /** Format: date-time */
             created_at: string;
