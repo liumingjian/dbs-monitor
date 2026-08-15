@@ -28,6 +28,7 @@ var packageLayers = map[string]int{
 	"internal/pgconn":         0,
 	"internal/platformdb":     1,
 	"internal/platformhealth": 1,
+	"test/acceptance":         3,
 }
 
 func TestInternalPackageArchitecture(t *testing.T) {
@@ -38,6 +39,7 @@ func TestInternalPackageArchitecture(t *testing.T) {
 	}{
 		{path: filepath.Join(repoRoot, "internal"), prefix: "internal"},
 		{path: filepath.Join(repoRoot, "cmd"), prefix: "cmd"},
+		{path: filepath.Join(repoRoot, "test"), prefix: "test"},
 	} {
 		entries, err := os.ReadDir(root.path)
 		if err != nil {
