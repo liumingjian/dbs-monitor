@@ -144,15 +144,22 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 
 	collector := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
 	collector.SetPlatformHealth(health)
-	probeIndex := capabilityIndex(t, metric.CapabilityExtensionPGStatStatements)
-	originalProbe := metric.Capabilities[probeIndex].Probe
-	metric.Capabilities[probeIndex].Probe = "SELECT missing_issue60_column FROM pg_extension"
-	defer func() { metric.Capabilities[probeIndex].Probe = originalProbe }()
-	if err := collector.RunOnce(ctx); err != nil {
-		t.Fatalf("collect failed capability probe: %v", err)
+	if _, err := admin.ExecContext(ctx, "GRANT pg_monitor TO "+roleIdentifier); err != nil {
+		t.Fatalf("grant pg_monitor for issue 60 failure: %v", err)
 	}
-	metric.Capabilities[probeIndex].Probe = originalProbe
-	assertProducedMetric(currentSeriesURL("pg.connection.total"), api.COLLECTIONFAILED)
+	if _, err := targetAdmin.ExecContext(ctx, "REVOKE ALL ON pg_stat_statements FROM PUBLIC"); err != nil {
+		t.Fatalf("revoke issue 60 query statistics access: %v", err)
+	}
+	if err := collector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect failed query statistics task: %v", err)
+	}
+	assertProducedQueryStatistics(api.COLLECTIONFAILED)
+	if _, err := targetAdmin.ExecContext(ctx, "GRANT SELECT ON pg_stat_statements TO PUBLIC"); err != nil {
+		t.Fatalf("restore issue 60 query statistics access: %v", err)
+	}
+	if _, err := admin.ExecContext(ctx, "REVOKE pg_monitor FROM "+roleIdentifier); err != nil {
+		t.Fatalf("revoke pg_monitor for issue 60 permission state: %v", err)
+	}
 
 	currentClock.Advance(6 * time.Minute)
 	if err := collector.RunOnce(ctx); err != nil {
@@ -219,17 +226,18 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	assertProducedMetric(currentSeriesURL("host.cpu.usage_percent"), api.AGENTOFFLINE)
 	assertMetricPointValue(t, client, currentSeriesURL("agent.status"), metric.AgentStatusEncodings[metric.AgentStatusOffline])
 
-	if _, err := pool.Exec(ctx, "UPDATE instance SET port = 1 WHERE id = $1", createdBody.Instance.Id); err != nil {
-		t.Fatalf("make issue 60 target unreachable: %v", err)
+	unreachable := requestJSON(t, client, http.MethodPut, fmt.Sprintf("%s/api/v1/instances/%s", server.URL, instanceID), api.InstanceMetadataInput{
+		Name: "issue 60 target", Host: env("PGHOST", "localhost"), Port: 1, Database: targetDatabase,
+	}, "")
+	unreachable.Body.Close()
+	if unreachable.StatusCode != http.StatusOK {
+		t.Fatalf("make issue 60 target unreachable status = %d, want 200", unreachable.StatusCode)
 	}
 	currentClock.Advance(5 * time.Second)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect issue 60 unreachable target: %v", err)
 	}
 	assertProducedMetric(currentSeriesURL("pg.connection.total"), api.DBUNREACHABLE)
-	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", createdBody.Instance.Id, envInt("PGPORT", 55432)); err != nil {
-		t.Fatalf("restore issue 60 target port: %v", err)
-	}
 
 	updated := requestJSON(t, client, http.MethodPut, fmt.Sprintf("%s/api/v1/instances/%s", server.URL, instanceID), api.InstanceMetadataInput{
 		Name: "issue 60 target", Host: env("PGHOST", "localhost"), Port: envInt("PGPORT", 55432),
@@ -266,17 +274,6 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 			t.Errorf("real unavailability producer %s was not observed", want)
 		}
 	}
-}
-
-func capabilityIndex(t *testing.T, capabilityID metric.CapabilityID) int {
-	t.Helper()
-	for index := range metric.Capabilities {
-		if metric.Capabilities[index].ID == capabilityID {
-			return index
-		}
-	}
-	t.Fatalf("capability %s is not declared", capabilityID)
-	return -1
 }
 
 func assertMetricPointValue(t *testing.T, client *http.Client, address string, want float64) {

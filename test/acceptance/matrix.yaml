@@ -55,8 +55,8 @@ entries:
     pages: ["实例工作台/监控与报警/标准监控"]
     operations: [createInstance, getMetricSeries, listInstanceCollectionTasks]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S1"
     owner_issue: 118
     reason: "条目内容由 #118 定稿；实现归片①实现票，届时置 covered 并填 test_ref"
   - id: AC-01-S2
@@ -73,8 +73,8 @@ entries:
     pages: []
     operations: [getMetricSeries, listInstanceCapabilities]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S2"
     owner_issue: 118
     reason: "S1 拍板验收判据原文（片①Further Notes），按 21 号 D1 设为加深基线，不许 pending 落地后必须 covered"
   - id: AC-01-F1
