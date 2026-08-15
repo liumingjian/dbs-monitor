@@ -78,11 +78,11 @@ release-evidence: check-pg-matrix
 
 check-vulnerabilities:
 	@mkdir -p results
-	@status=0; \
-	go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./... > results/govulncheck.txt 2>&1 || status=$$?; \
+	@govulncheck_status=0; \
+	go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./... > results/govulncheck.txt 2>&1 || govulncheck_status=$$?; \
 	cat results/govulncheck.txt; \
 	(cd web && npm audit --json > ../results/npm-audit.json) || echo "npm audit reported findings (report-only)"; \
-	exit $$status
+	exit $$govulncheck_status
 
 check-sqlc-vet:
 	@database=dbs_monitor_sqlc_vet_$$$$; \

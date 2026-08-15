@@ -13,7 +13,7 @@ import (
 const testCandidateSHA = "0123456789012345678901234567890123456789"
 
 func TestCollectEvidenceBuildsThreeStateTable(t *testing.T) {
-	probe := func(_ context.Context, target targetDatabase) (map[metric.CapabilityID]metric.CapabilityStatus, bool, error) {
+	probe := func(_ context.Context, _ targetDatabase) (map[metric.CapabilityID]metric.CapabilityStatus, bool, error) {
 		return map[metric.CapabilityID]metric.CapabilityStatus{
 			metric.CapabilityRolePGMonitor:             metric.CapabilityPresent,
 			metric.CapabilityExtensionPGStatStatements: metric.CapabilityMissing,

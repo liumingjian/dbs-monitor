@@ -71,8 +71,31 @@ func TestAcceptanceResultFailsWhileBaselineEntriesArePending(t *testing.T) {
 	if report.Summary.BaselinePassed {
 		t.Fatal("pending baseline entries produced a passing acceptance result")
 	}
-	if report.exitCode(0) == 0 {
-		t.Fatal("pending baseline entries did not make acceptance blocking")
+	if report.Summary.PendingCount == 0 {
+		t.Fatal("pending baseline entries were not included in the acceptance summary")
+	}
+}
+
+func TestAcceptanceResultExitCode(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		testExitCode   int
+		baselinePassed bool
+		want           int
+	}{
+		{name: "tests and baseline pass", baselinePassed: true, want: 0},
+		{name: "tests fail", testExitCode: 1, baselinePassed: true, want: 1},
+		{name: "test failure is normalized", testExitCode: 2, baselinePassed: true, want: 1},
+		{name: "baseline fails", baselinePassed: false, want: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := acceptanceResult{
+				Summary: resultSummary{BaselinePassed: test.baselinePassed},
+			}
+			if got := result.exitCode(test.testExitCode); got != test.want {
+				t.Errorf("exit code = %d, want %d", got, test.want)
+			}
+		})
 	}
 }
 

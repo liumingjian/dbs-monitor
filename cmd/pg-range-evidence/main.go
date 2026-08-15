@@ -20,12 +20,14 @@ import (
 
 var candidateSHAPattern = regexp.MustCompile(`^[0-9a-f]{40}$`)
 
+var supportedPostgreSQLVersions = [...]string{"13", "14", "15", "16", "17"}
+
 type targetDatabase struct {
 	Version string
 	URL     string
 }
 
-type probeFunc func(context.Context, targetDatabase) (map[metric.CapabilityID]metric.CapabilityStatus, bool, error)
+type targetProbe func(context.Context, targetDatabase) (map[metric.CapabilityID]metric.CapabilityStatus, bool, error)
 
 type pgRangeEvidence struct {
 	CandidateSHA string            `json:"candidate_sha"`
@@ -50,7 +52,7 @@ type evidenceEntry struct {
 
 func main() {
 	candidateSHA := flag.String("candidate-sha", "", "40-character candidate commit SHA")
-	output := flag.String("output", "results/pg-range-evidence.json", "evidence output path")
+	outputPath := flag.String("output", "results/pg-range-evidence.json", "evidence output path")
 	flag.Parse()
 
 	targets, err := targetsFromEnvironment()
@@ -58,31 +60,31 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	evidence, collectErr := collectEvidence(context.Background(), *candidateSHA, targets, probeTarget)
-	if err := writeEvidence(*output, evidence); err != nil {
+	evidence, collectionErr := collectEvidence(context.Background(), *candidateSHA, targets, probeTarget)
+	if err := writeEvidence(*outputPath, evidence); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if collectErr != nil {
-		fmt.Fprintln(os.Stderr, collectErr)
+	if collectionErr != nil {
+		fmt.Fprintln(os.Stderr, collectionErr)
 		os.Exit(1)
 	}
 }
 
 func targetsFromEnvironment() ([]targetDatabase, error) {
-	targets := make([]targetDatabase, 0, 5)
-	for _, version := range []string{"13", "14", "15", "16", "17"} {
-		name := "PG" + version + "_URL"
-		url := os.Getenv(name)
-		if url == "" {
-			return nil, fmt.Errorf("%s is required", name)
+	targets := make([]targetDatabase, 0, len(supportedPostgreSQLVersions))
+	for _, version := range supportedPostgreSQLVersions {
+		environmentVariable := "PG" + version + "_URL"
+		databaseURL := os.Getenv(environmentVariable)
+		if databaseURL == "" {
+			return nil, fmt.Errorf("%s is required", environmentVariable)
 		}
-		targets = append(targets, targetDatabase{Version: version, URL: url})
+		targets = append(targets, targetDatabase{Version: version, URL: databaseURL})
 	}
 	return targets, nil
 }
 
-func collectEvidence(ctx context.Context, candidateSHA string, targets []targetDatabase, probe probeFunc) (pgRangeEvidence, error) {
+func collectEvidence(ctx context.Context, candidateSHA string, targets []targetDatabase, probe targetProbe) (pgRangeEvidence, error) {
 	evidence := pgRangeEvidence{
 		CandidateSHA: candidateSHA,
 		GeneratedAt:  time.Now().UTC(),
@@ -97,56 +99,63 @@ func collectEvidence(ctx context.Context, candidateSHA string, targets []targetD
 
 	var failures []error
 	for _, target := range targets {
+		entryPrefix := "pg" + target.Version
 		evidence.Entries = append(evidence.Entries, evidenceEntry{
-			ID: "pg" + target.Version + "/collection", Baseline: true, Status: "pass",
+			ID:           entryPrefix + "/collection",
+			Baseline:     true,
+			Status:       "pass",
 			ActualResult: "collection query subset passed",
 		})
-		states, complete, err := probe(ctx, target)
-		if states == nil {
-			states = metric.UnknownCapabilityStates()
+
+		capabilityStates, snapshotComplete, err := probe(ctx, target)
+		if capabilityStates == nil {
+			capabilityStates = metric.UnknownCapabilityStates()
 		}
-		versionResult := "GO"
-		entryStatus := "pass"
-		if err != nil || !complete || containsUnknown(states) {
-			versionResult = "NO-GO"
-			entryStatus = "fail"
+		capabilityResult := "GO"
+		capabilityStatus := "pass"
+		if err != nil || !snapshotComplete || hasUnknownCapability(capabilityStates) {
+			capabilityResult = "NO-GO"
+			capabilityStatus = "fail"
 			evidence.Result = "fail"
 			failures = append(failures, fmt.Errorf("PG%s capability evidence is UNKNOWN", target.Version))
 		}
 		evidence.Versions = append(evidence.Versions, versionEvidence{
-			Version: target.Version, Result: versionResult, Capabilities: states,
+			Version:      target.Version,
+			Result:       capabilityResult,
+			Capabilities: capabilityStates,
 		})
 		evidence.Entries = append(evidence.Entries, evidenceEntry{
-			ID: "pg" + target.Version + "/capabilities", Baseline: true, Status: entryStatus,
-			ActualResult: versionResult,
+			ID:           entryPrefix + "/capabilities",
+			Baseline:     true,
+			Status:       capabilityStatus,
+			ActualResult: capabilityResult,
 		})
 	}
 	return evidence, errors.Join(failures...)
 }
 
 func validateTargets(targets []targetDatabase) error {
-	want := []string{"13", "14", "15", "16", "17"}
-	got := make([]string, 0, len(targets))
+	actualVersions := make([]string, 0, len(targets))
 	for _, target := range targets {
 		if target.URL == "" {
 			return fmt.Errorf("PG%s URL is required", target.Version)
 		}
-		got = append(got, target.Version)
+		actualVersions = append(actualVersions, target.Version)
 	}
-	if !slices.Equal(got, want) {
-		return fmt.Errorf("target versions = %v, want %v", got, want)
+	if !slices.Equal(actualVersions, supportedPostgreSQLVersions[:]) {
+		return fmt.Errorf("target versions = %v, want %v", actualVersions, supportedPostgreSQLVersions)
 	}
 	return nil
 }
 
-func probeTarget(parent context.Context, target targetDatabase) (map[metric.CapabilityID]metric.CapabilityStatus, bool, error) {
-	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
+func probeTarget(parentContext context.Context, target targetDatabase) (map[metric.CapabilityID]metric.CapabilityStatus, bool, error) {
+	ctx, cancel := context.WithTimeout(parentContext, 15*time.Second)
 	defer cancel()
-	config, err := pgx.ParseConfig(target.URL)
+	connectionConfig, err := pgx.ParseConfig(target.URL)
 	if err != nil {
 		return metric.UnknownCapabilityStates(), false, err
 	}
-	conn, err := (monitorpg.DirectDialer{}).Dial(ctx, config)
+	conn, err := (monitorpg.DirectDialer{}).Dial(ctx, connectionConfig)
 	if err != nil {
 		return metric.UnknownCapabilityStates(), false, err
 	}
@@ -155,7 +164,7 @@ func probeTarget(parent context.Context, target targetDatabase) (map[metric.Capa
 	return states, complete, nil
 }
 
-func containsUnknown(states map[metric.CapabilityID]metric.CapabilityStatus) bool {
+func hasUnknownCapability(states map[metric.CapabilityID]metric.CapabilityStatus) bool {
 	for _, declaration := range metric.Capabilities {
 		if states[declaration.ID] == metric.CapabilityUnknown {
 			return true
@@ -172,11 +181,11 @@ func writeEvidence(path string, evidence pgRangeEvidence) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create evidence directory: %w", err)
 	}
-	temporary := path + ".tmp"
-	if err := os.WriteFile(temporary, append(contents, '\n'), 0o644); err != nil {
+	temporaryPath := path + ".tmp"
+	if err := os.WriteFile(temporaryPath, append(contents, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write PG range evidence: %w", err)
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	if err := os.Rename(temporaryPath, path); err != nil {
 		return fmt.Errorf("publish PG range evidence: %w", err)
 	}
 	return nil

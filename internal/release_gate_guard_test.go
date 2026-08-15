@@ -40,7 +40,7 @@ func TestReleaseGateMakeTargets(t *testing.T) {
 }
 
 func TestAcceptanceWorkflowIsIndependentAndBlocking(t *testing.T) {
-	contents := readWorkflow(t, "acceptance.yml")
+	contents := readValidWorkflow(t, "acceptance.yml")
 	for _, required := range []string{
 		"name: acceptance", "push:", "      - main", "workflow_dispatch:",
 		"runs-on: ubuntu-latest", "run: make acceptance", "if: always()",
@@ -54,7 +54,7 @@ func TestAcceptanceWorkflowIsIndependentAndBlocking(t *testing.T) {
 		t.Fatal("acceptance workflow is not independent from check-full")
 	}
 
-	checkFull := readWorkflow(t, "check-full.yml")
+	checkFull := readValidWorkflow(t, "check-full.yml")
 	if !strings.Contains(checkFull, "run: make _check-full") {
 		t.Fatal("check-full workflow does not run the CI core independently")
 	}
@@ -64,7 +64,7 @@ func TestAcceptanceWorkflowIsIndependentAndBlocking(t *testing.T) {
 }
 
 func TestReleaseEvidenceWorkflowIsPinnedToManualSHA(t *testing.T) {
-	contents := readWorkflow(t, "release-evidence.yml")
+	contents := readValidWorkflow(t, "release-evidence.yml")
 	for _, required := range []string{
 		"name: release-evidence", "workflow_dispatch:", "sha:", "required: true",
 		"ref: ${{ inputs.sha }}", "CANDIDATE_SHA: ${{ inputs.sha }}",
@@ -85,7 +85,7 @@ func TestReleaseEvidenceWorkflowIsPinnedToManualSHA(t *testing.T) {
 }
 
 func TestReleaseGateValidatesExistingEvidenceWithoutBuilding(t *testing.T) {
-	contents := readWorkflow(t, "release-gate.yml")
+	contents := readValidWorkflow(t, "release-gate.yml")
 	for _, required := range []string{
 		"name: release-gate", "tags:", "      - 'v*'", "workflow_dispatch:",
 		"actions: read", "checks: read", "getRef", "getTag", "listWorkflowRuns",
@@ -115,11 +115,11 @@ func TestCheckFullOwnsVulnerabilityReports(t *testing.T) {
 			t.Errorf("check-vulnerabilities is missing %q", required)
 		}
 	}
-	if !strings.Contains(vulnerabilities, "npm audit") || !strings.Contains(vulnerabilities, "||") {
+	if !strings.Contains(vulnerabilities, "(cd web && npm audit --json > ../results/npm-audit.json) ||") {
 		t.Fatal("npm audit must be report-only")
 	}
 
-	workflow := readWorkflow(t, "check-full.yml")
+	workflow := readValidWorkflow(t, "check-full.yml")
 	for _, required := range []string{"if: always()", "vulnerability-reports-${{ github.sha }}", "results/govulncheck.txt", "results/npm-audit.json"} {
 		if !strings.Contains(workflow, required) {
 			t.Errorf("check-full workflow is missing vulnerability artifact field %q", required)
@@ -138,10 +138,10 @@ func TestMainBranchProtectionPolicy(t *testing.T) {
 			Strict   bool     `json:"strict"`
 			Contexts []string `json:"contexts"`
 		} `json:"required_status_checks"`
-		EnforceAdmins              bool `json:"enforce_admins"`
-		RequiredPullRequestReviews any  `json:"required_pull_request_reviews"`
-		AllowForcePushes           bool `json:"allow_force_pushes"`
-		AllowDeletions             bool `json:"allow_deletions"`
+		EnforceAdmins              bool            `json:"enforce_admins"`
+		RequiredPullRequestReviews json.RawMessage `json:"required_pull_request_reviews"`
+		AllowForcePushes           bool            `json:"allow_force_pushes"`
+		AllowDeletions             bool            `json:"allow_deletions"`
 	}
 	if err := json.Unmarshal(contents, &policy); err != nil {
 		t.Fatalf("parse branch protection policy: %v", err)
@@ -152,7 +152,7 @@ func TestMainBranchProtectionPolicy(t *testing.T) {
 	if !policy.EnforceAdmins {
 		t.Error("branch protection permits administrator bypass")
 	}
-	if policy.RequiredPullRequestReviews != nil {
+	if string(policy.RequiredPullRequestReviews) != "null" {
 		t.Error("branch protection unexpectedly requires reviews")
 	}
 	if policy.AllowForcePushes || policy.AllowDeletions {
@@ -160,13 +160,13 @@ func TestMainBranchProtectionPolicy(t *testing.T) {
 	}
 }
 
-func readWorkflow(t *testing.T, name string) string {
+func readValidWorkflow(t *testing.T, name string) string {
 	t.Helper()
 	contents, err := os.ReadFile(filepath.Join(internalRoot(t), "..", ".github", "workflows", name))
 	if err != nil {
 		t.Fatalf("read workflow %s: %v", name, err)
 	}
-	var workflow any
+	var workflow yaml.Node
 	if err := yaml.Unmarshal(contents, &workflow); err != nil {
 		t.Fatalf("parse workflow %s: %v", name, err)
 	}

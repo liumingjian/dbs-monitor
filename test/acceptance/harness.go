@@ -202,8 +202,8 @@ func (result *acceptanceResult) write(path string) error {
 	return nil
 }
 
-func (result *acceptanceResult) exitCode(testCode int) int {
-	if testCode != 0 || !result.Summary.BaselinePassed {
+func (result *acceptanceResult) exitCode(testExitCode int) int {
+	if testExitCode != 0 || !result.Summary.BaselinePassed {
 		return 1
 	}
 	return 0
