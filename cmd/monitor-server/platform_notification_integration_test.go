@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -46,10 +45,7 @@ func TestPlatformDatabaseFailureSendsSnapshotDirectlyWithoutProductWrites(t *tes
 		admin.Close()
 	})
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openRotationSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		migrationDB.Close()

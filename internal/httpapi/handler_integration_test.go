@@ -51,10 +51,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -1184,6 +1181,15 @@ func openSQL(t *testing.T, database string) *sql.DB {
 		t.Fatalf("ping database: %v", err)
 	}
 	return databaseHandle
+}
+
+func createTestCredentialDirectory(t *testing.T) string {
+	t.Helper()
+	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("create test credential directory: %v", err)
+	}
+	return directory
 }
 
 func connectionString(database string) string {

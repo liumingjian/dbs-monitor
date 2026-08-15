@@ -43,10 +43,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate test database: %v", err)
@@ -496,10 +493,7 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 		t.Fatalf("create isolation test database: %v", err)
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate isolation credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate isolation test database: %v", err)
@@ -606,10 +600,7 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 		cleanup.ExecContext(context.Background(), "DROP ROLE IF EXISTS "+roleIdentifier)
 	})
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate capability credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate capability platform database: %v", err)
@@ -898,6 +889,15 @@ func env(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func createTestCredentialDirectory(t *testing.T) string {
+	t.Helper()
+	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("create test credential directory: %v", err)
+	}
+	return directory
 }
 
 func envInt(name string, fallback int) int {

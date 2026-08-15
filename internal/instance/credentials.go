@@ -37,12 +37,12 @@ type CredentialFaultCode string
 const (
 	CredentialFaultMissingKey        CredentialFaultCode = "CREDENTIAL_KEY_MISSING"
 	CredentialFaultCurrentKey        CredentialFaultCode = "CREDENTIAL_CURRENT_KEY_INVALID"
-	CredentialFaultKeyFormat         CredentialFaultCode = "CREDENTIAL_KEY_FORMAT_INVALID"
 	CredentialFaultKeyLength         CredentialFaultCode = "CREDENTIAL_KEY_LENGTH_INVALID"
 	CredentialFaultKeyPermissions    CredentialFaultCode = "CREDENTIAL_KEY_PERMISSIONS_INVALID"
 	CredentialFaultKeyOwner          CredentialFaultCode = "CREDENTIAL_KEY_OWNER_INVALID"
 	CredentialFaultUnknownKeyVersion CredentialFaultCode = "CREDENTIAL_KEY_VERSION_UNKNOWN"
 	CredentialFaultAuthentication    CredentialFaultCode = "CREDENTIAL_AUTHENTICATION_FAILED"
+	CredentialFaultKeyFormat         CredentialFaultCode = "CREDENTIAL_KEY_FORMAT_INVALID"
 )
 
 // CredentialFault is the stable platform-fault fact consumed by diagnostics.
@@ -81,11 +81,11 @@ func (version CredentialVersion) After(other CredentialVersion) bool {
 
 // CredentialKeyring is the concrete instance-password implementation.
 type CredentialKeyring struct {
-	directory      string
-	currentVersion int32
-	currentKey     []byte
-	fault          error
-	generated      bool
+	directory           string
+	currentVersion      int32
+	currentKey          []byte
+	fault               error
+	generatedInitialKey bool
 }
 
 func (keyring *CredentialKeyring) CurrentVersion() int32 {
@@ -94,12 +94,12 @@ func (keyring *CredentialKeyring) CurrentVersion() int32 {
 
 func OpenCredentialKeyring(directory string, hasEncryptedCredentials bool) (*CredentialKeyring, error) {
 	keyring := &CredentialKeyring{directory: directory}
-	generated, err := initializeCredentialKeyring(directory, hasEncryptedCredentials)
+	generatedInitialKey, err := initializeCredentialKeyring(directory, hasEncryptedCredentials)
 	if err != nil {
 		keyring.fault = err
 		return keyring, err
 	}
-	keyring.generated = generated
+	keyring.generatedInitialKey = generatedInitialKey
 
 	version, err := readCurrentCredentialKeyVersion(directory)
 	if err != nil {
@@ -107,7 +107,8 @@ func OpenCredentialKeyring(directory string, hasEncryptedCredentials bool) (*Cre
 		return keyring, err
 	}
 	missingCode := CredentialFaultCurrentKey
-	if matches, globErr := filepath.Glob(filepath.Join(directory, credentialKeyFilenamePattern)); globErr == nil && len(matches) == 0 {
+	matches, globErr := filepath.Glob(filepath.Join(directory, credentialKeyFilenamePattern))
+	if globErr == nil && len(matches) == 0 {
 		missingCode = CredentialFaultMissingKey
 	}
 	key, err := readCredentialKey(directory, version, missingCode)
@@ -124,13 +125,16 @@ func (keyring *CredentialKeyring) Fault() error {
 	return keyring.fault
 }
 
-func (keyring *CredentialKeyring) Generated() bool {
-	return keyring.generated
+func (keyring *CredentialKeyring) GeneratedInitialKey() bool {
+	return keyring.generatedInitialKey
 }
 
 func initializeCredentialKeyring(directory string, hasEncryptedCredentials bool) (bool, error) {
 	info, err := os.Lstat(directory)
-	if err != nil || !info.IsDir() {
+	if err != nil {
+		return false, &CredentialFault{Code: CredentialFaultMissingKey}
+	}
+	if !info.IsDir() {
 		return false, &CredentialFault{Code: CredentialFaultMissingKey}
 	}
 	if info.Mode().Perm() != 0o700 {
@@ -142,7 +146,8 @@ func initializeCredentialKeyring(directory string, hasEncryptedCredentials bool)
 	if hasEncryptedCredentials {
 		return false, nil
 	}
-	if _, err := os.Lstat(filepath.Join(directory, credentialCurrentVersionFilename)); !errors.Is(err, os.ErrNotExist) {
+	currentPath := filepath.Join(directory, credentialCurrentVersionFilename)
+	if _, err := os.Lstat(currentPath); !errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	matches, globErr := filepath.Glob(filepath.Join(directory, credentialKeyFilenamePattern))
@@ -349,9 +354,9 @@ func generateInitialCredentialKeyring(directory string) (bool, error) {
 	if os.Geteuid() == 0 {
 		return false, &CredentialFault{Code: CredentialFaultKeyOwner}
 	}
-	key := make([]byte, credentialKeySize)
-	if _, err := io.ReadFull(rand.Reader, key); err != nil {
-		return false, fmt.Errorf("generate instance credential key: %w", err)
+	encodedKey, err := generateEncodedCredentialKey()
+	if err != nil {
+		return false, err
 	}
 	keyPath := filepath.Join(directory, credentialKeyFilename(1))
 	file, err := os.OpenFile(keyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
@@ -361,14 +366,13 @@ func generateInitialCredentialKeyring(directory string) (bool, error) {
 	if err != nil {
 		return false, &CredentialFault{Code: CredentialFaultMissingKey}
 	}
-	written := false
+	keyFileWritten := false
 	defer func() {
 		file.Close()
-		if !written {
+		if !keyFileWritten {
 			os.Remove(keyPath)
 		}
 	}()
-	encodedKey := base64.StdEncoding.EncodeToString(key) + "\n"
 	if bytesWritten, err := file.WriteString(encodedKey); err != nil || bytesWritten != len(encodedKey) {
 		return false, &CredentialFault{Code: CredentialFaultMissingKey}
 	}
@@ -378,7 +382,7 @@ func generateInitialCredentialKeyring(directory string) (bool, error) {
 	if err := file.Close(); err != nil {
 		return false, &CredentialFault{Code: CredentialFaultMissingKey}
 	}
-	written = true
+	keyFileWritten = true
 	if err := writeCurrentCredentialKeyVersion(directory, 1); err != nil {
 		return false, err
 	}
@@ -386,9 +390,9 @@ func generateInitialCredentialKeyring(directory string) (bool, error) {
 }
 
 func generateCredentialKey(directory string, version int32) error {
-	key := make([]byte, credentialKeySize)
-	if _, err := io.ReadFull(rand.Reader, key); err != nil {
-		return fmt.Errorf("generate instance credential key: %w", err)
+	encodedKey, err := generateEncodedCredentialKey()
+	if err != nil {
+		return err
 	}
 	file, err := os.CreateTemp(directory, ".master-key-")
 	if err != nil {
@@ -396,7 +400,6 @@ func generateCredentialKey(directory string, version int32) error {
 	}
 	temporary := file.Name()
 	defer os.Remove(temporary)
-	encodedKey := base64.StdEncoding.EncodeToString(key) + "\n"
 	if bytesWritten, err := file.WriteString(encodedKey); err != nil || bytesWritten != len(encodedKey) {
 		file.Close()
 		return &CredentialFault{Code: CredentialFaultMissingKey}
@@ -412,6 +415,14 @@ func generateCredentialKey(directory string, version int32) error {
 		return &CredentialFault{Code: CredentialFaultCurrentKey}
 	}
 	return syncCredentialDirectory(directory, CredentialFaultMissingKey)
+}
+
+func generateEncodedCredentialKey() (string, error) {
+	key := make([]byte, credentialKeySize)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return "", fmt.Errorf("generate instance credential key: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(key) + "\n", nil
 }
 
 func credentialKeyVersions(directory string) ([]int32, error) {
@@ -513,7 +524,10 @@ func readCredentialKey(directory string, version int32, missingCode CredentialFa
 
 func readCredentialFile(path string, missingCode CredentialFaultCode) ([]byte, error) {
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() {
+	if err != nil {
+		return nil, &CredentialFault{Code: missingCode}
+	}
+	if !info.Mode().IsRegular() {
 		return nil, &CredentialFault{Code: missingCode}
 	}
 	if info.Mode().Perm() != 0o600 {

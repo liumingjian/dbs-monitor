@@ -63,6 +63,9 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read generated startup key: %v", err)
 	}
+	if len(firstKey) == 0 {
+		t.Fatal("generated startup key was empty")
+	}
 	if err := os.RemoveAll(keyringDirectory); err != nil {
 		t.Fatalf("remove keyring before current-schema migration: %v", err)
 	}
@@ -75,9 +78,6 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	}
 	if _, err := os.Stat(keyringDirectory); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("current-schema migration recreated keyring: %v", err)
-	}
-	if len(firstKey) == 0 {
-		t.Fatal("generated startup key was empty")
 	}
 
 	lockConnection, err := database.Conn(ctx)

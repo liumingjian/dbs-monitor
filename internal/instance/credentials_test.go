@@ -17,7 +17,7 @@ func TestCredentialKeyringRoundTripAndNonceIsolation(t *testing.T) {
 		password   = "not-written-to-errors"
 		gcmTagSize = 16
 	)
-	directory := createCredentialDirectory(t)
+	directory := createTestCredentialDirectory(t)
 	keyring, err := OpenCredentialKeyring(directory, false)
 	if err != nil {
 		t.Fatalf("open new keyring: %v", err)
@@ -65,7 +65,7 @@ func TestCredentialKeyringRoundTripAndNonceIsolation(t *testing.T) {
 }
 
 func TestSMTPPasswordUsesDistinctAuthenticatedPurpose(t *testing.T) {
-	directory := createCredentialDirectory(t)
+	directory := createTestCredentialDirectory(t)
 	keyring, err := OpenCredentialKeyring(directory, false)
 	if err != nil {
 		t.Fatalf("open new keyring: %v", err)
@@ -83,7 +83,7 @@ func TestSMTPPasswordUsesDistinctAuthenticatedPurpose(t *testing.T) {
 }
 
 func TestWebhookSigningFieldsUseTargetBoundAuthenticatedPurposes(t *testing.T) {
-	directory := createCredentialDirectory(t)
+	directory := createTestCredentialDirectory(t)
 	keyring, err := OpenCredentialKeyring(directory, false)
 	if err != nil {
 		t.Fatalf("open new keyring: %v", err)
@@ -112,12 +112,12 @@ func TestWebhookSigningFieldsUseTargetBoundAuthenticatedPurposes(t *testing.T) {
 }
 
 func TestCredentialKeyringGeneratesOnlyOnce(t *testing.T) {
-	directory := createCredentialDirectory(t)
+	directory := createTestCredentialDirectory(t)
 	keyring, err := OpenCredentialKeyring(directory, false)
 	if err != nil {
 		t.Fatalf("open new keyring: %v", err)
 	}
-	if !keyring.Generated() {
+	if !keyring.GeneratedInitialKey() {
 		t.Fatal("new keyring was not reported as generated")
 	}
 	path := filepath.Join(directory, credentialKeyFilename(1))
@@ -151,7 +151,7 @@ func TestCredentialKeyringGeneratesOnlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen keyring: %v", err)
 	}
-	if keyring.Generated() {
+	if keyring.GeneratedInitialKey() {
 		t.Fatal("existing keyring was reported as generated")
 	}
 	second, err := os.ReadFile(path)
@@ -205,7 +205,7 @@ func TestCredentialKeyringRejectsOrphanedKey(t *testing.T) {
 }
 
 func TestCredentialKeyringDoesNotRepairDanglingCurrentPointer(t *testing.T) {
-	directory := createCredentialDirectory(t)
+	directory := createTestCredentialDirectory(t)
 	if err := os.Symlink(credentialKeyFilename(1), filepath.Join(directory, credentialCurrentVersionFilename)); err != nil {
 		t.Fatalf("create dangling current pointer: %v", err)
 	}
@@ -247,7 +247,7 @@ func TestCredentialKeyringFaults(t *testing.T) {
 			name: "dangling current",
 			setup: func(t *testing.T, directory string) {
 				writeCredentialFile(t, directory, credentialCurrentVersionFilename, []byte("2\n"), 0o600)
-				writeCredentialFile(t, directory, credentialKeyFilename(1), make([]byte, credentialKeySize), 0o600)
+				writeCredentialFile(t, directory, credentialKeyFilename(1), credentialKeyFixture(credentialKeySize), 0o600)
 			},
 			want: CredentialFaultCurrentKey,
 		},
@@ -298,7 +298,7 @@ func TestCredentialKeyringFaults(t *testing.T) {
 }
 
 func TestCredentialKeyringRejectsUnknownVersion(t *testing.T) {
-	keyring, err := OpenCredentialKeyring(createCredentialDirectory(t), false)
+	keyring, err := OpenCredentialKeyring(createTestCredentialDirectory(t), false)
 	if err != nil {
 		t.Fatalf("open keyring: %v", err)
 	}
@@ -331,7 +331,7 @@ func assertCredentialFault(t *testing.T, err error, want CredentialFaultCode) {
 	}
 }
 
-func createCredentialDirectory(t *testing.T) string {
+func createTestCredentialDirectory(t *testing.T) string {
 	t.Helper()
 	directory := filepath.Join(t.TempDir(), "credentials")
 	if err := os.Mkdir(directory, 0o700); err != nil {

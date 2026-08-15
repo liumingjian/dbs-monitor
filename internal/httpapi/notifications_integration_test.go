@@ -352,10 +352,7 @@ func notificationHTTPTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, 
 		admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
 		admin.Close()
 	})
-	directory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(directory, 0o700); err != nil {
-		t.Fatalf("precreate Webhook credential directory: %v", err)
-	}
+	directory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, directory); err != nil {
 		migrationDB.Close()

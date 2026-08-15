@@ -8,7 +8,6 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -38,10 +37,7 @@ func TestSessionSnapshotAndQueryStatisticsStates(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate: %v", err)

@@ -349,7 +349,10 @@ func (store *Store) PublishSummary(now time.Time) {
 
 func (store *Store) RecordCredentialKeyGenerated(now time.Time, version int32, path string) {
 	store.writeJournal(credentialKeyGeneratedEvent{
-		Event: "credential_key_generated", ObservedAt: now.UTC(), KeyVersion: version, Path: path,
+		Event:      "credential_key_generated",
+		ObservedAt: now.UTC(),
+		KeyVersion: version,
+		Path:       path,
 	})
 }
 

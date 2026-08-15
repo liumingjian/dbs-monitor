@@ -34,17 +34,19 @@ func openStartupCredentialKeyring(
 			failureCode = string(fault.Code)
 		}
 		health.Update(now, platformhealth.CredentialSource(platformhealth.CredentialFacts{
-			Available: true, FailureCode: failureCode,
+			Available:   true,
+			FailureCode: failureCode,
 		}))
 		logger.Printf("monitor-server: credential keyring at %s is unavailable: %v; continuing with dependent operations disabled", directory, keyringErr)
 		return keyring, nil
 	}
 
 	health.Update(now, platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
-	if keyring.Generated() {
-		path := filepath.Join(directory, fmt.Sprintf("master-key-v%d", keyring.CurrentVersion()))
-		logger.Printf("monitor-server: generated credential key version %d at %s", keyring.CurrentVersion(), path)
-		health.RecordCredentialKeyGenerated(now, keyring.CurrentVersion(), path)
+	if keyring.GeneratedInitialKey() {
+		version := keyring.CurrentVersion()
+		path := filepath.Join(directory, fmt.Sprintf("master-key-v%d", version))
+		logger.Printf("monitor-server: generated credential key version %d at %s", version, path)
+		health.RecordCredentialKeyGenerated(now, version, path)
 	}
 	return keyring, nil
 }
@@ -54,9 +56,9 @@ func databaseHasEncryptedCredentials(ctx context.Context, platform *db.Pool) (bo
 		EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NOT NULL)
 		OR EXISTS (SELECT 1 FROM smtp_channel WHERE auth_ciphertext IS NOT NULL)
 		OR EXISTS (SELECT 1 FROM webhook_target WHERE signing_value_ciphertext IS NOT NULL)`
-	var exists bool
-	if err := platform.QueryRow(ctx, query).Scan(&exists); err != nil {
+	var hasEncryptedCredentials bool
+	if err := platform.QueryRow(ctx, query).Scan(&hasEncryptedCredentials); err != nil {
 		return false, fmt.Errorf("inspect encrypted credentials: %w", err)
 	}
-	return exists, nil
+	return hasEncryptedCredentials, nil
 }

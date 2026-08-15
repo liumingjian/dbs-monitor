@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -58,7 +57,8 @@ func TestMissingCredentialKeyringKeepsControlPlaneAvailable(t *testing.T) {
 	}
 	generatedAt := time.Date(2026, time.August, 15, 11, 0, 0, 0, time.UTC)
 	var generationJournal bytes.Buffer
-	generationHealth := platformhealth.NewStore("3.0.0", generatedAt.Add(-time.Minute), log.New(&generationJournal, "", 0))
+	generationLogger := log.New(&generationJournal, "", 0)
+	generationHealth := platformhealth.NewStore("3.0.0", generatedAt.Add(-time.Minute), generationLogger)
 
 	pool, err := pgxpool.New(ctx, rotationConnectionString(databaseName))
 	if err != nil {
@@ -72,7 +72,7 @@ func TestMissingCredentialKeyringKeepsControlPlaneAvailable(t *testing.T) {
 		t.Fatalf("insert non-secret SMTP configuration: %v", err)
 	}
 	originalKeyring, err := openStartupCredentialKeyring(
-		ctx, platform, credentialDirectory, generationHealth, log.New(&generationJournal, "", 0), generatedAt,
+		ctx, platform, credentialDirectory, generationHealth, generationLogger, generatedAt,
 	)
 	if err != nil {
 		t.Fatalf("initialize original keyring: %v", err)
@@ -105,8 +105,9 @@ func TestMissingCredentialKeyringKeepsControlPlaneAvailable(t *testing.T) {
 
 	var journal bytes.Buffer
 	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
-	health := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), log.New(&journal, "", 0))
-	keyring, err := openStartupCredentialKeyring(ctx, platform, credentialDirectory, health, log.New(&journal, "", 0), now)
+	logger := log.New(&journal, "", 0)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), logger)
+	keyring, err := openStartupCredentialKeyring(ctx, platform, credentialDirectory, health, logger, now)
 	if err != nil {
 		t.Fatalf("open missing startup keyring: %v", err)
 	}
@@ -123,8 +124,8 @@ func TestMissingCredentialKeyringKeepsControlPlaneAvailable(t *testing.T) {
 	)
 	server := httptest.NewTLSServer(handler.Routes())
 	defer server.Close()
-	body, _ := json.Marshal(map[string]string{"username": "admin", "password": "issue-131-admin-password"})
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/login", bytes.NewReader(body))
+	loginBody := []byte(`{"password":"issue-131-admin-password","username":"admin"}`)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/api/v1/login", bytes.NewReader(loginBody))
 	if err != nil {
 		t.Fatalf("create login request: %v", err)
 	}

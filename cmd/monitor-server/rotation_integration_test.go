@@ -49,10 +49,7 @@ func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 		}
 	})
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openRotationSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate: %v", err)

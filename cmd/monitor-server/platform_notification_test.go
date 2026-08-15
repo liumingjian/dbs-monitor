@@ -36,10 +36,7 @@ func TestSendPlatformUnavailableNotificationFromSnapshot(t *testing.T) {
 	}))
 	defer receiver.Close()
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("create direct notification keyring: %v", err)
@@ -85,10 +82,7 @@ func TestSendPlatformUnavailableNotificationFromSnapshot(t *testing.T) {
 func TestSendPlatformUnavailableNotificationReportsAllSnapshotErrors(t *testing.T) {
 	t.Parallel()
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("create direct notification keyring: %v", err)
@@ -113,4 +107,13 @@ func TestSendPlatformUnavailableNotificationReportsAllSnapshotErrors(t *testing.
 	if err == nil || err.Error() != want {
 		t.Fatalf("direct notification error = %v, want %q", err, want)
 	}
+}
+
+func createTestCredentialDirectory(t *testing.T) string {
+	t.Helper()
+	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("create test credential directory: %v", err)
+	}
+	return directory
 }

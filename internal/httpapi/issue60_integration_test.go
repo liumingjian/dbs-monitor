@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -69,10 +68,7 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		t.Fatalf("install pg_stat_statements in issue 60 target: %v", err)
 	}
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("precreate credential directory: %v", err)
-	}
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, platformDatabase)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate issue 60 platform database: %v", err)
