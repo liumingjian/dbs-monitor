@@ -102,7 +102,7 @@ func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentia
 		return fmt.Errorf("inspect encrypted instance credentials: %w", err)
 	}
 	var hasSMTPTable bool
-	if err := database.QueryRowContext(ctx, "SELECT to_regclass('public.smtp_channel') IS NOT NULL").Scan(&hasSMTPTable); err != nil {
+	if err := database.QueryRowContext(ctx, "SELECT to_regclass('smtp_channel') IS NOT NULL").Scan(&hasSMTPTable); err != nil {
 		return fmt.Errorf("inspect SMTP credential schema: %w", err)
 	}
 	if hasSMTPTable {
@@ -113,7 +113,7 @@ func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentia
 		hasEncryptedCredentials = hasEncryptedCredentials || hasEncryptedSMTP
 	}
 	var hasWebhookTable bool
-	if err := database.QueryRowContext(ctx, "SELECT to_regclass('public.webhook_target') IS NOT NULL").Scan(&hasWebhookTable); err != nil {
+	if err := database.QueryRowContext(ctx, "SELECT to_regclass('webhook_target') IS NOT NULL").Scan(&hasWebhookTable); err != nil {
 		return fmt.Errorf("inspect Webhook credential schema: %w", err)
 	}
 	if hasWebhookTable {
