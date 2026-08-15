@@ -55,7 +55,8 @@ func TestPGStatStatementsDeclaration(t *testing.T) {
 			t.Errorf("pg_stat_statements query is missing %q", fragment)
 		}
 	}
-	if regexp.MustCompile(`(?i)\b(query|query_text|sql|sql_text)\b`).MatchString(task.SQL) {
+	sqlTextColumnPattern := regexp.MustCompile(`(?i)\b(query|query_text|sql|sql_text)\b`)
+	if sqlTextColumnPattern.MatchString(task.SQL) {
 		t.Fatal("pg_stat_statements query selects SQL text")
 	}
 }
