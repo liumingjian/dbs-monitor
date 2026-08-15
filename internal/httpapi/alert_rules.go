@@ -82,7 +82,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 	if input.Enabled != existing.Enabled {
 		return api.UpdateAlertRule400JSONResponse(alertRuleValidationError([]fieldError{{field: "enabled", message: "must be changed through the enablement endpoint"}})), nil
 	}
-	if code := alerting.BuiltinRuleRestriction(existing.BuiltinIdentifier.String, alerting.BuiltinRuleChange{Severity: &input.Severity}); code != "" {
+	if code := alerting.BuiltinRuleRestriction(existing.BuiltinIdentifier.Valid, alerting.BuiltinRuleChange{Severity: &input.Severity}); code != "" {
 		return api.UpdateAlertRule400JSONResponse(errorBody(code, "built-in collection rules must remain warning or critical")), nil
 	}
 	if existing.BuiltinIdentifier.Valid && input.MetricId != existing.MetricID {
@@ -156,7 +156,7 @@ func (handler *Handler) UpdateAlertRuleEnabled(ctx context.Context, request api.
 	if err != nil {
 		return nil, err
 	}
-	if code := alerting.BuiltinRuleRestriction(existing.BuiltinIdentifier.String, alerting.BuiltinRuleChange{Enabled: &request.Body.Enabled}); code != "" {
+	if code := alerting.BuiltinRuleRestriction(existing.BuiltinIdentifier.Valid, alerting.BuiltinRuleChange{Enabled: &request.Body.Enabled}); code != "" {
 		return api.UpdateAlertRuleEnabled400JSONResponse(errorBody(code, "built-in collection rules cannot be disabled")), nil
 	}
 	rule, err := queries.SetAlertRuleEnabled(ctx, alerting.SetAlertRuleEnabledParams{
@@ -192,7 +192,7 @@ func (handler *Handler) DeleteAlertRule(ctx context.Context, request api.DeleteA
 	if err != nil {
 		return nil, err
 	}
-	if code := alerting.BuiltinRuleRestriction(rule.BuiltinIdentifier.String, alerting.BuiltinRuleChange{Delete: true}); code != "" {
+	if code := alerting.BuiltinRuleRestriction(rule.BuiltinIdentifier.Valid, alerting.BuiltinRuleChange{Delete: true}); code != "" {
 		return api.DeleteAlertRule409JSONResponse(errorBody(code, "built-in collection rules cannot be deleted")), nil
 	}
 	if _, err := queries.DeleteAlertRule(ctx, ruleID); err != nil {

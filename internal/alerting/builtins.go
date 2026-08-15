@@ -27,8 +27,8 @@ type BuiltinRuleChange struct {
 	Severity *api.AlertSeverity
 }
 
-func BuiltinRuleRestriction(identifier string, change BuiltinRuleChange) api.ErrorErrorCode {
-	if identifier == "" {
+func BuiltinRuleRestriction(isBuiltin bool, change BuiltinRuleChange) api.ErrorErrorCode {
+	if !isBuiltin {
 		return ""
 	}
 	if change.Delete {
