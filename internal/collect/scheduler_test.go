@@ -30,6 +30,18 @@ func TestInitialPhaseIsStableAndDistributed(t *testing.T) {
 	}
 }
 
+func TestInitialDueRunsCapabilitySnapshotImmediately(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	instanceID := "00000000-0000-0000-0000-000000000001"
+
+	if got := initialDue(now, instanceID, capabilitySnapshotTask, capabilitySnapshotTask.Interval); !got.Equal(now) {
+		t.Fatalf("initial capability due = %s, want %s", got, now)
+	}
+	if got := initialDue(now, instanceID, metric.Tasks[0], metric.Tasks[0].Interval); !got.After(now) {
+		t.Fatalf("initial collection due = %s, want staggered after %s", got, now)
+	}
+}
+
 func TestFailureBackoffCapsAtSixtySecondsAndExcludesProbe(t *testing.T) {
 	tests := []struct {
 		name     string

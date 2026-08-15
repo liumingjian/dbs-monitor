@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 const instanceName = 'T11 smoke instance'
 
-test('walking skeleton reaches a chart and keeps URL and query time ranges in sync', async ({ page }) => {
+test('[AC-01-S1] real pg_stat_database samples reach a chart and keep URL and query time ranges in sync', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('用户名').fill('admin')
   await page.getByLabel('密码').fill('t11-playwright-password')
@@ -12,7 +12,11 @@ test('walking skeleton reaches a chart and keeps URL and query time ranges in sy
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
   await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '查看监控' }).click()
 
-  const chart = page.getByRole('figure', { name: '总连接数趋势' })
+  await page.getByLabel('指标').click()
+  await page.getByText('TPS (pg.tps)', { exact: true }).click()
+  await expect(page).toHaveURL((url) => url.searchParams.get('metric') === 'pg.tps')
+
+  const chart = page.getByRole('figure', { name: 'TPS趋势' })
   await expect(chart).toBeVisible()
   await chart.getByText('查看数据表').click()
   await expect(chart.locator('tbody tr').first()).toBeVisible()

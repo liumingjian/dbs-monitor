@@ -267,7 +267,7 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 			active[template.key] = struct{}{}
 			entry, exists := scheduler.schedule[template.key]
 			if !exists || entry.template.interval != template.interval {
-				entry.nextDue = nextDueAfter(now, initialPhase(template.key.instanceID, task.ID, template.interval), template.interval)
+				entry.nextDue = initialDue(now, template.key.instanceID, task, template.interval)
 			}
 			entry.template = template
 			scheduler.schedule[template.key] = entry
@@ -276,7 +276,7 @@ func (scheduler *centralScheduler) refresh(ctx context.Context, now time.Time) e
 		active[template.key] = struct{}{}
 		entry, exists := scheduler.schedule[template.key]
 		if !exists {
-			entry.nextDue = nextDueAfter(now, initialPhase(template.key.instanceID, capabilitySnapshotTask.ID, capabilitySnapshotTask.Interval), capabilitySnapshotTask.Interval)
+			entry.nextDue = initialDue(now, template.key.instanceID, capabilitySnapshotTask, capabilitySnapshotTask.Interval)
 		}
 		entry.template = template
 		scheduler.schedule[template.key] = entry
@@ -440,4 +440,11 @@ func nextDueAfter(now time.Time, phase, interval time.Duration) time.Time {
 		return base
 	}
 	return base.Add((now.Sub(base)/interval + 1) * interval)
+}
+
+func initialDue(now time.Time, instanceID string, task metric.Task, interval time.Duration) time.Time {
+	if isCapabilitySnapshotTask(task) {
+		return now
+	}
+	return nextDueAfter(now, initialPhase(instanceID, task.ID, interval), interval)
 }

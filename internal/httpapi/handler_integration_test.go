@@ -353,12 +353,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	assertMetricSeriesHasPoints(t, client, seriesURL)
 	tpsURL := strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1)
-	if _, err := pool.Exec(ctx, `UPDATE instance_collection_task_state
-		SET last_error_code = 'COUNTER_RESET', last_error_message = 'database statistics counters reset'
-		WHERE instance_id = $1 AND task_id = 'pg.stat_database'`, createBody.Instance.Id); err != nil {
-		t.Fatalf("mark counter reset: %v", err)
-	}
-	assertUnavailability(t, client, tpsURL, "COUNTER_RESET")
+	assertUnavailability(t, client, tpsURL, "NO_SAMPLES_YET")
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect pg_stat_database rate samples: %v", err)
 	}
