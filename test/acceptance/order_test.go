@@ -3,6 +3,7 @@
 package acceptance
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -61,6 +62,41 @@ func TestAcceptanceResultRetainsEveryMatrixEntry(t *testing.T) {
 	if report.Summary.PendingCount != 98 {
 		t.Fatalf("pending count = %d, want 98", report.Summary.PendingCount)
 	}
+}
+
+func TestAcceptanceResultSerializesVerdictInputs(t *testing.T) {
+	matrix := loadMatrix(t, "matrix.yaml")
+	report := newResult(matrix, "0123456789012345678901234567890123456789")
+	contents, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("encode acceptance result: %v", err)
+	}
+	var encoded struct {
+		Exceptions *json.RawMessage `json:"exceptions"`
+		Entries    []struct {
+			ID       string  `json:"id"`
+			Baseline *bool   `json:"baseline"`
+			TestRef  *string `json:"test_ref"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(contents, &encoded); err != nil {
+		t.Fatalf("decode acceptance result: %v", err)
+	}
+	if encoded.Exceptions == nil || string(*encoded.Exceptions) != "[]" {
+		t.Fatalf("exceptions = %s, want an explicit empty array", contents)
+	}
+	if len(encoded.Entries) == 0 || encoded.Entries[0].Baseline == nil || !*encoded.Entries[0].Baseline {
+		t.Fatalf("first entry baseline was not serialized: %s", contents)
+	}
+	for _, entry := range encoded.Entries {
+		if entry.ID == "AC-09-F1" {
+			if entry.TestRef == nil || *entry.TestRef == "" {
+				t.Fatalf("AC-09-F1 test_ref was not serialized: %s", contents)
+			}
+			return
+		}
+	}
+	t.Fatal("AC-09-F1 was not serialized")
 }
 
 func entryIDs(entries []matrixEntry) []string {

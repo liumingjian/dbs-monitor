@@ -43,6 +43,7 @@ type matrixEntry struct {
 	ID       string       `yaml:"id"`
 	Baseline bool         `yaml:"baseline"`
 	Status   resultStatus `yaml:"status"`
+	TestRef  *string      `yaml:"test_ref"`
 	Reason   string       `yaml:"reason"`
 }
 
@@ -50,6 +51,7 @@ type acceptanceResult struct {
 	MatrixVersion int           `json:"matrix_version"`
 	CandidateSHA  string        `json:"candidate_sha"`
 	GeneratedAt   time.Time     `json:"generated_at"`
+	Exceptions    []any         `json:"exceptions"`
 	Entries       []entryResult `json:"entries"`
 	Summary       resultSummary `json:"summary"`
 }
@@ -59,7 +61,8 @@ type entryResult struct {
 	Status       resultStatus `json:"status"`
 	ActualResult string       `json:"actual_result"`
 	DurationMS   int64        `json:"duration_ms"`
-	baseline     bool
+	Baseline     bool         `json:"baseline"`
+	TestRef      *string      `json:"test_ref"`
 }
 
 type resultSummary struct {
@@ -134,6 +137,7 @@ func newResult(matrix acceptanceMatrix, candidateSHA string) *acceptanceResult {
 		MatrixVersion: matrix.Version,
 		CandidateSHA:  candidateSHA,
 		GeneratedAt:   time.Now().UTC(),
+		Exceptions:    append(make([]any, 0, len(matrix.Exceptions)), matrix.Exceptions...),
 	}
 	for _, entry := range executionOrder(matrix.Entries) {
 		status := resultPending
@@ -146,7 +150,8 @@ func newResult(matrix acceptanceMatrix, candidateSHA string) *acceptanceResult {
 			ID:           entry.ID,
 			Status:       status,
 			ActualResult: actualResult,
-			baseline:     entry.Baseline,
+			Baseline:     entry.Baseline,
+			TestRef:      entry.TestRef,
 		})
 	}
 	result.rebuildSummary()
@@ -173,7 +178,7 @@ func (result *acceptanceResult) rebuildSummary() {
 			result.Summary.PendingCount++
 			result.Summary.PendingIDs = append(result.Summary.PendingIDs, entry.ID)
 		}
-		if entry.baseline && entry.Status != resultPassed && entry.Status != resultNA {
+		if entry.Baseline && entry.Status != resultPassed && entry.Status != resultNA {
 			result.Summary.BaselinePassed = false
 		}
 	}

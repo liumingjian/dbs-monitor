@@ -65,6 +65,7 @@ capacity_fraction = total_bytes / delivery_disk_bytes
 control_ratio = pressure["p95_ms"] / baseline["p95_ms"]
 
 report = {
+    "candidate_sha": manifest["git_revision"],
     "query": {**query, "threshold_ms": 500, "status": "PASS" if query["p95_ms"] <= 500 else "BREACHED"},
     "capacity": {
         "partitions": len(capacity_rows),
