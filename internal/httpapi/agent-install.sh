@@ -25,26 +25,12 @@ runtime_user=dbs-monitor-agent
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT INT TERM
 
-for command in curl date install openssl sha256sum systemctl useradd; do
+for command in curl install openssl sha256sum systemctl useradd; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "$command is required to install DBS Monitor Agent" >&2
     exit 1
   }
 done
-
-date_header=$(curl --fail --silent --show-error --head --cacert "$bootstrap_ca" "$server_url/api/agent/install/ca.crt" | tr -d '\r' | sed -n 's/^Date: //p' | tail -n 1)
-server_epoch=$(date -u -d "$date_header" +%s 2>/dev/null || true)
-local_epoch=$(date -u +%s)
-if [ -z "$server_epoch" ]; then
-  echo "could not read platform time during Agent installation" >&2
-  exit 1
-fi
-clock_delta=$((local_epoch - server_epoch))
-[ "$clock_delta" -ge 0 ] || clock_delta=$((-clock_delta))
-if [ "$clock_delta" -gt 5 ]; then
-  echo "clock differs from the platform by more than 5 seconds" >&2
-  exit 1
-fi
 
 curl --fail --silent --show-error --cacert "$bootstrap_ca" "$server_url/api/agent/install/ca.crt" -o "$work/ca.crt"
 actual_ca_sha256=$(openssl x509 -in "$work/ca.crt" -outform DER | sha256sum | cut -d' ' -f1)
@@ -58,8 +44,11 @@ case "$(uname -m)" in
   aarch64|arm64) agent_arch=arm64 ;;
   *) echo "unsupported Agent architecture: $(uname -m)" >&2; exit 1 ;;
 esac
+curl_config=$work/curl.conf
+umask 077
+printf 'header = "Authorization: Bearer %s"\n' "$agent_token" >"$curl_config"
 curl --fail --silent --show-error --cacert "$work/ca.crt" \
-  "$server_url/api/agent/install/dbs-monitor-agent/$agent_arch" -o "$work/dbs-monitor-agent"
+  --config "$curl_config" "$server_url/api/v1/agent/download?arch=linux/$agent_arch" -o "$work/dbs-monitor-agent"
 
 if ! id "$runtime_user" >/dev/null 2>&1; then
   useradd --system --home-dir "$install_root" --shell /usr/sbin/nologin "$runtime_user"

@@ -35,6 +35,18 @@ AgentReport:
       type: array
       description: Unacknowledged samples from the Agent's five-minute in-memory window.
       items: { $ref: '#/AgentSample' }
+AgentReportAccepted:
+  type: object
+  required: [server_version, server_time]
+  properties:
+    server_version:
+      type: string
+      minLength: 1
+      description: Version of the server that accepted the report.
+    server_time:
+      type: string
+      format: date-time
+      description: Server time used by the Agent startup clock check.
 AgentRegistrationState:
   type: string
   enum: [NEVER_REGISTERED, EXPECTED_ONLINE, REVOKED, DISABLED]

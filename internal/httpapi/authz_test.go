@@ -25,7 +25,8 @@ func TestEveryOperationDeclaresRequiredRole(t *testing.T) {
 	specRoles := map[string]string{}
 	for path, item := range doc.Paths.Map() {
 		for method, operation := range item.Operations() {
-			if operation.OperationID == "reportAgentMetrics" && (operation.Security == nil || len(*operation.Security) == 0) {
+			if (operation.OperationID == "reportAgentMetrics" || operation.OperationID == "downloadAgentBinary") &&
+				(operation.Security == nil || len(*operation.Security) == 0) {
 				t.Errorf("agent operation %q has no bearer security", operation.OperationID)
 			}
 			if operation.OperationID == "" {

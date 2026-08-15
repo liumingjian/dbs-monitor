@@ -2,6 +2,8 @@
 
 The instance access-settings page is the primary installation path. Register or re-enable the Agent, copy the one-time command, and run it as root on the database host. The installed service runs as the dedicated `dbs-monitor-agent` user and does not upgrade itself; rerun a newly issued installation command for an explicit upgrade.
 
+The server-side `AGENT_BINARY_DIR` deployment setting must point to a directory containing executable `dbs-monitor-agent-linux-amd64` and `dbs-monitor-agent-linux-arm64` files. The server checks both files at startup; an unavailable or incomplete directory is reported by the distribution health fact and authenticated download requests return `503` instead of a silent `404`.
+
 ## Manual-copy fallback
 
 Use this only when the host cannot reach the platform distribution endpoints. Copy the matching `dbs-monitor-agent-linux-amd64` or `dbs-monitor-agent-linux-arm64` release binary and the platform `ca.crt` through the approved delivery channel, then reproduce the installer-owned files:

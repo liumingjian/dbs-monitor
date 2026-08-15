@@ -666,7 +666,10 @@ func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.Repo
 			return nil, err
 		}
 	}
-	return api.ReportAgentMetrics204Response{}, nil
+	return api.ReportAgentMetrics200JSONResponse{
+		ServerTime:    now,
+		ServerVersion: handler.serverVersion,
+	}, nil
 }
 
 func agentReportHasClockSkew(report api.AgentReport, now time.Time) bool {
@@ -774,6 +777,18 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			}
 			return next(context.WithValue(ctx, authenticatedAgentKey{}, report.Body.InstanceId), writer, request, value)
 		}
+		if operationID == "DownloadAgentBinary" {
+			token := bearerToken(request.Header.Get("Authorization"))
+			if token == "" {
+				return unauthorizedAgentDownload(), nil
+			}
+			hash := sha256.Sum256([]byte(token))
+			instanceID, err := New(handler.platform).GetInstanceIDByAgentTokenHash(ctx, hash[:])
+			if err != nil {
+				return unauthorizedAgentDownload(), nil
+			}
+			return next(context.WithValue(ctx, authenticatedAgentKey{}, uuid.UUID(instanceID.Bytes)), writer, request, value)
+		}
 		cookie, err := request.Cookie(sessionCookie)
 		if err != nil {
 			writer.WriteHeader(http.StatusUnauthorized)
@@ -801,7 +816,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 }
 
 var RequiredRoles = map[string]string{
-	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
+	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT", "DownloadAgentBinary": "AGENT",
 	"GetAgentRegistration": "READONLY", "RegisterAgent": "PLATFORM_ADMIN",
 	"RotateAgentToken": "PLATFORM_ADMIN", "RevokeAgentToken": "PLATFORM_ADMIN", "DisableAgent": "PLATFORM_ADMIN",
 	"ListAlertRules": "READONLY", "CreateAlertRule": "ALERT_ADMIN",
@@ -935,6 +950,10 @@ func unauthorizedLogin() api.CreateSession401JSONResponse {
 
 func unauthorizedAgent() api.ReportAgentMetrics401JSONResponse {
 	return api.ReportAgentMetrics401JSONResponse(errorBody(api.UNAUTHENTICATED, "invalid agent token"))
+}
+
+func unauthorizedAgentDownload() api.DownloadAgentBinary401JSONResponse {
+	return api.DownloadAgentBinary401JSONResponse(errorBody(api.UNAUTHENTICATED, "invalid agent token"))
 }
 
 func badAgentRequest(message string) api.ReportAgentMetrics400JSONResponse {

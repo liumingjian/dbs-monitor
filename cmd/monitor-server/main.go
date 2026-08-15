@@ -123,6 +123,9 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := distribution.HealthError(); err != nil {
+		log.Printf("Agent distribution unavailable: %v", err)
+	}
 	apiHandler := httpapi.NewHandlerWithAgentDistribution(platform, clock.Real{}, keyring, version, distribution).Routes()
 	fileServer := http.FileServer(http.FS(static))
 	handler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {

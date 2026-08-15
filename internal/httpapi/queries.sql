@@ -78,6 +78,13 @@ WHERE id = $1
   AND agent_token_hash IS NOT NULL
   AND agent_token_revoked_at IS NULL;
 
+-- name: GetInstanceIDByAgentTokenHash :one
+SELECT id
+FROM instance
+WHERE agent_token_hash = $1
+  AND agent_expected
+  AND agent_token_revoked_at IS NULL;
+
 -- name: GetInstanceAlertStatus :one
 SELECT status
 FROM alert_instance

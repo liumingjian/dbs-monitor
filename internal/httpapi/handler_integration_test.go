@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -68,7 +69,15 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("seed admin: %v", err)
 	}
 
-	server := httptest.NewTLSServer(httpapi.NewHandlerWithVersion(platform, clock.Real{}, keyring, "3.0.0").Routes())
+	agentBinaryDirectory := t.TempDir()
+	agentBinary := []byte("dbs-monitor-agent-binary")
+	for _, architecture := range []string{"amd64", "arm64"} {
+		if err := os.WriteFile(filepath.Join(agentBinaryDirectory, "dbs-monitor-agent-linux-"+architecture), agentBinary, 0755); err != nil {
+			t.Fatalf("write %s Agent binary: %v", architecture, err)
+		}
+	}
+	distribution := httpapi.AgentDistribution{BinaryDirectory: agentBinaryDirectory, CAFingerprint: "test-ca-fingerprint"}
+	server := httptest.NewTLSServer(httpapi.NewHandlerWithAgentDistribution(platform, clock.Real{}, keyring, "3.0.0", distribution).Routes())
 	defer server.Close()
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
@@ -173,6 +182,33 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if !bytes.Equal(storedAgentTokenHash, wantAgentTokenHash[:]) || bytes.Contains(storedAgentTokenHash, []byte(agentToken)) {
 		t.Fatal("Agent token was not stored exclusively as its SHA-256 hash")
 	}
+	downloadURL := server.URL + "/api/v1/agent/download?arch=linux%2Famd64"
+	for name, token := range map[string]string{"missing": "", "wrong": "wrong-token"} {
+		download := requestJSON(t, client, http.MethodGet, downloadURL, nil, token)
+		download.Body.Close()
+		if download.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("%s Agent token download status = %d, want 401", name, download.StatusCode)
+		}
+	}
+	download := requestJSON(t, client, http.MethodGet, downloadURL, nil, agentToken)
+	downloadBody, err := io.ReadAll(download.Body)
+	download.Body.Close()
+	if err != nil || download.StatusCode != http.StatusOK || !bytes.Equal(downloadBody, agentBinary) {
+		t.Fatalf("authenticated Agent download = status %d body %q error %v", download.StatusCode, downloadBody, err)
+	}
+	invalidArchitecture := requestJSON(t, client, http.MethodGet, server.URL+"/api/v1/agent/download?arch=linux%2Fs390x", nil, agentToken)
+	invalidArchitecture.Body.Close()
+	if invalidArchitecture.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid Agent architecture status = %d, want 400", invalidArchitecture.StatusCode)
+	}
+	if err := os.Remove(filepath.Join(agentBinaryDirectory, "dbs-monitor-agent-linux-arm64")); err != nil {
+		t.Fatalf("remove arm64 Agent fixture: %v", err)
+	}
+	missingBinary := requestJSON(t, client, http.MethodGet, server.URL+"/api/v1/agent/download?arch=linux%2Farm64", nil, agentToken)
+	missingBinary.Body.Close()
+	if missingBinary.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("missing Agent binary status = %d, want 503", missingBinary.StatusCode)
+	}
 	registrationRead := getResponse(t, client, registrationURL)
 	var registrationReadBody map[string]any
 	if err := json.NewDecoder(registrationRead.Body).Decode(&registrationReadBody); err != nil {
@@ -196,6 +232,11 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatal("Agent token rotation did not issue a distinct token")
 	}
 	agentToken = *rotatedAgentBody.AgentToken
+	oldTokenDownload := requestJSON(t, client, http.MethodGet, downloadURL, nil, oldAgentToken)
+	oldTokenDownload.Body.Close()
+	if oldTokenDownload.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("rotated Agent token download status = %d, want 401", oldTokenDownload.StatusCode)
+	}
 	var agentMetricsEnabled bool
 	if err := pool.QueryRow(ctx, "SELECT agent_metrics_enabled FROM instance_collection_config WHERE instance_id = $1", instanceID).Scan(&agentMetricsEnabled); err != nil {
 		t.Fatalf("read default agent collection setting: %v", err)
@@ -547,8 +588,15 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		{"timestamp": now.Add(-5*time.Minute - time.Second).Format(time.RFC3339Nano), "metrics": hostMetrics},
 	}
 	accepted := report(now, "2.4.0", agentToken, backfill)
-	if accepted.StatusCode != http.StatusNoContent {
-		t.Fatalf("valid report status = %d, want 204", accepted.StatusCode)
+	if accepted.StatusCode != http.StatusOK {
+		t.Fatalf("valid report status = %d, want 200", accepted.StatusCode)
+	}
+	var acceptedBody api.AgentReportAccepted
+	if err := json.NewDecoder(accepted.Body).Decode(&acceptedBody); err != nil {
+		t.Fatalf("decode accepted Agent report: %v", err)
+	}
+	if acceptedBody.ServerVersion != "3.0.0" || acceptedBody.ServerTime.IsZero() {
+		t.Fatalf("accepted Agent report response = %+v", acceptedBody)
 	}
 	accepted.Body.Close()
 

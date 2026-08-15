@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,6 +100,10 @@ func TestReportBufferKeepsOnlyFiveMinutesInMemory(t *testing.T) {
 func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
 	requests := 0
 	var received api.AgentReport
+	var logs bytes.Buffer
+	previousLogOutput := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previousLogOutput) })
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		requests++
 		if err := json.NewDecoder(request.Body).Decode(&received); err != nil {
@@ -108,7 +115,13 @@ func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
 			writer.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
-		writer.WriteHeader(http.StatusNoContent)
+		writer.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(writer).Encode(map[string]any{
+			"server_version": "2.0.0",
+			"server_time":    received.Timestamp,
+		}); err != nil {
+			t.Errorf("encode Agent report response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -130,5 +143,32 @@ func TestServiceBackfillsUnacknowledgedSampleAfterReconnect(t *testing.T) {
 	}
 	if received.Backfill == nil || len(*received.Backfill) != 1 || !(*received.Backfill)[0].Timestamp.Equal(now) {
 		t.Fatalf("backfill = %+v, want failed sample at %s", received.Backfill, now)
+	}
+	if !strings.Contains(logs.String(), "Agent version 1.2.3 is behind server version 2.0.0") {
+		t.Fatalf("Agent logs = %q, want version upgrade warning", logs.String())
+	}
+}
+
+func TestServiceRejectsStartupClockSkewOverFiveSeconds(t *testing.T) {
+	now := time.Now().UTC()
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(writer).Encode(map[string]any{
+			"server_version": "1.2.3",
+			"server_time":    now.Add(6 * time.Second),
+		}); err != nil {
+			t.Errorf("encode Agent report response: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client, err := api.NewClientWithResponses(server.URL)
+	if err != nil {
+		t.Fatalf("create Agent API client: %v", err)
+	}
+	service := NewService(client, Config{Instance: uuid.New()}, "1.2.3", "/")
+	err = service.RunOnce(context.Background(), now)
+	if err == nil || !strings.Contains(err.Error(), "clock differs from the platform by more than 5 seconds") {
+		t.Fatalf("startup report error = %v, want explicit clock skew failure", err)
 	}
 }
