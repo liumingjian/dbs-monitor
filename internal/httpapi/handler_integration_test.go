@@ -253,7 +253,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("metadata after failed update = %q:%d, want target:%d", storedName, storedPort, instanceInput.Port)
 	}
 
-	dialsBeforeDisplayUpdate := dialer.calls
+	dialCountBeforeDisplayUpdate := dialer.calls
 	updated := requestJSON(t, client, http.MethodPut, server.URL+"/api/v1/instances/"+instanceID, api.InstanceMetadataInput{
 		Name:     "renamed target",
 		Host:     instanceInput.Host,
@@ -264,8 +264,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("update instance status = %d, want 200", updated.StatusCode)
 	}
 	updated.Body.Close()
-	if dialer.calls != dialsBeforeDisplayUpdate {
-		t.Fatalf("display-only metadata update dialed target %d times, want 0", dialer.calls-dialsBeforeDisplayUpdate)
+	if dialer.calls != dialCountBeforeDisplayUpdate {
+		t.Fatalf("display-only metadata update dialed target %d times, want 0", dialer.calls-dialCountBeforeDisplayUpdate)
 	}
 	var updatedCiphertext []byte
 	if err := pool.QueryRow(ctx, `SELECT password_ciphertext, credential_version FROM instance WHERE id = $1`, instanceID).
@@ -966,15 +966,15 @@ func assertCreateRejected(t *testing.T, ctx context.Context, client *http.Client
 	if body.Error.Code != wantCode {
 		t.Fatalf("create rejection code = %q, want %q", body.Error.Code, wantCode)
 	}
-	var instances, identities, collectionConfigs int
+	var instanceCount, identityCount, collectionConfigCount int
 	if err := pool.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM instance),
 		(SELECT count(*) FROM instance_identity),
-		(SELECT count(*) FROM instance_collection_config)`).Scan(&instances, &identities, &collectionConfigs); err != nil {
-		t.Fatalf("count rejected instances: %v", err)
+		(SELECT count(*) FROM instance_collection_config)`).Scan(&instanceCount, &identityCount, &collectionConfigCount); err != nil {
+		t.Fatalf("count onboarding rows after rejected create: %v", err)
 	}
-	if instances != 0 || identities != 0 || collectionConfigs != 0 {
-		t.Fatalf("rows after rejected create = instances %d, identities %d, collection configs %d; want all 0", instances, identities, collectionConfigs)
+	if instanceCount != 0 || identityCount != 0 || collectionConfigCount != 0 {
+		t.Fatalf("rows after rejected create: instances = %d, identities = %d, collection configs = %d; want all 0", instanceCount, identityCount, collectionConfigCount)
 	}
 }
 
