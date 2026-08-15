@@ -500,7 +500,7 @@ func notificationTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, *ins
 	if err != nil {
 		t.Fatal(err)
 	}
-	directory := filepath.Join(t.TempDir(), "credentials")
+	directory := createTestCredentialDirectory(t)
 	if _, err := migrations.Up(ctx, migrationDB, directory); err != nil {
 		t.Fatalf("migrate notification test database: %v", err)
 	}
@@ -509,7 +509,7 @@ func notificationTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, *ins
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyring, err := instance.OpenCredentialKeyring(directory, true)
+	keyring, err := instance.OpenCredentialKeyring(directory, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -602,4 +602,13 @@ func notificationTLSConfig(t *testing.T) *tls.Config {
 		t.Fatal(err)
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+}
+
+func createTestCredentialDirectory(t *testing.T) string {
+	t.Helper()
+	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("create test credential directory: %v", err)
+	}
+	return directory
 }

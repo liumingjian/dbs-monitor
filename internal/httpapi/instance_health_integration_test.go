@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -39,7 +38,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 	}
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -51,7 +50,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}

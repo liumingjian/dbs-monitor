@@ -26,7 +26,6 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
-	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
@@ -123,13 +122,17 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("platform database migration failed; refusing to start: %w", err)
 	}
 	migrationDB.Close()
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	keyring, err := openStartupCredentialKeyring(
+		ctx, platform, credentialDirectory, health, log.Default(), time.Now().UTC(),
+	)
 	if err != nil {
 		return err
 	}
 	notificationSnapshotStore := notify.NewChannelSnapshotStore(notificationSnapshotPath(credentialDirectory))
-	if err := notificationSnapshotStore.Sync(ctx, platform); err != nil {
-		return fmt.Errorf("initialize notification channel snapshot: %w", err)
+	if keyring.Fault() == nil {
+		if err := notificationSnapshotStore.Sync(ctx, platform); err != nil {
+			return fmt.Errorf("initialize notification channel snapshot: %w", err)
+		}
 	}
 	health.SetFailureObserver(func(failure platformhealth.FailureFact) {
 		go func() {
@@ -140,7 +143,6 @@ func run(ctx context.Context) error {
 			}
 		}()
 	})
-	health.Update(time.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
 	if err := metric.EnsurePartitions(ctx, platform, time.Now()); err != nil {
 		health.Update(time.Now().UTC(), platformhealth.PartitionSource(platformhealth.PartitionFacts{
 			ConsecutiveFailures: 1, PrebuildDaysRemaining: 6,

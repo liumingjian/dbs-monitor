@@ -352,7 +352,7 @@ func notificationHTTPTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, 
 		admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
 		admin.Close()
 	})
-	directory := filepath.Join(t.TempDir(), "credentials")
+	directory := createTestCredentialDirectory(t)
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, directory); err != nil {
 		migrationDB.Close()
@@ -363,7 +363,7 @@ func notificationHTTPTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, 
 	if err != nil {
 		t.Fatalf("open Webhook test database: %v", err)
 	}
-	keyring, err := instance.OpenCredentialKeyring(directory, true)
+	keyring, err := instance.OpenCredentialKeyring(directory, false)
 	if err != nil {
 		pool.Close()
 		t.Fatalf("open Webhook test keyring: %v", err)

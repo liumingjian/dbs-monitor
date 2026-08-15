@@ -33,6 +33,16 @@ func TestRunCommandRejectsUnsupportedArguments(t *testing.T) {
 	}
 }
 
+func TestRunRejectsUnreadableConfigBeforeStartup(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing-config.yaml")
+	t.Setenv("DBS_MONITOR_CONFIG_FILE", missing)
+
+	err := runCommand(context.Background(), nil, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "open server config") || !strings.Contains(err.Error(), missing) {
+		t.Fatalf("run error = %v, want unreadable config failure", err)
+	}
+}
+
 func TestRunCommandReportsCandidateIdentity(t *testing.T) {
 	previousVersion, previousCommitSHA := version, commitSHA
 	version = "0.0.0-dev+0123456789abcdef0123456789abcdef01234567"

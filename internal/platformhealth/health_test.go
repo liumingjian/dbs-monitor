@@ -236,6 +236,31 @@ func TestStoreWritesStructuredSecretFreeJournalEvents(t *testing.T) {
 	}
 }
 
+func TestStoreRecordsCredentialKeyGenerationEvent(t *testing.T) {
+	const path = "/etc/dbs-monitor/credentials/master-key-v1"
+
+	var output bytes.Buffer
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	store := NewStore("3.0.0", now.Add(-time.Minute), log.New(&output, "", 0))
+	store.Update(now, CredentialSource(CredentialFacts{Available: true}))
+	output.Reset()
+
+	store.RecordCredentialKeyGenerated(now, 1, path)
+
+	var event credentialKeyGeneratedEvent
+	if err := json.Unmarshal(output.Bytes(), &event); err != nil {
+		t.Fatalf("decode credential key generation event: %v", err)
+	}
+	if event.Event != "credential_key_generated" || !event.ObservedAt.Equal(now) ||
+		event.KeyVersion != 1 || event.Path != path {
+		t.Fatalf("credential key generation event = %+v", event)
+	}
+	keyring := store.Source(SourceCredentialKeyring)
+	if keyring.Status != StatusOK || keyring.Code != "CREDENTIAL_KEYRING_READY" {
+		t.Fatalf("credential keyring health = %+v, want OK after generation", keyring)
+	}
+}
+
 func TestPublishSummaryEmitsCertificateLevelChange(t *testing.T) {
 	var output bytes.Buffer
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)

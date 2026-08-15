@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +45,7 @@ func TestPlatformDatabaseFailureSendsSnapshotDirectlyWithoutProductWrites(t *tes
 		admin.Close()
 	})
 
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	credentialDirectory := createTestCredentialDirectory(t)
 	migrationDB := openRotationSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		migrationDB.Close()
@@ -59,7 +58,7 @@ func TestPlatformDatabaseFailureSendsSnapshotDirectlyWithoutProductWrites(t *tes
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("open issue 83 keyring: %v", err)
 	}

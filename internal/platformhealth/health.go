@@ -351,6 +351,15 @@ func (store *Store) PublishSummary(now time.Time) {
 	store.writeJournal(summaryEvent{Event: "platform_health_summary", Snapshot: snapshot})
 }
 
+func (store *Store) RecordCredentialKeyGenerated(now time.Time, version int32, path string) {
+	store.writeJournal(credentialKeyGeneratedEvent{
+		Event:      "credential_key_generated",
+		ObservedAt: now.UTC(),
+		KeyVersion: version,
+		Path:       path,
+	})
+}
+
 func (store *Store) SetFailureObserver(observer func(FailureFact)) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -439,6 +448,13 @@ type changeEvent struct {
 type summaryEvent struct {
 	Event string `json:"event"`
 	Snapshot
+}
+
+type credentialKeyGeneratedEvent struct {
+	Event      string    `json:"event"`
+	ObservedAt time.Time `json:"observed_at"`
+	KeyVersion int32     `json:"key_version"`
+	Path       string    `json:"path"`
 }
 
 func cloneSnapshot(snapshot Snapshot) Snapshot {
