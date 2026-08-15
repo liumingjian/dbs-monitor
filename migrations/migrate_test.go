@@ -435,11 +435,11 @@ func TestPlaintextCredentialMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create legacy migration provider: %v", err)
 	}
-	if _, err := provider.UpTo(ctx, 2); err != nil {
-		t.Fatalf("migrate legacy schema: %v", err)
+	if _, err := provider.UpTo(ctx, 6); err != nil {
+		t.Fatalf("migrate encrypted credential schema: %v", err)
 	}
-	instanceID := uuid.MustParse("00000000-0000-0000-0000-000000000067")
-	password := env("PGPASSWORD", "dbs_monitor")
+	instanceID := uuid.MustParse("00000000-0000-0000-0000-000000000123")
+	password := "issue-123-legacy-password"
 	legacyAgentTokenHash := sha256.Sum256([]byte("legacy-agent-token"))
 	if _, err := database.ExecContext(ctx, `INSERT INTO instance
 		(id, name, host, port, database_name, username, password, agent_token_hash)
