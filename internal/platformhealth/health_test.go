@@ -32,6 +32,33 @@ func TestAggregateStatusPrecedence(t *testing.T) {
 	}
 }
 
+func TestStoreIncludesTenHealthSubsystems(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	store := NewStore("3.0.0", now.Add(-time.Hour), nil)
+	want := []Source{
+		SourceServerProcess,
+		SourcePlatformDatabase,
+		SourceCollectionScheduler,
+		SourcePartitionMaintenance,
+		SourceTLSCertificate,
+		SourceAgentIngress,
+		SourceDisk,
+		SourceCredentialKeyring,
+		SourceTLS,
+		SourcePlatformDatabaseCapacity,
+	}
+
+	sources := store.Current().Sources
+	if len(sources) != len(want) {
+		t.Fatalf("health sources = %d, want %d: %+v", len(sources), len(want), sources)
+	}
+	for index, source := range sources {
+		if source.Source != want[index] {
+			t.Errorf("health source %d = %s, want %s", index, source.Source, want[index])
+		}
+	}
+}
+
 func TestSourceClassifications(t *testing.T) {
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
@@ -59,17 +86,17 @@ func TestSourceClassifications(t *testing.T) {
 		{
 			name:   "certificate unavailable",
 			got:    CertificateSource(now, nil),
-			source: SourceTLSCertificate, status: StatusUnknown, code: "CERTIFICATE_UNAVAILABLE",
+			source: SourceTLS, status: StatusUnknown, code: "CERTIFICATE_UNAVAILABLE",
 		},
 		{
 			name:   "certificate warning window",
 			got:    CertificateSource(now, timePointer(now.Add(30*24*time.Hour))),
-			source: SourceTLSCertificate, status: StatusDegraded, code: "CERTIFICATE_EXPIRING",
+			source: SourceTLS, status: StatusDegraded, code: "CERTIFICATE_EXPIRING",
 		},
 		{
 			name:   "certificate expired",
 			got:    CertificateSource(now, timePointer(now.Add(-time.Second))),
-			source: SourceTLSCertificate, status: StatusFailed, code: "CERTIFICATE_EXPIRED",
+			source: SourceTLS, status: StatusDegraded, code: "CERTIFICATE_EXPIRED",
 		},
 		{
 			name:   "credential keyring unavailable",
@@ -158,7 +185,7 @@ func TestPublishSummaryEmitsCertificateLevelChange(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 2 || !strings.Contains(lines[0], `"event":"platform_health_change"`) ||
-		!strings.Contains(lines[0], `"source":"TLS_CERTIFICATE"`) || !strings.Contains(lines[0], `"status":"DEGRADED"`) {
+		!strings.Contains(lines[0], `"source":"TLS"`) || !strings.Contains(lines[0], `"status":"DEGRADED"`) {
 		t.Fatalf("certificate transition journal = %q, want change event followed by summary", output.String())
 	}
 }

@@ -156,6 +156,8 @@ func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.
 	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY"})
 	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceDisk, Status: platformhealth.StatusOK, Code: "DISK_CLASSIFICATION_PENDING"})
 	health.Update(now, platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
+	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceTLSCertificate, Status: platformhealth.StatusOK, Code: "FACT_AVAILABLE"})
+	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourcePlatformDatabaseCapacity, Status: platformhealth.StatusOK, Code: "FACT_AVAILABLE"})
 	service := &Service{health: health}
 	scheduler := &centralScheduler{
 		service:    service,

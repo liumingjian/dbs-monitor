@@ -352,7 +352,7 @@ export interface components {
         /** @enum {string} */
         PlatformHealthStatus: "OK" | "DEGRADED" | "FAILED" | "UNKNOWN";
         /** @enum {string} */
-        PlatformHealthSource: "SERVER_PROCESS" | "PLATFORM_DATABASE" | "COLLECTION_SCHEDULER" | "PARTITION_MAINTENANCE" | "TLS_CERTIFICATE" | "AGENT_INGRESS" | "DISK" | "CREDENTIAL_KEYRING";
+        PlatformHealthSource: "SERVER_PROCESS" | "PLATFORM_DATABASE" | "COLLECTION_SCHEDULER" | "PARTITION_MAINTENANCE" | "TLS_CERTIFICATE" | "AGENT_INGRESS" | "DISK" | "CREDENTIAL_KEYRING" | "TLS" | "PLATFORM_DATABASE_CAPACITY";
         AlertRuleInput: {
             name: string;
             metric_id: string;
