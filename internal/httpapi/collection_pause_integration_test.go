@@ -58,7 +58,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}
-	currentClock := &fixedClock{now: time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)}
+	currentClock := &fixedClock{now: time.Now().UTC().Truncate(time.Microsecond)}
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}
