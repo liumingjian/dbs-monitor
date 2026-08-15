@@ -2205,6 +2205,8 @@ components:
         - AGENT_INGRESS
         - DISK
         - CREDENTIAL_KEYRING
+        - TLS
+        - PLATFORM_DATABASE_CAPACITY
       x-enum-varnames:
         - HealthSourceServerProcess
         - HealthSourcePlatformDatabase
@@ -2214,6 +2216,8 @@ components:
         - HealthSourceAgentIngress
         - HealthSourceDisk
         - HealthSourceCredentialKeyring
+        - HealthSourceTLS
+        - HealthSourcePlatformDatabaseCapacity
     AlertDisposition:
       type: string
       enum:

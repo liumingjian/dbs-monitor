@@ -265,14 +265,16 @@ const (
 
 // Defines values for PlatformHealthSource.
 const (
-	HealthSourceAgentIngress         PlatformHealthSource = "AGENT_INGRESS"
-	HealthSourceCollectionScheduler  PlatformHealthSource = "COLLECTION_SCHEDULER"
-	HealthSourceCredentialKeyring    PlatformHealthSource = "CREDENTIAL_KEYRING"
-	HealthSourceDisk                 PlatformHealthSource = "DISK"
-	HealthSourcePartitionMaintenance PlatformHealthSource = "PARTITION_MAINTENANCE"
-	HealthSourcePlatformDatabase     PlatformHealthSource = "PLATFORM_DATABASE"
-	HealthSourceServerProcess        PlatformHealthSource = "SERVER_PROCESS"
-	HealthSourceTLSCertificate       PlatformHealthSource = "TLS_CERTIFICATE"
+	HealthSourceAgentIngress             PlatformHealthSource = "AGENT_INGRESS"
+	HealthSourceCollectionScheduler      PlatformHealthSource = "COLLECTION_SCHEDULER"
+	HealthSourceCredentialKeyring        PlatformHealthSource = "CREDENTIAL_KEYRING"
+	HealthSourceDisk                     PlatformHealthSource = "DISK"
+	HealthSourcePartitionMaintenance     PlatformHealthSource = "PARTITION_MAINTENANCE"
+	HealthSourcePlatformDatabase         PlatformHealthSource = "PLATFORM_DATABASE"
+	HealthSourcePlatformDatabaseCapacity PlatformHealthSource = "PLATFORM_DATABASE_CAPACITY"
+	HealthSourceServerProcess            PlatformHealthSource = "SERVER_PROCESS"
+	HealthSourceTLS                      PlatformHealthSource = "TLS"
+	HealthSourceTLSCertificate           PlatformHealthSource = "TLS_CERTIFICATE"
 )
 
 // Defines values for PlatformHealthStatus.

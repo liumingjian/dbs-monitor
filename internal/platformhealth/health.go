@@ -21,14 +21,16 @@ const (
 type Source string
 
 const (
-	SourceServerProcess        Source = "SERVER_PROCESS"
-	SourcePlatformDatabase     Source = "PLATFORM_DATABASE"
-	SourceCollectionScheduler  Source = "COLLECTION_SCHEDULER"
-	SourcePartitionMaintenance Source = "PARTITION_MAINTENANCE"
-	SourceTLSCertificate       Source = "TLS_CERTIFICATE"
-	SourceAgentIngress         Source = "AGENT_INGRESS"
-	SourceDisk                 Source = "DISK"
-	SourceCredentialKeyring    Source = "CREDENTIAL_KEYRING"
+	SourceServerProcess            Source = "SERVER_PROCESS"
+	SourcePlatformDatabase         Source = "PLATFORM_DATABASE"
+	SourceCollectionScheduler      Source = "COLLECTION_SCHEDULER"
+	SourcePartitionMaintenance     Source = "PARTITION_MAINTENANCE"
+	SourceTLSCertificate           Source = "TLS_CERTIFICATE"
+	SourceAgentIngress             Source = "AGENT_INGRESS"
+	SourceDisk                     Source = "DISK"
+	SourceCredentialKeyring        Source = "CREDENTIAL_KEYRING"
+	SourceTLS                      Source = "TLS"
+	SourcePlatformDatabaseCapacity Source = "PLATFORM_DATABASE_CAPACITY"
 )
 
 type DiskLevel string
@@ -105,6 +107,8 @@ var sourceOrder = []Source{
 	SourceAgentIngress,
 	SourceDisk,
 	SourceCredentialKeyring,
+	SourceTLS,
+	SourcePlatformDatabaseCapacity,
 }
 
 type SourceSnapshot struct {
@@ -202,7 +206,7 @@ func SchedulerSource(facts SchedulerFacts) SourceSnapshot {
 }
 
 func CertificateSource(now time.Time, expiresAt *time.Time) SourceSnapshot {
-	result := SourceSnapshot{Source: SourceTLSCertificate, Status: StatusUnknown, Code: "CERTIFICATE_UNAVAILABLE"}
+	result := SourceSnapshot{Source: SourceTLS, Status: StatusUnknown, Code: "CERTIFICATE_UNAVAILABLE"}
 	if expiresAt == nil {
 		return result
 	}
@@ -210,7 +214,7 @@ func CertificateSource(now time.Time, expiresAt *time.Time) SourceSnapshot {
 	result.ExpiresAt = &expires
 	switch {
 	case !now.UTC().Before(expires):
-		result.Status = StatusFailed
+		result.Status = StatusDegraded
 		result.Code = "CERTIFICATE_EXPIRED"
 	case !expires.After(now.UTC().Add(30 * 24 * time.Hour)):
 		result.Status = StatusDegraded
@@ -380,8 +384,8 @@ func (store *Store) RejectSampleWrites() bool {
 }
 
 func (store *Store) assemble(now time.Time) Snapshot {
-	if certificate := store.sources[SourceTLSCertificate]; certificate.ExpiresAt != nil {
-		store.sources[SourceTLSCertificate] = CertificateSource(now, certificate.ExpiresAt)
+	if certificate := store.sources[SourceTLS]; certificate.ExpiresAt != nil {
+		store.sources[SourceTLS] = CertificateSource(now, certificate.ExpiresAt)
 	}
 	sources := make([]SourceSnapshot, 0, len(sourceOrder))
 	statuses := make([]Status, 0, len(sourceOrder))

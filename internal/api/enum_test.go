@@ -60,7 +60,8 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		{"PlatformHealthSource", mapKeys(map[api.PlatformHealthSource]string{
 			api.HealthSourceServerProcess: "", api.HealthSourcePlatformDatabase: "", api.HealthSourceCollectionScheduler: "",
 			api.HealthSourcePartitionMaintenance: "", api.HealthSourceTLSCertificate: "", api.HealthSourceAgentIngress: "",
-			api.HealthSourceDisk: "", api.HealthSourceCredentialKeyring: "",
+			api.HealthSourceDisk: "", api.HealthSourceCredentialKeyring: "", api.HealthSourceTLS: "",
+			api.HealthSourcePlatformDatabaseCapacity: "",
 		})},
 		{"AlertDisposition", mapKeys(map[api.AlertDisposition]string{
 			api.AlertDispositionNONE: "", api.AlertDispositionACKED: "", api.AlertDispositionIGNORED: "",
