@@ -18,7 +18,15 @@ type probeResult struct {
 	err        error
 }
 
-func ProbeAndStoreSnapshot(targetCtx, platformCtx context.Context, platform *db.Pool, conn *monitorpg.TargetConn, instanceID pgtype.UUID, observedAt time.Time) (bool, error) {
+func ProbeAndStoreSnapshot(targetCtx, platformCtx context.Context, platform db.DBTX, conn *monitorpg.TargetConn, instanceID pgtype.UUID, observedAt time.Time) (bool, error) {
+	states, complete := ProbeSnapshot(targetCtx, conn)
+	if err := StoreSnapshot(platformCtx, platform, instanceID, observedAt, states); err != nil {
+		return false, err
+	}
+	return complete, nil
+}
+
+func ProbeSnapshot(targetCtx context.Context, conn *monitorpg.TargetConn) (map[metric.CapabilityID]metric.CapabilityStatus, bool) {
 	results := make([]probeResult, 0, len(metric.Capabilities))
 	for _, declaration := range metric.Capabilities {
 		var present bool
@@ -28,18 +36,14 @@ func ProbeAndStoreSnapshot(targetCtx, platformCtx context.Context, platform *db.
 			break
 		}
 	}
-	states, complete := snapshotFromProbeResults(results)
-	if err := storeSnapshot(platformCtx, platform, instanceID, observedAt, states); err != nil {
-		return false, err
-	}
-	return complete, nil
+	return snapshotFromProbeResults(results)
 }
 
-func StoreUnknown(ctx context.Context, platform *db.Pool, instanceID pgtype.UUID, observedAt time.Time) error {
-	return storeSnapshot(ctx, platform, instanceID, observedAt, metric.UnknownCapabilityStates())
+func StoreUnknown(ctx context.Context, platform db.DBTX, instanceID pgtype.UUID, observedAt time.Time) error {
+	return StoreSnapshot(ctx, platform, instanceID, observedAt, metric.UnknownCapabilityStates())
 }
 
-func storeSnapshot(ctx context.Context, platform *db.Pool, instanceID pgtype.UUID, observedAt time.Time, states map[metric.CapabilityID]metric.CapabilityStatus) error {
+func StoreSnapshot(ctx context.Context, platform db.DBTX, instanceID pgtype.UUID, observedAt time.Time, states map[metric.CapabilityID]metric.CapabilityStatus) error {
 	encoded, err := json.Marshal(states)
 	if err != nil {
 		return fmt.Errorf("encode capability snapshot: %w", err)

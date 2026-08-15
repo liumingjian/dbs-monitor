@@ -8,7 +8,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
@@ -305,7 +304,13 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 			run.dueAt = entry.nextDue
 			if replaced, exists := scheduler.pending.put(run); exists {
 				if isCapabilitySnapshotTask(replaced.task) {
-					if err := capability.StoreUnknown(ctx, scheduler.service.platform, replaced.target.ID, scheduler.service.clock.Now().UTC()); err != nil {
+					_, err := scheduler.service.storeCapabilitySnapshot(
+						ctx,
+						replaced.target.ID,
+						scheduler.service.clock.Now().UTC(),
+						metric.UnknownCapabilityStates(),
+					)
+					if err != nil {
 						log.Printf("record capability backpressure failed: instance_id=%s error=%v", replaced.key.instanceID, err)
 					} else {
 						scheduler.counts.skipped++
