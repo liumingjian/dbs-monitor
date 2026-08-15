@@ -21,11 +21,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const tracerID = "AC-08-S1"
+const tracerID = onboardingEntryID
 
 var (
 	acceptanceReport *acceptanceResult
-	resultPath       string
 
 	// These method expressions make operationId deletion a compile-time acceptance failure.
 	_ = (*api.ClientWithResponses).CreateSessionWithResponse
@@ -43,7 +42,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	acceptanceReport = newResult(matrix, candidateSHA())
-	resultPath = os.Getenv("ACCEPTANCE_RESULT_PATH")
+	resultPath := os.Getenv("ACCEPTANCE_RESULT_PATH")
 	if resultPath == "" {
 		resultPath = filepath.Join("..", "..", "results", "acceptance-result.json")
 	}
@@ -65,11 +64,11 @@ func TestAcceptance_AC_08_S1(t *testing.T) {
 	}
 	started := time.Now()
 	defer func() {
-		status, actual := resultPassed, "generated-client flow reached a metric reported by the real Agent process"
+		status, actualResult := resultPassed, "generated-client flow reached a metric reported by the real Agent process"
 		if t.Failed() {
-			status, actual = resultFailed, "live tracer failed; see go test output"
+			status, actualResult = resultFailed, "live tracer failed; see go test output"
 		}
-		acceptanceReport.record(tracerID, status, actual, time.Since(started))
+		acceptanceReport.record(tracerID, status, actualResult, time.Since(started))
 	}()
 
 	root := repositoryRoot(t)
@@ -178,11 +177,16 @@ func buildBinary(t *testing.T, root, output, pkg string) {
 
 func writeServerConfig(t *testing.T, work, databaseURL, keyDirectory, binaryDirectory string) string {
 	t.Helper()
-	contents, err := yaml.Marshal(map[string]any{
-		"platform_database_url": databaseURL,
-		"master_key_path":       keyDirectory,
-		"agent_binary_dir":      binaryDirectory,
-	})
+	config := struct {
+		AgentBinaryDirectory string `yaml:"agent_binary_dir"`
+		MasterKeyDirectory   string `yaml:"master_key_path"`
+		PlatformDatabaseURL  string `yaml:"platform_database_url"`
+	}{
+		AgentBinaryDirectory: binaryDirectory,
+		MasterKeyDirectory:   keyDirectory,
+		PlatformDatabaseURL:  databaseURL,
+	}
+	contents, err := yaml.Marshal(config)
 	if err != nil {
 		t.Fatalf("encode server config: %v", err)
 	}
@@ -279,11 +283,14 @@ func generatedClient(baseURL, caPath string) (*api.ClientWithResponses, *http.Cl
 		return nil, nil, err
 	}
 	httpClient := &http.Client{
-		Jar:     jar,
+		Jar: jar,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    roots,
+				MinVersion: tls.VersionTLS13,
+			},
+		},
 		Timeout: 5 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{
-			RootCAs: roots, MinVersion: tls.VersionTLS13,
-		}},
 	}
 	client, err := api.NewClientWithResponses(baseURL, api.WithHTTPClient(httpClient))
 	return client, httpClient, err

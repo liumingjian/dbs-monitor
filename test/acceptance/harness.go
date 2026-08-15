@@ -3,10 +3,12 @@
 package acceptance
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,10 +17,20 @@ import (
 )
 
 const (
-	resultPassed  = "passed"
-	resultFailed  = "failed"
-	resultPending = "pending"
-	resultNA      = "n-a"
+	onboardingEntryID          = "AC-08-S1"
+	offlineKeyRotationEntryID  = "AC-08-S7"
+	expiredCertificateEntryID  = "SEC-3"
+	expiringCertificateEntryID = "SEC-4"
+	sessionExpiryEntryID       = "SEC-5"
+)
+
+type resultStatus string
+
+const (
+	resultPassed  resultStatus = "passed"
+	resultFailed  resultStatus = "failed"
+	resultPending resultStatus = "pending"
+	resultNA      resultStatus = "n-a"
 )
 
 type acceptanceMatrix struct {
@@ -28,10 +40,10 @@ type acceptanceMatrix struct {
 }
 
 type matrixEntry struct {
-	ID       string `yaml:"id"`
-	Baseline bool   `yaml:"baseline"`
-	Status   string `yaml:"status"`
-	Reason   string `yaml:"reason"`
+	ID       string       `yaml:"id"`
+	Baseline bool         `yaml:"baseline"`
+	Status   resultStatus `yaml:"status"`
+	Reason   string       `yaml:"reason"`
 }
 
 type acceptanceResult struct {
@@ -43,10 +55,10 @@ type acceptanceResult struct {
 }
 
 type entryResult struct {
-	ID           string `json:"id"`
-	Status       string `json:"status"`
-	ActualResult string `json:"actual_result"`
-	DurationMS   int64  `json:"duration_ms"`
+	ID           string       `json:"id"`
+	Status       resultStatus `json:"status"`
+	ActualResult string       `json:"actual_result"`
+	DurationMS   int64        `json:"duration_ms"`
 	baseline     bool
 }
 
@@ -78,28 +90,43 @@ func loadMatrix(t *testing.T, path string) acceptanceMatrix {
 }
 
 func executionOrder(entries []matrixEntry) []matrixEntry {
-	ordered := make([]matrixEntry, 0, len(entries))
-	appendMatching := func(match func(matrixEntry) bool) {
-		for _, entry := range entries {
-			if match(entry) {
-				ordered = append(ordered, entry)
-			}
-		}
-	}
-	appendMatching(func(entry matrixEntry) bool { return entry.ID == "AC-08-S1" })
-	appendMatching(func(entry matrixEntry) bool {
-		return entry.ID != "AC-08-S1" && entry.ID != "AC-08-S7" &&
-			!strings.HasPrefix(entry.ID, "REC-") && !strings.HasPrefix(entry.ID, "SEC-")
+	ordered := append(make([]matrixEntry, 0, len(entries)), entries...)
+	slices.SortStableFunc(ordered, func(left, right matrixEntry) int {
+		return cmp.Compare(executionRank(left.ID), executionRank(right.ID))
 	})
-	appendMatching(func(entry matrixEntry) bool { return strings.HasPrefix(entry.ID, "REC-") })
-	appendMatching(func(entry matrixEntry) bool {
-		return strings.HasPrefix(entry.ID, "SEC-") && entry.ID != "SEC-3" && entry.ID != "SEC-4" && entry.ID != "SEC-5"
-	})
-	for _, id := range []string{"SEC-3", "SEC-4", "SEC-5"} {
-		appendMatching(func(entry matrixEntry) bool { return entry.ID == id })
-	}
-	appendMatching(func(entry matrixEntry) bool { return entry.ID == "AC-08-S7" })
 	return ordered
+}
+
+func executionRank(id string) int {
+	const (
+		onboardingEntryRank = iota
+		sliceEntryRank
+		recoveryEntryRank
+		securityEntryRank
+		expiredCertificateEntryRank
+		expiringCertificateEntryRank
+		sessionExpiryEntryRank
+		offlineKeyRotationEntryRank
+	)
+
+	switch {
+	case id == onboardingEntryID:
+		return onboardingEntryRank
+	case id == offlineKeyRotationEntryID:
+		return offlineKeyRotationEntryRank
+	case strings.HasPrefix(id, "REC-"):
+		return recoveryEntryRank
+	case id == expiredCertificateEntryID:
+		return expiredCertificateEntryRank
+	case id == expiringCertificateEntryID:
+		return expiringCertificateEntryRank
+	case id == sessionExpiryEntryID:
+		return sessionExpiryEntryRank
+	case strings.HasPrefix(id, "SEC-"):
+		return securityEntryRank
+	default:
+		return sliceEntryRank
+	}
 }
 
 func newResult(matrix acceptanceMatrix, candidateSHA string) *acceptanceResult {
@@ -110,26 +137,29 @@ func newResult(matrix acceptanceMatrix, candidateSHA string) *acceptanceResult {
 	}
 	for _, entry := range executionOrder(matrix.Entries) {
 		status := resultPending
-		actual := "not implemented by this tracer ticket"
+		actualResult := "not implemented by this tracer ticket"
 		if entry.Status == resultNA {
 			status = resultNA
-			actual = entry.Reason
+			actualResult = entry.Reason
 		}
 		result.Entries = append(result.Entries, entryResult{
-			ID: entry.ID, Status: status, ActualResult: actual, baseline: entry.Baseline,
+			ID:           entry.ID,
+			Status:       status,
+			ActualResult: actualResult,
+			baseline:     entry.Baseline,
 		})
 	}
 	result.rebuildSummary()
 	return result
 }
 
-func (result *acceptanceResult) record(id, status, actual string, duration time.Duration) {
+func (result *acceptanceResult) record(id string, status resultStatus, actualResult string, duration time.Duration) {
 	for index := range result.Entries {
 		if result.Entries[index].ID != id {
 			continue
 		}
 		result.Entries[index].Status = status
-		result.Entries[index].ActualResult = actual
+		result.Entries[index].ActualResult = actualResult
 		result.Entries[index].DurationMS = duration.Milliseconds()
 		result.rebuildSummary()
 		return
