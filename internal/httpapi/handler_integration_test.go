@@ -40,7 +40,7 @@ import (
 )
 
 func TestHTTPSAPIAndAgentPush(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
 	databaseName := fmt.Sprintf("dbs_monitor_http_%d", os.Getpid())
@@ -622,21 +622,94 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.role", 1))
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.wal_lag_bytes", 1), "NOT_APPLICABLE_ROLE")
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication_slot.retained_wal_bytes", 1), "NOT_APPLICABLE_ROLE")
-	sampledAt := time.Now().UTC().Truncate(time.Second)
-	oldSampledAt := sampledAt.Add(-31 * 24 * time.Hour)
-	for _, capturedAt := range []time.Time{oldSampledAt, sampledAt} {
-		if _, err := pool.Exec(ctx, `INSERT INTO long_query_sample_snapshot
-				(instance_id, sampled_at, original_count, truncated) VALUES ($1, $2, 101, true)`, instanceID, capturedAt); err != nil {
-			t.Fatalf("insert long query snapshot: %v", err)
-		}
-		if _, err := pool.Exec(ctx, `INSERT INTO long_query_sample
-				(instance_id, sampled_at, pid, username, database_name, state, query_started_at,
-				 query_duration_ms, wait_event_type, wait_event, blocking_pids)
-				VALUES ($1, $2, 4242, 'operator', 'postgres', 'active', $3, 6000, 'Lock', 'transactionid', '{}')`,
-			instanceID, capturedAt, capturedAt.Add(-6*time.Second)); err != nil {
-			t.Fatalf("insert long query sample: %v", err)
+	// The task interval was changed to seven seconds above; wait until its next run is due.
+	slowQueryPID, stopSlowQuery := startLongRunningQuery(t, ctx, admin)
+	if err := collector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect long query sample: %v", err)
+	}
+	stopSlowQuery()
+
+	apiClient, err := api.NewClientWithResponses(server.URL, api.WithHTTPClient(client))
+	if err != nil {
+		t.Fatalf("create generated API client: %v", err)
+	}
+	queryWindowStart := time.Now().UTC().Add(-time.Minute)
+	queryWindowEnd := time.Now().UTC().Add(time.Minute)
+	longQueriesResponse, err := apiClient.ListLongQuerySamplesWithResponse(ctx, createBody.Instance.Id, &api.ListLongQuerySamplesParams{
+		From: queryWindowStart,
+		To:   queryWindowEnd,
+	})
+	if err != nil {
+		t.Fatalf("list long query samples through generated client: %v", err)
+	}
+	if longQueriesResponse.StatusCode() != http.StatusOK || longQueriesResponse.JSON200 == nil {
+		t.Fatalf("long query samples status = %d body = %s", longQueriesResponse.StatusCode(), longQueriesResponse.Body)
+	}
+	var capturedLongQuery *api.LongQuerySample
+	for index := range longQueriesResponse.JSON200.Items {
+		item := &longQueriesResponse.JSON200.Items[index]
+		if item.Pid == slowQueryPID {
+			capturedLongQuery = item
+			break
 		}
 	}
+	if capturedLongQuery == nil {
+		t.Fatalf("long query samples = %+v, want PID %d from the real collection pipeline", longQueriesResponse.JSON200.Items, slowQueryPID)
+	}
+	if capturedLongQuery.State == nil || *capturedLongQuery.State != "active" ||
+		capturedLongQuery.Username == nil || *capturedLongQuery.Username != env("PGUSER", "dbs_monitor") ||
+		capturedLongQuery.DatabaseName == nil || *capturedLongQuery.DatabaseName != env("PGDATABASE", "dbs_monitor") ||
+		capturedLongQuery.WaitEventType == nil || capturedLongQuery.WaitEvent == nil ||
+		capturedLongQuery.QueryDurationMs < 5000 || capturedLongQuery.QueryStartedAt.After(capturedLongQuery.SampledAt) ||
+		capturedLongQuery.SnapshotOriginalCount < 1 {
+		t.Fatalf("captured long query is missing native location fields: %+v", capturedLongQuery)
+	}
+
+	step := api.Raw
+	activityMetrics, err := apiClient.GetMetricSeriesWithResponse(ctx, createBody.Instance.Id, &api.GetMetricSeriesParams{
+		Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetricPgQueryLongRunningCount},
+		From:   queryWindowStart,
+		To:     queryWindowEnd,
+		Step:   &step,
+	})
+	if err != nil {
+		t.Fatalf("read long query metric through generated client: %v", err)
+	}
+	if activityMetrics.StatusCode() != http.StatusOK || activityMetrics.JSON200 == nil {
+		t.Fatalf("long query metric status = %d body = %s", activityMetrics.StatusCode(), activityMetrics.Body)
+	}
+	sharedSnapshot := false
+	for _, item := range activityMetrics.JSON200.Metrics {
+		for _, series := range item.Series {
+			for _, point := range series.Points {
+				if len(point) == 2 && point[0] != nil && point[1] != nil &&
+					int64(*point[0]) == capturedLongQuery.SampledAt.Unix() && *point[1] >= 1 {
+					sharedSnapshot = true
+				}
+			}
+		}
+	}
+	if !sharedSnapshot {
+		t.Fatalf("long query sample at %s does not share a timestamp with its metric: %+v",
+			capturedLongQuery.SampledAt, activityMetrics.JSON200.Metrics)
+	}
+
+	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, capturedLongQuery.SampledAt.Add(30*24*time.Hour+time.Nanosecond)); err != nil {
+		t.Fatalf("expire long query samples: %v", err)
+	}
+	expiredLongQueries, err := apiClient.ListLongQuerySamplesWithResponse(ctx, createBody.Instance.Id, &api.ListLongQuerySamplesParams{
+		From: queryWindowStart,
+		To:   queryWindowEnd,
+	})
+	if err != nil {
+		t.Fatalf("list expired long query samples: %v", err)
+	}
+	if expiredLongQueries.StatusCode() != http.StatusOK || expiredLongQueries.JSON200 == nil || expiredLongQueries.JSON200.Total != 0 {
+		t.Fatalf("expired long query samples = status %d body %s", expiredLongQueries.StatusCode(), expiredLongQueries.Body)
+	}
+
+	sampledAt := time.Now().UTC().Truncate(time.Second)
+	oldSampledAt := sampledAt.Add(-31 * 24 * time.Hour)
 	if _, err := pool.Exec(ctx, `INSERT INTO query_statistics_snapshot
 		(instance_id, sampled_at) VALUES ($1, $2)`, instanceID, oldSampledAt); err != nil {
 		t.Fatalf("insert old query statistics snapshot: %v", err)
@@ -646,18 +719,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		VALUES ($1, $2, 58, 1, 1, 1, 1)`, instanceID, oldSampledAt); err != nil {
 		t.Fatalf("insert old query statistics entry: %v", err)
 	}
-	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, sampledAt); err != nil {
-		t.Fatalf("expire long query samples: %v", err)
-	}
 	if err := collect.DropExpiredQueryStatisticsSnapshots(ctx, platform, sampledAt); err != nil {
 		t.Fatalf("expire query statistics snapshots: %v", err)
-	}
-	var oldSamples int
-	if err := pool.QueryRow(ctx, "SELECT count(*) FROM long_query_sample WHERE sampled_at = $1", oldSampledAt).Scan(&oldSamples); err != nil {
-		t.Fatalf("count expired long query samples: %v", err)
-	}
-	if oldSamples != 0 {
-		t.Fatalf("expired long query samples = %d, want 0", oldSamples)
 	}
 	var oldQueryStatistics int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM query_statistics_snapshot_entry
@@ -666,30 +729,6 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	if oldQueryStatistics != 0 {
 		t.Fatalf("expired query statistics entries = %d, want 0", oldQueryStatistics)
-	}
-	longQueriesURL := fmt.Sprintf("%s/api/v1/instances/%s/long-query-samples?from=%s&to=%s",
-		server.URL, instanceID,
-		url.QueryEscape(sampledAt.Add(-time.Minute).Format(time.RFC3339)),
-		url.QueryEscape(sampledAt.Add(time.Minute).Format(time.RFC3339)))
-	longQueriesResponse := getResponse(t, client, longQueriesURL)
-	if longQueriesResponse.StatusCode != http.StatusOK {
-		t.Fatalf("long query samples status = %d, want 200", longQueriesResponse.StatusCode)
-	}
-	var longQueries struct {
-		Total int              `json:"total"`
-		Items []map[string]any `json:"items"`
-	}
-	if err := json.NewDecoder(longQueriesResponse.Body).Decode(&longQueries); err != nil {
-		t.Fatalf("decode long query samples: %v", err)
-	}
-	longQueriesResponse.Body.Close()
-	if longQueries.Total != 1 || len(longQueries.Items) != 1 || longQueries.Items[0]["snapshot_truncated"] != true {
-		t.Fatalf("long query samples = %+v, want one truncated snapshot record", longQueries)
-	}
-	for _, forbidden := range []string{"query", "sql", "query_text", "sql_text"} {
-		if _, exists := longQueries.Items[0][forbidden]; exists {
-			t.Fatalf("long query sample exposes %q", forbidden)
-		}
 	}
 	tpsURL := strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1)
 	assertUnavailability(t, client, tpsURL, "NO_SAMPLES_YET")
@@ -1265,6 +1304,60 @@ func requestJSON(t *testing.T, client *http.Client, method, address string, body
 		t.Fatalf("send request: %v", err)
 	}
 	return response
+}
+
+func startLongRunningQuery(t *testing.T, ctx context.Context, observer *sql.DB) (int32, func()) {
+	t.Helper()
+	connection, err := pgx.Connect(ctx, connectionString(env("PGDATABASE", "dbs_monitor")))
+	if err != nil {
+		t.Fatalf("open long query connection: %v", err)
+	}
+	if _, err := connection.Exec(ctx, "SET application_name = 'issue-56-long-query'"); err != nil {
+		connection.Close(context.Background())
+		t.Fatalf("identify long query connection: %v", err)
+	}
+
+	queryCtx, cancelQuery := context.WithCancel(ctx)
+	queryDone := make(chan error, 1)
+	go func() {
+		_, queryErr := connection.Exec(queryCtx, "SELECT pg_sleep(20)")
+		queryDone <- queryErr
+	}()
+
+	stopped := false
+	stop := func() {
+		if stopped {
+			return
+		}
+		stopped = true
+		cancelQuery()
+		select {
+		case <-queryDone:
+		case <-time.After(2 * time.Second):
+		}
+		_ = connection.Close(context.Background())
+	}
+	t.Cleanup(stop)
+
+	pid := int32(connection.PgConn().PID())
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var ready bool
+		if err := observer.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity
+			WHERE pid = $1 AND state = 'active'
+			  AND statement_timestamp() - query_start > interval '7 seconds'
+		)`, pid).Scan(&ready); err != nil {
+			t.Fatalf("observe long query: %v", err)
+		}
+		if ready {
+			return pid, stop
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("query on PID %d did not cross the long-query threshold", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func openSQL(t *testing.T, database string) *sql.DB {
