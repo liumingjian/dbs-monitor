@@ -8,6 +8,9 @@ partition_span: 24h
 # Interval between partition maintenance passes. Default: 1h.
 partition_maintenance_interval: 1h
 
+# Retention for recovered alert history and its dependent records. Default: 2160h (90 days).
+alert_history_retention: 2160h
+
 # Lowest repeat_interval accepted by notification policy validation. Default: 15m.
 repeat_interval_minimum: 15m
 

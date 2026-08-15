@@ -462,8 +462,8 @@ entries:
     pages: []
     operations: []
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: TestAcceptance_AC_03_F6
     owner_issue: 119
     reason: "S1 未拍板此判据，按 21 号 D1 的纪律不擅自升为加深基线；但它是片③唯一会删数据的路径，不设即留覆盖真空。B 组唯一一条允许 pending 的普通加深，兑现归片③清理循环实现票。"
   # ── 片04 · 通知与告警设置区

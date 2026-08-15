@@ -25,11 +25,15 @@ func TestLoadServerConfig(t *testing.T) {
 		if config != defaultServerConfig() {
 			t.Fatalf("config = %+v, want defaults %+v", config, defaultServerConfig())
 		}
+		if config.AlertHistoryRetention != 90*24*time.Hour {
+			t.Fatalf("alert history retention = %s, want 90 days", config.AlertHistoryRetention)
+		}
 	})
 
 	t.Run("deployment overrides", func(t *testing.T) {
 		path := writeServerConfig(t, `partition_span: 1m
 partition_maintenance_interval: 2m
+alert_history_retention: 2m
 repeat_interval_minimum: 30s
 snapshot_truncation_limit: 5
 collection_freshness_threshold: 20s
@@ -48,6 +52,7 @@ master_key_path: /srv/dbs-monitor/credentials
 		want := serverConfig{
 			PartitionSpan:                time.Minute,
 			PartitionMaintenanceInterval: 2 * time.Minute,
+			AlertHistoryRetention:        2 * time.Minute,
 			RepeatIntervalMinimum:        30 * time.Second,
 			SnapshotTruncationLimit:      5,
 			CollectionFreshnessThreshold: 20 * time.Second,
@@ -83,6 +88,7 @@ master_key_path: /srv/dbs-monitor/credentials
 	}{
 		{name: "partition span", contents: "partition_span: 0s\n", message: "partition_span"},
 		{name: "partition maintenance interval", contents: "partition_maintenance_interval: -1s\n", message: "partition_maintenance_interval"},
+		{name: "alert history retention", contents: "alert_history_retention: 0s\n", message: "alert_history_retention"},
 		{name: "repeat interval minimum", contents: "repeat_interval_minimum: never\n", message: "repeat_interval_minimum"},
 		{name: "snapshot truncation limit", contents: "snapshot_truncation_limit: 0\n", message: "snapshot_truncation_limit"},
 		{name: "collection freshness threshold", contents: "collection_freshness_threshold: 0s\n", message: "collection_freshness_threshold"},

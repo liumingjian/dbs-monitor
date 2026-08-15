@@ -19,7 +19,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
-func TestDeleteRecoveredAlertHistoryAtNinetyDayBoundary(t *testing.T) {
+func TestDeleteRecoveredAlertHistoryAtConfiguredBoundary(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -55,7 +55,8 @@ func TestDeleteRecoveredAlertHistoryAtNinetyDayBoundary(t *testing.T) {
 	}
 
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
-	cutoff := now.Add(-90 * 24 * time.Hour)
+	retention := 2 * time.Minute
+	cutoff := now.Add(-retention)
 	boundaryID := insertRetentionAlert(t, ctx, pool, instanceID, "boundary", "RECOVERED", cutoff)
 	newerID := insertRetentionAlert(t, ctx, pool, instanceID, "newer", "RECOVERED", cutoff.Add(time.Microsecond))
 	unresolvedID := insertRetentionAlert(t, ctx, pool, instanceID, "unresolved", "FIRING", cutoff.Add(-24*time.Hour))
@@ -73,7 +74,7 @@ func TestDeleteRecoveredAlertHistoryAtNinetyDayBoundary(t *testing.T) {
 		t.Fatalf("create retained performance event: %v", err)
 	}
 
-	deleted, err := alerting.DeleteRecoveredAlertHistory(ctx, &db.Pool{Pool: pool}, now)
+	deleted, err := alerting.DeleteRecoveredAlertHistory(ctx, &db.Pool{Pool: pool}, now, retention)
 	if err != nil {
 		t.Fatalf("delete recovered alert history: %v", err)
 	}

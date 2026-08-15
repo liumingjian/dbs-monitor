@@ -261,7 +261,7 @@ func run(ctx context.Context) error {
 	}
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform, health, config.PartitionSpan, config.PartitionMaintenanceInterval)
-	go runAlertHistoryMaintenance(ctx, platform)
+	go runAlertHistoryMaintenance(ctx, platform, config.AlertHistoryRetention)
 	go runNotificationDelivery(ctx, platform, keyring)
 	go func() {
 		timer := time.NewTimer(time.Second)
@@ -315,9 +315,9 @@ func run(ctx context.Context) error {
 	}
 }
 
-func runAlertHistoryMaintenance(ctx context.Context, platform *db.Pool) {
+func runAlertHistoryMaintenance(ctx context.Context, platform *db.Pool, retention time.Duration) {
 	deleteExpiredAlertHistory := func(now time.Time) {
-		if _, err := alerting.DeleteRecoveredAlertHistory(ctx, platform, now); err != nil {
+		if _, err := alerting.DeleteRecoveredAlertHistory(ctx, platform, now, retention); err != nil {
 			log.Printf("alert history retention failed: %v", err)
 		}
 	}
