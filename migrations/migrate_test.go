@@ -71,6 +71,16 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	if !bytes.Equal(firstKey, secondKey) {
 		t.Fatal("second migration run replaced the master key")
 	}
+	var sessionTimestampColumns int
+	if err := database.QueryRowContext(ctx, `SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'public' AND table_name = 'user_session' AND is_nullable = 'NO'
+		  AND column_name IN ('created_at', 'last_seen_at')
+		  AND data_type = 'timestamp with time zone'`).Scan(&sessionTimestampColumns); err != nil {
+		t.Fatalf("inspect session timestamps: %v", err)
+	}
+	if sessionTimestampColumns != 2 {
+		t.Fatalf("required session timestamp columns = %d, want 2", sessionTimestampColumns)
+	}
 
 	lockConnection, err := database.Conn(ctx)
 	if err != nil {

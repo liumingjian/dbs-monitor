@@ -19,6 +19,8 @@ tags:
 paths:
   /api/v1/login:
     $ref: paths/auth.yaml#/~1api~1v1~1login
+  /api/v1/logout:
+    $ref: paths/auth.yaml#/~1api~1v1~1logout
   /api/v1/instances:
     $ref: paths/instances.yaml#/~1api~1v1~1instances
   /api/v1/instances/{id}:

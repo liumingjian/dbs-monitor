@@ -1,0 +1,13 @@
+long_lived:
+  platform_admin:
+    username: acceptance-platform-admin
+    role: PLATFORM_ADMIN
+  alert_admin:
+    username: acceptance-alert-admin
+    role: ALERT_ADMIN
+  viewer:
+    username: acceptance-viewer
+    role: READONLY
+disposable:
+  username_pattern: "{entry_id}-user-{sequence}"
+  creation_endpoint: "POST /api/v1/users"

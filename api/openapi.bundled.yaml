@@ -51,6 +51,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/logout:
+    post:
+      tags:
+        - auth
+      operationId: deleteSession
+      x-required-role: READONLY
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '204':
+          description: Logged out
+          headers:
+            Set-Cookie:
+              required: true
+              schema:
+                type: string
+        '401':
+          description: Authentication required
   /api/v1/instances:
     get:
       tags:

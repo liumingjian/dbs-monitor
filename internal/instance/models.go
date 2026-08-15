@@ -438,9 +438,11 @@ type SmtpChannel struct {
 }
 
 type UserSession struct {
-	TokenHash []byte
-	UserID    pgtype.UUID
-	ExpiresAt pgtype.Timestamptz
+	TokenHash  []byte
+	UserID     pgtype.UUID
+	ExpiresAt  pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
 }
 
 type WebhookTarget struct {
