@@ -144,6 +144,97 @@ func TestAcceptanceRoleFixturesAreHarnessConsumable(t *testing.T) {
 	}
 }
 
+func TestDeliveryAndOperationsDocumentationContract(t *testing.T) {
+	root := filepath.Join(internalRoot(t), "..")
+	read := func(path string) string {
+		t.Helper()
+		contents, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		return string(contents)
+	}
+	requireText := func(path string, required ...string) {
+		t.Helper()
+		contents := read(path)
+		for _, text := range required {
+			if !strings.Contains(contents, text) {
+				t.Errorf("%s is missing %q", path, text)
+			}
+		}
+	}
+
+	requireText("docs/deploy/build.md",
+		"功能等价", "不承诺 bit-for-bit", ".tool-versions", "npm ci", "linux/amd64",
+	)
+	requireText("docs/deploy/prerequisites.md",
+		"PostgreSQL 17", "dbsmon", "schema owner", "superuser", "零扩展", "UTF8",
+		"sslmode=verify-full", "install -d -m 0700 -o dbsmon -g dbsmon /etc/dbs-monitor/credentials",
+		"chmod 0600", "换机恢复", "不可恢复", "无后门", "升级到 PG 18+ 会导致平台拒绝启动",
+		"降级不受支持", "未备份即升级 = 不可回退",
+	)
+	for _, responsibility := range []string{
+		"1. 备份频率、保留与验证由客户决定",
+		"2. keyring 必须与平台数据库分开备份",
+		"3. 恢复顺序由客户执行",
+		"4. 回滚由客户执行",
+		"5. PostgreSQL 大版本升级是客户的独立工程",
+		"6. 客户按容量基线准备磁盘",
+		"7. 客户在升级前手工备份控制面",
+		"8. 客户提供专属 PostgreSQL 17 实例",
+		"9. 客户负责 PostgreSQL 实例的 initdb 参数、备份、监控、补丁与升级节奏",
+		"10. 客户保证 PostgreSQL 主机可用空间",
+		"11. 升级到 PG 18+ 会导致平台拒绝启动",
+		"12. 客户创建的最小权限平台角色",
+	} {
+		requireText("docs/deploy/prerequisites.md", responsibility)
+	}
+	for _, commitment := range []string{
+		"v1.x 内任意版本可直接升级到最新 v1.x",
+		"降级不受支持",
+		"先升级 server，再升级 Agent",
+		"v1.0.0 是首发版本，不存在从 0.x 升级的路径",
+	} {
+		requireText("docs/deploy/prerequisites.md", commitment)
+	}
+
+	requireText("docs/deploy/manual-agent-install.md",
+		"linux/amd64", "linux/arm64", "SHA256SUMS", "CA 证书文件", "配置样例",
+		"dbs-monitor-agent.service", "手工步骤", "CA 证书不进交付物", "sha256sum -c",
+		"/etc/dbs-monitor-agent/token", "0600", "装要 root，跑不要 root",
+	)
+	requireText("packaging/systemd/dbs-monitor-server.service", "User=dbsmon", "ExecStart=/opt/dbs-monitor/bin/dbs-monitor-server")
+	requireText("packaging/systemd/dbs-monitor-agent.service", "User=dbs-monitor-agent", "AGENT_TOKEN_FILE", "ExecStart=/opt/dbs-monitor-agent/bin/dbs-monitor-agent")
+
+	for _, path := range []string{"config/server-minimal.yaml", "config/server-full.yaml"} {
+		var config map[string]any
+		if err := yaml.Unmarshal([]byte(read(path)), &config); err != nil {
+			t.Errorf("parse %s: %v", path, err)
+		}
+		if _, exists := config["platform_database_url"]; !exists {
+			t.Errorf("%s has no platform_database_url", path)
+		}
+	}
+
+	entries, err := os.ReadDir(filepath.Join(root, "docs", "deploy"))
+	if err != nil {
+		t.Fatalf("read docs/deploy: %v", err)
+	}
+	for _, entry := range entries {
+		name := strings.ToLower(entry.Name())
+		if strings.Contains(name, "checklist") {
+			t.Errorf("manual pre-delivery checklist is forbidden: docs/deploy/%s", entry.Name())
+		}
+		if entry.IsDir() {
+			continue
+		}
+		contents := strings.ToLower(read(filepath.ToSlash(filepath.Join("docs", "deploy", entry.Name()))))
+		if strings.Contains(contents, "- [ ]") || strings.Contains(contents, "- [x]") {
+			t.Errorf("manual checklist task boxes are forbidden in docs/deploy/%s", entry.Name())
+		}
+	}
+}
+
 func readCertificateFixture(t *testing.T, directory, name string) *x509.Certificate {
 	t.Helper()
 	certificatePEM, err := os.ReadFile(filepath.Join(directory, name+".crt"))
