@@ -46,7 +46,7 @@ func reportPlatformDatabasePreflight(
 	}
 }
 
-func handlePlatformDatabasePreflightFailure(
+func handlePlatformDatabasePreflight(
 	report platformdb.Report,
 	recovering bool,
 	health *platformhealth.Store,
@@ -55,7 +55,7 @@ func handlePlatformDatabasePreflightFailure(
 ) (bool, error) {
 	fatalErr := report.FatalError()
 	if fatalErr == nil {
-		return false, nil
+		return true, nil
 	}
 	if !recovering {
 		return false, fatalErr
@@ -78,5 +78,5 @@ func handlePlatformDatabasePreflightFailure(
 			logger.Print(string(event))
 		}
 	}
-	return true, nil
+	return false, nil
 }

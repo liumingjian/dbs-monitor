@@ -73,27 +73,34 @@ func TestReportPlatformDatabasePreflightReportsHealthyWithoutWarnings(t *testing
 	}
 }
 
-func TestHandlePlatformDatabasePreflightFailureUsesRecoveryPolicy(t *testing.T) {
+func TestHandlePlatformDatabasePreflightUsesRecoveryPolicy(t *testing.T) {
 	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	healthy := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
+	if ready, err := handlePlatformDatabasePreflight(
+		platformdb.Report{}, false, healthy, log.New(io.Discard, "", 0), now,
+	); !ready || err != nil {
+		t.Fatalf("healthy result = ready %t, error %v; want ready without error", ready, err)
+	}
+
 	report := platformdb.Report{Fatal: []platformdb.Finding{{
 		Code:    platformdb.CodeVersionUnsupported,
 		Message: "PostgreSQL 17 is required",
 	}}}
 
 	startupHealth := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
-	if retry, err := handlePlatformDatabasePreflightFailure(
+	if ready, err := handlePlatformDatabasePreflight(
 		report, false, startupHealth, log.New(io.Discard, "", 0), now,
-	); retry || err == nil || !bytes.Contains([]byte(err.Error()), []byte(platformdb.CodeVersionUnsupported)) {
-		t.Fatalf("startup result = retry %t, error %v; want named fatal error", retry, err)
+	); ready || err == nil || !bytes.Contains([]byte(err.Error()), []byte(platformdb.CodeVersionUnsupported)) {
+		t.Fatalf("startup result = ready %t, error %v; want named fatal error", ready, err)
 	}
 
 	var journal bytes.Buffer
 	recoveryHealth := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
-	retry, err := handlePlatformDatabasePreflightFailure(
+	ready, err := handlePlatformDatabasePreflight(
 		report, true, recoveryHealth, log.New(&journal, "", 0), now,
 	)
-	if !retry || err != nil {
-		t.Fatalf("recovery result = retry %t, error %v; want retry without exit", retry, err)
+	if ready || err != nil {
+		t.Fatalf("recovery result = ready %t, error %v; want retry without exit", ready, err)
 	}
 	database := recoveryHealth.Source(platformhealth.SourcePlatformDatabase)
 	if database.Status != platformhealth.StatusFailed || database.Code != string(platformdb.CodeVersionUnsupported) {

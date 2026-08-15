@@ -16,25 +16,26 @@ import (
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
-type switchingHandler struct {
-	current atomic.Pointer[storedHandler]
+type switchableHandler struct {
+	current atomic.Pointer[handlerSlot]
 }
 
-type storedHandler struct {
+// handlerSlot lets atomic.Pointer store handlers with different concrete types.
+type handlerSlot struct {
 	handler http.Handler
 }
 
-func newSwitchingHandler(initial http.Handler) *switchingHandler {
-	handler := &switchingHandler{}
-	handler.Store(initial)
+func newSwitchableHandler(initial http.Handler) *switchableHandler {
+	handler := &switchableHandler{}
+	handler.Switch(initial)
 	return handler
 }
 
-func (handler *switchingHandler) Store(next http.Handler) {
-	handler.current.Store(&storedHandler{handler: next})
+func (handler *switchableHandler) Switch(next http.Handler) {
+	handler.current.Store(&handlerSlot{handler: next})
 }
 
-func (handler *switchingHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+func (handler *switchableHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	handler.current.Load().handler.ServeHTTP(writer, request)
 }
 
@@ -53,10 +54,10 @@ func preparePlatformDatabase(
 		health.Update(time.Now().UTC(), platformhealth.DatabaseSource(err))
 		return false, nil
 	}
-	retry, err := handlePlatformDatabasePreflightFailure(
+	preflightReady, err := handlePlatformDatabasePreflight(
 		report, recovering, health, logger, time.Now().UTC(),
 	)
-	if retry || err != nil {
+	if err != nil || !preflightReady {
 		return false, err
 	}
 
@@ -83,13 +84,14 @@ func preparePlatformDatabase(
 	return false, fmt.Errorf("platform database migration failed; refusing to start: %w", migrationErr)
 }
 
-// The database OID keeps fixed lock identifiers independent on shared clusters.
+// Combining the database OID with fixed lock IDs keeps locks independent across
+// databases on shared PostgreSQL clusters.
 const (
-	serverProcessLockID int64 = 0x50524f43 // "PROC"
-	tryAdvisoryLockSQL        = `SELECT pg_try_advisory_lock(
+	serverProcessLockID        int64 = 0x50524f43 // "PROC"
+	databaseAdvisoryTryLockSQL       = `SELECT pg_try_advisory_lock(
 		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
 	)`
-	unlockAdvisoryLockSQL = `SELECT pg_advisory_unlock(
+	databaseAdvisoryUnlockSQL = `SELECT pg_advisory_unlock(
 		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
 	)`
 )
@@ -118,7 +120,7 @@ func acquireDatabaseAdvisoryLock(
 		return nil, fmt.Errorf("reserve %s lock connection: %w", name, err)
 	}
 	var acquired bool
-	if err := connection.QueryRow(ctx, tryAdvisoryLockSQL, lockID).Scan(&acquired); err != nil {
+	if err := connection.QueryRow(ctx, databaseAdvisoryTryLockSQL, lockID).Scan(&acquired); err != nil {
 		connection.Release()
 		return nil, fmt.Errorf("acquire %s advisory lock: %w", name, err)
 	}
@@ -139,7 +141,7 @@ func (lock *databaseAdvisoryLock) Release() error {
 
 	ctx := context.Background()
 	var unlocked bool
-	if err := connection.QueryRow(ctx, unlockAdvisoryLockSQL, lock.lockID).Scan(&unlocked); err != nil {
+	if err := connection.QueryRow(ctx, databaseAdvisoryUnlockSQL, lock.lockID).Scan(&unlocked); err != nil {
 		_ = connection.Conn().Close(ctx)
 		return fmt.Errorf("release %s advisory lock: %w", lock.name, err)
 	}

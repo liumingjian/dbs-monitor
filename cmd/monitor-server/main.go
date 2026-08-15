@@ -99,10 +99,10 @@ func run(ctx context.Context) error {
 	}
 
 	health.Update(time.Now().UTC(), platformhealth.DatabaseSource(errors.New("platform database startup pending")))
-	switching := newSwitchingHandler(securityHeadersHandler(startupFailureHandler(health)))
+	serverHandler := newSwitchableHandler(securityHeadersHandler(startupFailureHandler(health)))
 	server := &http.Server{
 		Addr:              env("LISTEN_ADDR", ":8443"),
-		Handler:           switching,
+		Handler:           serverHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		TLSConfig:         serverTLSConfig(),
 	}
@@ -294,7 +294,7 @@ func run(ctx context.Context) error {
 		}
 		fileServer.ServeHTTP(writer, request)
 	})
-	switching.Store(securityHeadersHandler(platformFailureHandler(applicationHandler, health)))
+	serverHandler.Switch(securityHeadersHandler(platformFailureHandler(applicationHandler, health)))
 	select {
 	case <-ctx.Done():
 		return nil

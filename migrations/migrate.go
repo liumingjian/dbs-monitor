@@ -42,22 +42,34 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (appl
 	return up(ctx, database, credentialDirectory, 0)
 }
 
-func UpWithLockTimeout(ctx context.Context, database *sql.DB, credentialDirectory string, lockWaitTimeout time.Duration) (applied int, returnedErr error) {
+func UpWithLockTimeout(
+	ctx context.Context,
+	database *sql.DB,
+	credentialDirectory string,
+	lockWaitTimeout time.Duration,
+) (applied int, returnedErr error) {
 	return up(ctx, database, credentialDirectory, lockWaitTimeout)
 }
 
-func up(ctx context.Context, database *sql.DB, credentialDirectory string, lockWaitTimeout time.Duration) (applied int, returnedErr error) {
+func up(
+	ctx context.Context,
+	database *sql.DB,
+	credentialDirectory string,
+	lockWaitTimeout time.Duration,
+) (applied int, returnedErr error) {
 	lockConnection, err := database.Conn(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("reserve migration lock connection: %w", err)
 	}
 	lockContext := ctx
-	cancelLockWait := func() {}
+	var cancelLockWait context.CancelFunc
 	if lockWaitTimeout > 0 {
 		lockContext, cancelLockWait = context.WithTimeout(ctx, lockWaitTimeout)
 	}
 	_, err = lockConnection.ExecContext(lockContext, migrationAdvisoryLockSQL, migrationAdvisoryLockID)
-	cancelLockWait()
+	if cancelLockWait != nil {
+		cancelLockWait()
+	}
 	if err != nil {
 		lockConnection.Close()
 		if errors.Is(lockContext.Err(), context.DeadlineExceeded) {

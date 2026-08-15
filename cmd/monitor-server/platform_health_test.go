@@ -168,10 +168,10 @@ func TestStartupFailureHandlerExposesFailedHealthAndRejectsBusinessAPI(t *testin
 	}
 }
 
-func TestSwitchingHandlerPublishesRecoveredApplicationWithoutRestart(t *testing.T) {
+func TestSwitchableHandlerPublishesRecoveredApplicationWithoutRestart(t *testing.T) {
 	health := platformhealth.NewStore("3.0.0", time.Now().Add(-time.Hour), nil)
 	health.Update(time.Now(), platformhealth.DatabaseSource(errors.New("connection refused")))
-	handler := newSwitchingHandler(startupFailureHandler(health))
+	handler := newSwitchableHandler(startupFailureHandler(health))
 
 	beforeRecovery := httptest.NewRecorder()
 	handler.ServeHTTP(beforeRecovery, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
@@ -179,7 +179,7 @@ func TestSwitchingHandlerPublishesRecoveredApplicationWithoutRestart(t *testing.
 		t.Fatalf("status before recovery = %d, want 503", beforeRecovery.Code)
 	}
 
-	handler.Store(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+	handler.Switch(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusNoContent)
 	}))
 	afterRecovery := httptest.NewRecorder()
