@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +107,14 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	)
 	if _, err := lockConnection.ExecContext(ctx, migrationLockSQL, migrationLockID); err != nil {
 		t.Fatalf("hold migration advisory lock: %v", err)
+	}
+	lockWaitStarted := time.Now()
+	if _, err := migrations.UpWithLockTimeout(ctx, database, keyringDirectory, 100*time.Millisecond); err == nil ||
+		!strings.Contains(err.Error(), "migration advisory lock wait timed out after 100ms") {
+		t.Fatalf("timed migration lock error = %v, want distinct timeout diagnostic", err)
+	}
+	if elapsed := time.Since(lockWaitStarted); elapsed > time.Second {
+		t.Fatalf("migration lock timeout took %s, want no more than 1s", elapsed)
 	}
 	type migrationResult struct {
 		applied int

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -10,6 +11,19 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
+
+func startupFailureHandler(health *platformhealth.Store) http.Handler {
+	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/api/v1/diagnostics/health" {
+			writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+			if err := json.NewEncoder(writer).Encode(health.Current()); err != nil {
+				log.Printf("monitor-server: encode startup health response: %v", err)
+			}
+			return
+		}
+		writePlatformFailure(writer, request)
+	})
+}
 
 func reportConfigPermissions(
 	health *platformhealth.Store,
@@ -43,17 +57,21 @@ func platformFailureHandler(next http.Handler, health *platformhealth.Store) htt
 			next.ServeHTTP(writer, request)
 			return
 		}
-		writer.Header().Set("X-DBS-Platform-Fault", "true")
-		if strings.HasPrefix(request.URL.Path, "/api/") {
-			writer.Header().Set("Content-Type", "application/json; charset=utf-8")
-			writer.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = writer.Write([]byte(`{"error":{"code":"INTERNAL","message":"平台自身故障"}}`))
-			return
-		}
-		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
-		writer.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = writer.Write([]byte(platformFailurePage))
+		writePlatformFailure(writer, request)
 	})
+}
+
+func writePlatformFailure(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("X-DBS-Platform-Fault", "true")
+	if strings.HasPrefix(request.URL.Path, "/api/") {
+		writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+		writer.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = writer.Write([]byte(`{"error":{"code":"INTERNAL","message":"平台自身故障"}}`))
+		return
+	}
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	writer.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = writer.Write([]byte(platformFailurePage))
 }
 
 const platformFailurePage = `<!doctype html>

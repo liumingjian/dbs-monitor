@@ -14,15 +14,24 @@ import (
 )
 
 func TestPlatformDatabasePreflightRunsBeforeMigrations(t *testing.T) {
-	mainSource, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "cmd", "monitor-server", "main.go"))
+	serverDirectory := filepath.Join(internalRoot(t), "..", "cmd", "monitor-server")
+	mainSource, err := os.ReadFile(filepath.Join(serverDirectory, "main.go"))
 	if err != nil {
 		t.Fatalf("read monitor server startup: %v", err)
 	}
-	contents := string(mainSource)
+	startupSource, err := os.ReadFile(filepath.Join(serverDirectory, "startup.go"))
+	if err != nil {
+		t.Fatalf("read shared platform database startup: %v", err)
+	}
+	contents := string(startupSource)
 	preflight := strings.Index(contents, "platformdb.Check(ctx, platform)")
-	migration := strings.Index(contents, "migrations.Up(ctx, migrationDB, credentialDirectory)")
+	migration := strings.Index(contents, "migrations.UpWithLockTimeout(ctx, migrationDB, credentialDirectory, lockWaitTimeout)")
 	if preflight < 0 || migration < 0 || preflight >= migration {
 		t.Fatalf("platform database preflight must run after connection and before migrations")
+	}
+	if strings.Count(contents, "platformdb.Check(ctx, platform)") != 1 ||
+		!strings.Contains(string(mainSource), "preparePlatformDatabase(") {
+		t.Fatal("startup and recovery must share the single platform database prerequisite implementation")
 	}
 }
 

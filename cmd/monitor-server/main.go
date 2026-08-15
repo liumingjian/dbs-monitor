@@ -28,9 +28,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
-	"github.com/liumingjian/dbs-monitor/internal/platformdb"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
-	"github.com/liumingjian/dbs-monitor/migrations"
 	webassets "github.com/liumingjian/dbs-monitor/web"
 )
 
@@ -85,6 +83,43 @@ func run(ctx context.Context) error {
 	}
 	health := platformhealth.NewStore(version, startedAt, log.Default())
 	reportConfigPermissions(health, log.Default(), configPath, configPermissionsSecure, time.Now().UTC())
+	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
+	if err != nil {
+		return err
+	}
+	expiresAt, certificateErr := certificateExpiration(certificate)
+	if certificateErr != nil {
+		health.Update(time.Now().UTC(), platformhealth.CertificateSource(time.Now().UTC(), nil))
+		return certificateErr
+	}
+	health.Update(time.Now().UTC(), platformhealth.CertificateSource(time.Now().UTC(), expiresAt))
+	static, err := webassets.Files()
+	if err != nil {
+		return err
+	}
+
+	health.Update(time.Now().UTC(), platformhealth.DatabaseSource(errors.New("platform database startup pending")))
+	switching := newSwitchingHandler(securityHeadersHandler(startupFailureHandler(health)))
+	server := &http.Server{
+		Addr:              env("LISTEN_ADDR", ":8443"),
+		Handler:           switching,
+		ReadHeaderTimeout: 5 * time.Second,
+		TLSConfig:         serverTLSConfig(),
+	}
+	serverErrors := make(chan error, 1)
+	go func() {
+		err := server.ListenAndServeTLS(certificate, key)
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		serverErrors <- err
+	}()
+	defer func() {
+		shutdown, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdown)
+	}()
+
 	connectionString := config.PlatformDatabaseURL
 	credentialDirectory := config.MasterKeyPath
 	pool, err := pgxpool.New(ctx, connectionString)
@@ -93,15 +128,46 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	preflightReport, err := platformdb.Check(ctx, platform)
-	if err != nil {
-		return err
+	retryDelay := time.Second
+	for {
+		ready, err := preparePlatformDatabase(
+			ctx, platform, connectionString, credentialDirectory,
+			config.MigrationLockWaitTimeout, health, log.Default(),
+		)
+		if err != nil {
+			return err
+		}
+		if ready {
+			break
+		}
+		log.Printf("monitor-server: platform database unavailable; retrying startup in %s", retryDelay)
+		timer := time.NewTimer(retryDelay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case err := <-serverErrors:
+			timer.Stop()
+			return err
+		case <-timer.C:
+		}
+		if retryDelay < 30*time.Second {
+			retryDelay *= 2
+			if retryDelay > 30*time.Second {
+				retryDelay = 30 * time.Second
+			}
+		}
 	}
-	if err := preflightReport.FatalError(); err != nil {
-		return err
-	}
-	reportPlatformDatabasePreflight(preflightReport, health, log.Default(), time.Now().UTC())
 
+	processLock, err := acquireServerProcessLock(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("reserve server process lock: %w", err)
+	}
+	defer func() {
+		if err := processLock.Release(); err != nil {
+			log.Printf("monitor-server: %v", err)
+		}
+	}()
 	rotationLock, err := acquireMasterKeyRotationLock(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("reserve server master key rotation lock: %w", err)
@@ -112,15 +178,6 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	migrationDB, err := migrations.Open(connectionString)
-	if err != nil {
-		return err
-	}
-	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
-		migrationDB.Close()
-		return fmt.Errorf("platform database migration failed; refusing to start: %w", err)
-	}
-	migrationDB.Close()
 	keyring, err := openStartupCredentialKeyring(
 		ctx, platform, credentialDirectory, health, log.Default(), time.Now().UTC(),
 	)
@@ -191,16 +248,6 @@ func run(ctx context.Context) error {
 		Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY",
 	})
 	health.Update(time.Now().UTC(), platformhealth.DiskUnavailableSource(platformhealth.DiskNormal))
-	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
-	if err != nil {
-		return err
-	}
-	expiresAt, certificateErr := certificateExpiration(certificate)
-	if certificateErr != nil {
-		health.Update(time.Now().UTC(), platformhealth.CertificateSource(time.Now().UTC(), nil))
-		return certificateErr
-	}
-	health.Update(time.Now().UTC(), platformhealth.CertificateSource(time.Now().UTC(), expiresAt))
 	evaluation := evaluator.New(platform, clock.Real{}, collector.WithTriggerSnapshotConnection)
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform, health)
@@ -217,10 +264,6 @@ func run(ctx context.Context) error {
 		}
 	}()
 
-	static, err := webassets.Files()
-	if err != nil {
-		return err
-	}
 	distribution, err := httpapi.LoadAgentDistribution(
 		filepath.Join(env("CERT_DIR", "certs"), "ca.crt"),
 		config.AgentBinaryDir,
@@ -249,19 +292,13 @@ func run(ctx context.Context) error {
 		}
 		fileServer.ServeHTTP(writer, request)
 	})
-	handler := securityHeadersHandler(platformFailureHandler(applicationHandler, health))
-	server := &http.Server{Addr: env("LISTEN_ADDR", ":8443"), Handler: handler, ReadHeaderTimeout: 5 * time.Second}
-	go func() {
-		<-ctx.Done()
-		shutdown, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		server.Shutdown(shutdown)
-	}()
-	server.TLSConfig = serverTLSConfig()
-	if err := server.ListenAndServeTLS(certificate, key); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	switching.Store(securityHeadersHandler(platformFailureHandler(applicationHandler, health)))
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-serverErrors:
 		return err
 	}
-	return nil
 }
 
 func runAlertHistoryMaintenance(ctx context.Context, platform *db.Pool) {

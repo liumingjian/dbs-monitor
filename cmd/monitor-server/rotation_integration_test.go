@@ -61,6 +61,47 @@ func TestMasterKeyRotationLockIsExclusiveAndReusable(t *testing.T) {
 	}
 }
 
+func TestServerProcessLockIsExclusiveAndIndependentFromRotationLock(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	connectionString := rotationConnectionString(env("PGDATABASE", "dbs_monitor"))
+	pool, err := pgxpool.New(ctx, connectionString)
+	if err != nil {
+		t.Fatalf("open platform pool: %v", err)
+	}
+	defer pool.Close()
+
+	processLock, err := acquireServerProcessLock(ctx, pool)
+	if err != nil {
+		t.Fatalf("acquire initial server process lock: %v", err)
+	}
+	if _, err := acquireServerProcessLock(ctx, pool); !errors.Is(err, errServerProcessLockUnavailable) {
+		t.Fatalf("contended server process lock error = %v, want %v", err, errServerProcessLockUnavailable)
+	}
+	rotationLock, err := acquireMasterKeyRotationLock(ctx, pool)
+	if err != nil {
+		t.Fatalf("rotation lock was coupled to server process lock: %v", err)
+	}
+	if err := rotationLock.Release(); err != nil {
+		t.Fatalf("release independent rotation lock: %v", err)
+	}
+	if err := processLock.Release(); err != nil {
+		t.Fatalf("release server process lock: %v", err)
+	}
+
+	reacquiredLock, err := acquireServerProcessLock(ctx, pool)
+	if err != nil {
+		t.Fatalf("reacquire released server process lock: %v", err)
+	}
+	if err := reacquiredLock.Release(); err != nil {
+		t.Fatalf("release reacquired server process lock: %v", err)
+	}
+	if errServerProcessLockUnavailable.Error() == errMasterKeyRotationLockUnavailable.Error() {
+		t.Fatal("server process and rotation lock errors must be distinct")
+	}
+}
+
 func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
