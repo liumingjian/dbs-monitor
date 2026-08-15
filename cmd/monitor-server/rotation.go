@@ -12,9 +12,11 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 )
 
+// PostgreSQL advisory locks are cluster-wide, so both queries combine the
+// current database OID with the "ROTA" identifier.
 const (
-	masterKeyRotationLockID  int64 = 0x524f5441 // "ROTA"; the database OID provides the remaining scope.
-	masterKeyRotationLockSQL       = `SELECT pg_try_advisory_lock(
+	masterKeyRotationLockID     int64 = 0x524f5441
+	masterKeyRotationTryLockSQL       = `SELECT pg_try_advisory_lock(
 		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
 	)`
 	masterKeyRotationUnlockSQL = `SELECT pg_advisory_unlock(
@@ -41,6 +43,7 @@ func runMasterKeyRotationCommand(ctx context.Context) (returnedErr error) {
 		return fmt.Errorf("open platform database: %w", err)
 	}
 	defer pool.Close()
+
 	rotationLock, err := acquireMasterKeyRotationLock(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("refuse offline master key rotation: %w", err)
@@ -64,8 +67,9 @@ func acquireMasterKeyRotationLock(ctx context.Context, pool *pgxpool.Pool) (*mas
 	if err != nil {
 		return nil, fmt.Errorf("reserve master key rotation lock connection: %w", err)
 	}
+
 	var acquired bool
-	if err := connection.QueryRow(ctx, masterKeyRotationLockSQL, masterKeyRotationLockID).Scan(&acquired); err != nil {
+	if err := connection.QueryRow(ctx, masterKeyRotationTryLockSQL, masterKeyRotationLockID).Scan(&acquired); err != nil {
 		connection.Release()
 		return nil, fmt.Errorf("acquire master key rotation advisory lock: %w", err)
 	}
@@ -84,9 +88,10 @@ func (lock *masterKeyRotationLock) Release() error {
 	lock.connection = nil
 	defer connection.Release()
 
+	ctx := context.Background()
 	var unlocked bool
-	if err := connection.QueryRow(context.Background(), masterKeyRotationUnlockSQL, masterKeyRotationLockID).Scan(&unlocked); err != nil {
-		_ = connection.Conn().Close(context.Background())
+	if err := connection.QueryRow(ctx, masterKeyRotationUnlockSQL, masterKeyRotationLockID).Scan(&unlocked); err != nil {
+		_ = connection.Conn().Close(ctx)
 		return fmt.Errorf("release master key rotation advisory lock: %w", err)
 	}
 	if !unlocked {

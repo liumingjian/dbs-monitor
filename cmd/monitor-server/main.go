@@ -67,6 +67,7 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
+
 	rotationLock, err := acquireMasterKeyRotationLock(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("reserve server master key rotation lock: %w", err)
