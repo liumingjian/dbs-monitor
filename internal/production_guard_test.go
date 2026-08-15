@@ -16,7 +16,7 @@ import (
 )
 
 func TestB11AcceptanceAndE2EScriptsDoNotWriteBusinessTables(t *testing.T) {
-	root := filepath.Join(internalRoot(t), "..")
+	root := filepath.Dir(internalRoot(t))
 	violations, err := findBusinessTableWrites(root)
 	if err != nil {
 		t.Fatalf("scan acceptance and E2E data setup: %v", err)
@@ -27,7 +27,7 @@ func TestB11AcceptanceAndE2EScriptsDoNotWriteBusinessTables(t *testing.T) {
 }
 
 func TestB12CoveredAcceptanceReferencesResolve(t *testing.T) {
-	root := filepath.Join(internalRoot(t), "..")
+	root := filepath.Dir(internalRoot(t))
 	violations, err := findBrokenAcceptanceReferences(root)
 	if err != nil {
 		t.Fatalf("scan covered acceptance references: %v", err)
@@ -38,7 +38,7 @@ func TestB12CoveredAcceptanceReferencesResolve(t *testing.T) {
 }
 
 func TestB14PlatformDatabaseImagesUsePostgres17(t *testing.T) {
-	root := filepath.Join(internalRoot(t), "..")
+	root := filepath.Dir(internalRoot(t))
 	violations, err := findPlatformDatabaseImageViolations(root)
 	if err != nil {
 		t.Fatalf("scan platform database images: %v", err)
@@ -49,12 +49,12 @@ func TestB14PlatformDatabaseImagesUsePostgres17(t *testing.T) {
 }
 
 func TestB14PlatformDatabaseRuntimeCompatibility(t *testing.T) {
-	major, localeProvider, err := platformDatabaseCompatibility(context.Background())
+	majorVersion, localeProvider, err := platformDatabaseCompatibility(context.Background())
 	if err != nil {
 		t.Fatalf("query platform database compatibility: %v", err)
 	}
-	if major != 17 {
-		t.Errorf("platform database major version = %d, want 17", major)
+	if majorVersion != 17 {
+		t.Errorf("platform database major version = %d, want 17", majorVersion)
 	}
 	if localeProvider == "i" {
 		t.Error("platform database uses the unsupported ICU locale provider")
@@ -124,7 +124,10 @@ func writeGuardFixture(t *testing.T, root, relativePath, contents string) {
 	}
 }
 
-var businessWritePattern = regexp.MustCompile(`(?i)\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:dbsmon\.)?"?([a-z_][a-z0-9_]*)"?`)
+var (
+	businessWritePattern  = regexp.MustCompile(`(?i)\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:dbsmon\.)?"?([a-z_][a-z0-9_]*)"?`)
+	migrationTablePattern = regexp.MustCompile(`(?im)^CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z_][a-z0-9_]*)`)
+)
 
 func findBusinessTableWrites(root string) ([]string, error) {
 	businessTables, err := migrationTableNames(filepath.Join(root, "migrations"))
@@ -167,10 +170,9 @@ func findBusinessTableWrites(root string) ([]string, error) {
 	return violations, nil
 }
 
-func migrationTableNames(directory string) (map[string]bool, error) {
-	pattern := regexp.MustCompile(`(?im)^CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z_][a-z0-9_]*)`)
+func migrationTableNames(migrationDirectory string) (map[string]bool, error) {
 	tables := make(map[string]bool)
-	entries, err := os.ReadDir(directory)
+	entries, err := os.ReadDir(migrationDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -178,11 +180,11 @@ func migrationTableNames(directory string) (map[string]bool, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
 			continue
 		}
-		contents, err := os.ReadFile(filepath.Join(directory, entry.Name()))
+		contents, err := os.ReadFile(filepath.Join(migrationDirectory, entry.Name()))
 		if err != nil {
 			return nil, err
 		}
-		for _, match := range pattern.FindAllSubmatch(contents, -1) {
+		for _, match := range migrationTablePattern.FindAllSubmatch(contents, -1) {
 			tables[strings.ToLower(string(match[1]))] = true
 		}
 	}
@@ -223,21 +225,22 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 			violations = append(violations, entry.ID+" is covered without test_ref")
 			continue
 		}
-		parts := strings.Split(*entry.TestRef, "::")
+		testReference := *entry.TestRef
+		parts := strings.Split(testReference, "::")
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			violations = append(violations, fmt.Sprintf("%s has malformed test_ref %q", entry.ID, *entry.TestRef))
+			violations = append(violations, fmt.Sprintf("%s has malformed test_ref %q", entry.ID, testReference))
 			continue
 		}
 		if !strings.Contains(parts[1], strings.ReplaceAll(entry.ID, "-", "_")) {
-			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, *entry.TestRef))
+			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
 		}
-		path := filepath.Clean(filepath.Join(root, filepath.FromSlash(parts[0])))
-		relative, err := filepath.Rel(root, path)
-		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			violations = append(violations, fmt.Sprintf("%s test_ref escapes the repository: %q", entry.ID, *entry.TestRef))
+		testPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(parts[0])))
+		relativePath, err := filepath.Rel(root, testPath)
+		if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+			violations = append(violations, fmt.Sprintf("%s test_ref escapes the repository: %q", entry.ID, testReference))
 			continue
 		}
-		testSource, err := os.ReadFile(path)
+		testSource, err := os.ReadFile(testPath)
 		if err != nil {
 			violations = append(violations, fmt.Sprintf("%s test_ref path %q cannot be read", entry.ID, parts[0]))
 			continue
@@ -249,11 +252,13 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 	return violations, nil
 }
 
+type imageService struct {
+	Image string `yaml:"image"`
+}
+
 func findPlatformDatabaseImageViolations(root string) ([]string, error) {
 	var compose struct {
-		Services map[string]struct {
-			Image string `yaml:"image"`
-		} `yaml:"services"`
+		Services map[string]imageService `yaml:"services"`
 	}
 	if err := readYAML(filepath.Join(root, "compose.yaml"), &compose); err != nil {
 		return nil, err
@@ -285,17 +290,15 @@ func findPlatformDatabaseImageViolations(root string) ([]string, error) {
 		if workflow.IsDir() || !strings.HasSuffix(workflow.Name(), ".yml") {
 			continue
 		}
-		var document struct {
+		var workflowDocument struct {
 			Jobs map[string]struct {
-				Services map[string]struct {
-					Image string `yaml:"image"`
-				} `yaml:"services"`
+				Services map[string]imageService `yaml:"services"`
 			} `yaml:"jobs"`
 		}
-		if err := readYAML(filepath.Join(workflowDirectory, workflow.Name()), &document); err != nil {
+		if err := readYAML(filepath.Join(workflowDirectory, workflow.Name()), &workflowDocument); err != nil {
 			return nil, err
 		}
-		for jobName, job := range document.Jobs {
+		for jobName, job := range workflowDocument.Jobs {
 			for serviceName, service := range job.Services {
 				if !strings.HasPrefix(service.Image, "postgres:") || service.Image == "postgres:17" {
 					continue
@@ -320,25 +323,25 @@ func readYAML(path string, target any) error {
 	return nil
 }
 
-func platformDatabaseCompatibility(parent context.Context) (int, string, error) {
+func platformDatabaseCompatibility(parentContext context.Context) (int, string, error) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		databaseURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
 			envOr("PGUSER", "dbs_monitor"), envOr("PGPASSWORD", "dbs_monitor"),
 			envOr("PGHOST", "localhost"), envOr("PGPORT", "55432"), envOr("PGDATABASE", "dbs_monitor"))
 	}
-	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
+	queryContext, cancel := context.WithTimeout(parentContext, 5*time.Second)
 	defer cancel()
-	connection, err := pgx.Connect(ctx, databaseURL)
+	connection, err := pgx.Connect(queryContext, databaseURL)
 	if err != nil {
 		return 0, "", err
 	}
 	defer connection.Close(context.Background())
-	var major int
+	var majorVersion int
 	var localeProvider string
-	err = connection.QueryRow(ctx, `SELECT current_setting('server_version_num')::integer / 10000, datlocprovider::text
-		FROM pg_database WHERE datname = current_database()`).Scan(&major, &localeProvider)
-	return major, localeProvider, err
+	err = connection.QueryRow(queryContext, `SELECT current_setting('server_version_num')::integer / 10000, datlocprovider::text
+		FROM pg_database WHERE datname = current_database()`).Scan(&majorVersion, &localeProvider)
+	return majorVersion, localeProvider, err
 }
 
 func envOr(name, fallback string) string {
