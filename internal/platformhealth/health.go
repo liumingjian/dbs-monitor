@@ -312,14 +312,23 @@ func NewStore(version string, startedAt time.Time, logger *log.Logger) *Store {
 	for _, source := range sourceOrder {
 		sources[source] = SourceSnapshot{Source: source, Status: StatusUnknown, Code: "FACT_UNAVAILABLE"}
 	}
+	sources[SourceServerProcess] = ServerProcessSource(version, startedAt, true)
+	store := &Store{sources: sources, logger: logger}
+	store.snapshot = store.assemble(startedAt.UTC())
+	return store
+}
+
+func ServerProcessSource(version string, startedAt time.Time, configPermissionsSecure bool) SourceSnapshot {
 	started := startedAt.UTC()
-	sources[SourceServerProcess] = SourceSnapshot{
+	result := SourceSnapshot{
 		Source: SourceServerProcess, Status: StatusOK, Code: "SERVER_PROCESS_RUNNING",
 		Version: &version, StartedAt: &started,
 	}
-	store := &Store{sources: sources, logger: logger}
-	store.snapshot = store.assemble(started)
-	return store
+	if !configPermissionsSecure {
+		result.Status = StatusDegraded
+		result.Code = "CONFIG_FILE_PERMISSIONS_INSECURE"
+	}
+	return result
 }
 
 func (store *Store) Update(now time.Time, source SourceSnapshot) {

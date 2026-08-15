@@ -1,0 +1,2 @@
+# Install this file as /etc/dbs-monitor/config.yaml with mode 0600.
+platform_database_url: postgres://dbs_monitor:change-me@platform-db:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full

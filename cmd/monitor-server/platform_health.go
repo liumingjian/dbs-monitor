@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -9,6 +10,29 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
+
+func reportConfigPermissions(
+	health *platformhealth.Store,
+	logger *log.Logger,
+	path string,
+	permissionsSecure bool,
+	now time.Time,
+) {
+	if permissionsSecure {
+		return
+	}
+	logger.Printf("monitor-server: config file %s permissions are not 0600; continuing with degraded health", path)
+	process := health.Source(platformhealth.SourceServerProcess)
+	version := ""
+	if process.Version != nil {
+		version = *process.Version
+	}
+	startedAt := now.UTC()
+	if process.StartedAt != nil {
+		startedAt = *process.StartedAt
+	}
+	health.Update(now.UTC(), platformhealth.ServerProcessSource(version, startedAt, false))
+}
 
 func refreshPlatformDatabaseHealth(ctx context.Context, platform *db.Pool, health *platformhealth.Store, now time.Time) {
 	health.Update(now, platformhealth.DatabaseSource(platform.Ping(ctx)))
