@@ -152,13 +152,19 @@ services:
             return;
           }
           if (request.method === 'GET' && request.url === '/requests') {
-            response.writeHead(200, {'content-type': 'application/json'}).end(JSON.stringify(requests));
+            response.writeHead(200, { 'content-type': 'application/json' })
+              .end(JSON.stringify(requests));
             return;
           }
           const chunks = [];
           request.on('data', chunk => chunks.push(chunk));
           request.on('end', () => {
-            requests.push({method: request.method, url: request.url, headers: request.headers, body: Buffer.concat(chunks).toString()});
+            requests.push({
+              method: request.method,
+              url: request.url,
+              headers: request.headers,
+              body: Buffer.concat(chunks).toString(),
+            });
             response.writeHead(204).end();
           });
         }).listen(8080, '0.0.0.0');

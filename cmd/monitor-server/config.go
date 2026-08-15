@@ -77,16 +77,17 @@ func loadServerConfig(path string) (serverConfig, bool, error) {
 	if err := decoder.Decode(&raw); err != nil && !errors.Is(err, io.EOF) {
 		return serverConfig{}, permissionsSecure, fmt.Errorf("parse server config %s: %w", path, err)
 	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		if err == nil {
-			err = errors.New("multiple YAML documents are not allowed")
-		}
+	var extraDocument any
+	err = decoder.Decode(&extraDocument)
+	if err == nil {
+		err = errors.New("multiple YAML documents are not allowed")
+	}
+	if !errors.Is(err, io.EOF) {
 		return serverConfig{}, permissionsSecure, fmt.Errorf("parse server config %s: %w", path, err)
 	}
 
 	config := defaultServerConfig()
-	for _, setting := range []struct {
+	durationOverrides := []struct {
 		name   string
 		value  *string
 		target *time.Duration
@@ -98,7 +99,8 @@ func loadServerConfig(path string) (serverConfig, bool, error) {
 		{name: "migration_lock_wait_timeout", value: raw.MigrationLockWaitTimeout, target: &config.MigrationLockWaitTimeout},
 		{name: "session_absolute_ttl", value: raw.SessionAbsoluteTTL, target: &config.SessionAbsoluteTTL},
 		{name: "session_idle_ttl", value: raw.SessionIdleTTL, target: &config.SessionIdleTTL},
-	} {
+	}
+	for _, setting := range durationOverrides {
 		if setting.value == nil {
 			continue
 		}
@@ -150,7 +152,10 @@ func (config serverConfig) validate() error {
 
 func validatePlatformDatabaseURL(connectionString string) error {
 	parsed, err := url.ParseRequestURI(connectionString)
-	if err != nil || (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Hostname() == "" {
+	if err != nil {
+		return errors.New("platform_database_url must be a PostgreSQL TCP URL")
+	}
+	if (parsed.Scheme != "postgres" && parsed.Scheme != "postgresql") || parsed.Hostname() == "" {
 		return errors.New("platform_database_url must be a PostgreSQL TCP URL")
 	}
 	query := parsed.Query()

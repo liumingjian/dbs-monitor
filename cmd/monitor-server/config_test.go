@@ -81,6 +81,7 @@ master_key_path: /srv/dbs-monitor/credentials
 		{name: "platform database ssl mode", contents: "platform_database_url: postgres://dbs_monitor@platform-db/dbs_monitor?search_path=dbsmon&sslmode=require\n", message: "sslmode"},
 		{name: "master key path", contents: "master_key_path: relative/credentials\n", message: "master_key_path"},
 		{name: "unknown setting", contents: "no_data_periods: 1\n", message: "field no_data_periods not found"},
+		{name: "multiple documents", contents: "{}\n---\n{}\n", message: "multiple YAML documents are not allowed"},
 	}
 	for _, test := range invalid {
 		t.Run("rejects "+test.name, func(t *testing.T) {
@@ -123,23 +124,41 @@ func TestReportConfigPermissionsDegradesHealthWithoutStopping(t *testing.T) {
 	}
 }
 
+func TestReportConfigPermissionsLeavesSecureConfigHealthy(t *testing.T) {
+	var output bytes.Buffer
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
+
+	reportConfigPermissions(health, log.New(&output, "", 0), "/etc/dbs-monitor/config.yaml", true, now)
+
+	process := health.Source(platformhealth.SourceServerProcess)
+	if process.Status != platformhealth.StatusOK || process.Code != "SERVER_PROCESS_RUNNING" {
+		t.Fatalf("server process health = %+v, want unchanged healthy process", process)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("secure config permission warning = %q, want none", output.String())
+	}
+}
+
 func TestServerConfigExamplesLoad(t *testing.T) {
 	root := filepath.Clean(filepath.Join("..", ".."))
 	for _, name := range []string{"server-minimal.yaml", "server-full.yaml"} {
-		contents, err := os.ReadFile(filepath.Join(root, "config", name))
-		if err != nil {
-			t.Fatalf("read %s: %v", name, err)
-		}
-		config, permissionsSecure, err := loadServerConfig(writeServerConfig(t, string(contents), 0o600))
-		if err != nil {
-			t.Fatalf("load %s: %v", name, err)
-		}
-		if !permissionsSecure {
-			t.Fatalf("%s does not satisfy the 0600 deployment contract", name)
-		}
-		if config.PlatformDatabaseURL == "" || config.AgentBinaryDir == "" || config.MasterKeyPath == "" {
-			t.Fatalf("%s does not produce a launchable config: %+v", name, config)
-		}
+		t.Run(name, func(t *testing.T) {
+			contents, err := os.ReadFile(filepath.Join(root, "config", name))
+			if err != nil {
+				t.Fatalf("read config example: %v", err)
+			}
+			config, permissionsSecure, err := loadServerConfig(writeServerConfig(t, string(contents), 0o600))
+			if err != nil {
+				t.Fatalf("load config example: %v", err)
+			}
+			if !permissionsSecure {
+				t.Fatal("config example does not satisfy the 0600 deployment contract")
+			}
+			if config.PlatformDatabaseURL == "" || config.AgentBinaryDir == "" || config.MasterKeyPath == "" {
+				t.Fatalf("config example does not produce a launchable config: %+v", config)
+			}
+		})
 	}
 }
 

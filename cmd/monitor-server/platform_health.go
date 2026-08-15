@@ -23,15 +23,9 @@ func reportConfigPermissions(
 	}
 	logger.Printf("monitor-server: config file %s permissions are not 0600; continuing with degraded health", path)
 	process := health.Source(platformhealth.SourceServerProcess)
-	version := ""
-	if process.Version != nil {
-		version = *process.Version
-	}
-	startedAt := now.UTC()
-	if process.StartedAt != nil {
-		startedAt = *process.StartedAt
-	}
-	health.Update(now.UTC(), platformhealth.ServerProcessSource(version, startedAt, false))
+	process.Status = platformhealth.StatusDegraded
+	process.Code = "CONFIG_FILE_PERMISSIONS_INSECURE"
+	health.Update(now, process)
 }
 
 func refreshPlatformDatabaseHealth(ctx context.Context, platform *db.Pool, health *platformhealth.Store, now time.Time) {
