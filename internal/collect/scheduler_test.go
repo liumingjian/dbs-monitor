@@ -173,7 +173,7 @@ func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.
 	health.Update(now, platformhealth.CertificateSource(now, &expiresAt))
 	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY"})
 	health.Update(now, platformhealth.CredentialSource(platformhealth.CredentialFacts{Available: true}))
-	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceTLSCertificate, Status: platformhealth.StatusOK, Code: "FACT_AVAILABLE"})
+	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourceTLS, Status: platformhealth.StatusOK, Code: "FACT_AVAILABLE"})
 	health.Update(now, platformhealth.SourceSnapshot{Source: platformhealth.SourcePlatformDatabaseCapacity, Status: platformhealth.StatusOK, Code: "FACT_AVAILABLE"})
 	service := &Service{health: health}
 	if err := service.SetDiskMonitor(t.TempDir(), platformhealth.DefaultDiskThresholds()); err != nil {

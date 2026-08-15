@@ -182,11 +182,13 @@ INSERT INTO alert_rule (
     recovery_operator, recovery_threshold, window_seconds,
     consecutive_count, recovery_consecutive_count, severity,
     no_data_policy, scope, evaluation_interval_seconds,
-    enabled, version, created_at, updated_at, notification_policy_id,
+    enabled, version, created_by, updated_by, created_at, updated_at, notification_policy_id,
     source_template_id, source_template_version
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $19, $20)
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1,
+        $17, $17, $18, $18,
+        $19, $20, $21)
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by
 `
 
 type CreateAlertRuleParams struct {
@@ -206,6 +208,7 @@ type CreateAlertRuleParams struct {
 	Scope                     string
 	EvaluationIntervalSeconds int32
 	Enabled                   bool
+	ActorID                   pgtype.UUID
 	CreatedAt                 pgtype.Timestamptz
 	NotificationPolicyID      pgtype.UUID
 	SourceTemplateID          pgtype.Text
@@ -230,6 +233,7 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		arg.Scope,
 		arg.EvaluationIntervalSeconds,
 		arg.Enabled,
+		arg.ActorID,
 		arg.CreatedAt,
 		arg.NotificationPolicyID,
 		arg.SourceTemplateID,
@@ -262,19 +266,22 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		&i.NotificationPolicyID,
 		&i.SourceTemplateID,
 		&i.SourceTemplateVersion,
+		&i.CreatedBy,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
 
 const createAlertRuleVersion = `-- name: CreateAlertRuleVersion :exec
-INSERT INTO alert_rule_version (rule_id, version, snapshot, created_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO alert_rule_version (rule_id, version, snapshot, created_by, created_at)
+VALUES ($1, $2, $3, $4, $5)
 `
 
 type CreateAlertRuleVersionParams struct {
 	RuleID    pgtype.UUID
 	Version   int32
 	Snapshot  []byte
+	CreatedBy pgtype.UUID
 	CreatedAt pgtype.Timestamptz
 }
 
@@ -283,6 +290,7 @@ func (q *Queries) CreateAlertRuleVersion(ctx context.Context, arg CreateAlertRul
 		arg.RuleID,
 		arg.Version,
 		arg.Snapshot,
+		arg.CreatedBy,
 		arg.CreatedAt,
 	)
 	return err
@@ -498,7 +506,7 @@ func (q *Queries) GetAlertDispositionForUpdate(ctx context.Context, id pgtype.UU
 }
 
 const getAlertRule = `-- name: GetAlertRule :one
-SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version FROM alert_rule WHERE id = $1
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by FROM alert_rule WHERE id = $1
 `
 
 func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, error) {
@@ -530,6 +538,8 @@ func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, 
 		&i.NotificationPolicyID,
 		&i.SourceTemplateID,
 		&i.SourceTemplateVersion,
+		&i.CreatedBy,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
@@ -907,7 +917,7 @@ func (q *Queries) ListAlertRuleTemplates(ctx context.Context) ([]AlertRuleTempla
 }
 
 const listAlertRules = `-- name: ListAlertRules :many
-SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version FROM alert_rule ORDER BY created_at, id
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by FROM alert_rule ORDER BY created_at, id
 `
 
 func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
@@ -945,6 +955,8 @@ func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 			&i.NotificationPolicyID,
 			&i.SourceTemplateID,
 			&i.SourceTemplateVersion,
+			&i.CreatedBy,
+			&i.UpdatedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -1349,7 +1361,7 @@ SET enabled = $2,
     enabled_updated_by = $3,
     enabled_updated_at = $4
 WHERE id = $1
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by
 `
 
 type SetAlertRuleEnabledParams struct {
@@ -1393,6 +1405,8 @@ func (q *Queries) SetAlertRuleEnabled(ctx context.Context, arg SetAlertRuleEnabl
 		&i.NotificationPolicyID,
 		&i.SourceTemplateID,
 		&i.SourceTemplateVersion,
+		&i.CreatedBy,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
@@ -1481,9 +1495,10 @@ SET name = $2,
     evaluation_interval_seconds = $15,
     notification_policy_id = $16,
     version = version + 1,
-    updated_at = $17
+    updated_by = $17,
+    updated_at = $18
 WHERE id = $1
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by
 `
 
 type UpdateAlertRuleParams struct {
@@ -1503,6 +1518,7 @@ type UpdateAlertRuleParams struct {
 	Scope                     string
 	EvaluationIntervalSeconds int32
 	NotificationPolicyID      pgtype.UUID
+	UpdatedBy                 pgtype.UUID
 	UpdatedAt                 pgtype.Timestamptz
 }
 
@@ -1524,6 +1540,7 @@ func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams
 		arg.Scope,
 		arg.EvaluationIntervalSeconds,
 		arg.NotificationPolicyID,
+		arg.UpdatedBy,
 		arg.UpdatedAt,
 	)
 	var i AlertRule
@@ -1553,6 +1570,8 @@ func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams
 		&i.NotificationPolicyID,
 		&i.SourceTemplateID,
 		&i.SourceTemplateVersion,
+		&i.CreatedBy,
+		&i.UpdatedBy,
 	)
 	return i, err
 }

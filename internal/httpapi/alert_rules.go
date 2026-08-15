@@ -118,6 +118,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
 	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	var updated alerting.AlertRule
 	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
@@ -139,6 +140,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 			Scope:                     string(input.Scope),
 			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
 			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
+			UpdatedBy:                 actorID,
 			UpdatedAt:                 now,
 		})
 		if err != nil {
@@ -148,7 +150,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 		if err != nil {
 			return err
 		}
-		return saveAlertRuleVersion(ctx, queries, updated, response, scopedInstanceIDs, now)
+		return saveAlertRuleVersion(ctx, queries, updated, response, scopedInstanceIDs, actorID, now)
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return api.UpdateAlertRule404JSONResponse(errorBody(api.NOTFOUND, "alert rule not found")), nil
@@ -321,6 +323,7 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
 	ruleID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	databaseSourceTemplateID := pgtype.Text{}
@@ -349,6 +352,7 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 			Scope:                     string(input.Scope),
 			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
 			Enabled:                   input.Enabled,
+			ActorID:                   actorID,
 			CreatedAt:                 now,
 			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
 			SourceTemplateID:          databaseSourceTemplateID,
@@ -361,7 +365,7 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 		if err != nil {
 			return err
 		}
-		return saveAlertRuleVersion(ctx, queries, rule, response, scopedInstanceIDs, now)
+		return saveAlertRuleVersion(ctx, queries, rule, response, scopedInstanceIDs, actorID, now)
 	})
 	if err != nil {
 		return api.AlertRule{}, nil, err
@@ -526,7 +530,15 @@ func (handler *Handler) validateAlertRuleReferences(ctx context.Context, rule ap
 	return nil, nil
 }
 
-func saveAlertRuleVersion(ctx context.Context, queries *alerting.Queries, rule alerting.AlertRule, response api.AlertRule, instanceIDs []pgtype.UUID, createdAt pgtype.Timestamptz) error {
+func saveAlertRuleVersion(
+	ctx context.Context,
+	queries *alerting.Queries,
+	rule alerting.AlertRule,
+	response api.AlertRule,
+	instanceIDs []pgtype.UUID,
+	actorID pgtype.UUID,
+	createdAt pgtype.Timestamptz,
+) error {
 	if err := replaceAlertRuleScope(ctx, queries, rule.ID, instanceIDs); err != nil {
 		return err
 	}
@@ -538,6 +550,7 @@ func saveAlertRuleVersion(ctx context.Context, queries *alerting.Queries, rule a
 		RuleID:    rule.ID,
 		Version:   rule.Version,
 		Snapshot:  snapshot,
+		CreatedBy: actorID,
 		CreatedAt: createdAt,
 	})
 }
@@ -681,14 +694,13 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 		Version:                         int(rule.Version),
 		CreatedAt:                       rule.CreatedAt.Time,
 		UpdatedAt:                       rule.UpdatedAt.Time,
+		CreatedBy:                       toOptionalAPIUUID(rule.CreatedBy),
+		UpdatedBy:                       toOptionalAPIUUID(rule.UpdatedBy),
+		EnabledUpdatedBy:                toOptionalAPIUUID(rule.EnabledUpdatedBy),
 	}
 	if stats.LastTriggeredAt.Valid {
 		value := stats.LastTriggeredAt.Time
 		result.LastTriggeredAt = &value
-	}
-	if rule.EnabledUpdatedBy.Valid {
-		value := openapi_types.UUID(rule.EnabledUpdatedBy.Bytes)
-		result.EnabledUpdatedBy = &value
 	}
 	if rule.EnabledUpdatedAt.Valid {
 		value := rule.EnabledUpdatedAt.Time
@@ -731,4 +743,12 @@ func toAPIAlertRuleTemplate(template alerting.AlertRuleTemplate) api.AlertRuleTe
 		NoDataPolicy:              api.NoDataPolicy(template.NoDataPolicy),
 		EvaluationIntervalSeconds: int(template.EvaluationIntervalSeconds),
 	}
+}
+
+func toOptionalAPIUUID(id pgtype.UUID) *openapi_types.UUID {
+	if !id.Valid {
+		return nil
+	}
+	value := openapi_types.UUID(id.Bytes)
+	return &value
 }

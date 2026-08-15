@@ -37,10 +37,12 @@ INSERT INTO alert_rule (
     recovery_operator, recovery_threshold, window_seconds,
     consecutive_count, recovery_consecutive_count, severity,
     no_data_policy, scope, evaluation_interval_seconds,
-    enabled, version, created_at, updated_at, notification_policy_id,
+    enabled, version, created_by, updated_by, created_at, updated_at, notification_policy_id,
     source_template_id, source_template_version
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $19, $20)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1,
+        sqlc.arg(actor_id), sqlc.arg(actor_id), sqlc.arg(created_at), sqlc.arg(created_at),
+        sqlc.arg(notification_policy_id), sqlc.arg(source_template_id), sqlc.arg(source_template_version))
 RETURNING *;
 
 -- name: UpdateAlertRule :one
@@ -59,9 +61,10 @@ SET name = $2,
     no_data_policy = $13,
     scope = $14,
     evaluation_interval_seconds = $15,
-    notification_policy_id = $16,
+    notification_policy_id = sqlc.arg(notification_policy_id),
     version = version + 1,
-    updated_at = $17
+    updated_by = sqlc.arg(updated_by),
+    updated_at = sqlc.arg(updated_at)
 WHERE id = $1
 RETURNING *;
 
@@ -87,8 +90,8 @@ INSERT INTO alert_rule_scope_instance (rule_id, instance_id)
 VALUES ($1, $2);
 
 -- name: CreateAlertRuleVersion :exec
-INSERT INTO alert_rule_version (rule_id, version, snapshot, created_at)
-VALUES ($1, $2, $3, $4);
+INSERT INTO alert_rule_version (rule_id, version, snapshot, created_by, created_at)
+VALUES ($1, $2, $3, $4, $5);
 
 -- name: ListEvaluationTargets :many
 SELECT rule.id AS rule_id,

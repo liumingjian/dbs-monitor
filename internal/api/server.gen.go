@@ -555,6 +555,7 @@ type AlertRule struct {
 	BuiltinIdentifier               *string              `json:"builtin_identifier,omitempty"`
 	ConsecutiveCount                int                  `json:"consecutive_count"`
 	CreatedAt                       time.Time            `json:"created_at"`
+	CreatedBy                       *openapi_types.UUID  `json:"created_by,omitempty"`
 	CurrentAlertCount               int                  `json:"current_alert_count"`
 	EffectiveNotificationPolicyName string               `json:"effective_notification_policy_name"`
 	Enabled                         bool                 `json:"enabled"`
@@ -579,6 +580,7 @@ type AlertRule struct {
 	SourceTemplateVersion           *int                 `json:"source_template_version,omitempty"`
 	Threshold                       float64              `json:"threshold"`
 	UpdatedAt                       time.Time            `json:"updated_at"`
+	UpdatedBy                       *openapi_types.UUID  `json:"updated_by,omitempty"`
 	Version                         int                  `json:"version"`
 	WindowSeconds                   int                  `json:"window_seconds"`
 }

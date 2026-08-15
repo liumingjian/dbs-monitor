@@ -89,6 +89,8 @@ type AlertRule struct {
 	NotificationPolicyID      pgtype.UUID
 	SourceTemplateID          pgtype.Text
 	SourceTemplateVersion     pgtype.Int4
+	CreatedBy                 pgtype.UUID
+	UpdatedBy                 pgtype.UUID
 }
 
 type AlertRuleEvaluationState struct {
@@ -126,6 +128,7 @@ type AlertRuleVersion struct {
 	Version   int32
 	Snapshot  []byte
 	CreatedAt pgtype.Timestamptz
+	CreatedBy pgtype.UUID
 }
 
 type AlertTriggerSnapshot struct {
