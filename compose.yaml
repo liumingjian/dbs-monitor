@@ -61,3 +61,112 @@ services:
       interval: 1s
       timeout: 3s
       retries: 30
+
+  monitored-pg12:
+    image: postgres:12
+    profiles: [target-pg12]
+    environment:
+      POSTGRES_DB: monitored
+      POSTGRES_USER: monitored
+      POSTGRES_PASSWORD: monitored
+    ports: ["55422:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  platform-pg16:
+    image: postgres:16
+    profiles: [platform-pg16]
+    environment:
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    ports: ["55426:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  restore-target:
+    image: postgres:17
+    profiles: [restore]
+    environment:
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    ports: ["55439:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  smtp-sink:
+    image: axllent/mailpit:v1.30.7
+    profiles: [smtp]
+    ports:
+      - "51025:1025"
+      - "58025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  webhook-sink:
+    image: node:22-alpine
+    profiles: [webhook]
+    command:
+      - node
+      - -e
+      - |
+        const http = require('http');
+        const requests = [];
+        http.createServer((request, response) => {
+          if (request.method === 'GET' && request.url === '/health') {
+            response.writeHead(200).end('ok');
+            return;
+          }
+          if (request.method === 'GET' && request.url === '/requests') {
+            response.writeHead(200, { 'content-type': 'application/json' })
+              .end(JSON.stringify(requests));
+            return;
+          }
+          const chunks = [];
+          request.on('data', chunk => chunks.push(chunk));
+          request.on('end', () => {
+            requests.push({
+              method: request.method,
+              url: request.url,
+              headers: request.headers,
+              body: Buffer.concat(chunks).toString(),
+            });
+            response.writeHead(204).end();
+          });
+        }).listen(8080, '0.0.0.0');
+    ports: ["58080:8080"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  server:
+    image: golang:1.23.0
+    profiles: [server]
+    user: "65532:65532"
+    working_dir: /workspace
+    command: ["go", "run", "./cmd/monitor-server"]
+    environment:
+      DBS_MONITOR_CONFIG_FILE: /etc/dbs-monitor/config.yaml
+      GOCACHE: /tmp/go-build
+      GOMODCACHE: /tmp/go-mod
+      HOME: /tmp
+    volumes:
+      - .:/workspace:ro
+      - ./config/server-minimal.yaml:/etc/dbs-monitor/config.yaml:ro

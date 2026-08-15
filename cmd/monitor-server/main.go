@@ -36,8 +36,6 @@ import (
 )
 
 const (
-	defaultDatabaseURL           = "postgres:///dbs_monitor?host=/opt/dbs-monitor/run&sslmode=disable"
-	defaultCredentialDirectory   = "/opt/dbs-monitor/etc/credentials"
 	defaultPostgresDataDirectory = "/opt/dbs-monitor/var/lib/postgresql"
 	rotateMasterKeyCommand       = "rotate-master-key"
 	commandUsage                 = "usage: dbs-monitor-server [--version|rotate-master-key|diagnostic-bundle [output]]"
@@ -81,9 +79,15 @@ func defaultDiagnosticBundleOutput(now time.Time) string {
 
 func run(ctx context.Context) error {
 	startedAt := time.Now().UTC()
+	configPath := env("DBS_MONITOR_CONFIG_FILE", defaultServerConfigPath)
+	config, configPermissionsSecure, err := loadServerConfig(configPath)
+	if err != nil {
+		return err
+	}
 	health := platformhealth.NewStore(version, startedAt, log.Default())
-	connectionString := env("DATABASE_URL", defaultDatabaseURL)
-	credentialDirectory := env("CREDENTIALS_DIR", defaultCredentialDirectory)
+	reportConfigPermissions(health, log.Default(), configPath, configPermissionsSecure, time.Now().UTC())
+	connectionString := config.PlatformDatabaseURL
+	credentialDirectory := config.MasterKeyPath
 	pool, err := pgxpool.New(ctx, connectionString)
 	if err != nil {
 		return fmt.Errorf("open platform database: %w", err)
@@ -199,7 +203,7 @@ func run(ctx context.Context) error {
 	}
 	distribution, err := httpapi.LoadAgentDistribution(
 		filepath.Join(env("CERT_DIR", "certs"), "ca.crt"),
-		env("AGENT_BINARY_DIR", "/opt/dbs-monitor/bin"),
+		config.AgentBinaryDir,
 	)
 	if err != nil {
 		return err

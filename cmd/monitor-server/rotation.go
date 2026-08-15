@@ -21,8 +21,16 @@ type credentialRotationResult struct {
 }
 
 func runMasterKeyRotationCommand(ctx context.Context) error {
-	connectionString := env("DATABASE_URL", defaultDatabaseURL)
-	credentialDirectory := env("CREDENTIALS_DIR", defaultCredentialDirectory)
+	configPath := env("DBS_MONITOR_CONFIG_FILE", defaultServerConfigPath)
+	config, permissionsSecure, err := loadServerConfig(configPath)
+	if err != nil {
+		return err
+	}
+	if !permissionsSecure {
+		log.Printf("monitor-server: config file %s permissions are not 0600; continuing", configPath)
+	}
+	connectionString := config.PlatformDatabaseURL
+	credentialDirectory := config.MasterKeyPath
 	pool, err := pgxpool.New(ctx, connectionString)
 	if err != nil {
 		return fmt.Errorf("open platform database: %w", err)
