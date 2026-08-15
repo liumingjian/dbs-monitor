@@ -67,6 +67,7 @@ type Handler struct {
 	caFingerprint             string
 	agentDistribution         *AgentDistribution
 	health                    *platformhealth.Store
+	partitionSpan             time.Duration
 	notificationSnapshotStore *notify.ChannelSnapshotStore
 	sessionConfig             SessionConfig
 }
@@ -98,11 +99,16 @@ func NewHandlerWithPlatformHealth(platform *db.Pool, currentClock clock.Clock, k
 		dialer:        dialer,
 		serverVersion: serverVersion,
 		health:        health,
+		partitionSpan: metric.DefaultPartitionSpan,
 		sessionConfig: SessionConfig{
 			AbsoluteTTL: defaultSessionAbsoluteTTL,
 			IdleTTL:     defaultSessionIdleTTL,
 		},
 	}
+}
+
+func (handler *Handler) SetPartitionSpan(span time.Duration) {
+	handler.partitionSpan = span
 }
 
 func NewHandlerWithAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string, distribution AgentDistribution) *Handler {
@@ -1112,7 +1118,7 @@ func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.Repo
 		if !metric.IsMissingPartition(err) {
 			return nil, err
 		}
-		if err := metric.EnsurePartitions(ctx, handler.platform, now.Add(-agentBackfillWindow)); err != nil {
+		if err := metric.EnsurePartitionRange(ctx, handler.platform, now.Add(-agentBackfillWindow), now, handler.partitionSpan); err != nil {
 			return nil, err
 		}
 		if err := handler.storeAgentReport(ctx, authenticated, *request.Body, now); err != nil {

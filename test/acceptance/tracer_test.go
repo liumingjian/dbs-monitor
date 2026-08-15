@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,6 +49,7 @@ func TestMain(m *testing.M) {
 	}
 
 	code := m.Run()
+	cleanupRecoveryBinaries()
 	if err := acceptanceReport.write(resultPath); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		code = 1
@@ -199,8 +201,11 @@ func writeServerConfig(t *testing.T, work, databaseURL, keyDirectory, binaryDire
 
 type managedProcess struct {
 	name    string
+	command *exec.Cmd
 	done    chan error
 	logPath string
+	stop    sync.Once
+	exitErr error
 }
 
 func startProcess(t *testing.T, name, binary, logPath string, environment []string) *managedProcess {
@@ -217,20 +222,10 @@ func startProcess(t *testing.T, name, binary, logPath string, environment []stri
 		logFile.Close()
 		t.Fatalf("start %s: %v", name, err)
 	}
-	process := &managedProcess{name: name, done: make(chan error, 1), logPath: logPath}
+	process := &managedProcess{name: name, command: command, done: make(chan error, 1), logPath: logPath}
 	go func() { process.done <- command.Wait() }()
 	t.Cleanup(func() {
-		select {
-		case <-process.done:
-		default:
-			_ = command.Process.Signal(os.Interrupt)
-			select {
-			case <-process.done:
-			case <-time.After(5 * time.Second):
-				_ = command.Process.Kill()
-				<-process.done
-			}
-		}
+		_ = process.Stop()
 		_ = logFile.Close()
 		if t.Failed() {
 			if contents, err := os.ReadFile(logPath); err == nil && len(contents) > 0 {
@@ -239,6 +234,24 @@ func startProcess(t *testing.T, name, binary, logPath string, environment []stri
 		}
 	})
 	return process
+}
+
+func (process *managedProcess) Stop() error {
+	process.stop.Do(func() {
+		select {
+		case process.exitErr = <-process.done:
+			return
+		default:
+		}
+		_ = process.command.Process.Signal(os.Interrupt)
+		select {
+		case process.exitErr = <-process.done:
+		case <-time.After(5 * time.Second):
+			_ = process.command.Process.Kill()
+			process.exitErr = <-process.done
+		}
+	})
+	return process.exitErr
 }
 
 func waitForAPI(t *testing.T, server *managedProcess, baseURL, caPath string) *api.ClientWithResponses {

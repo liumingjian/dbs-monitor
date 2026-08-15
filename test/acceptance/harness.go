@@ -45,6 +45,7 @@ type matrixEntry struct {
 	Status   resultStatus `yaml:"status"`
 	TestRef  *string      `yaml:"test_ref"`
 	Reason   string       `yaml:"reason"`
+	RidesOn  []string     `yaml:"rides_on"`
 }
 
 type acceptanceResult struct {

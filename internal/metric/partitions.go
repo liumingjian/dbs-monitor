@@ -10,15 +10,32 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+const (
+	DefaultPartitionSpan = 24 * time.Hour
+	partitionPrebuild    = 7
+	partitionRetention   = 30
+)
+
 func EnsurePartitions(ctx context.Context, db DBTX, now time.Time) error {
-	start := dayUTC(now)
-	for offset := 0; offset <= 7; offset++ {
-		from := start.AddDate(0, 0, offset)
-		to := from.AddDate(0, 0, 1)
-		name := fmt.Sprintf("metric_sample_%s", from.Format("20060102"))
+	return EnsurePartitionsWithSpan(ctx, db, now, DefaultPartitionSpan)
+}
+
+func EnsurePartitionsWithSpan(ctx context.Context, db DBTX, now time.Time, span time.Duration) error {
+	return EnsurePartitionRange(ctx, db, now, now, span)
+}
+
+func EnsurePartitionRange(ctx context.Context, db DBTX, from, through time.Time, span time.Duration) error {
+	if span < time.Second {
+		return errors.New("partition span must be at least one second")
+	}
+	start := partitionBoundary(from, span)
+	end := partitionBoundary(through, span).Add(partitionPrebuild * span)
+	for boundary := start; !boundary.After(end); boundary = boundary.Add(span) {
+		to := boundary.Add(span)
+		name := partitionName(boundary, span)
 		statement := fmt.Sprintf(
 			"CREATE TABLE IF NOT EXISTS %s PARTITION OF metric_sample FOR VALUES FROM ('%s') TO ('%s')",
-			name, from.Format(time.RFC3339), to.Format(time.RFC3339),
+			name, boundary.Format(time.RFC3339), to.Format(time.RFC3339),
 		)
 		if _, err := db.Exec(ctx, statement); err != nil {
 			return fmt.Errorf("create partition %s: %w", name, err)
@@ -28,7 +45,14 @@ func EnsurePartitions(ctx context.Context, db DBTX, now time.Time) error {
 }
 
 func DropExpiredPartitions(ctx context.Context, db DBTX, now time.Time) error {
-	cutoff := dayUTC(now).AddDate(0, 0, -31)
+	return DropExpiredPartitionsWithSpan(ctx, db, now, DefaultPartitionSpan)
+}
+
+func DropExpiredPartitionsWithSpan(ctx context.Context, db DBTX, now time.Time, span time.Duration) error {
+	if span < time.Second {
+		return errors.New("partition span must be at least one second")
+	}
+	cutoff := partitionBoundary(now, span).Add(-partitionRetention * span)
 	rows, err := db.Query(ctx, `
 		SELECT child.relname
 		FROM pg_inherits
@@ -44,7 +68,7 @@ func DropExpiredPartitions(ctx context.Context, db DBTX, now time.Time) error {
 		if err := rows.Scan(&name); err != nil {
 			return err
 		}
-		date, err := time.Parse("20060102", strings.TrimPrefix(name, "metric_sample_"))
+		date, err := partitionTime(name)
 		if err != nil {
 			continue
 		}
@@ -57,12 +81,29 @@ func DropExpiredPartitions(ctx context.Context, db DBTX, now time.Time) error {
 	return rows.Err()
 }
 
+func partitionBoundary(value time.Time, span time.Duration) time.Time {
+	return time.Unix(0, value.UnixNano()/span.Nanoseconds()*span.Nanoseconds()).UTC()
+}
+
+func partitionName(from time.Time, span time.Duration) string {
+	format := "20060102_150405"
+	if span == DefaultPartitionSpan {
+		format = "20060102"
+	}
+	return "metric_sample_" + from.UTC().Format(format)
+}
+
+func partitionTime(name string) (time.Time, error) {
+	value := strings.TrimPrefix(name, "metric_sample_")
+	for _, format := range []string{"20060102", "20060102_150405"} {
+		if parsed, err := time.Parse(format, value); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unrecognized metric partition %q", name)
+}
+
 func IsMissingPartition(err error) bool {
 	var pgError *pgconn.PgError
 	return errors.As(err, &pgError) && pgError.Code == "23514"
-}
-
-func dayUTC(value time.Time) time.Time {
-	value = value.UTC()
-	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
 }
