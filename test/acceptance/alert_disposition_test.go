@@ -104,30 +104,30 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 		t.Fatalf("create alert rule status/body = %d/%s", createdRule.StatusCode(), createdRule.Body)
 	}
 	ruleID := createdRule.JSON201.Id
-	evaluation := evaluator.New(platform, currentClock, nil)
+	alertEvaluator := evaluator.New(platform, currentClock, nil)
 
 	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
-	if err := evaluation.RunOnce(ctx); err != nil {
+	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate firing transition: %v", err)
 	}
-	firing := currentDispositionAlert(t, ctx, client, instanceID, ruleID)
-	if firing.Status != api.FIRING || firing.Disposition != api.AlertDispositionNONE {
-		t.Fatalf("initial alert state/disposition = %s/%s, want FIRING/NONE", firing.Status, firing.Disposition)
+	initialAlert := findCurrentDispositionAlert(t, ctx, client, instanceID, ruleID)
+	if initialAlert.Status != api.FIRING || initialAlert.Disposition != api.AlertDispositionNONE {
+		t.Fatalf("initial alert state/disposition = %s/%s, want FIRING/NONE", initialAlert.Status, initialAlert.Disposition)
 	}
 
-	assertDispositionValidation(t, ctx, client, firing.Id, api.AlertDispositionInput{
+	assertDispositionValidationError(t, ctx, client, initialAlert.Id, api.AlertDispositionInput{
 		Disposition: api.AlertDispositionIGNORED,
 	}, "ignore_reason_code")
 	blankDetail := "  "
 	otherReason := api.OTHER
-	assertDispositionValidation(t, ctx, client, firing.Id, api.AlertDispositionInput{
+	assertDispositionValidationError(t, ctx, client, initialAlert.Id, api.AlertDispositionInput{
 		Disposition:        api.AlertDispositionIGNORED,
 		IgnoreReasonCode:   &otherReason,
 		IgnoreReasonDetail: &blankDetail,
 	}, "ignore_reason_detail")
 
 	note := "Investigating"
-	acked := updateDisposition(t, ctx, client, firing.Id, api.AlertDispositionInput{
+	acked := updateDisposition(t, ctx, client, initialAlert.Id, api.AlertDispositionInput{
 		Disposition: api.AlertDispositionACKED,
 		Note:        &note,
 	})
@@ -135,49 +135,49 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 		t.Fatalf("ACKED projected facts = stop repeat %t, excluded health %t", acked.StopsRepeatNotifications, acked.ExcludedFromHealthRollup)
 	}
 	currentClock.Advance(time.Second)
-	detail := "Expected maintenance load"
-	ignored := updateDisposition(t, ctx, client, firing.Id, api.AlertDispositionInput{
+	reasonDetail := "Expected maintenance load"
+	ignored := updateDisposition(t, ctx, client, initialAlert.Id, api.AlertDispositionInput{
 		Disposition:        api.AlertDispositionIGNORED,
 		IgnoreReasonCode:   &otherReason,
-		IgnoreReasonDetail: &detail,
+		IgnoreReasonDetail: &reasonDetail,
 	})
 	if ignored.StopsRepeatNotifications || !ignored.ExcludedFromHealthRollup {
 		t.Fatalf("IGNORED projected facts = stop repeat %t, excluded health %t", ignored.StopsRepeatNotifications, ignored.ExcludedFromHealthRollup)
 	}
 	currentClock.Advance(time.Second)
-	updateDisposition(t, ctx, client, firing.Id, api.AlertDispositionInput{Disposition: api.AlertDispositionACKED})
+	updateDisposition(t, ctx, client, initialAlert.Id, api.AlertDispositionInput{Disposition: api.AlertDispositionACKED})
 
-	disposition := getDisposition(t, ctx, client, firing.Id)
-	assertDispositionHistory(t, disposition, createdRule.JSON201.Version)
+	dispositionDetail := getDispositionDetail(t, ctx, client, initialAlert.Id)
+	assertDispositionHistory(t, dispositionDetail, createdRule.JSON201.Version)
 
 	currentClock.Advance(5 * time.Second)
 	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
-	if err := evaluation.RunOnce(ctx); err != nil {
+	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate disposed alert: %v", err)
 	}
-	stillFiring := getDispositionAlert(t, ctx, client, firing.Id)
+	stillFiring := getDispositionAlertDetail(t, ctx, client, initialAlert.Id)
 	if stillFiring.Status != api.FIRING || stillFiring.Disposition != api.AlertDispositionACKED {
 		t.Fatalf("disposed alert state/disposition = %s/%s, want FIRING/ACKED", stillFiring.Status, stillFiring.Disposition)
 	}
 
 	currentClock.Advance(5 * time.Second)
 	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 20)
-	if err := evaluation.RunOnce(ctx); err != nil {
+	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate recovery: %v", err)
 	}
-	recovered := getDispositionAlert(t, ctx, client, firing.Id)
+	recovered := getDispositionAlertDetail(t, ctx, client, initialAlert.Id)
 	if recovered.Status != api.RECOVERED || recovered.Disposition != api.AlertDispositionACKED {
 		t.Fatalf("recovered alert state/disposition = %s/%s, want RECOVERED/ACKED", recovered.Status, recovered.Disposition)
 	}
 
 	currentClock.Advance(5 * time.Second)
 	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
-	if err := evaluation.RunOnce(ctx); err != nil {
+	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate new lifecycle: %v", err)
 	}
-	newLifecycle := currentDispositionAlert(t, ctx, client, instanceID, ruleID)
-	if newLifecycle.Id == firing.Id || newLifecycle.Status != api.FIRING || newLifecycle.Disposition != api.AlertDispositionNONE {
-		t.Fatalf("new lifecycle = id %s state/disposition %s/%s, want a new FIRING/NONE alert", newLifecycle.Id, newLifecycle.Status, newLifecycle.Disposition)
+	nextAlert := findCurrentDispositionAlert(t, ctx, client, instanceID, ruleID)
+	if nextAlert.Id == initialAlert.Id || nextAlert.Status != api.FIRING || nextAlert.Disposition != api.AlertDispositionNONE {
+		t.Fatalf("new lifecycle = id %s state/disposition %s/%s, want a new FIRING/NONE alert", nextAlert.Id, nextAlert.Status, nextAlert.Disposition)
 	}
 }
 
@@ -204,18 +204,18 @@ func dispositionAcceptancePort(t *testing.T) int {
 	return port
 }
 
-func reportDispositionSample(t *testing.T, ctx context.Context, client *api.ClientWithResponses, token string, instanceID uuid.UUID, at time.Time, value float64) {
+func reportDispositionSample(t *testing.T, ctx context.Context, client *api.ClientWithResponses, agentToken string, instanceID uuid.UUID, reportedAt time.Time, value float64) {
 	t.Helper()
 	response, err := client.ReportAgentMetricsWithResponse(ctx, api.AgentReport{
 		InstanceId:   instanceID,
 		AgentVersion: "3.0.0",
-		Timestamp:    at,
+		Timestamp:    reportedAt,
 		Metrics: []api.AgentMetric{{
 			Metric: api.AgentMetricMetricHostCpuUsagePercent,
 			Value:  value,
 		}},
 	}, func(_ context.Context, request *http.Request) error {
-		request.Header.Set("Authorization", "Bearer "+token)
+		request.Header.Set("Authorization", "Bearer "+agentToken)
 		return nil
 	})
 	if err != nil {
@@ -226,7 +226,7 @@ func reportDispositionSample(t *testing.T, ctx context.Context, client *api.Clie
 	}
 }
 
-func currentDispositionAlert(t *testing.T, ctx context.Context, client *api.ClientWithResponses, instanceID, ruleID uuid.UUID) api.AlertObservation {
+func findCurrentDispositionAlert(t *testing.T, ctx context.Context, client *api.ClientWithResponses, instanceID, ruleID uuid.UUID) api.AlertObservation {
 	t.Helper()
 	response, err := client.ListCurrentAlertsWithResponse(ctx, &api.ListCurrentAlertsParams{InstanceId: &instanceID})
 	if err != nil {
@@ -244,7 +244,7 @@ func currentDispositionAlert(t *testing.T, ctx context.Context, client *api.Clie
 	return api.AlertObservation{}
 }
 
-func getDispositionAlert(t *testing.T, ctx context.Context, client *api.ClientWithResponses, alertID uuid.UUID) api.AlertDetail {
+func getDispositionAlertDetail(t *testing.T, ctx context.Context, client *api.ClientWithResponses, alertID uuid.UUID) api.AlertDetail {
 	t.Helper()
 	response, err := client.GetAlertDetailWithResponse(ctx, alertID)
 	if err != nil {
@@ -256,7 +256,7 @@ func getDispositionAlert(t *testing.T, ctx context.Context, client *api.ClientWi
 	return *response.JSON200
 }
 
-func assertDispositionValidation(t *testing.T, ctx context.Context, client *api.ClientWithResponses, alertID uuid.UUID, input api.AlertDispositionInput, field string) {
+func assertDispositionValidationError(t *testing.T, ctx context.Context, client *api.ClientWithResponses, alertID uuid.UUID, input api.AlertDispositionInput, expectedField string) {
 	t.Helper()
 	response, err := client.UpdateAlertDispositionWithResponse(ctx, alertID, input)
 	if err != nil {
@@ -269,11 +269,11 @@ func assertDispositionValidation(t *testing.T, ctx context.Context, client *api.
 		t.Fatalf("invalid disposition has no field errors: %s", response.Body)
 	}
 	for _, fieldError := range *response.JSON400.Error.FieldErrors {
-		if fieldError.Field == field {
+		if fieldError.Field == expectedField {
 			return
 		}
 	}
-	t.Fatalf("invalid disposition field errors = %+v, want %s", *response.JSON400.Error.FieldErrors, field)
+	t.Fatalf("invalid disposition field errors = %+v, want %s", *response.JSON400.Error.FieldErrors, expectedField)
 }
 
 func updateDisposition(t *testing.T, ctx context.Context, client *api.ClientWithResponses, alertID uuid.UUID, input api.AlertDispositionInput) api.AlertDispositionDetail {
@@ -288,7 +288,7 @@ func updateDisposition(t *testing.T, ctx context.Context, client *api.ClientWith
 	return *response.JSON200
 }
 
-func getDisposition(t *testing.T, ctx context.Context, client *api.ClientWithResponses, alertID uuid.UUID) api.AlertDispositionDetail {
+func getDispositionDetail(t *testing.T, ctx context.Context, client *api.ClientWithResponses, alertID uuid.UUID) api.AlertDispositionDetail {
 	t.Helper()
 	response, err := client.GetAlertDispositionWithResponse(ctx, alertID)
 	if err != nil {
@@ -302,22 +302,62 @@ func getDisposition(t *testing.T, ctx context.Context, client *api.ClientWithRes
 
 func assertDispositionHistory(t *testing.T, detail api.AlertDispositionDetail, ruleVersion int) {
 	t.Helper()
-	wantFrom := []api.AlertDisposition{api.AlertDispositionNONE, api.AlertDispositionACKED, api.AlertDispositionIGNORED}
-	wantTo := []api.AlertDisposition{api.AlertDispositionACKED, api.AlertDispositionIGNORED, api.AlertDispositionACKED}
-	if detail.Disposition != api.AlertDispositionACKED || detail.DispositionBy == nil || detail.DispositionAt == nil || len(detail.History) != len(wantTo) {
-		t.Fatalf("current disposition/history = %+v", detail)
+	expectedTransitions := []struct {
+		from api.AlertDisposition
+		to   api.AlertDisposition
+	}{
+		{from: api.AlertDispositionNONE, to: api.AlertDispositionACKED},
+		{from: api.AlertDispositionACKED, to: api.AlertDispositionIGNORED},
+		{from: api.AlertDispositionIGNORED, to: api.AlertDispositionACKED},
 	}
+
+	if detail.Disposition != api.AlertDispositionACKED {
+		t.Fatalf("current disposition = %s, want ACKED", detail.Disposition)
+	}
+	if detail.DispositionBy == nil || detail.DispositionAt == nil {
+		t.Fatalf("current disposition attribution = actor %v at %v, want both populated", detail.DispositionBy, detail.DispositionAt)
+	}
+	if len(detail.History) != len(expectedTransitions) {
+		t.Fatalf("disposition history length = %d, want %d: %+v", len(detail.History), len(expectedTransitions), detail.History)
+	}
+	expectedActorID := *detail.DispositionBy
+
 	for index, event := range detail.History {
-		threshold, hasThreshold := event.RuleSnapshot["threshold"].(float64)
-		if event.FromDisposition != wantFrom[index] || event.ToDisposition != wantTo[index] ||
-			event.ActorId != *detail.DispositionBy || event.RuleVersion != ruleVersion || event.CurrentValue == nil || *event.CurrentValue != 90 ||
-			event.EvaluatedAt.IsZero() || event.ActedAt.IsZero() || !hasThreshold || threshold != 80 {
-			t.Fatalf("disposition history event %d = %+v", index, event)
+		expected := expectedTransitions[index]
+		if event.FromDisposition != expected.from || event.ToDisposition != expected.to {
+			t.Fatalf("disposition history event %d transition = %s -> %s, want %s -> %s", index, event.FromDisposition, event.ToDisposition, expected.from, expected.to)
+		}
+		if event.ActorId != expectedActorID {
+			t.Fatalf("disposition history event %d actor = %s, want %s", index, event.ActorId, expectedActorID)
+		}
+		if event.RuleVersion != ruleVersion {
+			t.Fatalf("disposition history event %d rule version = %d, want %d", index, event.RuleVersion, ruleVersion)
+		}
+		if event.CurrentValue == nil {
+			t.Fatalf("disposition history event %d current value is absent", index)
+		}
+		if *event.CurrentValue != 90 {
+			t.Fatalf("disposition history event %d current value = %v, want 90", index, *event.CurrentValue)
+		}
+		snapshotThreshold := event.RuleSnapshot["threshold"]
+		threshold, hasThreshold := snapshotThreshold.(float64)
+		if !hasThreshold || threshold != 80 {
+			t.Fatalf("disposition history event %d threshold = %v, want 80", index, snapshotThreshold)
+		}
+		if event.EvaluatedAt.IsZero() || event.ActedAt.IsZero() {
+			t.Fatalf("disposition history event %d timestamps = evaluated %s, acted %s, want both populated", index, event.EvaluatedAt, event.ActedAt)
 		}
 	}
-	if detail.History[0].Note == nil || *detail.History[0].Note != "Investigating" ||
-		detail.History[1].IgnoreReasonCode == nil || *detail.History[1].IgnoreReasonCode != api.OTHER ||
-		detail.History[1].IgnoreReasonDetail == nil || *detail.History[1].IgnoreReasonDetail != "Expected maintenance load" {
-		t.Fatalf("disposition history payloads = %+v", detail.History)
+
+	acknowledged := detail.History[0]
+	if acknowledged.Note == nil || *acknowledged.Note != "Investigating" {
+		t.Fatalf("acknowledged disposition payload = %+v, want note Investigating", acknowledged)
+	}
+	ignored := detail.History[1]
+	if ignored.IgnoreReasonCode == nil || *ignored.IgnoreReasonCode != api.OTHER {
+		t.Fatalf("ignored disposition payload = %+v, want reason OTHER", ignored)
+	}
+	if ignored.IgnoreReasonDetail == nil || *ignored.IgnoreReasonDetail != "Expected maintenance load" {
+		t.Fatalf("ignored disposition payload = %+v, want detail Expected maintenance load", ignored)
 	}
 }
