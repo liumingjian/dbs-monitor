@@ -11,16 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
+	"github.com/liumingjian/dbs-monitor/internal/collect"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
-	"github.com/liumingjian/dbs-monitor/internal/instance"
-	"github.com/liumingjian/dbs-monitor/internal/metric"
+	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
@@ -50,7 +49,7 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	currentClock := fixedClock{now: now}
 
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
@@ -61,66 +60,65 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
 	client.Jar = jar
-	login := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
-		"username": "admin", "password": "correct horse battery staple",
-	}, "")
-	login.Body.Close()
-	if login.StatusCode != http.StatusNoContent {
-		t.Fatalf("login status = %d, want 204", login.StatusCode)
+	apiClient, err := api.NewClientWithResponses(server.URL, api.WithHTTPClient(client))
+	if err != nil {
+		t.Fatalf("create API client: %v", err)
 	}
-
-	instanceID := uuid.New()
-	pgInstanceID := pgtype.UUID{Bytes: instanceID, Valid: true}
-	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
-		ID: pgInstanceID, Name: "target", Host: "localhost", Port: 5432,
-		DatabaseName: "postgres", Username: "postgres", Password: "unused",
-	}); err != nil {
-		t.Fatalf("create instance: %v", err)
-	}
-
-	created := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/alert-rules", map[string]any{
-		"name":                       "High active connections",
-		"metric_id":                  "pg.connection.active",
-		"aggregation":                "latest",
-		"operator":                   ">=",
-		"threshold":                  10,
-		"recovery_operator":          "<",
-		"recovery_threshold":         5,
-		"window_seconds":             60,
-		"consecutive_count":          2,
-		"recovery_consecutive_count": 2,
-		"severity":                   "warning",
-		"no_data_policy":             "mark_no_data",
-		"enabled":                    true,
-	}, "")
-	defer created.Body.Close()
-	if created.StatusCode != http.StatusCreated {
-		t.Fatalf("create rule status = %d, want 201", created.StatusCode)
-	}
-	var createdRule struct {
-		ID      uuid.UUID `json:"id"`
-		Version int       `json:"version"`
-	}
-	if err := json.NewDecoder(created.Body).Decode(&createdRule); err != nil {
-		t.Fatalf("decode created rule: %v", err)
-	}
-	if createdRule.ID == uuid.Nil || createdRule.Version != 1 {
-		t.Fatalf("created rule = %+v, want id and version 1", createdRule)
-	}
-
-	queries := metric.New(pool)
-	seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
-		InstanceID: pgInstanceID, MetricID: "pg.connection.active",
-		Labels: []byte(`{}`), LabelsKey: "{}", LastSeen: pgtype.Timestamptz{Time: now, Valid: true},
+	login, err := apiClient.CreateSessionWithResponse(ctx, api.CreateSessionJSONRequestBody{
+		Username: "admin", Password: "correct horse battery staple",
 	})
 	if err != nil {
-		t.Fatalf("create metric series: %v", err)
+		t.Fatalf("login: %v", err)
 	}
-	if err := metric.EnsurePartitions(ctx, pool, now); err != nil {
-		t.Fatalf("ensure metric partitions: %v", err)
+	if login.StatusCode() != http.StatusNoContent {
+		t.Fatalf("login status = %d, want 204", login.StatusCode())
 	}
-	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 12)", seriesID, now); err != nil {
-		t.Fatalf("insert breaching sample: %v", err)
+	if cookies := client.Jar.Cookies(login.HTTPResponse.Request.URL); len(cookies) == 0 {
+		t.Fatalf("login response did not populate the cookie jar: %v", login.HTTPResponse.Header)
+	}
+
+	createdInstance, err := apiClient.CreateInstanceWithResponse(ctx, api.InstanceInput{
+		Name: "target", Host: env("PGHOST", "localhost"), Port: envInt("PGPORT", 55432),
+		Database: databaseName, Username: env("PGUSER", "dbs_monitor"),
+		Password: env("PGPASSWORD", "dbs_monitor"),
+	})
+	if err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+	if createdInstance.StatusCode() != http.StatusCreated || createdInstance.JSON201 == nil {
+		t.Fatalf("create instance status = %d, want 201", createdInstance.StatusCode())
+	}
+	instanceID := createdInstance.JSON201.Instance.Id
+
+	created, err := apiClient.CreateAlertRuleWithResponse(ctx, api.AlertRuleInput{
+		Name:                     "Any PostgreSQL connection",
+		MetricId:                 "pg.connection.total",
+		Aggregation:              api.Latest,
+		Operator:                 api.GreaterThanEqual,
+		Threshold:                0,
+		RecoveryOperator:         api.LessThan,
+		RecoveryThreshold:        -1,
+		WindowSeconds:            60,
+		ConsecutiveCount:         2,
+		RecoveryConsecutiveCount: 2,
+		Severity:                 api.Warning,
+		NoDataPolicy:             api.MarkNoData,
+		Enabled:                  true,
+	})
+	if err != nil {
+		t.Fatalf("create alert rule: %v", err)
+	}
+	if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
+		t.Fatalf("create rule status = %d, want 201", created.StatusCode())
+	}
+	createdRule := *created.JSON201
+	if createdRule.Version != 1 {
+		t.Fatalf("created rule = %+v, want version 1", createdRule)
+	}
+
+	collector := collect.New(platform, monitorpg.DirectDialer{}, currentClock)
+	if err := collector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect rule sample: %v", err)
 	}
 
 	eval := evaluator.New(platform, currentClock)
@@ -137,7 +135,7 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 		FROM alert_instance instance
 		JOIN alert_event event ON event.alert_instance_id = instance.id
 		WHERE instance.rule_id = $1 AND instance.instance_id = $2 AND event.kind = 'FIRED'`,
-		createdRule.ID, instanceID).Scan(&status, &eventKind, &ruleVersion, &snapshot)
+		createdRule.Id, instanceID).Scan(&status, &eventKind, &ruleVersion, &snapshot)
 	if err != nil {
 		t.Fatalf("read firing state and event: %v", err)
 	}
@@ -154,8 +152,8 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	if err := json.Unmarshal(snapshot, &ruleSnapshot); err != nil {
 		t.Fatalf("decode rule snapshot: %v", err)
 	}
-	if ruleSnapshot.MetricID != "pg.connection.active" || ruleSnapshot.Threshold != 10 ||
-		ruleSnapshot.RecoveryThreshold != 5 || ruleSnapshot.Severity != "warning" || ruleSnapshot.Version != 1 {
+	if ruleSnapshot.MetricID != "pg.connection.total" || ruleSnapshot.Threshold != 0 ||
+		ruleSnapshot.RecoveryThreshold != -1 || ruleSnapshot.Severity != "warning" || ruleSnapshot.Version != 1 {
 		t.Fatalf("rule snapshot = %+v", ruleSnapshot)
 	}
 }
