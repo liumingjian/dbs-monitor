@@ -145,28 +145,53 @@ func TestPlatformAdminGuardSerializesConcurrentMutations(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
+	const (
+		firstAdminUsername = "first-admin"
+		firstAdminPassword = "correct horse battery staple"
+	)
+
 	platform := openUserTestDatabase(t, ctx)
-	first, second := uuid.New(), uuid.New()
-	for _, user := range []struct {
-		id       uuid.UUID
-		username string
-	}{{first, "first-admin"}, {second, "second-admin"}} {
-		if _, err := platform.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role)
-			VALUES ($1, $2, 'hash', 'PLATFORM_ADMIN')`, user.id, user.username); err != nil {
-			t.Fatalf("insert %s: %v", user.username, err)
-		}
+	if err := SeedAdmin(ctx, platform, firstAdminUsername, firstAdminPassword); err != nil {
+		t.Fatalf("seed first administrator: %v", err)
 	}
 
-	handler := NewHandler(platform, nil, nil)
+	handler := NewHandler(platform, clock.Real{}, nil)
+	server := httptest.NewTLSServer(handler.Routes())
+	defer server.Close()
+
+	firstAdminClient := userTestClient(t, server)
+	assertUserStatus(t, userJSONRequest(t, firstAdminClient, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
+		"username": firstAdminUsername, "password": firstAdminPassword,
+	}), http.StatusNoContent)
+	currentUserResponse := userJSONRequest(t, firstAdminClient, http.MethodGet, server.URL+"/api/v1/me", nil)
+	assertUserStatus(t, currentUserResponse, http.StatusOK)
+	var firstAdmin struct {
+		ID uuid.UUID `json:"id"`
+	}
+	decodeUserJSON(t, currentUserResponse, &firstAdmin)
+
+	createUserResponse := userJSONRequest(t, firstAdminClient, http.MethodPost, server.URL+"/api/v1/users", map[string]any{
+		"username": "second-admin", "role": "PLATFORM_ADMIN",
+	})
+	assertUserStatus(t, createUserResponse, http.StatusCreated)
+	var secondAdmin struct {
+		User struct {
+			ID uuid.UUID `json:"id"`
+		} `json:"user"`
+	}
+	decodeUserJSON(t, createUserResponse, &secondAdmin)
+	firstAdminID := firstAdmin.ID
+	secondAdminID := secondAdmin.User.ID
+
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	go func() {
 		<-start
-		results <- handler.setUserEnabled(ctx, second, first, false)
+		results <- handler.setUserEnabled(ctx, secondAdminID, firstAdminID, false)
 	}()
 	go func() {
 		<-start
-		results <- handler.setUserRole(ctx, first, second, "READONLY")
+		results <- handler.setUserRole(ctx, firstAdminID, secondAdminID, "READONLY")
 	}()
 	close(start)
 
