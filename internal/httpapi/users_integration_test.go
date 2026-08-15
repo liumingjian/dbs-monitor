@@ -121,18 +121,37 @@ func TestPlatformAdminGuardSerializesConcurrentMutations(t *testing.T) {
 	defer cancel()
 
 	platform := openUserTestDatabase(t, ctx)
-	first, second := uuid.New(), uuid.New()
-	for _, user := range []struct {
-		id       uuid.UUID
-		username string
-	}{{first, "first-admin"}, {second, "second-admin"}} {
-		if _, err := platform.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role)
-			VALUES ($1, $2, 'hash', 'PLATFORM_ADMIN')`, user.id, user.username); err != nil {
-			t.Fatalf("insert %s: %v", user.username, err)
-		}
+	if err := SeedAdmin(ctx, platform, "first-admin", "correct horse battery staple"); err != nil {
+		t.Fatalf("seed first administrator: %v", err)
 	}
 
-	handler := NewHandler(platform, nil)
+	handler := NewHandler(platform, clock.Real{})
+	server := httptest.NewTLSServer(handler.Routes())
+	defer server.Close()
+
+	firstClient := userTestClient(t, server)
+	assertUserStatus(t, userJSONRequest(t, firstClient, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
+		"username": "first-admin", "password": "correct horse battery staple",
+	}), http.StatusNoContent)
+	current := userJSONRequest(t, firstClient, http.MethodGet, server.URL+"/api/v1/me", nil)
+	assertUserStatus(t, current, http.StatusOK)
+	var firstBody struct {
+		ID uuid.UUID `json:"id"`
+	}
+	decodeUserJSON(t, current, &firstBody)
+
+	created := userJSONRequest(t, firstClient, http.MethodPost, server.URL+"/api/v1/users", map[string]any{
+		"username": "second-admin", "role": "PLATFORM_ADMIN",
+	})
+	assertUserStatus(t, created, http.StatusCreated)
+	var secondBody struct {
+		User struct {
+			ID uuid.UUID `json:"id"`
+		} `json:"user"`
+	}
+	decodeUserJSON(t, created, &secondBody)
+	first, second := firstBody.ID, secondBody.User.ID
+
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	go func() {
