@@ -120,7 +120,7 @@ func (service *Service) RunOnce(ctx context.Context) error {
 				return err
 			}
 			if !eligible.IsZero() && now.Before(eligible) {
-				if err := service.recordUnmet(ctx, run, resultBackoff, eligible); err != nil {
+				if err := service.recordUnexecuted(ctx, run, resultBackoff, eligible); err != nil {
 					return err
 				}
 				continue
@@ -144,29 +144,38 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	}
 
 	if run.task.Kind == metric.TaskKindProbe {
-		taskCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
-		conn, err := service.dialer.Dial(taskCtx, targetConnectionString(run.target))
-		if err == nil {
-			var one int
-			err = conn.QueryRow(taskCtx, run.task.SQL).Scan(&one)
-			closeConnection(conn)
-		}
-		if err != nil {
-			outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, true)
-			outcome.duration = time.Since(startedWall)
-			return outcome
-		}
-		latency := float64(time.Since(startedWall).Microseconds()) / 1000
-		outcome.err = service.recordSuccess(ctx, run, []collectedSample{
-			{metricID: metric.MetricAvailabilityReachable, value: metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
-			{metricID: metric.MetricProbeLatencyMS, value: latency},
-		})
-		outcome.result = resultSuccess
+		return service.executeProbe(ctx, run, startedWall)
+	}
+	return service.executeQuery(ctx, run, startedWall)
+}
+
+func (service *Service) executeProbe(ctx context.Context, run scheduledRun, startedWall time.Time) executionOutcome {
+	outcome := executionOutcome{run: run, result: resultFailed}
+	taskCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	conn, err := service.dialer.Dial(taskCtx, targetConnectionString(run.target))
+	if err == nil {
+		var one int
+		err = conn.QueryRow(taskCtx, run.task.SQL).Scan(&one)
+		closeConnection(conn)
+	}
+	if err != nil {
+		outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, true)
 		outcome.duration = time.Since(startedWall)
 		return outcome
 	}
+	latency := float64(time.Since(startedWall).Microseconds()) / 1000
+	outcome.err = service.recordSuccess(ctx, run, []collectedSample{
+		{metricID: metric.MetricAvailabilityReachable, value: metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
+		{metricID: metric.MetricProbeLatencyMS, value: latency},
+	})
+	outcome.result = resultSuccess
+	outcome.duration = time.Since(startedWall)
+	return outcome
+}
 
+func (service *Service) executeQuery(ctx context.Context, run scheduledRun, startedWall time.Time) executionOutcome {
+	outcome := executionOutcome{run: run, result: resultFailed}
 	timeout := taskTimeout(run.interval)
 	taskCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

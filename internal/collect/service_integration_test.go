@@ -137,7 +137,7 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		t.Fatalf("count unreachable samples before skip: %v", err)
 	}
 	skipped := newScheduledRun(targets[0], probeTask, 0, time.Now().UTC())
-	if err := collector.recordUnmet(ctx, skipped, resultSkippedBackpressure, time.Time{}); err != nil {
+	if err := collector.recordUnexecuted(ctx, skipped, resultSkippedBackpressure, time.Time{}); err != nil {
 		t.Fatalf("record probe backpressure skip: %v", err)
 	}
 	var skippedResult string

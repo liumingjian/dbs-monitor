@@ -20,7 +20,7 @@ const (
 	workCapability
 )
 
-type work struct {
+type dispatchWork struct {
 	instanceID string
 	class      workClass
 }
@@ -97,44 +97,44 @@ func newDispatcher(probeLimit, queryLimit int) *dispatcher {
 	}
 }
 
-func (dispatcher *dispatcher) admit(item work) bool {
-	if item.class == workProbe {
-		if dispatcher.activeProbes >= dispatcher.probeLimit || dispatcher.instanceProbe[item.instanceID] {
+func (dispatcher *dispatcher) admit(work dispatchWork) bool {
+	if work.class == workProbe {
+		if dispatcher.activeProbes >= dispatcher.probeLimit || dispatcher.instanceProbe[work.instanceID] {
 			return false
 		}
 		dispatcher.activeProbes++
-		dispatcher.instanceProbe[item.instanceID] = true
+		dispatcher.instanceProbe[work.instanceID] = true
 		return true
 	}
-	if dispatcher.activeQueries >= dispatcher.queryLimit || dispatcher.instanceQuery[item.instanceID] {
+	if dispatcher.activeQueries >= dispatcher.queryLimit || dispatcher.instanceQuery[work.instanceID] {
 		return false
 	}
-	if item.class == workCollectionQuery && dispatcher.capabilityWaiting {
+	if work.class == workCollectionQuery && dispatcher.capabilityWaiting {
 		reserved := min(4, dispatcher.queryLimit)
 		if dispatcher.activeCollectionQueries >= dispatcher.queryLimit-reserved {
 			return false
 		}
 	}
 	dispatcher.activeQueries++
-	if item.class == workCollectionQuery {
+	if work.class == workCollectionQuery {
 		dispatcher.activeCollectionQueries++
 	}
-	dispatcher.instanceQuery[item.instanceID] = true
+	dispatcher.instanceQuery[work.instanceID] = true
 	return true
 }
 
-func (dispatcher *dispatcher) finish(item work) {
-	if item.class == workProbe {
-		if dispatcher.instanceProbe[item.instanceID] {
-			delete(dispatcher.instanceProbe, item.instanceID)
+func (dispatcher *dispatcher) finish(work dispatchWork) {
+	if work.class == workProbe {
+		if dispatcher.instanceProbe[work.instanceID] {
+			delete(dispatcher.instanceProbe, work.instanceID)
 			dispatcher.activeProbes--
 		}
 		return
 	}
-	if dispatcher.instanceQuery[item.instanceID] {
-		delete(dispatcher.instanceQuery, item.instanceID)
+	if dispatcher.instanceQuery[work.instanceID] {
+		delete(dispatcher.instanceQuery, work.instanceID)
 		dispatcher.activeQueries--
-		if item.class == workCollectionQuery {
+		if work.class == workCollectionQuery {
 			dispatcher.activeCollectionQueries--
 		}
 	}
@@ -265,7 +265,7 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 			run := entry.template
 			run.dueAt = entry.nextDue
 			if replaced, exists := scheduler.pending.put(run); exists {
-				if err := scheduler.service.recordUnmet(ctx, replaced, resultSkippedBackpressure, time.Time{}); err != nil {
+				if err := scheduler.service.recordUnexecuted(ctx, replaced, resultSkippedBackpressure, time.Time{}); err != nil {
 					log.Printf("record collection backpressure skip failed: instance_id=%s task_id=%s error=%v", replaced.key.instanceID, replaced.key.taskID, err)
 				} else {
 					scheduler.counts.skipped++
@@ -286,15 +286,14 @@ func (scheduler *centralScheduler) dispatch(ctx context.Context) {
 		}
 		if !eligible.IsZero() && run.dueAt.Before(eligible) {
 			_, _ = scheduler.pending.take(run.key)
-			if err := scheduler.service.recordUnmet(ctx, run, resultBackoff, eligible); err != nil {
+			if err := scheduler.service.recordUnexecuted(ctx, run, resultBackoff, eligible); err != nil {
 				log.Printf("record collection backoff failed: instance_id=%s task_id=%s error=%v", run.key.instanceID, run.key.taskID, err)
 			} else {
 				scheduler.counts.backoff++
 			}
 			continue
 		}
-		item := work{instanceID: run.key.instanceID, class: classFor(run.task)}
-		if !scheduler.dispatcher.admit(item) {
+		if !scheduler.dispatcher.admit(run.dispatchWork()) {
 			continue
 		}
 		delay := scheduler.service.clock.Now().UTC().Sub(run.dueAt)
@@ -318,7 +317,7 @@ func (scheduler *centralScheduler) dispatch(ctx context.Context) {
 }
 
 func (scheduler *centralScheduler) complete(outcome executionOutcome) {
-	scheduler.dispatcher.finish(work{instanceID: outcome.run.key.instanceID, class: classFor(outcome.run.task)})
+	scheduler.dispatcher.finish(outcome.run.dispatchWork())
 	if outcome.err != nil {
 		log.Printf("collection task persistence failed: instance_id=%s task_id=%s error=%v", outcome.run.key.instanceID, outcome.run.key.taskID, outcome.err)
 		return
@@ -376,6 +375,10 @@ func classFor(task metric.Task) workClass {
 		return workProbe
 	}
 	return workCollectionQuery
+}
+
+func (run scheduledRun) dispatchWork() dispatchWork {
+	return dispatchWork{instanceID: run.key.instanceID, class: classFor(run.task)}
 }
 
 func taskKeyLess(left, right taskKey) bool {

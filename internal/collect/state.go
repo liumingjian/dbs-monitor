@@ -57,7 +57,7 @@ func (service *Service) recordStarted(ctx context.Context, run scheduledRun) err
 	return nil
 }
 
-func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, result taskResult, nextEligible time.Time) error {
+func (service *Service) recordUnexecuted(ctx context.Context, run scheduledRun, result taskResult, nextEligibleAt time.Time) error {
 	now := service.clock.Now().UTC()
 	code := string(result)
 	message := collectionErrorMessage(code)
@@ -78,7 +78,7 @@ func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, resul
 			END,
 			last_error_code = EXCLUDED.last_error_code,
 			last_error_message = EXCLUDED.last_error_message`,
-			run.target.ID, run.task.ID, run.dueAt, now, result, nullableTimestamp(nextEligible), code, message)
+			run.target.ID, run.task.ID, run.dueAt, now, result, nullableTimestamp(nextEligibleAt), code, message)
 		if err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ func (service *Service) recordUnmet(ctx context.Context, run scheduledRun, resul
 }
 
 func (service *Service) recordFailure(ctx context.Context, run scheduledRun, result taskResult, code string, connectionFailure bool) error {
-	finished := service.clock.Now().UTC()
+	finishedAt := service.clock.Now().UTC()
 	message := collectionErrorMessage(code)
 	write := func() error {
 		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
@@ -99,9 +99,9 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 				return err
 			}
 			failures++
-			var taskNextEligible time.Time
+			var taskNextEligibleAt time.Time
 			if run.task.Kind != metric.TaskKindProbe && !connectionFailure {
-				taskNextEligible = finished.Add(failureBackoff(run.task.Kind, run.interval, failures))
+				taskNextEligibleAt = finishedAt.Add(failureBackoff(run.task.Kind, run.interval, failures))
 			}
 			if connectionFailure {
 				connectionFailures, err := connectionFailureCount(ctx, tx, run.target.ID)
@@ -109,7 +109,7 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 					return err
 				}
 				connectionFailures++
-				connectionNextEligible := finished.Add(failureBackoff(metric.TaskKindSQL, run.interval, connectionFailures))
+				connectionNextEligibleAt := finishedAt.Add(failureBackoff(metric.TaskKindSQL, run.interval, connectionFailures))
 				if _, err := tx.Exec(ctx, `INSERT INTO instance_collection_connection_state
 					(instance_id, consecutive_failures, next_eligible_at, last_error_code, last_error_message)
 					VALUES ($1, $2, $3, $4, $5)
@@ -118,7 +118,7 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 					next_eligible_at = EXCLUDED.next_eligible_at,
 					last_error_code = EXCLUDED.last_error_code,
 					last_error_message = EXCLUDED.last_error_message`,
-					run.target.ID, connectionFailures, connectionNextEligible, code, message); err != nil {
+					run.target.ID, connectionFailures, connectionNextEligibleAt, code, message); err != nil {
 					return err
 				}
 			}
@@ -135,14 +135,14 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 				next_eligible_at = EXCLUDED.next_eligible_at,
 				last_error_code = EXCLUDED.last_error_code,
 				last_error_message = EXCLUDED.last_error_message`,
-				run.target.ID, run.task.ID, run.dueAt, run.startedAt, finished, result,
-				failures, nullableTimestamp(taskNextEligible), code, message)
+				run.target.ID, run.task.ID, run.dueAt, run.startedAt, finishedAt, result,
+				failures, nullableTimestamp(taskNextEligibleAt), code, message)
 			if err != nil {
 				return err
 			}
 			if run.task.Kind == metric.TaskKindProbe {
 				if err := insertSample(ctx, tx, run.target.ID, metric.MetricAvailabilityReachable,
-					metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["unreachable"], finished); err != nil {
+					metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["unreachable"], finishedAt); err != nil {
 					return err
 				}
 				return setSourceFailure(ctx, tx, run.target.ID, "DB_UNREACHABLE", message)
@@ -150,18 +150,18 @@ func (service *Service) recordFailure(ctx context.Context, run scheduledRun, res
 			return setSourceFailure(ctx, tx, run.target.ID, "COLLECTION_FAILED", message)
 		})
 	}
-	return service.withPartitionRepair(ctx, finished, write)
+	return service.withPartitionRepair(ctx, finishedAt, write)
 }
 
 func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, samples []collectedSample) error {
-	finished := service.clock.Now().UTC()
+	finishedAt := service.clock.Now().UTC()
 	write := func() error {
 		return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 			if err := lockInstance(ctx, tx, run.target.ID); err != nil {
 				return err
 			}
 			for _, sample := range samples {
-				if err := insertSample(ctx, tx, run.target.ID, sample.metricID, sample.value, finished); err != nil {
+				if err := insertSample(ctx, tx, run.target.ID, sample.metricID, sample.value, finishedAt); err != nil {
 					return err
 				}
 			}
@@ -176,7 +176,7 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, sam
 				last_error_code = NULL,
 				last_error_message = NULL
 				WHERE instance_id = $1 AND task_id = $2`,
-				run.target.ID, run.task.ID, run.dueAt, run.startedAt, finished)
+				run.target.ID, run.task.ID, run.dueAt, run.startedAt, finishedAt)
 			if err != nil {
 				return err
 			}
@@ -201,11 +201,11 @@ func (service *Service) recordSuccess(ctx context.Context, run scheduledRun, sam
 			}
 			return instance.New(tx).SetCollectSuccess(ctx, instance.SetCollectSuccessParams{
 				InstanceID:    run.target.ID,
-				LastSuccessAt: pgtype.Timestamptz{Time: finished, Valid: true},
+				LastSuccessAt: pgtype.Timestamptz{Time: finishedAt, Valid: true},
 			})
 		})
 	}
-	return service.withPartitionRepair(ctx, finished, write)
+	return service.withPartitionRepair(ctx, finishedAt, write)
 }
 
 func (service *Service) nextEligible(ctx context.Context, run scheduledRun) (time.Time, error) {

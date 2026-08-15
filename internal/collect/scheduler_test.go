@@ -55,35 +55,35 @@ func TestFailureBackoffCapsAtSixtySecondsAndExcludesProbe(t *testing.T) {
 
 func TestDispatcherEnforcesDualSlotsGlobalLimitsAndCapabilityReserve(t *testing.T) {
 	dispatcher := newDispatcher(2, 4)
-	if !dispatcher.admit(work{instanceID: "one", class: workCollectionQuery}) {
+	if !dispatcher.admit(dispatchWork{instanceID: "one", class: workCollectionQuery}) {
 		t.Fatal("first collection query was not admitted")
 	}
-	if dispatcher.admit(work{instanceID: "one", class: workCollectionQuery}) {
+	if dispatcher.admit(dispatchWork{instanceID: "one", class: workCollectionQuery}) {
 		t.Fatal("same-instance collection queries overlapped")
 	}
-	if !dispatcher.admit(work{instanceID: "one", class: workProbe}) {
+	if !dispatcher.admit(dispatchWork{instanceID: "one", class: workProbe}) {
 		t.Fatal("probe did not run alongside same-instance collection query")
 	}
-	if !dispatcher.admit(work{instanceID: "two", class: workProbe}) {
+	if !dispatcher.admit(dispatchWork{instanceID: "two", class: workProbe}) {
 		t.Fatal("second probe was not admitted")
 	}
-	if dispatcher.admit(work{instanceID: "three", class: workProbe}) {
+	if dispatcher.admit(dispatchWork{instanceID: "three", class: workProbe}) {
 		t.Fatal("probe global limit was exceeded")
 	}
-	if !dispatcher.admit(work{instanceID: "two", class: workCollectionQuery}) {
+	if !dispatcher.admit(dispatchWork{instanceID: "two", class: workCollectionQuery}) {
 		t.Fatal("second collection query was not admitted")
 	}
 
 	dispatcher.capabilityWaiting = true
-	if dispatcher.admit(work{instanceID: "three", class: workCollectionQuery}) {
+	if dispatcher.admit(dispatchWork{instanceID: "three", class: workCollectionQuery}) {
 		t.Fatal("collection query consumed a capability-reserved slot")
 	}
 	for _, instanceID := range []string{"three", "four"} {
-		if !dispatcher.admit(work{instanceID: instanceID, class: workCapability}) {
+		if !dispatcher.admit(dispatchWork{instanceID: instanceID, class: workCapability}) {
 			t.Fatalf("capability task for %s did not receive its reserved slot", instanceID)
 		}
 	}
-	if dispatcher.admit(work{instanceID: "five", class: workCapability}) {
+	if dispatcher.admit(dispatchWork{instanceID: "five", class: workCapability}) {
 		t.Fatal("query-channel global limit was exceeded")
 	}
 }

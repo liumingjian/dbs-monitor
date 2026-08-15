@@ -30,10 +30,6 @@ const sessionCookie = "dbs_monitor_session"
 type authenticatedAgentKey struct{}
 type authenticatedUserKey struct{}
 
-type authenticatedUser struct {
-	id pgtype.UUID
-}
-
 type Handler struct {
 	platform *db.Pool
 	clock    clock.Clock
@@ -169,12 +165,15 @@ func (handler *Handler) UpdateCollectionTaskInterval(ctx context.Context, reques
 		return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
-	actor, ok := ctx.Value(authenticatedUserKey{}).(authenticatedUser)
+	actorID, ok := ctx.Value(authenticatedUserKey{}).(pgtype.UUID)
 	if !ok {
 		return nil, errors.New("authenticated user is missing")
 	}
 	if err := metric.New(handler.platform).SetTaskInterval(ctx, metric.SetTaskIntervalParams{
-		InstanceID: instanceID, TaskID: request.TaskId, IntervalSeconds: int32(request.Body.IntervalSeconds), UpdatedBy: actor.id,
+		InstanceID:      instanceID,
+		TaskID:          request.TaskId,
+		IntervalSeconds: int32(request.Body.IntervalSeconds),
+		UpdatedBy:       actorID,
 	}); err != nil {
 		return nil, err
 	}
@@ -444,8 +443,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		user := authenticatedUser{id: principal.ID}
-		return next(context.WithValue(ctx, authenticatedUserKey{}, user), writer, request, value)
+		return next(context.WithValue(ctx, authenticatedUserKey{}, principal.ID), writer, request, value)
 	}
 }
 
