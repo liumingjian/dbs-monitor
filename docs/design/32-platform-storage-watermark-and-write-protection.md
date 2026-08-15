@@ -9,7 +9,7 @@
 
 ## 0. 一句话结论
 
-**平台库容量与 server 本机盘是两条互不相干的水位：平台库以 `pg_database_size(dbsmon)` 除以部署期容量预算，紧急时拒写新样本；server 本机盘只保护诊断包、本地通知快照与 debug 日志等本机大体量写入面，绝不阻断样本。两条水位各自配置、各自进健康快照；样本侧「绝不自动删旧分区、绝不缩短 30 天保留期」保持不变。**
+**平台库容量与 server 本机盘是两条互不相干的水位：平台库以 `pg_database_size(current_database())` 除以部署期容量预算，紧急时拒写新样本；server 本机盘只保护诊断包、本地通知快照与 debug 日志等本机大体量写入面，绝不阻断样本。两条水位各自配置、各自进健康快照；样本侧「绝不自动删旧分区、绝不缩短 30 天保留期」保持不变。**
 
 ---
 
@@ -30,11 +30,11 @@
 
 两条线都采用预警 80% / 临界 90% / 紧急 95%，回落须越过 2 个百分点的滞回带，并随既有 60 秒健康快照节拍采样。
 
-阈值与滞回是**两套独立的部署期配置项**，不进用户 UI。相同默认值只表示默认策略一致，不表示两个事实源共用配置或状态。
+A、B 两条线各自拥有一套独立的部署期阈值与滞回配置，不进用户 UI。相同默认值只表示默认策略一致，不表示两个事实源共用配置或状态。
 
 ## 3. D3 · A 线事实源与健康投影
 
-A 线使用 `pg_database_size(dbsmon)` ÷ 部署期配置项「平台库容量预算」。预算由客户按 [30](30-external-postgres-prerequisites.md) §10.2 第 6 条的容量依据填写，不从 server 本机盘推算，也不编造平台库主机的剩余空间。
+A 线使用 `pg_database_size(current_database())` ÷ 部署期配置项「平台库容量预算」。平台库的 database 名由配置给出，`dbsmon` 是固定 schema 名。预算由客户按 [30](30-external-postgres-prerequisites.md) §10.2 第 6 条的容量依据填写，不从 server 本机盘推算，也不编造平台库主机的剩余空间。
 
 该事实追加为 [14](14-platform-observability-and-diagnostics.md) D2 的第十个健康子系统 `platform_db_capacity`（API 枚举 `PLATFORM_DATABASE_CAPACITY`）：
 
