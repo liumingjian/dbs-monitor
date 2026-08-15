@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -122,6 +123,69 @@ func TestPlatformFailureHandler(t *testing.T) {
 				t.Fatalf("platform fault header set = %t, want %t", got, test.platformFaultSet)
 			}
 		})
+	}
+}
+
+func TestStartupFailureHandlerExposesFailedHealthAndRejectsBusinessAPI(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), nil)
+	health.Update(now, platformhealth.DatabaseSource(errors.New("connection refused")))
+	handler := startupFailureHandler(health)
+
+	healthResponse := httptest.NewRecorder()
+	handler.ServeHTTP(healthResponse, httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics/health", nil))
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", healthResponse.Code)
+	}
+	var snapshot platformhealth.Snapshot
+	if err := json.Unmarshal(healthResponse.Body.Bytes(), &snapshot); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if snapshot.Status != platformhealth.StatusFailed ||
+		health.Source(platformhealth.SourcePlatformDatabase).Status != platformhealth.StatusFailed {
+		t.Fatalf("health snapshot = %+v, want platform database FAILED", snapshot)
+	}
+
+	businessResponse := httptest.NewRecorder()
+	handler.ServeHTTP(businessResponse, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if businessResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("business status = %d, want 503", businessResponse.Code)
+	}
+	const wantBody = `{"error":{"code":"INTERNAL","message":"平台自身故障"}}`
+	if businessResponse.Body.String() != wantBody {
+		t.Fatalf("business body = %q, want %q", businessResponse.Body.String(), wantBody)
+	}
+	if strings.Contains(businessResponse.Body.String(), "DB_UNREACHABLE") ||
+		strings.Contains(businessResponse.Body.String(), "NO_DATA") {
+		t.Fatalf("business body contains target database semantics: %q", businessResponse.Body.String())
+	}
+
+	health.Update(now.Add(time.Second), platformhealth.DatabaseSource(nil))
+	beforeApplicationHandoff := httptest.NewRecorder()
+	handler.ServeHTTP(beforeApplicationHandoff, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if beforeApplicationHandoff.Code != http.StatusServiceUnavailable {
+		t.Fatalf("business status before application handoff = %d, want 503", beforeApplicationHandoff.Code)
+	}
+}
+
+func TestSwitchableHandlerPublishesRecoveredApplicationWithoutRestart(t *testing.T) {
+	health := platformhealth.NewStore("3.0.0", time.Now().Add(-time.Hour), nil)
+	health.Update(time.Now(), platformhealth.DatabaseSource(errors.New("connection refused")))
+	handler := newSwitchableHandler(startupFailureHandler(health))
+
+	beforeRecovery := httptest.NewRecorder()
+	handler.ServeHTTP(beforeRecovery, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if beforeRecovery.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status before recovery = %d, want 503", beforeRecovery.Code)
+	}
+
+	handler.Switch(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	afterRecovery := httptest.NewRecorder()
+	handler.ServeHTTP(afterRecovery, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if afterRecovery.Code != http.StatusNoContent {
+		t.Fatalf("status after recovery = %d, want 204", afterRecovery.Code)
 	}
 }
 

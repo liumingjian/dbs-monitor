@@ -72,3 +72,50 @@ func TestReportPlatformDatabasePreflightReportsHealthyWithoutWarnings(t *testing
 		t.Fatalf("platform database journal = %q, want no warnings", journal.String())
 	}
 }
+
+func TestHandlePlatformDatabasePreflightUsesRecoveryPolicy(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	healthy := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
+	if ready, err := handlePlatformDatabasePreflight(
+		platformdb.Report{}, false, healthy, log.New(io.Discard, "", 0), now,
+	); !ready || err != nil {
+		t.Fatalf("healthy result = ready %t, error %v; want ready without error", ready, err)
+	}
+
+	report := platformdb.Report{Fatal: []platformdb.Finding{{
+		Code:    platformdb.CodeVersionUnsupported,
+		Message: "PostgreSQL 17 is required",
+	}}}
+
+	startupHealth := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
+	if ready, err := handlePlatformDatabasePreflight(
+		report, false, startupHealth, log.New(io.Discard, "", 0), now,
+	); ready || err == nil || !bytes.Contains([]byte(err.Error()), []byte(platformdb.CodeVersionUnsupported)) {
+		t.Fatalf("startup result = ready %t, error %v; want named fatal error", ready, err)
+	}
+
+	var journal bytes.Buffer
+	recoveryHealth := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
+	ready, err := handlePlatformDatabasePreflight(
+		report, true, recoveryHealth, log.New(&journal, "", 0), now,
+	)
+	if ready || err != nil {
+		t.Fatalf("recovery result = ready %t, error %v; want retry without exit", ready, err)
+	}
+	database := recoveryHealth.Source(platformhealth.SourcePlatformDatabase)
+	if database.Status != platformhealth.StatusFailed || database.Code != string(platformdb.CodeVersionUnsupported) {
+		t.Fatalf("recovery health = %+v, want named failed prerequisite", database)
+	}
+	var event struct {
+		Event string          `json:"event"`
+		Level string          `json:"level"`
+		Code  platformdb.Code `json:"code"`
+	}
+	if err := json.NewDecoder(&journal).Decode(&event); err != nil {
+		t.Fatalf("decode recovery failure event: %v", err)
+	}
+	if event.Event != "platform_database_prerequisite_failure" || event.Level != "ERROR" ||
+		event.Code != platformdb.CodeVersionUnsupported {
+		t.Fatalf("recovery failure event = %+v", event)
+	}
+}

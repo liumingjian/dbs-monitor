@@ -15,23 +15,9 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
 
-// PostgreSQL advisory locks are cluster-wide, so both queries combine the
-// current database OID with the "ROTA" identifier.
-const (
-	masterKeyRotationLockID     int64 = 0x524f5441
-	masterKeyRotationTryLockSQL       = `SELECT pg_try_advisory_lock(
-		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
-	)`
-	masterKeyRotationUnlockSQL = `SELECT pg_advisory_unlock(
-		((SELECT oid::bigint FROM pg_database WHERE datname = current_database()) << 32) | $1
-	)`
-)
+const masterKeyRotationLockID int64 = 0x524f5441 // "ROTA"
 
 var errMasterKeyRotationLockUnavailable = errors.New("master key rotation lock is held by a running server or another rotation")
-
-type masterKeyRotationLock struct {
-	connection *pgxpool.Conn
-}
 
 type credentialRotationResult struct {
 	KeyVersion         int32
@@ -73,42 +59,10 @@ func runMasterKeyRotationCommand(ctx context.Context) (returnedErr error) {
 	return nil
 }
 
-func acquireMasterKeyRotationLock(ctx context.Context, pool *pgxpool.Pool) (*masterKeyRotationLock, error) {
-	connection, err := pool.Acquire(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("reserve master key rotation lock connection: %w", err)
-	}
-
-	var acquired bool
-	if err := connection.QueryRow(ctx, masterKeyRotationTryLockSQL, masterKeyRotationLockID).Scan(&acquired); err != nil {
-		connection.Release()
-		return nil, fmt.Errorf("acquire master key rotation advisory lock: %w", err)
-	}
-	if !acquired {
-		connection.Release()
-		return nil, errMasterKeyRotationLockUnavailable
-	}
-	return &masterKeyRotationLock{connection: connection}, nil
-}
-
-func (lock *masterKeyRotationLock) Release() error {
-	if lock == nil || lock.connection == nil {
-		return nil
-	}
-	connection := lock.connection
-	lock.connection = nil
-	defer connection.Release()
-
-	ctx := context.Background()
-	var unlocked bool
-	if err := connection.QueryRow(ctx, masterKeyRotationUnlockSQL, masterKeyRotationLockID).Scan(&unlocked); err != nil {
-		_ = connection.Conn().Close(ctx)
-		return fmt.Errorf("release master key rotation advisory lock: %w", err)
-	}
-	if !unlocked {
-		return fmt.Errorf("release master key rotation advisory lock: lock was not held")
-	}
-	return nil
+func acquireMasterKeyRotationLock(ctx context.Context, pool *pgxpool.Pool) (*databaseAdvisoryLock, error) {
+	return acquireDatabaseAdvisoryLock(
+		ctx, pool, masterKeyRotationLockID, "master key rotation", errMasterKeyRotationLockUnavailable,
+	)
 }
 
 func rotateCredentialKeyring(ctx context.Context, platform *db.Pool, directory string) (credentialRotationResult, error) {

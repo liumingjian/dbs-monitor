@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
+	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -37,12 +39,42 @@ func Open(connectionString string) (*sql.DB, error) {
 }
 
 func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (applied int, returnedErr error) {
+	return up(ctx, database, credentialDirectory, 0)
+}
+
+func UpWithLockTimeout(
+	ctx context.Context,
+	database *sql.DB,
+	credentialDirectory string,
+	lockWaitTimeout time.Duration,
+) (applied int, returnedErr error) {
+	return up(ctx, database, credentialDirectory, lockWaitTimeout)
+}
+
+func up(
+	ctx context.Context,
+	database *sql.DB,
+	credentialDirectory string,
+	lockWaitTimeout time.Duration,
+) (applied int, returnedErr error) {
 	lockConnection, err := database.Conn(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("reserve migration lock connection: %w", err)
 	}
-	if _, err := lockConnection.ExecContext(ctx, migrationAdvisoryLockSQL, migrationAdvisoryLockID); err != nil {
+	lockContext := ctx
+	var cancelLockWait context.CancelFunc
+	if lockWaitTimeout > 0 {
+		lockContext, cancelLockWait = context.WithTimeout(ctx, lockWaitTimeout)
+	}
+	_, err = lockConnection.ExecContext(lockContext, migrationAdvisoryLockSQL, migrationAdvisoryLockID)
+	if cancelLockWait != nil {
+		cancelLockWait()
+	}
+	if err != nil {
 		lockConnection.Close()
+		if errors.Is(lockContext.Err(), context.DeadlineExceeded) {
+			return 0, fmt.Errorf("migration advisory lock wait timed out after %s: %w", lockWaitTimeout, context.DeadlineExceeded)
+		}
 		return 0, fmt.Errorf("acquire migration advisory lock: %w", err)
 	}
 	defer func() {
