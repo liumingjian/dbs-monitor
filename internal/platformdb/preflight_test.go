@@ -3,23 +3,14 @@ package platformdb
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
 
 func TestEvaluateRejectsEachFatalPrerequisiteWithADistinctCode(t *testing.T) {
-	valid := Facts{
-		ServerVersionNum: 170010,
-		Encoding:         "UTF8",
-		CanCreateSchema:  true,
-		TLSActive:        true,
-		LocaleProvider:   "c",
-		Collation:        "C",
-		CharacterType:    "C",
-		TimeZone:         "UTC",
-	}
+	valid := validPreflightFacts()
 	tests := []struct {
 		name string
 		edit func(*Facts)
@@ -55,23 +46,20 @@ func TestEvaluateRejectsEachFatalPrerequisiteWithADistinctCode(t *testing.T) {
 		CodeSchemaNotClean,
 		CodeTLSInactive,
 	}
-	if !reflect.DeepEqual(gotCodes, wantCodes) {
+	if !slices.Equal(gotCodes, wantCodes) {
 		t.Fatalf("fatal codes = %v, want distinct codes %v", gotCodes, wantCodes)
 	}
 }
 
 func TestEvaluateEnumeratesEachAdvisoryPrerequisite(t *testing.T) {
-	report := Evaluate(Facts{
-		ServerVersionNum:   170009,
-		Encoding:           "UTF8",
-		CanCreateSchema:    true,
-		TLSActive:          true,
-		LocaleProvider:     "i",
-		Collation:          "zh-CN-x-icu",
-		CharacterType:      "zh-CN-x-icu",
-		TimeZone:           "Asia/Shanghai",
-		OtherDatabaseCount: 2,
-	})
+	facts := validPreflightFacts()
+	facts.ServerVersionNum = 170009
+	facts.LocaleProvider = "i"
+	facts.Collation = "zh-CN-x-icu"
+	facts.CharacterType = "zh-CN-x-icu"
+	facts.TimeZone = "Asia/Shanghai"
+	facts.OtherDatabaseCount = 2
+	report := Evaluate(facts)
 
 	if len(report.Fatal) != 0 {
 		t.Fatalf("advisory facts produced fatal findings: %+v", report.Fatal)
@@ -89,24 +77,15 @@ func TestEvaluateEnumeratesEachAdvisoryPrerequisite(t *testing.T) {
 			t.Fatalf("warning %s has no actionable message", warning.Code)
 		}
 	}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Fatalf("warning codes = %v, want %v", got, want)
 	}
 }
 
 func TestPlatformObjectAllowlistCoversMigrationObjects(t *testing.T) {
-	allowedRelations := make(map[string]bool, len(platformRelations))
-	for _, name := range platformRelations {
-		allowedRelations[name] = true
-	}
-	allowedFunctions := make(map[string]bool, len(platformFunctions))
-	for _, name := range platformFunctions {
-		allowedFunctions[name] = true
-	}
-	allowedTriggers := make(map[string]bool, len(platformTriggers))
-	for _, name := range platformTriggers {
-		allowedTriggers[name] = true
-	}
+	allowedRelations := nameSet(platformRelations)
+	allowedFunctions := nameSet(platformFunctions)
+	allowedTriggers := nameSet(platformTriggers)
 	for _, name := range []string{
 		"goose_db_version", "goose_db_version_id_seq", "metric_series_series_id_seq",
 		"alert_event_id_seq", "notification_attempt_id_seq", "notification_policy_channel_id_seq",
@@ -146,4 +125,25 @@ func TestPlatformObjectAllowlistCoversMigrationObjects(t *testing.T) {
 			}
 		}
 	}
+}
+
+func validPreflightFacts() Facts {
+	return Facts{
+		ServerVersionNum: 170010,
+		Encoding:         "UTF8",
+		CanCreateSchema:  true,
+		TLSActive:        true,
+		LocaleProvider:   "c",
+		Collation:        "C",
+		CharacterType:    "C",
+		TimeZone:         "UTC",
+	}
+}
+
+func nameSet(names []string) map[string]bool {
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
+	}
+	return set
 }

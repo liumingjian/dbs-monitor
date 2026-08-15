@@ -9,6 +9,14 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
+type platformDatabasePrerequisiteWarningEvent struct {
+	Event      string          `json:"event"`
+	Level      string          `json:"level"`
+	Code       platformdb.Code `json:"code"`
+	Message    string          `json:"message"`
+	ObservedAt time.Time       `json:"observed_at"`
+}
+
 func reportPlatformDatabasePreflight(
 	report platformdb.Report,
 	health *platformhealth.Store,
@@ -25,13 +33,7 @@ func reportPlatformDatabasePreflight(
 		Code:   "PLATFORM_DATABASE_PREREQUISITES_DEGRADED",
 	})
 	for _, warning := range report.Warnings {
-		event, err := json.Marshal(struct {
-			Event      string          `json:"event"`
-			Level      string          `json:"level"`
-			Code       platformdb.Code `json:"code"`
-			Message    string          `json:"message"`
-			ObservedAt time.Time       `json:"observed_at"`
-		}{
+		event, err := json.Marshal(platformDatabasePrerequisiteWarningEvent{
 			Event:      "platform_database_prerequisite_warning",
 			Level:      "WARN",
 			Code:       warning.Code,

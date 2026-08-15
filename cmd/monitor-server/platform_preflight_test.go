@@ -2,8 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"io"
 	"log"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,16 +34,41 @@ func TestReportPlatformDatabasePreflightEnumeratesWarningsAndDegradesHealth(t *t
 	if database.Status != platformhealth.StatusDegraded || database.Code != "PLATFORM_DATABASE_PREREQUISITES_DEGRADED" {
 		t.Fatalf("platform database health = %+v, want degraded prerequisites", database)
 	}
-	output := journal.String()
-	if got := strings.Count(output, `"event":"platform_database_prerequisite_warning"`); got != len(warnings) {
-		t.Fatalf("warning event count = %d, want %d; journal=%q", got, len(warnings), output)
-	}
-	for _, warning := range warnings {
-		if !strings.Contains(output, `"code":"`+string(warning.Code)+`"`) {
-			t.Errorf("journal does not enumerate %s: %q", warning.Code, output)
+	decoder := json.NewDecoder(&journal)
+	for _, want := range warnings {
+		var got struct {
+			Event      string          `json:"event"`
+			Level      string          `json:"level"`
+			Code       platformdb.Code `json:"code"`
+			Message    string          `json:"message"`
+			ObservedAt time.Time       `json:"observed_at"`
+		}
+		if err := decoder.Decode(&got); err != nil {
+			t.Fatalf("decode warning event for %s: %v", want.Code, err)
+		}
+		if got.Event != "platform_database_prerequisite_warning" || got.Level != "WARN" ||
+			got.Code != want.Code || got.Message != want.Message || !got.ObservedAt.Equal(now) {
+			t.Errorf("warning event = %+v, want code=%s message=%q observed_at=%s", got, want.Code, want.Message, now)
 		}
 	}
-	if !strings.Contains(output, `"level":"WARN"`) {
-		t.Fatalf("journal warnings have no WARN level: %q", output)
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		t.Fatalf("decode event after expected warnings: %v", err)
+	}
+}
+
+func TestReportPlatformDatabasePreflightReportsHealthyWithoutWarnings(t *testing.T) {
+	var journal bytes.Buffer
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Minute), nil)
+
+	reportPlatformDatabasePreflight(platformdb.Report{}, health, log.New(&journal, "", 0), now)
+
+	database := health.Source(platformhealth.SourcePlatformDatabase)
+	if database.Status != platformhealth.StatusOK || database.Code != "PLATFORM_DATABASE_REACHABLE" {
+		t.Fatalf("platform database health = %+v, want reachable", database)
+	}
+	if journal.Len() != 0 {
+		t.Fatalf("platform database journal = %q, want no warnings", journal.String())
 	}
 }

@@ -95,14 +95,14 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	preflight, err := platformdb.Check(ctx, platform)
+	preflightReport, err := platformdb.Check(ctx, platform)
 	if err != nil {
 		return err
 	}
-	if err := preflight.FatalError(); err != nil {
+	if err := preflightReport.FatalError(); err != nil {
 		return err
 	}
-	reportPlatformDatabasePreflight(preflight, health, log.Default(), time.Now().UTC())
+	reportPlatformDatabasePreflight(preflightReport, health, log.Default(), time.Now().UTC())
 
 	migrationDB, err := migrations.Open(connectionString)
 	if err != nil {

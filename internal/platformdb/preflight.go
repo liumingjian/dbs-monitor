@@ -8,6 +8,8 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 )
 
+const requiredPostgresMajorVersion = 17
+
 // Keep this at the PostgreSQL patch level used for release validation.
 const recommendedPostgresVersionNum = 170010
 
@@ -60,12 +62,13 @@ type Facts struct {
 }
 
 func Evaluate(facts Facts) Report {
-	report := Report{}
-	if facts.ServerVersionNum/10000 != 17 {
+	var report Report
+	majorVersion := postgresMajorVersion(facts.ServerVersionNum)
+	if majorVersion != requiredPostgresMajorVersion {
 		report.Fatal = append(report.Fatal, Finding{
 			Code: CodeVersionUnsupported,
-			Message: fmt.Sprintf("PostgreSQL major version is %d (server_version_num=%d); version 17 is required",
-				facts.ServerVersionNum/10000, facts.ServerVersionNum),
+			Message: fmt.Sprintf("PostgreSQL major version is %d (server_version_num=%d); version %d is required",
+				majorVersion, facts.ServerVersionNum, requiredPostgresMajorVersion),
 		})
 	}
 	if !strings.EqualFold(facts.Encoding, "UTF8") {
@@ -112,7 +115,7 @@ func Evaluate(facts Facts) Report {
 			Message: fmt.Sprintf("PostgreSQL instance has %d other non-system database(s); a dedicated instance is recommended", facts.OtherDatabaseCount),
 		})
 	}
-	if facts.ServerVersionNum/10000 == 17 && facts.ServerVersionNum < recommendedPostgresVersionNum {
+	if majorVersion == requiredPostgresMajorVersion && facts.ServerVersionNum < recommendedPostgresVersionNum {
 		report.Warnings = append(report.Warnings, Finding{
 			Code: CodeMinorVersionOutdated,
 			Message: fmt.Sprintf("PostgreSQL minor version is behind the recommended patch level (server_version_num=%d, recommended>=%d)",
@@ -120,6 +123,10 @@ func Evaluate(facts Facts) Report {
 		})
 	}
 	return report
+}
+
+func postgresMajorVersion(serverVersionNum int) int {
+	return serverVersionNum / 10000
 }
 
 func standardLocale(provider, collation, characterType string) bool {
