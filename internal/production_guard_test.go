@@ -250,7 +250,7 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 	if err := yaml.Unmarshal(contents, &matrix); err != nil {
 		return nil, err
 	}
-	testSource, err := acceptanceTestSource(root)
+	testSources, err := readAcceptanceTestSources(root)
 	if err != nil {
 		return nil, err
 	}
@@ -270,17 +270,17 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
 			continue
 		}
-		if !strings.Contains(testSource, testReference) {
+		if !strings.Contains(testSources, testReference) {
 			violations = append(violations, fmt.Sprintf("%s test_ref %q is absent from test source", entry.ID, testReference))
 		}
 	}
 	return violations, nil
 }
 
-func acceptanceTestSource(root string) (string, error) {
-	var source strings.Builder
-	for _, target := range []string{filepath.Join(root, "test"), filepath.Join(root, "web", "e2e")} {
-		err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, walkErr error) error {
+func readAcceptanceTestSources(root string) (string, error) {
+	var sources strings.Builder
+	for _, sourceRoot := range []string{filepath.Join(root, "test"), filepath.Join(root, "web", "e2e")} {
+		err := filepath.WalkDir(sourceRoot, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
@@ -291,15 +291,15 @@ func acceptanceTestSource(root string) (string, error) {
 			if err != nil {
 				return err
 			}
-			source.Write(contents)
-			source.WriteByte('\n')
+			sources.Write(contents)
+			sources.WriteByte('\n')
 			return nil
 		})
 		if err != nil && !os.IsNotExist(err) {
 			return "", err
 		}
 	}
-	return source.String(), nil
+	return sources.String(), nil
 }
 
 type imageService struct {
@@ -337,8 +337,12 @@ func findPlatformDatabaseImageViolations(root string) ([]string, error) {
 		return nil, err
 	}
 	for _, workflow := range workflows {
-		extension := filepath.Ext(workflow.Name())
-		if workflow.IsDir() || (extension != ".yml" && extension != ".yaml") {
+		if workflow.IsDir() {
+			continue
+		}
+		switch filepath.Ext(workflow.Name()) {
+		case ".yml", ".yaml":
+		default:
 			continue
 		}
 		var workflowDocument struct {
