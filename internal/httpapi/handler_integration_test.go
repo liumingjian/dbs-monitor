@@ -622,12 +622,12 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.role", 1))
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.wal_lag_bytes", 1), "NOT_APPLICABLE_ROLE")
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication_slot.retained_wal_bytes", 1), "NOT_APPLICABLE_ROLE")
-	// The task interval was changed to seven seconds above; wait until its next run is due.
-	slowQueryPID, stopSlowQuery := startLongRunningQuery(t, ctx, admin)
+	// Wait until the query crosses the configured seven-second collection interval.
+	longQueryPID, stopLongQuery := startLongRunningQuery(t, ctx, admin)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect long query sample: %v", err)
 	}
-	stopSlowQuery()
+	stopLongQuery()
 
 	apiClient, err := api.NewClientWithResponses(server.URL, api.WithHTTPClient(client))
 	if err != nil {
@@ -645,56 +645,31 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if longQueriesResponse.StatusCode() != http.StatusOK || longQueriesResponse.JSON200 == nil {
 		t.Fatalf("long query samples status = %d body = %s", longQueriesResponse.StatusCode(), longQueriesResponse.Body)
 	}
-	var capturedLongQuery *api.LongQuerySample
-	for index := range longQueriesResponse.JSON200.Items {
-		item := &longQueriesResponse.JSON200.Items[index]
-		if item.Pid == slowQueryPID {
-			capturedLongQuery = item
-			break
-		}
+	longQuerySample, found := findLongQuerySample(longQueriesResponse.JSON200.Items, longQueryPID)
+	if !found {
+		t.Fatalf("long query samples = %+v, want PID %d from the real collection pipeline", longQueriesResponse.JSON200.Items, longQueryPID)
 	}
-	if capturedLongQuery == nil {
-		t.Fatalf("long query samples = %+v, want PID %d from the real collection pipeline", longQueriesResponse.JSON200.Items, slowQueryPID)
-	}
-	if capturedLongQuery.State == nil || *capturedLongQuery.State != "active" ||
-		capturedLongQuery.Username == nil || *capturedLongQuery.Username != env("PGUSER", "dbs_monitor") ||
-		capturedLongQuery.DatabaseName == nil || *capturedLongQuery.DatabaseName != env("PGDATABASE", "dbs_monitor") ||
-		capturedLongQuery.WaitEventType == nil || capturedLongQuery.WaitEvent == nil ||
-		capturedLongQuery.QueryDurationMs < 5000 || capturedLongQuery.QueryStartedAt.After(capturedLongQuery.SampledAt) ||
-		capturedLongQuery.SnapshotOriginalCount < 1 {
-		t.Fatalf("captured long query is missing native location fields: %+v", capturedLongQuery)
-	}
+	assertCollectedLongQuerySample(t, longQuerySample)
 
-	step := api.Raw
-	activityMetrics, err := apiClient.GetMetricSeriesWithResponse(ctx, createBody.Instance.Id, &api.GetMetricSeriesParams{
+	rawStep := api.Raw
+	longQueryMetricResponse, err := apiClient.GetMetricSeriesWithResponse(ctx, createBody.Instance.Id, &api.GetMetricSeriesParams{
 		Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetricPgQueryLongRunningCount},
 		From:   queryWindowStart,
 		To:     queryWindowEnd,
-		Step:   &step,
+		Step:   &rawStep,
 	})
 	if err != nil {
 		t.Fatalf("read long query metric through generated client: %v", err)
 	}
-	if activityMetrics.StatusCode() != http.StatusOK || activityMetrics.JSON200 == nil {
-		t.Fatalf("long query metric status = %d body = %s", activityMetrics.StatusCode(), activityMetrics.Body)
+	if longQueryMetricResponse.StatusCode() != http.StatusOK || longQueryMetricResponse.JSON200 == nil {
+		t.Fatalf("long query metric status = %d body = %s", longQueryMetricResponse.StatusCode(), longQueryMetricResponse.Body)
 	}
-	sharedSnapshot := false
-	for _, item := range activityMetrics.JSON200.Metrics {
-		for _, series := range item.Series {
-			for _, point := range series.Points {
-				if len(point) == 2 && point[0] != nil && point[1] != nil &&
-					int64(*point[0]) == capturedLongQuery.SampledAt.Unix() && *point[1] >= 1 {
-					sharedSnapshot = true
-				}
-			}
-		}
-	}
-	if !sharedSnapshot {
+	if !hasLongQueryCountAt(longQueryMetricResponse.JSON200, longQuerySample.SampledAt) {
 		t.Fatalf("long query sample at %s does not share a timestamp with its metric: %+v",
-			capturedLongQuery.SampledAt, activityMetrics.JSON200.Metrics)
+			longQuerySample.SampledAt, longQueryMetricResponse.JSON200.Metrics)
 	}
 
-	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, capturedLongQuery.SampledAt.Add(30*24*time.Hour+time.Nanosecond)); err != nil {
+	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, longQuerySample.SampledAt.Add(30*24*time.Hour+time.Nanosecond)); err != nil {
 		t.Fatalf("expire long query samples: %v", err)
 	}
 	expiredLongQueries, err := apiClient.ListLongQuerySamplesWithResponse(ctx, createBody.Instance.Id, &api.ListLongQuerySamplesParams{
@@ -704,8 +679,11 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list expired long query samples: %v", err)
 	}
-	if expiredLongQueries.StatusCode() != http.StatusOK || expiredLongQueries.JSON200 == nil || expiredLongQueries.JSON200.Total != 0 {
+	if expiredLongQueries.StatusCode() != http.StatusOK || expiredLongQueries.JSON200 == nil {
 		t.Fatalf("expired long query samples = status %d body %s", expiredLongQueries.StatusCode(), expiredLongQueries.Body)
+	}
+	if expiredLongQueries.JSON200.Total != 0 {
+		t.Fatalf("expired long query samples total = %d, want 0", expiredLongQueries.JSON200.Total)
 	}
 
 	sampledAt := time.Now().UTC().Truncate(time.Second)
@@ -1306,6 +1284,66 @@ func requestJSON(t *testing.T, client *http.Client, method, address string, body
 	return response
 }
 
+func findLongQuerySample(samples []api.LongQuerySample, pid int32) (api.LongQuerySample, bool) {
+	for _, sample := range samples {
+		if sample.Pid == pid {
+			return sample, true
+		}
+	}
+	return api.LongQuerySample{}, false
+}
+
+func assertCollectedLongQuerySample(t *testing.T, sample api.LongQuerySample) {
+	t.Helper()
+	if sample.State == nil {
+		t.Fatal("captured long query is missing state")
+	}
+	if *sample.State != "active" {
+		t.Fatalf("captured long query state = %q, want active", *sample.State)
+	}
+	if sample.Username == nil {
+		t.Fatal("captured long query is missing username")
+	}
+	if want := env("PGUSER", "dbs_monitor"); *sample.Username != want {
+		t.Fatalf("captured long query username = %q, want %q", *sample.Username, want)
+	}
+	if sample.DatabaseName == nil {
+		t.Fatal("captured long query is missing database name")
+	}
+	if want := env("PGDATABASE", "dbs_monitor"); *sample.DatabaseName != want {
+		t.Fatalf("captured long query database name = %q, want %q", *sample.DatabaseName, want)
+	}
+	if sample.WaitEventType == nil {
+		t.Fatal("captured long query is missing wait event type")
+	}
+	if sample.WaitEvent == nil {
+		t.Fatal("captured long query is missing wait event")
+	}
+	if sample.QueryDurationMs < 5000 {
+		t.Fatalf("captured long query duration = %dms, want at least 5000ms", sample.QueryDurationMs)
+	}
+	if sample.QueryStartedAt.After(sample.SampledAt) {
+		t.Fatalf("captured long query started at %s after sample at %s", sample.QueryStartedAt, sample.SampledAt)
+	}
+	if sample.SnapshotOriginalCount < 1 {
+		t.Fatalf("captured long query snapshot count = %d, want at least 1", sample.SnapshotOriginalCount)
+	}
+}
+
+func hasLongQueryCountAt(response *api.MetricSeriesResponse, sampledAt time.Time) bool {
+	for _, metric := range response.Metrics {
+		for _, series := range metric.Series {
+			for _, point := range series.Points {
+				if len(point) == 2 && point[0] != nil && point[1] != nil &&
+					int64(*point[0]) == sampledAt.Unix() && *point[1] >= 1 {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 func startLongRunningQuery(t *testing.T, ctx context.Context, observer *sql.DB) (int32, func()) {
 	t.Helper()
 	connection, err := pgx.Connect(ctx, connectionString(env("PGDATABASE", "dbs_monitor")))
@@ -1318,10 +1356,10 @@ func startLongRunningQuery(t *testing.T, ctx context.Context, observer *sql.DB) 
 	}
 
 	queryCtx, cancelQuery := context.WithCancel(ctx)
-	queryDone := make(chan error, 1)
+	queryDone := make(chan struct{})
 	go func() {
-		_, queryErr := connection.Exec(queryCtx, "SELECT pg_sleep(20)")
-		queryDone <- queryErr
+		defer close(queryDone)
+		_, _ = connection.Exec(queryCtx, "SELECT pg_sleep(20)")
 	}()
 
 	stopped := false
