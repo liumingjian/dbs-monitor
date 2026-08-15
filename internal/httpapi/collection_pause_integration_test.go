@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
+	"github.com/liumingjian/dbs-monitor/internal/metric"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
@@ -143,6 +145,28 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		t.Fatalf("alert status after two breaches = %s, want FIRING", initialAlertStatus)
 	}
 
+	var capabilityObservedBefore time.Time
+	if err := pool.QueryRow(ctx, "SELECT observed_at FROM instance_capability_snapshot WHERE instance_id = $1", instanceID).
+		Scan(&capabilityObservedBefore); err != nil {
+		t.Fatalf("read capability snapshot before pause: %v", err)
+	}
+	const capabilityLockID = 650065
+	capabilityLock, err := admin.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("start capability probe lock transaction: %v", err)
+	}
+	defer capabilityLock.Rollback()
+	if _, err := capabilityLock.ExecContext(ctx, "SELECT pg_advisory_xact_lock($1)", capabilityLockID); err != nil {
+		t.Fatalf("hold capability probe lock: %v", err)
+	}
+	originalProbe := metric.Capabilities[0].Probe
+	metric.Capabilities[0].Probe = fmt.Sprintf("SELECT pg_advisory_xact_lock(%d) IS NULL", capabilityLockID)
+	defer func() { metric.Capabilities[0].Probe = originalProbe }()
+	currentClock.Advance(metric.CapabilitySnapshotTTL + time.Second)
+	collectionDone := make(chan error, 1)
+	go func() { collectionDone <- collector.RunOnce(ctx) }()
+	waitForCapabilityProbe(t, ctx, admin, capabilityLockID)
+
 	pauseURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/pause", server.URL, instanceID)
 	paused := requestJSON(t, client, http.MethodPut, pauseURL, map[string]any{"paused": true, "reason": "planned retirement"}, "")
 	if paused.StatusCode != http.StatusOK {
@@ -162,6 +186,20 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if !pauseBody.Paused || pauseBody.Reason != "planned retirement" || pauseBody.UpdatedBy != adminID ||
 		pauseBody.UpdatedAt == nil || !pauseBody.UpdatedAt.Equal(currentClock.now) {
 		t.Fatalf("pause response = %+v", pauseBody)
+	}
+	if err := capabilityLock.Rollback(); err != nil {
+		t.Fatalf("release capability probe lock: %v", err)
+	}
+	if err := <-collectionDone; err != nil {
+		t.Fatalf("finish in-flight collection after pause: %v", err)
+	}
+	var capabilityObservedAfter time.Time
+	if err := pool.QueryRow(ctx, "SELECT observed_at FROM instance_capability_snapshot WHERE instance_id = $1", instanceID).
+		Scan(&capabilityObservedAfter); err != nil {
+		t.Fatalf("read capability snapshot after pause: %v", err)
+	}
+	if !capabilityObservedAfter.Equal(capabilityObservedBefore) {
+		t.Fatalf("paused capability snapshot advanced from %s to %s", capabilityObservedBefore, capabilityObservedAfter)
 	}
 	assertPauseEvent(t, ctx, pool, alertID, adminID, "FROZEN", 1)
 	pausedRuleResponse := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/alert-rules", alertRuleInput(instanceID), "")
@@ -298,6 +336,27 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if !resumedWatermark.After(watermark) {
 		t.Fatalf("resumed watermark = %s, want after %s", resumedWatermark, watermark)
 	}
+}
+
+func waitForCapabilityProbe(t *testing.T, ctx context.Context, admin *sql.DB, lockID int) {
+	t.Helper()
+	queryPattern := fmt.Sprintf("%%pg_advisory_xact_lock(%d)%%", lockID)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var waiting bool
+		if err := admin.QueryRowContext(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_stat_activity
+			WHERE query LIKE $1
+			  AND wait_event_type = 'Lock'
+		)`, queryPattern).Scan(&waiting); err != nil {
+			t.Fatalf("check blocked capability probe: %v", err)
+		}
+		if waiting {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("capability probe did not block before pause")
 }
 
 func assertPauseEvent(t *testing.T, ctx context.Context, pool *pgxpool.Pool, alertID, actorID uuid.UUID, kind string, want int) {

@@ -10,7 +10,6 @@ import (
 
 	"github.com/shirou/gopsutil/v4/disk"
 
-	"github.com/liumingjian/dbs-monitor/internal/capability"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
@@ -308,7 +307,12 @@ func (scheduler *centralScheduler) accrue(ctx context.Context, now time.Time) {
 			run.dueAt = entry.nextDue
 			if replaced, exists := scheduler.pending.put(run); exists {
 				if isCapabilitySnapshotTask(replaced.task) {
-					if err := capability.StoreUnknown(ctx, scheduler.service.platform, replaced.target.ID, scheduler.service.clock.Now().UTC()); err != nil {
+					if _, err := scheduler.service.storeCapabilitySnapshotIfCollectionActive(
+						ctx,
+						replaced.target.ID,
+						scheduler.service.clock.Now().UTC(),
+						metric.UnknownCapabilityStates(),
+					); err != nil {
 						log.Printf("record capability backpressure failed: instance_id=%s error=%v", replaced.key.instanceID, err)
 					} else {
 						scheduler.counts.skipped++
