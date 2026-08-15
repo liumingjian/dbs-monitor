@@ -89,7 +89,7 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		t.Fatalf("seed issue 60 admin: %v", err)
 	}
 
-	currentClock := &fixedClock{now: time.Now().UTC().Truncate(time.Microsecond)}
+	currentClock := newCurrentFixedClock()
 	health := platformhealth.NewStore("3.0.0", currentClock.now.Add(-time.Hour), log.New(io.Discard, "", 0))
 	server := httptest.NewTLSServer(httpapi.NewHandlerWithPlatformHealth(
 		platform, currentClock, keyring, monitorpg.DirectDialer{}, "3.0.0", health,

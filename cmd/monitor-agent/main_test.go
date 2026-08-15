@@ -3,11 +3,27 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRunCommandRejectsUnsupportedArguments(t *testing.T) {
+	for _, arguments := range [][]string{
+		{"unsupported"},
+		{"--version", "unexpected"},
+	} {
+		err := runCommand(context.Background(), arguments, io.Discard)
+		if err == nil {
+			t.Fatalf("runCommand(%q) succeeded", arguments)
+		}
+		if got := err.Error(); got != commandUsage {
+			t.Fatalf("runCommand(%q) error = %q, want %q", arguments, got, commandUsage)
+		}
+	}
+}
 
 func TestRunCommandReportsCandidateIdentity(t *testing.T) {
 	previousVersion, previousCommitSHA := version, commitSHA

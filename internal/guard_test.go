@@ -41,43 +41,72 @@ func TestBuildInjectsCandidateIdentity(t *testing.T) {
 		"0.0.0-dev+$(CANDIDATE_SHA)",
 		"-X main.version=$(BUILD_VERSION)",
 		"-X main.commitSHA=$(CANDIDATE_SHA)",
+		"export BUILD_LDFLAGS",
 	} {
 		if !strings.Contains(contents, required) {
 			t.Errorf("build does not inject candidate identity: missing %q", required)
 		}
 	}
-	if got := strings.Count(contents, `-ldflags "$(BUILD_LDFLAGS)"`); got != 2 {
+	if got := strings.Count(contents, `-ldflags "$$BUILD_LDFLAGS"`); got != 2 {
 		t.Errorf("build applies candidate identity flags %d times, want both binaries", got)
 	}
 }
 
-func TestToolchainGuardNamesVersionMismatch(t *testing.T) {
+func TestToolchainGuardNamesConfigurationErrors(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..")
 	guard := filepath.Join(root, "scripts", "check-toolchain.sh")
 	if output, err := exec.Command("sh", guard, filepath.Join(root, ".tool-versions"), filepath.Join(root, "go.mod")).CombinedOutput(); err != nil {
 		t.Fatalf("repository toolchain guard failed: %v\n%s", err, output)
 	}
 
-	temporaryRoot := t.TempDir()
-	toolVersions := filepath.Join(temporaryRoot, ".tool-versions")
-	goMod := filepath.Join(temporaryRoot, "go.mod")
-	if err := os.WriteFile(toolVersions, []byte("golang 1.23.1\nnodejs 22.23.2\n"), 0600); err != nil {
-		t.Fatalf("write mismatched .tool-versions: %v", err)
-	}
-	if err := os.WriteFile(goMod, []byte("module example.invalid/test\n\ngo 1.23.0\n\ntoolchain go1.23.0\n"), 0600); err != nil {
-		t.Fatalf("write mismatched go.mod: %v", err)
-	}
-	output, err := exec.Command("sh", guard, toolVersions, goMod).CombinedOutput()
-	if err == nil {
-		t.Fatalf("toolchain guard accepted mismatched versions:\n%s", output)
-	}
-	const want = "toolchain mismatch: golang .tool-versions=1.23.1, go.mod toolchain=1.23.0"
-	if !strings.Contains(string(output), want) {
-		t.Fatalf("toolchain guard output = %q, want %q", output, want)
+	for _, test := range []struct {
+		name         string
+		toolVersions string
+		goMod        string
+		want         string
+	}{
+		{
+			name:         "missing golang version",
+			toolVersions: "nodejs 22.23.2\n",
+			goMod:        "module example.invalid/test\n\ngo 1.23.0\n\ntoolchain go1.23.12\n",
+			want:         "toolchain mismatch: .tool-versions is missing golang",
+		},
+		{
+			name:         "missing Go toolchain",
+			toolVersions: "golang 1.23.12\nnodejs 22.23.2\n",
+			goMod:        "module example.invalid/test\n\ngo 1.23.0\n",
+			want:         "toolchain mismatch: go.mod is missing toolchain",
+		},
+		{
+			name:         "version mismatch",
+			toolVersions: "golang 1.23.1\nnodejs 22.23.2\n",
+			goMod:        "module example.invalid/test\n\ngo 1.23.0\n\ntoolchain go1.23.0\n",
+			want:         "toolchain mismatch: golang .tool-versions=1.23.1, go.mod toolchain=1.23.0",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			temporaryRoot := t.TempDir()
+			toolVersions := filepath.Join(temporaryRoot, ".tool-versions")
+			goMod := filepath.Join(temporaryRoot, "go.mod")
+			if err := os.WriteFile(toolVersions, []byte(test.toolVersions), 0600); err != nil {
+				t.Fatalf("write .tool-versions: %v", err)
+			}
+			if err := os.WriteFile(goMod, []byte(test.goMod), 0600); err != nil {
+				t.Fatalf("write go.mod: %v", err)
+			}
+
+			output, err := exec.Command("sh", guard, toolVersions, goMod).CombinedOutput()
+			if err == nil {
+				t.Fatalf("toolchain guard accepted invalid configuration:\n%s", output)
+			}
+			if !strings.Contains(string(output), test.want) {
+				t.Fatalf("toolchain guard output = %q, want %q", output, test.want)
+			}
+		})
 	}
 }
 
-func TestWorkflowsReadToolchainVersionsFromRepositoryFiles(t *testing.T) {
+func TestWorkflowsUseRepositoryToolchainVersions(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..")
 	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
 	if err != nil {
@@ -93,23 +122,44 @@ func TestWorkflowsReadToolchainVersionsFromRepositoryFiles(t *testing.T) {
 		t.Fatalf("read workflows: %v", err)
 	}
 	for _, workflow := range workflows {
+		if workflow.IsDir() {
+			continue
+		}
 		contents, err := os.ReadFile(filepath.Join(root, ".github", "workflows", workflow.Name()))
 		if err != nil {
 			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
 		}
 		text := string(contents)
-		for _, required := range []string{
-			"uses: actions/setup-go@v6",
-			"go-version-file: go.mod",
-			"node-version-file: .tool-versions",
+		for _, toolchain := range []struct {
+			action           string
+			requiredAction   string
+			versionFile      string
+			hardCodedVersion string
+		}{
+			{
+				action:           "actions/setup-go",
+				requiredAction:   "uses: actions/setup-go@v6",
+				versionFile:      "go-version-file: go.mod",
+				hardCodedVersion: "go-version:",
+			},
+			{
+				action:           "actions/setup-node",
+				requiredAction:   "uses: actions/setup-node@v4",
+				versionFile:      "node-version-file: .tool-versions",
+				hardCodedVersion: "node-version:",
+			},
 		} {
-			if !strings.Contains(text, required) {
-				t.Errorf("workflow %s does not use repository toolchain source %q", workflow.Name(), required)
+			if !strings.Contains(text, toolchain.action) {
+				continue
 			}
-		}
-		for _, forbidden := range []string{"go-version:", "node-version:"} {
-			if strings.Contains(text, forbidden) {
-				t.Errorf("workflow %s hard-codes a toolchain with %q", workflow.Name(), forbidden)
+			if !strings.Contains(text, toolchain.requiredAction) {
+				t.Errorf("workflow %s does not use required action %q", workflow.Name(), toolchain.requiredAction)
+			}
+			if !strings.Contains(text, toolchain.versionFile) {
+				t.Errorf("workflow %s does not use repository toolchain source %q", workflow.Name(), toolchain.versionFile)
+			}
+			if strings.Contains(text, toolchain.hardCodedVersion) {
+				t.Errorf("workflow %s hard-codes a toolchain with %q", workflow.Name(), toolchain.hardCodedVersion)
 			}
 		}
 	}

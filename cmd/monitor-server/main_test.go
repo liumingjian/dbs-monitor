@@ -27,8 +27,8 @@ func TestRunCommandRejectsUnsupportedArguments(t *testing.T) {
 		if err == nil {
 			t.Fatalf("runCommand(%q) succeeded", arguments)
 		}
-		if got, want := err.Error(), "usage: dbs-monitor-server [--version|rotate-master-key|diagnostic-bundle [output]]"; got != want {
-			t.Fatalf("runCommand(%q) error = %q, want %q", arguments, got, want)
+		if got := err.Error(); got != commandUsage {
+			t.Fatalf("runCommand(%q) error = %q, want %q", arguments, got, commandUsage)
 		}
 	}
 }

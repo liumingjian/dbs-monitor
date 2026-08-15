@@ -19,6 +19,8 @@ CANDIDATE_SHA := $(shell git rev-parse HEAD)
 CANDIDATE_TAG := $(shell git describe --exact-match HEAD 2>/dev/null)
 BUILD_VERSION := $(if $(CANDIDATE_TAG),$(patsubst v%,%,$(CANDIDATE_TAG)),0.0.0-dev+$(CANDIDATE_SHA))
 BUILD_LDFLAGS := -X main.version=$(BUILD_VERSION) -X main.commitSHA=$(CANDIDATE_SHA)
+# Keep tag-derived values out of shell source; the shell reads them as environment data.
+export BUILD_LDFLAGS
 
 .PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix check-sqlc-vet
 
@@ -41,8 +43,8 @@ dev-down:
 
 build:
 	cd web && npm run build
-	go build -ldflags "$(BUILD_LDFLAGS)" -tags embed_web -o dbs-monitor-server ./cmd/monitor-server
-	go build -ldflags "$(BUILD_LDFLAGS)" -o dbs-monitor-agent ./cmd/monitor-agent
+	go build -ldflags "$$BUILD_LDFLAGS" -tags embed_web -o dbs-monitor-server ./cmd/monitor-server
+	go build -ldflags "$$BUILD_LDFLAGS" -o dbs-monitor-agent ./cmd/monitor-agent
 
 check:
 	sh scripts/check-toolchain.sh
