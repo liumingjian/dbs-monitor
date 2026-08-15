@@ -158,12 +158,17 @@ type AlertTriggerSnapshotSession struct {
 }
 
 type AppUser struct {
-	ID           pgtype.UUID
-	Username     string
-	PasswordHash []byte
-	Role         string
-	Enabled      bool
-	CreatedAt    pgtype.Timestamptz
+	ID               pgtype.UUID
+	Username         string
+	PasswordHash     []byte
+	Role             string
+	Enabled          bool
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        pgtype.UUID
+	EnabledUpdatedBy pgtype.UUID
+	EnabledUpdatedAt pgtype.Timestamptz
+	RoleUpdatedBy    pgtype.UUID
+	RoleUpdatedAt    pgtype.Timestamptz
 }
 
 type CollectionTaskConfig struct {
@@ -191,6 +196,9 @@ type Instance struct {
 	AgentTokenIssuedAt     pgtype.Timestamptz
 	AgentTokenRevokedAt    pgtype.Timestamptz
 	AgentFirstRegisteredAt pgtype.Timestamptz
+	CreatedBy              pgtype.UUID
+	CredentialUpdatedBy    pgtype.UUID
+	CredentialUpdatedAt    pgtype.Timestamptz
 }
 
 type InstanceCapabilitySnapshot struct {
@@ -408,6 +416,15 @@ type PerformanceEvent struct {
 	AlertInstanceID pgtype.UUID
 	EventType       string
 	DerivedAt       pgtype.Timestamptz
+}
+
+type PlatformEvent struct {
+	ID           int64
+	Kind         string
+	OccurredAt   pgtype.Timestamptz
+	ActorID      pgtype.UUID
+	ActorSubject pgtype.Text
+	SubjectID    pgtype.UUID
 }
 
 type QueryStatisticsSnapshot struct {

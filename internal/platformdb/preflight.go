@@ -206,6 +206,8 @@ var platformRelations = []string{
 	"notification_policy_channel_id_seq",
 	"maintenance_window",
 	"maintenance_window_instance",
+	"platform_event",
+	"platform_event_id_seq",
 }
 
 var platformFunctions = []string{"protect_default_notification_policy"}

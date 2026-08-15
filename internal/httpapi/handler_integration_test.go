@@ -33,6 +33,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
@@ -385,6 +386,16 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	if bytes.Equal(originalCiphertext, updatedCiphertext) || credentialVersion != 2 {
 		t.Fatalf("successful credential update did not rotate ciphertext/version: version %d", credentialVersion)
+	}
+	var credentialActor, credentialSubjectID string
+	if err := pool.QueryRow(ctx, `SELECT actor.username, event.subject_id::text
+		FROM platform_event event JOIN app_user actor ON actor.id = event.actor_id
+		WHERE event.kind = $1 ORDER BY event.occurred_at DESC, event.id DESC LIMIT 1`,
+		platformevent.InstanceCredentialUpdated).Scan(&credentialActor, &credentialSubjectID); err != nil {
+		t.Fatalf("read credential update attribution: %v", err)
+	}
+	if credentialActor != "admin" || credentialSubjectID != instanceID {
+		t.Fatalf("credential update attribution = actor %q target %q, want admin and %s", credentialActor, credentialSubjectID, instanceID)
 	}
 	rotatedCiphertext := bytes.Clone(updatedCiphertext)
 

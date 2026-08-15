@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
@@ -100,6 +101,7 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 		"username": "operator", "password": createdUser.InitialPassword,
 	})
 	assertUserStatus(t, failedOldLogin, http.StatusUnauthorized)
+	assertUserPlatformEvent(t, ctx, platform, platformevent.LoginFailed, "", "operator", "")
 
 	reset := userJSONRequest(t, admin, http.MethodPost, server.URL+"/api/v1/users/"+createdUser.User.ID+"/password", nil)
 	assertUserStatus(t, reset, http.StatusOK)
@@ -110,6 +112,7 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 	if len(resetBody.Password) < 12 {
 		t.Fatalf("reset password length = %d, want at least 12", len(resetBody.Password))
 	}
+	assertUserPlatformEvent(t, ctx, platform, platformevent.UserPasswordReset, "admin", "", createdUser.User.ID)
 	assertUserStatus(t, userJSONRequest(t, operator, http.MethodGet, server.URL+"/api/v1/users", nil), http.StatusUnauthorized)
 
 	operator = userTestClient(t, server)
@@ -122,6 +125,7 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 	}), http.StatusNoContent)
 	disabled := userJSONRequest(t, admin, http.MethodPut, server.URL+"/api/v1/users/"+createdUser.User.ID+"/status", map[string]any{"enabled": false})
 	assertUserStatus(t, disabled, http.StatusOK)
+	assertUserPlatformEvent(t, ctx, platform, platformevent.UserStatusChanged, "admin", "", createdUser.User.ID)
 	assertUserStatus(t, userJSONRequest(t, operator, http.MethodGet, server.URL+"/api/v1/users", nil), http.StatusUnauthorized)
 	assertUserStatus(t, userJSONRequest(t, secondOperatorSession, http.MethodGet, server.URL+"/api/v1/users", nil), http.StatusUnauthorized)
 	var disabledSessionCount int
@@ -139,6 +143,25 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 	assertUserError(t, selfDisable, http.StatusBadRequest, errSelfDisable.Error())
 	selfDowngrade := userJSONRequest(t, admin, http.MethodPut, server.URL+"/api/v1/users/"+adminUser.ID+"/role", map[string]any{"role": "READONLY"})
 	assertUserError(t, selfDowngrade, http.StatusBadRequest, errSelfDowngrade.Error())
+}
+
+func assertUserPlatformEvent(t *testing.T, ctx context.Context, platform *db.Pool, kind, actorUsername, actorSubject, subjectID string) {
+	t.Helper()
+	var gotActorUsername, gotActorSubject, gotSubjectID string
+	err := platform.QueryRow(ctx, `SELECT coalesce(actor.username, ''), coalesce(event.actor_subject, ''),
+		coalesce(event.subject_id::text, '')
+		FROM platform_event event
+		LEFT JOIN app_user actor ON actor.id = event.actor_id
+		WHERE event.kind = $1
+		ORDER BY event.occurred_at DESC, event.id DESC
+		LIMIT 1`, kind).Scan(&gotActorUsername, &gotActorSubject, &gotSubjectID)
+	if err != nil {
+		t.Fatalf("read %s platform event: %v", kind, err)
+	}
+	if gotActorUsername != actorUsername || gotActorSubject != actorSubject || gotSubjectID != subjectID {
+		t.Fatalf("%s attribution = actor %q, subject %q, target %q; want %q, %q, %q",
+			kind, gotActorUsername, gotActorSubject, gotSubjectID, actorUsername, actorSubject, subjectID)
+	}
 }
 
 func TestPlatformAdminGuardSerializesConcurrentMutations(t *testing.T) {

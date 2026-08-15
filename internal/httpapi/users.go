@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 )
 
 var (
@@ -55,11 +56,28 @@ func (handler *Handler) CreateUser(ctx context.Context, request api.CreateUserRe
 	if err != nil {
 		return nil, err
 	}
-	row, err := New(handler.platform).CreateUser(ctx, CreateUserParams{
-		ID:           databaseUserID(uuid.New()),
-		Username:     request.Body.Username,
-		PasswordHash: passwordHash,
-		Role:         string(request.Body.Role),
+	actorID := authenticatedUserID(ctx)
+	newUserID := uuid.New()
+	occurredAt := handler.clock.Now().UTC()
+	var createdUser CreateUserRow
+	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		row, err := New(tx).CreateUser(ctx, CreateUserParams{
+			ID:           databaseUserID(newUserID),
+			Username:     request.Body.Username,
+			PasswordHash: passwordHash,
+			Role:         string(request.Body.Role),
+			CreatedBy:    databaseUserID(actorID),
+		})
+		if err != nil {
+			return err
+		}
+		createdUser = row
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserCreated,
+			OccurredAt: occurredAt,
+			ActorID:    &actorID,
+			SubjectID:  &newUserID,
+		})
 	})
 	if err != nil {
 		var databaseError *pgconn.PgError
@@ -69,7 +87,7 @@ func (handler *Handler) CreateUser(ctx context.Context, request api.CreateUserRe
 		return nil, err
 	}
 	return api.CreateUser201JSONResponse{
-		User:            toAPIUser(row.ID, row.Username, row.Role, row.Enabled, row.CreatedAt),
+		User:            toAPIUser(createdUser.ID, createdUser.Username, createdUser.Role, createdUser.Enabled, createdUser.CreatedAt),
 		InitialPassword: password,
 	}, nil
 }
@@ -134,7 +152,17 @@ func (handler *Handler) ResetUserPassword(ctx context.Context, request api.Reset
 		if updated == 0 {
 			return errUserNotFound
 		}
-		return queries.DeleteUserSessions(ctx, targetID)
+		if err := queries.DeleteUserSessions(ctx, targetID); err != nil {
+			return err
+		}
+		actorID := authenticatedUserID(ctx)
+		subjectID := request.Id
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserPasswordReset,
+			OccurredAt: handler.clock.Now().UTC(),
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
+		})
 	})
 	if errors.Is(err, errUserNotFound) {
 		return api.ResetUserPassword404JSONResponse(errorBody(api.NOTFOUND, err.Error())), nil
@@ -198,13 +226,26 @@ func (handler *Handler) setUserEnabled(ctx context.Context, actorID, targetID uu
 		if disablesPlatformAdmin && len(enabledAdminIDs) <= 1 {
 			return errLastPlatformAdmin
 		}
-		if _, err := queries.SetUserEnabled(ctx, SetUserEnabledParams{ID: target.ID, Enabled: newEnabled}); err != nil {
+		now := handler.clock.Now().UTC()
+		if _, err := queries.SetUserEnabled(ctx, SetUserEnabledParams{
+			ID:               target.ID,
+			Enabled:          newEnabled,
+			EnabledUpdatedBy: databaseUserID(actorID),
+			EnabledUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		}); err != nil {
 			return err
 		}
 		if !newEnabled {
-			return queries.DeleteUserSessions(ctx, target.ID)
+			if err := queries.DeleteUserSessions(ctx, target.ID); err != nil {
+				return err
+			}
 		}
-		return nil
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserStatusChanged,
+			OccurredAt: now,
+			ActorID:    &actorID,
+			SubjectID:  &targetID,
+		})
 	})
 }
 
@@ -229,8 +270,21 @@ func (handler *Handler) setUserRole(ctx context.Context, actorID, targetID uuid.
 		if target.Enabled && downgradesPlatformAdmin && len(enabledAdminIDs) <= 1 {
 			return errLastPlatformAdmin
 		}
-		_, err = queries.SetUserRole(ctx, SetUserRoleParams{ID: target.ID, Role: newRole})
-		return err
+		now := handler.clock.Now().UTC()
+		if _, err := queries.SetUserRole(ctx, SetUserRoleParams{
+			ID:            target.ID,
+			Role:          newRole,
+			RoleUpdatedBy: databaseUserID(actorID),
+			RoleUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		}); err != nil {
+			return err
+		}
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserRoleChanged,
+			OccurredAt: now,
+			ActorID:    &actorID,
+			SubjectID:  &targetID,
+		})
 	})
 }
 

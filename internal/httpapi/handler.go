@@ -29,6 +29,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
@@ -153,14 +154,33 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 		if bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(request.Body.Password)) != nil {
 			return errInvalidLogin
 		}
-		return queries.CreateSession(ctx, CreateSessionParams{
+		if err := queries.CreateSession(ctx, CreateSessionParams{
 			TokenHash: tokenHash,
 			UserID:    user.ID,
 			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 			CreatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		}); err != nil {
+			return err
+		}
+		actorID := uuid.UUID(user.ID.Bytes)
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.LoginSucceeded,
+			OccurredAt: now,
+			ActorID:    &actorID,
 		})
 	})
 	if errors.Is(err, errInvalidLogin) {
+		actorSubject := request.Body.Username
+		if strings.TrimSpace(actorSubject) == "" {
+			actorSubject = "<empty username>"
+		}
+		if recordErr := platformevent.Record(ctx, handler.platform, platformevent.Event{
+			Kind:         platformevent.LoginFailed,
+			OccurredAt:   now,
+			ActorSubject: actorSubject,
+		}); recordErr != nil {
+			return nil, recordErr
+		}
 		return unauthorizedLogin(), nil
 	}
 	if err != nil {
@@ -330,6 +350,7 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		Username:           request.Body.Username,
 		PasswordCiphertext: ciphertext,
 		PasswordKeyVersion: keyVersion,
+		CreatedBy:          databaseUserID(authenticatedUserID(ctx)),
 	})
 	if err != nil {
 		return nil, err
@@ -469,6 +490,9 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		return nil, errors.New("instance credential body is required")
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	actorID := authenticatedUserID(ctx)
+	subjectID := request.Id
+	updatedAt := handler.clock.Now().UTC()
 	var updatedUsername string
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		queries := instance.New(tx)
@@ -490,12 +514,22 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 			return err
 		}
 		updatedUsername, err = queries.UpdateInstanceCredential(ctx, instance.UpdateInstanceCredentialParams{
-			ID:                 instanceID,
-			Username:           request.Body.Username,
-			PasswordCiphertext: ciphertext,
-			PasswordKeyVersion: keyVersion,
+			ID:                  instanceID,
+			Username:            request.Body.Username,
+			PasswordCiphertext:  ciphertext,
+			PasswordKeyVersion:  keyVersion,
+			CredentialUpdatedBy: databaseUserID(actorID),
+			CredentialUpdatedAt: pgtype.Timestamptz{Time: updatedAt, Valid: true},
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.InstanceCredentialUpdated,
+			OccurredAt: updatedAt,
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
+		})
 	})
 	if err != nil {
 		if responseBody, ok := targetValidationResponseBody(err); ok {
@@ -509,7 +543,9 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteInstanceRequestObject) (api.DeleteInstanceResponseObject, error) {
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
 	removedAt := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
-	actorID := databaseUserID(authenticatedUserID(ctx))
+	actorID := authenticatedUserID(ctx)
+	databaseActorID := databaseUserID(actorID)
+	subjectID := request.Id
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		instanceQueries := instance.New(tx)
 		if _, err := instanceQueries.LockInstanceForRemoval(ctx, instanceID); err != nil {
@@ -518,7 +554,15 @@ func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteIn
 		if err := alerting.New(tx).CloseAlertsForInstanceRemoval(ctx, alerting.CloseAlertsForInstanceRemovalParams{
 			InstanceID: instanceID,
 			UpdatedAt:  removedAt,
-			ActorID:    actorID,
+			ActorID:    databaseActorID,
+		}); err != nil {
+			return err
+		}
+		if err := platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.InstanceRemoved,
+			OccurredAt: removedAt.Time,
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
 		}); err != nil {
 			return err
 		}

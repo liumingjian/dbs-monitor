@@ -45,8 +45,8 @@ WITH created_identity AS (
     VALUES ($1, $2)
     RETURNING id
 ), created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version)
-    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8
+    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, created_by)
+    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8, $9
     FROM created_identity
     RETURNING id, name, host, port, database_name, username, agent_version, created_at
 ), configured AS (
@@ -68,6 +68,7 @@ type CreateInstanceParams struct {
 	Username           string
 	PasswordCiphertext []byte
 	PasswordKeyVersion int32
+	CreatedBy          pgtype.UUID
 }
 
 type CreateInstanceRow struct {
@@ -91,6 +92,7 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		arg.Username,
 		arg.PasswordCiphertext,
 		arg.PasswordKeyVersion,
+		arg.CreatedBy,
 	)
 	var i CreateInstanceRow
 	err := row.Scan(
@@ -670,16 +672,20 @@ UPDATE instance
 SET username = $2,
     password_ciphertext = $3,
     password_key_version = $4,
+    credential_updated_by = $5,
+    credential_updated_at = $6,
     credential_version = credential_version + 1
 WHERE id = $1
 RETURNING username
 `
 
 type UpdateInstanceCredentialParams struct {
-	ID                 pgtype.UUID
-	Username           string
-	PasswordCiphertext []byte
-	PasswordKeyVersion int32
+	ID                  pgtype.UUID
+	Username            string
+	PasswordCiphertext  []byte
+	PasswordKeyVersion  int32
+	CredentialUpdatedBy pgtype.UUID
+	CredentialUpdatedAt pgtype.Timestamptz
 }
 
 func (q *Queries) UpdateInstanceCredential(ctx context.Context, arg UpdateInstanceCredentialParams) (string, error) {
@@ -688,6 +694,8 @@ func (q *Queries) UpdateInstanceCredential(ctx context.Context, arg UpdateInstan
 		arg.Username,
 		arg.PasswordCiphertext,
 		arg.PasswordKeyVersion,
+		arg.CredentialUpdatedBy,
+		arg.CredentialUpdatedAt,
 	)
 	var username string
 	err := row.Scan(&username)
