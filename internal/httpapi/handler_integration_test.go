@@ -32,6 +32,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
+	"github.com/liumingjian/dbs-monitor/internal/metric"
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
@@ -45,6 +46,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	databaseName := fmt.Sprintf("dbs_monitor_http_%d", os.Getpid())
 	admin := openSQL(t, env("PGDATABASE", "dbs_monitor"))
 	t.Cleanup(func() { admin.Close() })
+	if _, err := admin.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"); err != nil {
+		t.Fatalf("install pg_stat_statements in monitored target: %v", err)
+	}
 	identifier := pgx.Identifier{databaseName}.Sanitize()
 	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
 	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
@@ -571,6 +575,12 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertUnavailability(t, client, seriesURL, "COLLECTION_FAILED")
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1), "COLLECTION_FAILED")
 
+	if _, err := admin.ExecContext(ctx, "GRANT pg_monitor TO "+targetRoleIdentifier); err != nil {
+		t.Fatalf("grant pg_monitor to monitored target role: %v", err)
+	}
+	if err := metric.EnsurePartitions(ctx, platform, time.Now().UTC()); err != nil {
+		t.Fatalf("create metric partitions: %v", err)
+	}
 	collector := collect.New(platform, monitorpg.DirectDialer{}, clock.Real{}, keyring)
 	collector.SetPlatformHealth(health)
 	if err := collector.RunOnce(ctx); err != nil {

@@ -1,6 +1,6 @@
 //go:build acceptance
 
-package acceptance_test
+package acceptance
 
 import (
 	"context"
@@ -28,6 +28,15 @@ import (
 )
 
 func TestAcceptance_AC_09_F1(t *testing.T) {
+	started := time.Now()
+	defer func() {
+		status, actualResult := resultPassed, "all platform diagnostic endpoints enforce PLATFORM_ADMIN through the generated client"
+		if t.Failed() {
+			status, actualResult = resultFailed, "AC-09-F1 diagnostics authorization failed; see go test output"
+		}
+		acceptanceReport.record("AC-09-F1", status, actualResult, time.Since(started))
+	}()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

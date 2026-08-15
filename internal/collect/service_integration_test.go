@@ -36,6 +36,9 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	databaseName := fmt.Sprintf("dbs_monitor_collect_%d", os.Getpid())
 	admin := openSQL(t, env("PGDATABASE", "dbs_monitor"))
 	defer admin.Close()
+	if _, err := admin.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"); err != nil {
+		t.Fatalf("install pg_stat_statements in monitored target: %v", err)
+	}
 	identifier := pgx.Identifier{databaseName}.Sanitize()
 	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
 	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
@@ -78,6 +81,9 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 
 	dialer := &countingDialer{}
 	currentClock := &fixedClock{now: time.Now().UTC()}
+	if err := metric.EnsurePartitions(ctx, platform, currentClock.now); err != nil {
+		t.Fatalf("create metric partitions: %v", err)
+	}
 	collector := New(platform, dialer, currentClock, keyring)
 	health := platformhealth.NewStore("3.0.0", currentClock.now.Add(-time.Hour), log.New(io.Discard, "", 0))
 	collector.SetPlatformHealth(health)

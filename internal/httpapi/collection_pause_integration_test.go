@@ -35,6 +35,9 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	databaseName := fmt.Sprintf("dbs_monitor_pause_%d", os.Getpid())
 	admin := openSQL(t, env("PGDATABASE", "dbs_monitor"))
 	defer admin.Close()
+	if _, err := admin.ExecContext(ctx, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"); err != nil {
+		t.Fatalf("install pg_stat_statements in monitored target: %v", err)
+	}
 	identifier := pgx.Identifier{databaseName}.Sanitize()
 	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
 	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
@@ -60,6 +63,9 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		t.Fatalf("open credential keyring: %v", err)
 	}
 	currentClock := newCurrentFixedClock()
+	if err := metric.EnsurePartitions(ctx, platform, currentClock.now); err != nil {
+		t.Fatalf("create metric partitions: %v", err)
+	}
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}
@@ -288,8 +294,8 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		"metrics": []map[string]any{{"metric": "host.cpu.usage_percent", "value": 42}},
 	}, agentToken)
 	agentReport.Body.Close()
-	if agentReport.StatusCode != http.StatusNoContent {
-		t.Fatalf("paused Agent report status = %d, want 204", agentReport.StatusCode)
+	if agentReport.StatusCode != http.StatusOK {
+		t.Fatalf("paused Agent report status = %d, want 200 with version negotiation", agentReport.StatusCode)
 	}
 	var lastReportAt time.Time
 	var samplesAfter int

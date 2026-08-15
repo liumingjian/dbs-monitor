@@ -89,6 +89,9 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	}
 
 	currentClock := newCurrentFixedClock()
+	if err := metric.EnsurePartitions(ctx, platform, currentClock.now); err != nil {
+		t.Fatalf("create metric partitions: %v", err)
+	}
 	health := platformhealth.NewStore("3.0.0", currentClock.now.Add(-time.Hour), log.New(io.Discard, "", 0))
 	server := httptest.NewTLSServer(httpapi.NewHandlerWithPlatformHealth(
 		platform, currentClock, keyring, monitorpg.DirectDialer{}, "3.0.0", health,
@@ -181,9 +184,12 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		"instance_id": instanceID, "agent_version": "2.0.0", "timestamp": currentClock.now,
 		"metrics": []map[string]any{{"metric": "host.cpu.usage_percent", "value": 25.0}},
 	}, *registrationBody.AgentToken)
-	report.Body.Close()
-	if report.StatusCode != http.StatusNoContent {
-		t.Fatalf("issue 60 Agent report status = %d, want 204", report.StatusCode)
+	var accepted api.AgentReportAccepted
+	if err := decodeJSONResponse(report, &accepted); err != nil {
+		t.Fatalf("decode issue 60 Agent report response: %v", err)
+	}
+	if report.StatusCode != http.StatusOK || accepted.ServerVersion == "" || accepted.ServerTime.IsZero() {
+		t.Fatalf("issue 60 Agent report = status %d body %+v, want 200 with server identity and time", report.StatusCode, accepted)
 	}
 	assertMetricPointValue(t, client, currentSeriesURL("agent.status"), metric.AgentStatusEncodings[metric.AgentStatusOnline])
 	for _, item := range metric.Metrics {
