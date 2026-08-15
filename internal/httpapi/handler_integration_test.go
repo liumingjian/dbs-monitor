@@ -471,7 +471,45 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.prepared_xacts.count", 1))
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.role", 1))
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.wal_lag_bytes", 1), "NOT_APPLICABLE_ROLE")
-	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication_slot.retained_wal_bytes", 1), "NOT_APPLICABLE_ROLE")
+	slotSeriesURL := strings.Replace(seriesURL, "pg.connection.total", "pg.replication_slot.retained_wal_bytes", 1)
+	assertUnavailability(t, client, slotSeriesURL, "NOT_APPLICABLE_ROLE")
+	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
+		SET states = jsonb_set(states, '{topo.has_slot}', '"PRESENT"')
+		WHERE instance_id = $1`, createBody.Instance.Id); err != nil {
+		t.Fatalf("set replication slot capability present: %v", err)
+	}
+	slotSampledAt := time.Now().UTC()
+	var slotSeriesID int64
+	if err := pool.QueryRow(ctx, `INSERT INTO metric_series
+			(instance_id, metric_id, labels, labels_key, last_seen)
+		VALUES ($1, 'pg.replication_slot.retained_wal_bytes', '{"slot":"caught-up"}', '{"slot":"caught-up"}', $2)
+		RETURNING series_id`, createBody.Instance.Id, slotSampledAt).Scan(&slotSeriesID); err != nil {
+		t.Fatalf("create replication slot metric series: %v", err)
+	}
+	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 0)", slotSeriesID, slotSampledAt); err != nil {
+		t.Fatalf("insert zero replication slot sample: %v", err)
+	}
+	slotSeries := getResponse(t, client, slotSeriesURL)
+	var slotSeriesBody api.MetricSeriesResponse
+	if err := json.NewDecoder(slotSeries.Body).Decode(&slotSeriesBody); err != nil {
+		slotSeries.Body.Close()
+		t.Fatalf("decode replication slot metric series: %v", err)
+	}
+	slotSeries.Body.Close()
+	if len(slotSeriesBody.Metrics) != 1 || !slotSeriesBody.Metrics[0].Unavailability.IsNull() || len(slotSeriesBody.Metrics[0].Series) != 1 {
+		t.Fatalf("replication slot metric response = %+v, want one available series", slotSeriesBody.Metrics)
+	}
+	caughtUpSeries := slotSeriesBody.Metrics[0].Series[0]
+	if caughtUpSeries.Labels["slot"] != "caught-up" || len(caughtUpSeries.Points) != 1 || len(caughtUpSeries.Points[0]) != 2 ||
+		caughtUpSeries.Points[0][1] == nil || *caughtUpSeries.Points[0][1] != 0 {
+		t.Fatalf("replication slot metric series = %+v, want caught-up slot with zero backlog", caughtUpSeries)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
+		SET states = jsonb_set(states, '{topo.has_slot}', '"NOT_APPLICABLE"')
+		WHERE instance_id = $1`, createBody.Instance.Id); err != nil {
+		t.Fatalf("restore absent replication slot capability: %v", err)
+	}
+	assertUnavailability(t, client, slotSeriesURL, "NOT_APPLICABLE_ROLE")
 	sampledAt := time.Now().UTC().Truncate(time.Second)
 	oldSampledAt := sampledAt.Add(-31 * 24 * time.Hour)
 	for _, capturedAt := range []time.Time{oldSampledAt, sampledAt} {
