@@ -120,8 +120,13 @@ func TestPlatformAdminGuardSerializesConcurrentMutations(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
+	const (
+		firstAdminUsername = "first-admin"
+		firstAdminPassword = "correct horse battery staple"
+	)
+
 	platform := openUserTestDatabase(t, ctx)
-	if err := SeedAdmin(ctx, platform, "first-admin", "correct horse battery staple"); err != nil {
+	if err := SeedAdmin(ctx, platform, firstAdminUsername, firstAdminPassword); err != nil {
 		t.Fatalf("seed first administrator: %v", err)
 	}
 
@@ -129,38 +134,39 @@ func TestPlatformAdminGuardSerializesConcurrentMutations(t *testing.T) {
 	server := httptest.NewTLSServer(handler.Routes())
 	defer server.Close()
 
-	firstClient := userTestClient(t, server)
-	assertUserStatus(t, userJSONRequest(t, firstClient, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
-		"username": "first-admin", "password": "correct horse battery staple",
+	firstAdminClient := userTestClient(t, server)
+	assertUserStatus(t, userJSONRequest(t, firstAdminClient, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
+		"username": firstAdminUsername, "password": firstAdminPassword,
 	}), http.StatusNoContent)
-	current := userJSONRequest(t, firstClient, http.MethodGet, server.URL+"/api/v1/me", nil)
-	assertUserStatus(t, current, http.StatusOK)
-	var firstBody struct {
+	currentUserResponse := userJSONRequest(t, firstAdminClient, http.MethodGet, server.URL+"/api/v1/me", nil)
+	assertUserStatus(t, currentUserResponse, http.StatusOK)
+	var firstAdmin struct {
 		ID uuid.UUID `json:"id"`
 	}
-	decodeUserJSON(t, current, &firstBody)
+	decodeUserJSON(t, currentUserResponse, &firstAdmin)
 
-	created := userJSONRequest(t, firstClient, http.MethodPost, server.URL+"/api/v1/users", map[string]any{
+	createUserResponse := userJSONRequest(t, firstAdminClient, http.MethodPost, server.URL+"/api/v1/users", map[string]any{
 		"username": "second-admin", "role": "PLATFORM_ADMIN",
 	})
-	assertUserStatus(t, created, http.StatusCreated)
-	var secondBody struct {
+	assertUserStatus(t, createUserResponse, http.StatusCreated)
+	var secondAdmin struct {
 		User struct {
 			ID uuid.UUID `json:"id"`
 		} `json:"user"`
 	}
-	decodeUserJSON(t, created, &secondBody)
-	first, second := firstBody.ID, secondBody.User.ID
+	decodeUserJSON(t, createUserResponse, &secondAdmin)
+	firstAdminID := firstAdmin.ID
+	secondAdminID := secondAdmin.User.ID
 
 	start := make(chan struct{})
 	results := make(chan error, 2)
 	go func() {
 		<-start
-		results <- handler.setUserEnabled(ctx, second, first, false)
+		results <- handler.setUserEnabled(ctx, secondAdminID, firstAdminID, false)
 	}()
 	go func() {
 		<-start
-		results <- handler.setUserRole(ctx, first, second, "READONLY")
+		results <- handler.setUserRole(ctx, firstAdminID, secondAdminID, "READONLY")
 	}()
 	close(start)
 
