@@ -1711,6 +1711,7 @@ export interface components {
             started_at?: string;
             /** Format: date-time */
             expires_at?: string;
+            validity_days_remaining?: number;
             probe_capacity?: number;
             probe_active?: number;
             query_capacity?: number;

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -224,7 +223,7 @@ func run(ctx context.Context) error {
 		}
 		fileServer.ServeHTTP(writer, request)
 	})
-	handler := platformFailureHandler(applicationHandler, health)
+	handler := securityHeadersHandler(platformFailureHandler(applicationHandler, health))
 	server := &http.Server{Addr: env("LISTEN_ADDR", ":8443"), Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		<-ctx.Done()
@@ -232,7 +231,7 @@ func run(ctx context.Context) error {
 		defer cancel()
 		server.Shutdown(shutdown)
 	}()
-	server.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	server.TLSConfig = serverTLSConfig()
 	if err := server.ListenAndServeTLS(certificate, key); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}

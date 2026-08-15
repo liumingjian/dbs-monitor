@@ -114,6 +114,7 @@ type SourceSnapshot struct {
 	Version               *string    `json:"version,omitempty"`
 	StartedAt             *time.Time `json:"started_at,omitempty"`
 	ExpiresAt             *time.Time `json:"expires_at,omitempty"`
+	ValidityDaysRemaining *int       `json:"validity_days_remaining,omitempty"`
 	ProbeCapacity         *int       `json:"probe_capacity,omitempty"`
 	ProbeActive           *int       `json:"probe_active,omitempty"`
 	QueryCapacity         *int       `json:"query_capacity,omitempty"`
@@ -202,15 +203,20 @@ func SchedulerSource(facts SchedulerFacts) SourceSnapshot {
 }
 
 func CertificateSource(now time.Time, expiresAt *time.Time) SourceSnapshot {
-	result := SourceSnapshot{Source: SourceTLSCertificate, Status: StatusUnknown, Code: "CERTIFICATE_UNAVAILABLE"}
+	result := SourceSnapshot{Source: SourceTLSCertificate, Status: StatusDegraded, Code: "CERTIFICATE_UNAVAILABLE"}
 	if expiresAt == nil {
 		return result
 	}
 	expires := expiresAt.UTC()
 	result.ExpiresAt = &expires
+	daysRemaining := int(math.Ceil(expires.Sub(now.UTC()).Hours() / 24))
+	if daysRemaining < 0 {
+		daysRemaining = 0
+	}
+	result.ValidityDaysRemaining = &daysRemaining
 	switch {
 	case !now.UTC().Before(expires):
-		result.Status = StatusFailed
+		result.Status = StatusDegraded
 		result.Code = "CERTIFICATE_EXPIRED"
 	case !expires.After(now.UTC().Add(30 * 24 * time.Hour)):
 		result.Status = StatusDegraded

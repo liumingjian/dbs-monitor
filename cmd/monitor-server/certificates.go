@@ -59,7 +59,7 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	serverTemplate := x509.Certificate{SerialNumber: serverSerial, Subject: pkix.Name{CommonName: publicHost}, NotBefore: now.Add(-time.Minute), NotAfter: now.AddDate(2, 0, 0), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature}
+	serverTemplate := x509.Certificate{SerialNumber: serverSerial, Subject: pkix.Name{CommonName: publicHost}, NotBefore: now.Add(-time.Minute), NotAfter: now.AddDate(1, 0, 0), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature}
 	if ip := net.ParseIP(publicHost); ip != nil {
 		serverTemplate.IPAddresses = []net.IP{ip}
 	} else {
