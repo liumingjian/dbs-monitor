@@ -15,8 +15,12 @@ OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
 SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
 GOOSE := go run github.com/pressly/goose/v3/cmd/goose@v3.24.3
 
+CANDIDATE_SHA := $(shell git rev-parse HEAD)
+CANDIDATE_TAG := $(shell git describe --exact-match HEAD 2>/dev/null)
+BUILD_VERSION := $(if $(CANDIDATE_TAG),$(patsubst v%,%,$(CANDIDATE_TAG)),0.0.0-dev+$(CANDIDATE_SHA))
+BUILD_LDFLAGS := -X main.version=$(BUILD_VERSION) -X main.commitSHA=$(CANDIDATE_SHA)
+
 .PHONY: gen dev-up dev-down build check check-full check-pg-matrix check-snapshot-matrix check-sqlc-vet
-.PHONY: legacy-package-binaries-linux-amd64 legacy-package-binaries-linux-arm64 legacy-package-linux-amd64 legacy-package-linux-arm64
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml
@@ -37,10 +41,11 @@ dev-down:
 
 build:
 	cd web && npm run build
-	go build -tags embed_web -o dbs-monitor-server ./cmd/monitor-server
-	go build -o dbs-monitor-agent ./cmd/monitor-agent
+	go build -ldflags "$(BUILD_LDFLAGS)" -tags embed_web -o dbs-monitor-server ./cmd/monitor-server
+	go build -ldflags "$(BUILD_LDFLAGS)" -o dbs-monitor-agent ./cmd/monitor-agent
 
 check:
+	sh scripts/check-toolchain.sh
 	sh scripts/check-generated.sh
 	go vet ./...
 	go test ./...
@@ -81,25 +86,3 @@ check-pg-matrix:
 check-snapshot-matrix:
 	docker compose --profile matrix up -d --wait
 	SNAPSHOT_MATRIX_PORTS="55433 55434 55435 55436 55437" go test ./internal/evaluator -run TestTriggerSnapshotQueryPGMatrix -count=1
-
-legacy-package-binaries-linux-amd64:
-	cd web && npm ci && npm run build
-	mkdir -p dist/bin/linux-amd64
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embed_web -trimpath -o dist/bin/linux-amd64/dbs-monitor-server ./cmd/monitor-server
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent ./cmd/monitor-agent
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent-linux-amd64 ./cmd/monitor-agent
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-amd64/dbs-monitor-agent-linux-arm64 ./cmd/monitor-agent
-
-legacy-package-binaries-linux-arm64:
-	cd web && npm ci && npm run build
-	mkdir -p dist/bin/linux-arm64
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags embed_web -trimpath -o dist/bin/linux-arm64/dbs-monitor-server ./cmd/monitor-server
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent ./cmd/monitor-agent
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent-linux-amd64 ./cmd/monitor-agent
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o dist/bin/linux-arm64/dbs-monitor-agent-linux-arm64 ./cmd/monitor-agent
-
-legacy-package-linux-amd64:
-	TARGET_ARCH=amd64 sh scripts/package-linux.sh
-
-legacy-package-linux-arm64:
-	TARGET_ARCH=arm64 sh scripts/package-linux.sh

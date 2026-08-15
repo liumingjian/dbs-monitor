@@ -1,6 +1,6 @@
 [Unit]
 Description=DBS Monitor Server
-After=network-online.target dbs-monitor-postgres.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]

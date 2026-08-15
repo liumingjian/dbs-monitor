@@ -2,6 +2,8 @@ module github.com/liumingjian/dbs-monitor
 
 go 1.23.0
 
+toolchain go1.23.12
+
 require (
 	github.com/getkin/kin-openapi v0.132.0
 	github.com/google/uuid v1.6.0

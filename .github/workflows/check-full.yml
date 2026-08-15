@@ -56,12 +56,12 @@ jobs:
       DATABASE_URL: postgres://dbs_monitor:dbs_monitor@localhost:55432/dbs_monitor?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.23.x'
+          go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version-file: .tool-versions
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci

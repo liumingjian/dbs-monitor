@@ -23,13 +23,31 @@ func TestRunCommandRejectsUnsupportedArguments(t *testing.T) {
 		{"unsupported"},
 		{rotateMasterKeyCommand, "unexpected"},
 	} {
-		err := runCommand(context.Background(), arguments)
+		err := runCommand(context.Background(), arguments, io.Discard)
 		if err == nil {
 			t.Fatalf("runCommand(%q) succeeded", arguments)
 		}
-		if got, want := err.Error(), "usage: dbs-monitor-server [rotate-master-key|diagnostic-bundle [output]]"; got != want {
+		if got, want := err.Error(), "usage: dbs-monitor-server [--version|rotate-master-key|diagnostic-bundle [output]]"; got != want {
 			t.Fatalf("runCommand(%q) error = %q, want %q", arguments, got, want)
 		}
+	}
+}
+
+func TestRunCommandReportsCandidateIdentity(t *testing.T) {
+	previousVersion, previousCommitSHA := version, commitSHA
+	version = "0.0.0-dev+0123456789abcdef0123456789abcdef01234567"
+	commitSHA = "0123456789abcdef0123456789abcdef01234567"
+	t.Cleanup(func() {
+		version, commitSHA = previousVersion, previousCommitSHA
+	})
+
+	var output bytes.Buffer
+	if err := runCommand(context.Background(), []string{"--version"}, &output); err != nil {
+		t.Fatalf("runCommand(--version): %v", err)
+	}
+	const want = "dbs-monitor-server 0.0.0-dev+0123456789abcdef0123456789abcdef01234567 (0123456789abcdef0123456789abcdef01234567)\n"
+	if output.String() != want {
+		t.Fatalf("version output = %q, want %q", output.String(), want)
 	}
 }
 

@@ -20,15 +20,6 @@ func requireMakeTarget(t *testing.T, makefileContents, target string) string {
 	return contents
 }
 
-func containsAnySubstring(text string, substrings ...string) bool {
-	for _, substring := range substrings {
-		if strings.Contains(text, substring) {
-			return true
-		}
-	}
-	return false
-}
-
 func readLinuxReleaseDisposition(t *testing.T) string {
 	t.Helper()
 	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
@@ -36,6 +27,92 @@ func readLinuxReleaseDisposition(t *testing.T) string {
 		t.Fatalf("read Linux release disposition: %v", err)
 	}
 	return string(disposition)
+}
+
+func TestBuildInjectsCandidateIdentity(t *testing.T) {
+	makefile, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "Makefile"))
+	if err != nil {
+		t.Fatalf("read Makefile: %v", err)
+	}
+	contents := string(makefile)
+	for _, required := range []string{
+		"CANDIDATE_SHA := $(shell git rev-parse HEAD)",
+		"CANDIDATE_TAG := $(shell git describe --exact-match HEAD 2>/dev/null)",
+		"0.0.0-dev+$(CANDIDATE_SHA)",
+		"-X main.version=$(BUILD_VERSION)",
+		"-X main.commitSHA=$(CANDIDATE_SHA)",
+	} {
+		if !strings.Contains(contents, required) {
+			t.Errorf("build does not inject candidate identity: missing %q", required)
+		}
+	}
+	if got := strings.Count(contents, `-ldflags "$(BUILD_LDFLAGS)"`); got != 2 {
+		t.Errorf("build applies candidate identity flags %d times, want both binaries", got)
+	}
+}
+
+func TestToolchainGuardNamesVersionMismatch(t *testing.T) {
+	root := filepath.Join(internalRoot(t), "..")
+	guard := filepath.Join(root, "scripts", "check-toolchain.sh")
+	if output, err := exec.Command("sh", guard, filepath.Join(root, ".tool-versions"), filepath.Join(root, "go.mod")).CombinedOutput(); err != nil {
+		t.Fatalf("repository toolchain guard failed: %v\n%s", err, output)
+	}
+
+	temporaryRoot := t.TempDir()
+	toolVersions := filepath.Join(temporaryRoot, ".tool-versions")
+	goMod := filepath.Join(temporaryRoot, "go.mod")
+	if err := os.WriteFile(toolVersions, []byte("golang 1.23.1\nnodejs 22.23.2\n"), 0600); err != nil {
+		t.Fatalf("write mismatched .tool-versions: %v", err)
+	}
+	if err := os.WriteFile(goMod, []byte("module example.invalid/test\n\ngo 1.23.0\n\ntoolchain go1.23.0\n"), 0600); err != nil {
+		t.Fatalf("write mismatched go.mod: %v", err)
+	}
+	output, err := exec.Command("sh", guard, toolVersions, goMod).CombinedOutput()
+	if err == nil {
+		t.Fatalf("toolchain guard accepted mismatched versions:\n%s", output)
+	}
+	const want = "toolchain mismatch: golang .tool-versions=1.23.1, go.mod toolchain=1.23.0"
+	if !strings.Contains(string(output), want) {
+		t.Fatalf("toolchain guard output = %q, want %q", output, want)
+	}
+}
+
+func TestWorkflowsReadToolchainVersionsFromRepositoryFiles(t *testing.T) {
+	root := filepath.Join(internalRoot(t), "..")
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
+	if err != nil {
+		t.Fatalf("read Makefile: %v", err)
+	}
+	check := requireMakeTarget(t, string(makefile), "check")
+	if !strings.Contains(check, "sh scripts/check-toolchain.sh") {
+		t.Fatal("make check does not run the toolchain consistency guard")
+	}
+
+	workflows, err := os.ReadDir(filepath.Join(root, ".github", "workflows"))
+	if err != nil {
+		t.Fatalf("read workflows: %v", err)
+	}
+	for _, workflow := range workflows {
+		contents, err := os.ReadFile(filepath.Join(root, ".github", "workflows", workflow.Name()))
+		if err != nil {
+			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
+		}
+		text := string(contents)
+		for _, required := range []string{
+			"uses: actions/setup-go@v6",
+			"go-version-file: go.mod",
+			"node-version-file: .tool-versions",
+		} {
+			if !strings.Contains(text, required) {
+				t.Errorf("workflow %s does not use repository toolchain source %q", workflow.Name(), required)
+			}
+		}
+		for _, forbidden := range []string{"go-version:", "node-version:"} {
+			if strings.Contains(text, forbidden) {
+				t.Errorf("workflow %s hard-codes a toolchain with %q", workflow.Name(), forbidden)
+			}
+		}
+	}
 }
 
 func TestMigrationsContainOnlyUpSections(t *testing.T) {
@@ -85,129 +162,35 @@ func TestClaudeMarkdownPathsExist(t *testing.T) {
 	}
 }
 
-func TestInstalledDatabaseAndCredentialKeyringStaySeparate(t *testing.T) {
-	installer, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "packaging", "bundle", "install.sh"))
-	if err != nil {
-		t.Fatalf("read installer: %v", err)
-	}
-	contents := string(installer)
-	for _, required := range []string{
-		`data_dir=$(realpath -m "$data_dir")`,
-		`data_prefix=${data_dir%/}`,
-		`case "$install_root/etc" in`,
-		`case "$data_dir" in`,
-		`PGDATA=$data_dir`,
-		`CREDENTIALS_DIR=$install_root/etc/credentials`,
-	} {
-		if !strings.Contains(contents, required) {
-			t.Errorf("installer no longer enforces separate database and credential-keyring artifacts: missing %q", required)
-		}
-	}
-}
-
-func TestLegacyUpgradeBacksUpControlPlaneBeforeReplacingFiles(t *testing.T) {
+func TestDeadDeliveryAssetsAreRemoved(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..")
-	upgradePath := filepath.Join(root, "packaging", "bundle", "upgrade.sh")
-	contents, err := os.ReadFile(upgradePath)
-	if err != nil {
-		t.Fatalf("read upgrade script: %v", err)
-	}
-	if output, err := exec.Command("sh", "-n", upgradePath).CombinedOutput(); err != nil {
-		t.Fatalf("upgrade script syntax: %v\n%s", err, output)
-	}
-	script := string(contents)
-	for _, required := range []string{
-		"systemctl stop dbs-monitor-server.service",
-		"--format=custom",
-		"--exclude-table-data=public.metric_sample*",
-		`/pg_restore" --list`,
-		"systemctl stop dbs-monitor-postgres.service",
-		"systemctl start dbs-monitor-postgres.service",
-		"systemctl start dbs-monitor-server.service",
-		"PostgreSQL major-version upgrades require a separate migration",
+	for _, path := range []string{
+		"scripts/package-linux.sh",
+		"packaging/README.md",
+		"packaging/bundle",
+		"packaging/systemd/dbs-monitor-postgres.service",
 	} {
-		if !strings.Contains(script, required) {
-			t.Errorf("upgrade script is missing %q", required)
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(path))); !os.IsNotExist(err) {
+			t.Errorf("dead delivery asset %s still exists", path)
 		}
 	}
-	stopServerIndex := strings.Index(script, "systemctl stop dbs-monitor-server.service")
-	backupIndex := strings.Index(script, "--format=custom")
-	stopPostgresIndex := strings.Index(script, "systemctl stop dbs-monitor-postgres.service")
-	startPostgresIndex := strings.Index(script, "systemctl start dbs-monitor-postgres.service")
-	startServerIndex := strings.Index(script, "systemctl start dbs-monitor-server.service")
-	if stopServerIndex >= backupIndex || backupIndex >= stopPostgresIndex ||
-		stopPostgresIndex >= startPostgresIndex || startPostgresIndex >= startServerIndex {
-		t.Error("upgrade order must be stop server, back up, replace/restart PostgreSQL, then start server")
-	}
 
-	packagerContents, err := os.ReadFile(filepath.Join(root, "scripts", "package-linux.sh"))
-	if err != nil {
-		t.Fatalf("read Linux packager: %v", err)
-	}
-	if !strings.Contains(string(packagerContents), "packaging/bundle/upgrade.sh") {
-		t.Error("legacy Linux archive does not include upgrade.sh")
-	}
-}
-
-func TestV1ReleaseGateExcludesLegacyLinuxPackaging(t *testing.T) {
-	projectRoot := filepath.Join(internalRoot(t), "..")
-	makefile, err := os.ReadFile(filepath.Join(projectRoot, "Makefile"))
+	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
 	if err != nil {
 		t.Fatalf("read Makefile: %v", err)
 	}
-	makefileContents := string(makefile)
-
-	checkFull := requireMakeTarget(t, makefileContents, "check-full")
-	if strings.Contains(checkFull, "GOOS=linux") {
-		t.Error("check-full must remain host-neutral; deferred Linux builds cannot gate the v1 release")
-	}
-	if strings.Contains(checkFull, "legacy-package-") {
-		t.Error("check-full must not invoke deferred Linux packaging targets")
-	}
-	if containsAnySubstring(checkFull, "scripts/rt-c", "RT_C_") {
-		t.Error("check-full must not turn the historical Linux RT-C reproduction into a v1 release gate")
-	}
-
-	for _, target := range []string{
-		"legacy-package-binaries-linux-amd64",
-		"legacy-package-binaries-linux-arm64",
-		"legacy-package-linux-amd64",
-		"legacy-package-linux-arm64",
-	} {
-		targetDeclaration := regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(target) + `:`)
-		if !targetDeclaration.MatchString(makefileContents) {
-			t.Errorf("deferred Linux packaging target must be explicitly marked legacy: missing %q", target)
+	for _, obsolete := range []string{"legacy-package-", "scripts/package-linux.sh"} {
+		if strings.Contains(string(makefile), obsolete) {
+			t.Errorf("Makefile still exposes dead delivery entry point %q", obsolete)
 		}
 	}
-	if regexp.MustCompile(`(?m)^package-(?:binaries-)?linux-(?:amd64|arm64):`).MatchString(makefileContents) {
-		t.Error("unqualified Linux package targets make the deferred release path appear active")
-	}
 
-	workflowsDir := filepath.Join(projectRoot, ".github", "workflows")
-	workflows, err := os.ReadDir(workflowsDir)
+	serverUnit, err := os.ReadFile(filepath.Join(root, "packaging", "systemd", "dbs-monitor-server.service"))
 	if err != nil {
-		t.Fatalf("read workflows: %v", err)
+		t.Fatalf("read server systemd unit: %v", err)
 	}
-	legacyEntryPoints := []string{
-		"legacy-package-",
-		"scripts/package-linux.sh",
-		"packaging/bundle/install.sh",
-		"packaging/bundle/upgrade.sh",
-		"packaging/systemd/",
-		"scripts/rt-c",
-		"RT_C_",
-	}
-	for _, workflow := range workflows {
-		workflowContents, err := os.ReadFile(filepath.Join(workflowsDir, workflow.Name()))
-		if err != nil {
-			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
-		}
-		workflowText := string(workflowContents)
-		for _, legacyEntryPoint := range legacyEntryPoints {
-			if strings.Contains(workflowText, legacyEntryPoint) {
-				t.Errorf("workflow %s must not invoke deferred Linux release entry point %q", workflow.Name(), legacyEntryPoint)
-			}
-		}
+	if strings.Contains(string(serverUnit), "dbs-monitor-postgres.service") {
+		t.Fatal("server systemd unit still depends on removed bundled PostgreSQL unit")
 	}
 }
 
