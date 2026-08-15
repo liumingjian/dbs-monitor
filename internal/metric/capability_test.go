@@ -67,7 +67,7 @@ func TestTaskCapabilityBlockReason(t *testing.T) {
 		{name: "missing role", taskID: TaskStatActivity, states: map[CapabilityID]CapabilityStatus{CapabilityRolePGMonitor: CapabilityMissing}, want: CapabilityBlockPermissionDenied, blocked: true},
 		{name: "missing extension", taskID: TaskQueryStatistics, states: map[CapabilityID]CapabilityStatus{CapabilityExtensionPGStatStatements: CapabilityMissing}, want: CapabilityBlockExtensionMissing, blocked: true},
 		{name: "replication is structurally absent", taskID: TaskReplication, states: map[CapabilityID]CapabilityStatus{CapabilityRolePGMonitor: CapabilityPresent, CapabilityTopologyHasReplication: CapabilityNotApplicable}, want: CapabilityBlockNotApplicableRole, blocked: true},
-		{name: "slot is structurally absent", taskID: TaskReplicationSlot, states: map[CapabilityID]CapabilityStatus{CapabilityRolePGMonitor: CapabilityPresent, CapabilityTopologyHasSlot: CapabilityNotApplicable}, want: CapabilityBlockFeatureDisabled, blocked: true},
+		{name: "slot is structurally absent", taskID: TaskReplicationSlot, states: map[CapabilityID]CapabilityStatus{CapabilityRolePGMonitor: CapabilityPresent, CapabilityTopologyHasSlot: CapabilityNotApplicable}, want: CapabilityBlockNotApplicableRole, blocked: true},
 		{name: "unknown capability", taskID: TaskStatActivity, states: map[CapabilityID]CapabilityStatus{CapabilityRolePGMonitor: CapabilityUnknown}, want: CapabilityBlockCollectionFailed, blocked: true},
 	}
 	for _, tt := range tests {
