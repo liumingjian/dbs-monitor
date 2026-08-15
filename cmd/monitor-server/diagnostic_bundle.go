@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +25,7 @@ const (
 	diagnosticBundleMaxBytes  = int64(64 << 20)
 	diagnosticArchiveFileMode = 0600
 	diagnosticJournalUnit     = "dbs-monitor-server.service"
+	diagnosticRedactedValue   = "[REDACTED]"
 )
 
 type diagnosticManifest struct {
@@ -39,19 +41,60 @@ type deploymentSummary struct {
 	Shape     string     `json:"shape"`
 }
 
+type diagnosticConfigSummary struct {
+	PartitionSpan                string `json:"partition_span"`
+	PartitionMaintenanceInterval string `json:"partition_maintenance_interval"`
+	RepeatIntervalMinimum        string `json:"repeat_interval_minimum"`
+	SnapshotTruncationLimit      int    `json:"snapshot_truncation_limit"`
+	CollectionFreshnessThreshold string `json:"collection_freshness_threshold"`
+	MigrationLockWaitTimeout     string `json:"migration_lock_wait_timeout"`
+	SessionAbsoluteTTL           string `json:"session_absolute_ttl"`
+	SessionIdleTTL               string `json:"session_idle_ttl"`
+	AgentBinaryDir               string `json:"agent_binary_dir"`
+	PlatformDatabaseHost         string `json:"platform_database_host"`
+	PlatformDatabasePort         string `json:"platform_database_port"`
+	PlatformDatabaseName         string `json:"platform_database_name"`
+	PlatformDatabaseUsername     string `json:"platform_database_username"`
+	PlatformDatabasePassword     string `json:"platform_database_password"`
+	PlatformDatabaseSearchPath   string `json:"platform_database_search_path"`
+	PlatformDatabaseSSLMode      string `json:"platform_database_sslmode"`
+}
+
 type diagnosticFile struct {
 	name    string
 	content []byte
 }
 
+type diagnosticBundleOptions struct {
+	InputTruncated bool
+	Config         *serverConfig
+}
+
 func runDiagnosticBundleCommand(ctx context.Context, output string) error {
+	config, _, err := loadServerConfig(env("DBS_MONITOR_CONFIG_FILE", defaultServerConfigPath))
+	if err != nil {
+		return err
+	}
 	journal, inputTruncated, err := readPlatformJournal(ctx, diagnosticBundleMaxBytes)
 	if err != nil {
 		return err
 	}
-	return createDiagnosticBundleWithInputTruncation(
-		output, journal, time.Now().UTC(), "linux-systemd", diagnosticBundleMaxBytes, inputTruncated,
+	return createDiagnosticBundleWithOptions(
+		output, journal, time.Now().UTC(), "linux-systemd", diagnosticBundleMaxBytes,
+		diagnosticBundleOptions{InputTruncated: inputTruncated, Config: &config},
 	)
+}
+
+func platformDatabasePassword(connectionString string) (string, error) {
+	parsed, err := url.Parse(connectionString)
+	if err != nil {
+		return "", fmt.Errorf("parse platform database URL for diagnostic secret scan: %w", err)
+	}
+	if parsed.User == nil {
+		return "", nil
+	}
+	password, _ := parsed.User.Password()
+	return password, nil
 }
 
 func readPlatformJournal(ctx context.Context, maximumBytes int64) ([]byte, bool, error) {
@@ -108,12 +151,22 @@ func readPlatformJournal(ctx context.Context, maximumBytes int64) ([]byte, bool,
 }
 
 func createDiagnosticBundle(output string, journal []byte, generatedAt time.Time, shape string, maximumBytes int64) error {
-	return createDiagnosticBundleWithInputTruncation(output, journal, generatedAt, shape, maximumBytes, false)
+	return createDiagnosticBundleWithOptions(
+		output, journal, generatedAt, shape, maximumBytes, diagnosticBundleOptions{},
+	)
 }
 
-func createDiagnosticBundleWithInputTruncation(output string, journal []byte, generatedAt time.Time, shape string, maximumBytes int64, inputTruncated bool) error {
+func createDiagnosticBundleWithOptions(output string, journal []byte, generatedAt time.Time, shape string, maximumBytes int64, options diagnosticBundleOptions) error {
 	if maximumBytes <= 0 {
 		return errors.New("diagnostic bundle maximum size must be positive")
+	}
+	var configuredSecrets []string
+	if options.Config != nil {
+		platformPassword, err := platformDatabasePassword(options.Config.PlatformDatabaseURL)
+		if err != nil {
+			return err
+		}
+		configuredSecrets = append(configuredSecrets, platformPassword)
 	}
 	if _, err := os.Lstat(output); err == nil {
 		return fmt.Errorf("diagnostic bundle output already exists: %s", output)
@@ -121,19 +174,19 @@ func createDiagnosticBundleWithInputTruncation(output string, journal []byte, ge
 		return fmt.Errorf("inspect diagnostic bundle output: %w", err)
 	}
 
-	if err := scanDiagnosticContent("journal.log", journal); err != nil {
+	if err := scanDiagnosticContent("journal.log", journal, configuredSecrets...); err != nil {
 		return err
 	}
 	snapshot, err := latestHealthSummary(journal)
 	if err != nil {
 		return err
 	}
-	snapshotFiles, err := diagnosticSnapshotFiles(snapshot, shape)
+	snapshotFiles, err := diagnosticSnapshotFiles(snapshot, shape, options.Config)
 	if err != nil {
 		return err
 	}
 	for _, file := range snapshotFiles {
-		if err := scanDiagnosticContent(file.name, file.content); err != nil {
+		if err := scanDiagnosticContent(file.name, file.content, configuredSecrets...); err != nil {
 			return err
 		}
 	}
@@ -142,7 +195,7 @@ func createDiagnosticBundleWithInputTruncation(output string, journal []byte, ge
 	if len(lines) > 0 && len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
 	}
-	archive, err := renderDiagnosticArchive(snapshotFiles, journal, generatedAt, maximumBytes, inputTruncated)
+	archive, err := renderDiagnosticArchive(snapshotFiles, journal, generatedAt, maximumBytes, options.InputTruncated)
 	if err != nil {
 		return err
 	}
@@ -183,8 +236,8 @@ func latestHealthSummary(journal []byte) (platformhealth.Snapshot, error) {
 	return latest, nil
 }
 
-func diagnosticSnapshotFiles(snapshot platformhealth.Snapshot, shape string) ([]diagnosticFile, error) {
-	files := make([]diagnosticFile, 0, 8)
+func diagnosticSnapshotFiles(snapshot platformhealth.Snapshot, shape string, config *serverConfig) ([]diagnosticFile, error) {
+	files := make([]diagnosticFile, 0, 9)
 	health, err := marshalDiagnosticJSON(snapshot)
 	if err != nil {
 		return nil, err
@@ -210,7 +263,9 @@ func diagnosticSnapshotFiles(snapshot platformhealth.Snapshot, shape string) ([]
 		source, exists := bySource[endpoint.source]
 		if !exists {
 			source = platformhealth.SourceSnapshot{
-				Source: endpoint.source, Status: platformhealth.StatusUnknown, Code: "FACT_UNAVAILABLE",
+				Source: endpoint.source,
+				Status: platformhealth.StatusUnknown,
+				Code:   "FACT_UNAVAILABLE",
 			}
 		}
 		content, err := marshalDiagnosticJSON(source)
@@ -234,15 +289,83 @@ func diagnosticSnapshotFiles(snapshot platformhealth.Snapshot, shape string) ([]
 		return nil, err
 	}
 	files = append(files, diagnosticFile{name: "deployment.json", content: deployment})
+	if config != nil {
+		summary, err := effectiveDiagnosticConfigSummary(*config)
+		if err != nil {
+			return nil, err
+		}
+		content, err := marshalDiagnosticJSON(summary)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, diagnosticFile{name: "config.json", content: content})
+	}
 	return files, nil
 }
 
+func effectiveDiagnosticConfigSummary(config serverConfig) (diagnosticConfigSummary, error) {
+	parsed, err := url.Parse(config.PlatformDatabaseURL)
+	if err != nil {
+		return diagnosticConfigSummary{}, fmt.Errorf("parse platform database URL for diagnostic config summary: %w", err)
+	}
+	username := ""
+	if parsed.User != nil {
+		username = parsed.User.Username()
+	}
+	return diagnosticConfigSummary{
+		PartitionSpan:                config.PartitionSpan.String(),
+		PartitionMaintenanceInterval: config.PartitionMaintenanceInterval.String(),
+		RepeatIntervalMinimum:        config.RepeatIntervalMinimum.String(),
+		SnapshotTruncationLimit:      config.SnapshotTruncationLimit,
+		CollectionFreshnessThreshold: config.CollectionFreshnessThreshold.String(),
+		MigrationLockWaitTimeout:     config.MigrationLockWaitTimeout.String(),
+		SessionAbsoluteTTL:           config.SessionAbsoluteTTL.String(),
+		SessionIdleTTL:               config.SessionIdleTTL.String(),
+		AgentBinaryDir:               config.AgentBinaryDir,
+		PlatformDatabaseHost:         parsed.Hostname(),
+		PlatformDatabasePort:         parsed.Port(),
+		PlatformDatabaseName:         strings.TrimPrefix(parsed.Path, "/"),
+		PlatformDatabaseUsername:     username,
+		PlatformDatabasePassword:     diagnosticRedactedValue,
+		PlatformDatabaseSearchPath:   parsed.Query().Get("search_path"),
+		PlatformDatabaseSSLMode:      parsed.Query().Get("sslmode"),
+	}, nil
+}
+
 func marshalDiagnosticJSON(value any) ([]byte, error) {
-	encoded, err := json.MarshalIndent(value, "", "  ")
+	encoded, err := json.Marshal(value)
 	if err != nil {
 		return nil, fmt.Errorf("encode diagnostic JSON: %w", err)
 	}
+	var normalized any
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	if err := decoder.Decode(&normalized); err != nil {
+		return nil, fmt.Errorf("normalize diagnostic JSON: %w", err)
+	}
+	redactDiagnosticPasswordFields(normalized)
+	encoded, err = json.MarshalIndent(normalized, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode redacted diagnostic JSON: %w", err)
+	}
 	return append(encoded, '\n'), nil
+}
+
+func redactDiagnosticPasswordFields(value any) {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, child := range value {
+			if isDiagnosticPasswordField(key) {
+				value[key] = diagnosticRedactedValue
+				continue
+			}
+			redactDiagnosticPasswordFields(child)
+		}
+	case []any:
+		for _, child := range value {
+			redactDiagnosticPasswordFields(child)
+		}
+	}
 }
 
 func renderDiagnosticArchive(snapshotFiles []diagnosticFile, journal []byte, generatedAt time.Time, maximumBytes int64, journalTruncated bool) ([]byte, error) {
@@ -314,8 +437,17 @@ func largestFittingDiagnosticArchive(snapshotFiles []diagnosticFile, lines [][]b
 	return largestArchive, nil
 }
 
-func scanDiagnosticContent(name string, content []byte) error {
-	lowercaseContent := bytes.ToLower(content)
+func scanDiagnosticContent(name string, content []byte, configuredSecrets ...string) error {
+	for _, secret := range configuredSecrets {
+		if secret != "" && bytes.Contains(content, []byte(secret)) {
+			return fmt.Errorf("diagnostic bundle secret scan rejected %s: configured secret", name)
+		}
+	}
+	contentToScan, err := diagnosticContentWithoutRedactedPasswordFields(name, content)
+	if err != nil {
+		return err
+	}
+	lowercaseContent := bytes.ToLower(contentToScan)
 	for _, forbidden := range [][]byte{
 		[]byte("password"), []byte("ciphertext"), []byte("master_key"), []byte("master key"),
 		[]byte("token"), []byte("authorization"), []byte("dsn"), []byte("request_body"), []byte("raw_sql"),
@@ -328,6 +460,53 @@ func scanDiagnosticContent(name string, content []byte) error {
 		}
 	}
 	return nil
+}
+
+func diagnosticContentWithoutRedactedPasswordFields(name string, content []byte) ([]byte, error) {
+	if !strings.HasSuffix(name, ".json") {
+		return content, nil
+	}
+	var value any
+	if err := json.Unmarshal(content, &value); err != nil {
+		return content, nil
+	}
+	if err := removeRedactedPasswordFields(value); err != nil {
+		return nil, fmt.Errorf("diagnostic bundle secret scan rejected %s: %w", name, err)
+	}
+	filtered, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("normalize %s for diagnostic secret scan: %w", name, err)
+	}
+	return filtered, nil
+}
+
+func removeRedactedPasswordFields(value any) error {
+	switch value := value.(type) {
+	case map[string]any:
+		for key, child := range value {
+			if isDiagnosticPasswordField(key) {
+				if child != diagnosticRedactedValue {
+					return fmt.Errorf("password field %q is not redacted", key)
+				}
+				delete(value, key)
+				continue
+			}
+			if err := removeRedactedPasswordFields(child); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, child := range value {
+			if err := removeRedactedPasswordFields(child); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func isDiagnosticPasswordField(name string) bool {
+	return strings.Contains(strings.ToLower(name), "password")
 }
 
 func publishDiagnosticArchive(output string, archive []byte) error {

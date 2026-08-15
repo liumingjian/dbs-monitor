@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -75,8 +76,13 @@ func TestCreateDiagnosticBundleContainsEndpointSnapshots(t *testing.T) {
 			`],"assembled_at":"2026-08-11T11:59:00Z"}`,
 	}, "\n") + "\n"
 	output := filepath.Join(t.TempDir(), "diagnostics.tar.gz")
+	config := defaultServerConfig()
+	config.PlatformDatabaseURL = "postgres://dbs_monitor:platform-db-password-issue-75@platform-db:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full"
 
-	if err := createDiagnosticBundle(output, []byte(journal), now, "linux-systemd", diagnosticBundleMaxBytes); err != nil {
+	if err := createDiagnosticBundleWithOptions(
+		output, []byte(journal), now, "linux-systemd", diagnosticBundleMaxBytes,
+		diagnosticBundleOptions{Config: &config},
+	); err != nil {
 		t.Fatalf("create diagnostic bundle: %v", err)
 	}
 
@@ -84,7 +90,7 @@ func TestCreateDiagnosticBundleContainsEndpointSnapshots(t *testing.T) {
 	for _, name := range []string{
 		"manifest.json", "journal.log", "diagnostics/health.json", "diagnostics/disk.json",
 		"diagnostics/scheduler.json", "diagnostics/partitions.json", "diagnostics/certificate.json",
-		"diagnostics/keyring.json", "diagnostics/platform.json", "deployment.json",
+		"diagnostics/keyring.json", "diagnostics/platform.json", "deployment.json", "config.json",
 	} {
 		if _, exists := files[name]; !exists {
 			t.Errorf("diagnostic archive is missing %s", name)
@@ -96,6 +102,18 @@ func TestCreateDiagnosticBundleContainsEndpointSnapshots(t *testing.T) {
 	if !bytes.Contains(files["deployment.json"], []byte(`"version": "3.0.0"`)) ||
 		!bytes.Contains(files["deployment.json"], []byte(`"shape": "linux-systemd"`)) {
 		t.Fatalf("deployment summary = %s", files["deployment.json"])
+	}
+	configSummary := files["config.json"]
+	if !bytes.Contains(configSummary, []byte(`"platform_database_password": "[REDACTED]"`)) ||
+		!bytes.Contains(configSummary, []byte(`"partition_span": "24h0m0s"`)) {
+		t.Fatalf("effective config summary = %s", configSummary)
+	}
+	for _, forbidden := range []string{
+		"platform-db-password-issue-75", "platform_database_url", "# DBS Monitor server deployment configuration",
+	} {
+		if bytes.Contains(configSummary, []byte(forbidden)) {
+			t.Errorf("effective config summary contains forbidden raw config content %q: %s", forbidden, configSummary)
+		}
 	}
 }
 
@@ -145,6 +163,127 @@ func TestCreateDiagnosticBundleRejectsSecretsWithoutPublishingArchive(t *testing
 	}
 	if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
 		t.Fatalf("rejected diagnostic bundle was published: %v", statErr)
+	}
+}
+
+func TestCreateDiagnosticBundleRejectsConfiguredPlatformDatabasePassword(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "diagnostics.tar.gz")
+	const platformPassword = "platform-db-password-issue-75"
+	journal := []byte("connection failed for value " + platformPassword + "\n")
+	config := defaultServerConfig()
+	config.PlatformDatabaseURL = "postgres://dbs_monitor:" + platformPassword + "@platform-db:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full"
+
+	err := createDiagnosticBundleWithOptions(
+		output, journal, time.Now(), "linux-systemd", diagnosticBundleMaxBytes,
+		diagnosticBundleOptions{Config: &config},
+	)
+	if err == nil || !strings.Contains(err.Error(), "configured secret") {
+		t.Fatalf("create diagnostic bundle error = %v, want configured platform password rejection", err)
+	}
+	if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
+		t.Fatalf("rejected diagnostic bundle was published: %v", statErr)
+	}
+}
+
+func TestMarshalDiagnosticJSONRedactsPasswordFields(t *testing.T) {
+	content, err := marshalDiagnosticJSON(map[string]any{
+		"platform_database_password": "platform-db-password-issue-75",
+		"nested":                     map[string]any{"password": "another-secret"},
+		"large_counter":              int64(9007199254740993),
+		"safe":                       "visible",
+	})
+	if err != nil {
+		t.Fatalf("marshal diagnostic JSON: %v", err)
+	}
+	if bytes.Contains(content, []byte("platform-db-password-issue-75")) || bytes.Contains(content, []byte("another-secret")) {
+		t.Fatalf("diagnostic JSON contains a password value: %s", content)
+	}
+	if got := bytes.Count(content, []byte(`"[REDACTED]"`)); got != 2 {
+		t.Fatalf("redacted password values = %d, want 2: %s", got, content)
+	}
+	if !bytes.Contains(content, []byte(`"large_counter": 9007199254740993`)) {
+		t.Fatalf("diagnostic JSON rounded an int64 counter: %s", content)
+	}
+	if err := scanDiagnosticContent("diagnostics/test.json", content); err != nil {
+		t.Fatalf("secret scan rejected fixed redactions: %v", err)
+	}
+}
+
+func TestDiagnosticBundleStoreListsAndDeletesOneArchiveWithEvent(t *testing.T) {
+	directory := t.TempDir()
+	oldName := "dbs-monitor-diagnostics-20260815T100000Z.tar.gz"
+	newName := "dbs-monitor-diagnostics-20260815T110000Z.tar.gz"
+	for name, content := range map[string]string{
+		oldName:            "old bundle",
+		newName:            "new bundle",
+		"unmanaged.tar.gz": "not managed by the diagnostic bundle store",
+	} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte(content), diagnosticArchiveFileMode); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	oldTime := time.Date(2026, time.August, 15, 10, 0, 0, 0, time.UTC)
+	newTime := oldTime.Add(time.Hour)
+	if err := os.Chtimes(filepath.Join(directory, oldName), oldTime, oldTime); err != nil {
+		t.Fatalf("set old bundle time: %v", err)
+	}
+	if err := os.Chtimes(filepath.Join(directory, newName), newTime, newTime); err != nil {
+		t.Fatalf("set new bundle time: %v", err)
+	}
+
+	bundles, err := listDiagnosticBundles(directory)
+	if err != nil {
+		t.Fatalf("list diagnostic bundles: %v", err)
+	}
+	if len(bundles) != 2 || bundles[0].Name != oldName || bundles[1].Name != newName {
+		t.Fatalf("listed bundles = %+v, want managed archives oldest first", bundles)
+	}
+
+	var event diagnosticBundleDeletionEvent
+	record := func(candidate diagnosticBundleDeletionEvent) error {
+		event = candidate
+		return nil
+	}
+	deletedAt := newTime.Add(time.Hour)
+	if err := deleteDiagnosticBundle(directory, oldName, deletedAt, record); err != nil {
+		t.Fatalf("delete diagnostic bundle: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, oldName)); !os.IsNotExist(err) {
+		t.Fatalf("deleted bundle still exists: %v", err)
+	}
+	if event.Event != "diagnostic_bundle_deleted" || event.BundleName != oldName ||
+		event.DeletedAt != deletedAt || event.Bytes != int64(len("old bundle")) {
+		t.Fatalf("deletion event = %+v", event)
+	}
+	if _, err := os.Stat(filepath.Join(directory, newName)); err != nil {
+		t.Fatalf("delete removed another bundle: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "unmanaged.tar.gz")); err != nil {
+		t.Fatalf("delete removed unmanaged archive: %v", err)
+	}
+}
+
+func TestDeleteDiagnosticBundleRestoresArchiveWhenEventRecordingFails(t *testing.T) {
+	directory := t.TempDir()
+	name := "dbs-monitor-diagnostics-20260815T120000Z.tar.gz"
+	path := filepath.Join(directory, name)
+	if err := os.WriteFile(path, []byte("bundle"), diagnosticArchiveFileMode); err != nil {
+		t.Fatalf("write diagnostic bundle: %v", err)
+	}
+	recordError := errors.New("platform event unavailable")
+	err := deleteDiagnosticBundle(directory, name, time.Now(), func(diagnosticBundleDeletionEvent) error {
+		return recordError
+	})
+	if !errors.Is(err, recordError) {
+		t.Fatalf("delete diagnostic bundle error = %v, want event error", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("bundle was not restored after event failure: %v", err)
+	}
+	if err := deleteDiagnosticBundle(directory, "../"+name, time.Now(), func(diagnosticBundleDeletionEvent) error {
+		return nil
+	}); err == nil {
+		t.Fatal("delete diagnostic bundle accepted path traversal")
 	}
 }
 

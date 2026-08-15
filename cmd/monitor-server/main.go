@@ -73,7 +73,7 @@ func runCommand(ctx context.Context, arguments []string, output io.Writer) error
 }
 
 func defaultDiagnosticBundleOutput(now time.Time) string {
-	return fmt.Sprintf("dbs-monitor-diagnostics-%s.tar.gz", now.UTC().Format("20060102T150405Z"))
+	return fmt.Sprintf("%s%s%s", diagnosticBundlePrefix, now.UTC().Format("20060102T150405Z"), diagnosticBundleSuffix)
 }
 
 func run(ctx context.Context) error {
