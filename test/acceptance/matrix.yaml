@@ -1272,10 +1272,10 @@ entries:
     slice: "09"
     kind: S1
     baseline: true
-    title: "平台健康成功路径：七事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
+    title: "平台健康成功路径：十事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
     layer: api
     asserts:
-      - "getPlatformHealth 返回总态 OK，七事实源齐全：服务端进程（版本+启动时间）、自带 PG、采集调度器、分区维护、证书、Agent 接入、磁盘水位"
+      - "getPlatformHealth 返回总态 OK，十事实源齐全：SERVER_PROCESS、PLATFORM_DATABASE（外部前置 PG 17）、COLLECTION_SCHEDULER、PARTITION_MAINTENANCE、TLS_CERTIFICATE、AGENT_INGRESS、DISK（server 本机盘）、CREDENTIAL_KEYRING、TLS、PLATFORM_DATABASE_CAPACITY"
       - "快照含组装时间；事实层保留每源级别与细因"
       - "结构化事件流中存在 60 秒汇总，字段形状符合约定"
       - "秘密扫描全绿：无密码、密文、主密钥、Agent token、Authorization 头、DSN、原始 SQL、请求体"
@@ -1360,24 +1360,24 @@ entries:
     slice: "09"
     kind: F5
     baseline: true
-    title: "磁盘紧急拒写：拒写生效可证，且旧分区与 30 天保留承诺前后完全一致"
+    title: "平台库容量紧急拒写：拒写生效可证，且旧分区与 30 天保留承诺前后完全一致"
     layer: db
     asserts:
       - "注入前取 DB 只读基线：分区清单、最旧分区、保留配置"
-      - "调低紧急水位阈值至当前使用率之下（部署期配置项，走与生产相同的判定代码路径）"
-      - "新样本写入被拒；该任务在片①任务状态中可见失败，细因 = 磁盘紧急水位"
+      - "调低平台库容量预算至当前占用之下（部署期配置项，走与生产相同的判定代码路径）"
+      - "新样本写入被拒；该任务在片①任务状态中可见失败，细因 = 平台库容量紧急水位"
       - "完整性水位停摆，缺数以可见的采集失败呈现而非样本静默消失"
-      - "快照总态 FAILED，磁盘源 FAILED"
+      - "快照总态 FAILED，PLATFORM_DATABASE_CAPACITY 源 FAILED"
       - "注入后再取对比：分区清单与最旧分区完全一致，保留配置未变（绝不自动删旧分区、绝不缩短保留期）"
       - "控制面小体量写入（处置留痕、配置）不在拒写范围"
       - "级别回落需低于阈值 2 个百分点（滞回），不因边界抖动翻动快照"
     pages: []
-    operations: [getDiskWatermark, getPlatformHealth, listInstanceCollectionTasks]
+    operations: [getPlatformHealth, listInstanceCollectionTasks]
     crosscut: []
     status: pending
     test_ref: null
-    owner_issue: 118
-    reason: "S1 拍板验收判据原文「磁盘紧急拒写可证且不删旧数据」；本组唯一需要「注入前取基线、注入后取对比」的条目，设为加深基线"
+    owner_issue: 126
+    reason: "32 号 D8 改写触发源但不降低原判据：平台库容量紧急拒写可证且不删旧数据；本组唯一需要「注入前取基线、注入后取对比」的条目，保持加深基线"
   - id: AC-09-F6
     slice: "09"
     kind: F6
