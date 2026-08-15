@@ -97,12 +97,18 @@ func TestAcceptance_REC_3(t *testing.T) {
 		stack := newRecoveryStackWithKey(t, restoredURL, keyDirectory, time.Second, 24*time.Hour)
 		client := stack.waitForApplication(t)
 		instances, err := client.ListInstancesWithResponse(context.Background())
-		if err != nil || instances.StatusCode() != http.StatusOK || instances.JSON200 == nil || len(*instances.JSON200) == 0 {
-			t.Fatalf("restored instances = status %d body %s error %v", instances.StatusCode(), instances.Body, err)
+		if err != nil {
+			t.Fatalf("list restored instances: %v", err)
+		}
+		if instances.StatusCode() != http.StatusOK || instances.JSON200 == nil || len(*instances.JSON200) == 0 {
+			t.Fatalf("restored instances = status %d body %s", instances.StatusCode(), instances.Body)
 		}
 		rules, err := client.ListAlertRulesWithResponse(context.Background())
-		if err != nil || rules.StatusCode() != http.StatusOK || rules.JSON200 == nil || len(*rules.JSON200) == 0 {
-			t.Fatalf("restored rules = status %d body %s error %v", rules.StatusCode(), rules.Body, err)
+		if err != nil {
+			t.Fatalf("list restored rules: %v", err)
+		}
+		if rules.StatusCode() != http.StatusOK || rules.JSON200 == nil || len(*rules.JSON200) == 0 {
+			t.Fatalf("restored rules = status %d body %s", rules.StatusCode(), rules.Body)
 		}
 		waitForRecoveryMetricCount(t, client, instanceID, 2)
 		waitForRecoveryMetricID(t, client, instanceID, "pg.connection.total")
@@ -166,8 +172,11 @@ func TestAcceptance_REC_6(t *testing.T) {
 		composeService(t, "recovery", "up", "-d", "--wait", "acceptance-recovery-platform")
 		client = stack.waitForApplication(t)
 		instances, err := client.ListInstancesWithResponse(context.Background())
-		if err != nil || instances.StatusCode() != http.StatusOK {
-			t.Fatalf("business API after database recovery = status %d error %v", instances.StatusCode(), err)
+		if err != nil {
+			t.Fatalf("list instances after database recovery: %v", err)
+		}
+		if instances.StatusCode() != http.StatusOK {
+			t.Fatalf("business API after database recovery = status %d", instances.StatusCode())
 		}
 	})
 }
@@ -180,7 +189,7 @@ func TestAcceptance_REC_7(t *testing.T) {
 			t.Fatalf("create incompatible migration fixture: %v", err)
 		}
 		connection.Close(context.Background())
-		stack := newRecoveryStackWithoutWait(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
+		stack := newRecoveryStackWithKey(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, stack.process, 30*time.Second)
 		assertRecoveryLogContains(t, stack.process, "migration")
 		assertRecoveryLogContains(t, stack.process, "instance_identity")
@@ -237,12 +246,15 @@ func TestAcceptance_REC_10(t *testing.T) {
 		databaseURL := recoveryDatabase(t, platformDatabaseURL(t))
 		first := newRecoveryStack(t, databaseURL, time.Minute, 24*time.Hour)
 		client := first.waitForApplication(t)
-		second := newRecoveryStackWithoutWait(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
+		second := newRecoveryStackWithKey(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, second.process, 30*time.Second)
 		assertRecoveryLogContains(t, second.process, "another monitor-server instance is already running")
 		instances, err := client.ListInstancesWithResponse(context.Background())
-		if err != nil || instances.StatusCode() != http.StatusOK {
-			t.Fatalf("first server after rejected peer = status %d error %v", instances.StatusCode(), err)
+		if err != nil {
+			t.Fatalf("list instances from first server: %v", err)
+		}
+		if instances.StatusCode() != http.StatusOK {
+			t.Fatalf("first server after rejected peer = status %d", instances.StatusCode())
 		}
 	})
 }
@@ -251,14 +263,14 @@ func TestAcceptance_REC_11(t *testing.T) {
 	runRecoveryEntry(t, "REC-11", func(t *testing.T) {
 		resetRecoveryDatabaseService(t)
 		composeService(t, "platform-pg16", "up", "-d", "--wait", "platform-pg16")
-		wrongVersion := newRecoveryStackWithoutWait(t, pg16DatabaseURL(t), newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
+		wrongVersion := newRecoveryStackWithKey(t, pg16DatabaseURL(t), newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, wrongVersion.process, 30*time.Second)
 		assertRecoveryLogContains(t, wrongVersion.process, "PLATFORM_DATABASE_VERSION_UNSUPPORTED")
 		assertPlatformTablesAbsent(t, pg16DatabaseURL(t))
 		composeService(t, "platform-pg16", "stop", "platform-pg16")
 
 		weakTLSURL := databaseURLWithQuery(t, platformDatabaseURL(t), "sslmode", "require")
-		weakTLS := newRecoveryStackWithoutWait(t, weakTLSURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
+		weakTLS := newRecoveryStackWithKey(t, weakTLSURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, weakTLS.process, 30*time.Second)
 		assertRecoveryLogContains(t, weakTLS.process, "sslmode=verify-full")
 
@@ -268,7 +280,7 @@ func TestAcceptance_REC_11(t *testing.T) {
 			t.Fatalf("create non-platform schema fixture: %v", err)
 		}
 		connection.Close(context.Background())
-		dirty := newRecoveryStackWithoutWait(t, dirtyURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
+		dirty := newRecoveryStackWithKey(t, dirtyURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, dirty.process, 30*time.Second)
 		assertRecoveryLogContains(t, dirty.process, "PLATFORM_DATABASE_SCHEMA_NOT_CLEAN")
 		assertPlatformTablesAbsent(t, dirtyURL)
@@ -280,14 +292,20 @@ func TestAcceptance_REC_12(t *testing.T) {
 		stack := newRecoveryStack(t, recoveryDatabase(t, platformDatabaseURL(t)), time.Minute, 24*time.Hour)
 		client := stack.waitForApplication(t)
 		health, err := client.GetPlatformHealthWithResponse(context.Background())
-		if err != nil || health.JSON200 == nil || string(health.JSON200.Status) != "DEGRADED" {
-			t.Fatalf("shared-instance health = %+v, %v; want DEGRADED", health.JSON200, err)
+		if err != nil {
+			t.Fatalf("read shared-instance health: %v", err)
+		}
+		if health.JSON200 == nil || string(health.JSON200.Status) != "DEGRADED" {
+			t.Fatalf("shared-instance health = %+v; want DEGRADED", health.JSON200)
 		}
 		assertRecoveryLogContains(t, stack.process, "PLATFORM_DATABASE_INSTANCE_SHARED")
 		assertRecoveryLogContains(t, stack.process, "platform_database_prerequisite_warning")
 		instances, err := client.ListInstancesWithResponse(context.Background())
-		if err != nil || instances.StatusCode() != http.StatusOK {
-			t.Fatalf("business API with warning-only preflight = status %d error %v", instances.StatusCode(), err)
+		if err != nil {
+			t.Fatalf("list instances with warning-only preflight: %v", err)
+		}
+		if instances.StatusCode() != http.StatusOK {
+			t.Fatalf("business API with warning-only preflight = status %d", instances.StatusCode())
 		}
 	})
 }
@@ -308,8 +326,11 @@ func TestAcceptance_REC_13(t *testing.T) {
 		assertRecoveryLogContains(t, stack.process, "platform_database_prerequisite_failure")
 		assertProcessRunning(t, stack.process)
 		health, err := client.GetPlatformHealthWithResponse(context.Background())
-		if err != nil || health.JSON200 == nil || string(health.JSON200.Status) != "FAILED" {
-			t.Fatalf("recovery preflight health = %+v, %v; want FAILED", health.JSON200, err)
+		if err != nil {
+			t.Fatalf("read recovery preflight health: %v", err)
+		}
+		if health.JSON200 == nil || string(health.JSON200.Status) != "FAILED" {
+			t.Fatalf("recovery preflight health = %+v; want FAILED", health.JSON200)
 		}
 		composeService(t, "platform-pg16", "stop", "platform-pg16")
 		composeService(t, "recovery", "up", "-d", "--wait", "acceptance-recovery-platform")
@@ -350,11 +371,6 @@ func newRecoveryStack(t *testing.T, databaseURL string, span, interval time.Dura
 }
 
 func newRecoveryStackWithKey(t *testing.T, databaseURL, keyDirectory string, span, interval time.Duration) *recoveryStack {
-	stack := newRecoveryStackWithoutWait(t, databaseURL, keyDirectory, span, interval)
-	return stack
-}
-
-func newRecoveryStackWithoutWait(t *testing.T, databaseURL, keyDirectory string, span, interval time.Duration) *recoveryStack {
 	t.Helper()
 	serverBinary, agentBinary := recoveryBinaries(t)
 	work := t.TempDir()
@@ -394,10 +410,9 @@ func (stack *recoveryStack) waitForHTTP(t *testing.T) *api.ClientWithResponses {
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
-		case err := <-stack.process.done:
-			stack.process.done <- err
+		case <-stack.process.done:
 			contents, _ := os.ReadFile(stack.process.logPath)
-			t.Fatalf("recovery server exited before HTTP readiness: %v\n%s", err, contents)
+			t.Fatalf("recovery server exited before HTTP readiness: %v\n%s", stack.process.exitErr, contents)
 		default:
 		}
 		client, _, err := generatedClient(stack.baseURL, filepath.Join(stack.certDirectory, "ca.crt"))
@@ -456,11 +471,18 @@ func recoveryBinaries(t *testing.T) (string, string) {
 		recoveryBuild.server = filepath.Join(recoveryBuild.directory, "dbs-monitor-server")
 		recoveryBuild.agent = filepath.Join(recoveryBuild.directory, "dbs-monitor-agent")
 		root := repositoryRoot(t)
-		for output, pkg := range map[string]string{recoveryBuild.server: "./cmd/monitor-server", recoveryBuild.agent: "./cmd/monitor-agent"} {
-			command := exec.Command("go", "build", "-ldflags", "-X main.version=1.0.0 -X main.commitSHA="+candidateSHA(), "-o", output, pkg)
+		binaries := []struct {
+			output      string
+			packageName string
+		}{
+			{output: recoveryBuild.server, packageName: "./cmd/monitor-server"},
+			{output: recoveryBuild.agent, packageName: "./cmd/monitor-agent"},
+		}
+		for _, binary := range binaries {
+			command := exec.Command("go", "build", "-ldflags", "-X main.version=1.0.0 -X main.commitSHA="+candidateSHA(), "-o", binary.output, binary.packageName)
 			command.Dir = root
 			if contents, err := command.CombinedOutput(); err != nil {
-				recoveryBuild.err = fmt.Errorf("build %s: %w\n%s", pkg, err, contents)
+				recoveryBuild.err = fmt.Errorf("build %s: %w\n%s", binary.packageName, err, contents)
 				return
 			}
 		}
@@ -512,13 +534,19 @@ func createRecoveryAgent(t *testing.T, client *api.ClientWithResponses, entryID 
 		Name: entryID + " target", Host: "127.0.0.1", Port: envInt(t, "ACCEPTANCE_TARGET_PORT", 55447),
 		Database: "monitored", Username: "monitored", Password: "monitored",
 	})
-	if err != nil || created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
-		t.Fatalf("create %s instance = status %d body %s error %v", entryID, created.StatusCode(), created.Body, err)
+	if err != nil {
+		t.Fatalf("create %s instance: %v", entryID, err)
+	}
+	if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
+		t.Fatalf("create %s instance = status %d body %s", entryID, created.StatusCode(), created.Body)
 	}
 	instanceID := created.JSON201.Instance.Id
 	registered, err := client.RegisterAgentWithResponse(context.Background(), instanceID)
-	if err != nil || registered.StatusCode() != http.StatusOK || registered.JSON200 == nil || registered.JSON200.AgentToken == nil {
-		t.Fatalf("register %s Agent = status %d body %s error %v", entryID, registered.StatusCode(), registered.Body, err)
+	if err != nil {
+		t.Fatalf("register %s Agent: %v", entryID, err)
+	}
+	if registered.StatusCode() != http.StatusOK || registered.JSON200 == nil || registered.JSON200.AgentToken == nil {
+		t.Fatalf("register %s Agent = status %d body %s", entryID, registered.StatusCode(), registered.Body)
 	}
 	return instanceID, *registered.JSON200.AgentToken
 }
@@ -532,8 +560,11 @@ func reportRecoveryMetric(t *testing.T, client *api.ClientWithResponses, instanc
 		request.Header.Set("Authorization", "Bearer "+token)
 		return nil
 	})
-	if err != nil || response.StatusCode() != http.StatusOK {
-		t.Fatalf("report recovery metric = status %d body %s error %v", response.StatusCode(), response.Body, err)
+	if err != nil {
+		t.Fatalf("report recovery metric: %v", err)
+	}
+	if response.StatusCode() != http.StatusOK {
+		t.Fatalf("report recovery metric = status %d body %s", response.StatusCode(), response.Body)
 	}
 }
 
@@ -543,8 +574,11 @@ func recoveryMetricPoints(t *testing.T, client *api.ClientWithResponses, instanc
 	response, err := client.GetMetricSeriesWithResponse(context.Background(), instanceID, &api.GetMetricSeriesParams{
 		Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetricHostCpuUsagePercent}, From: from, To: to, Step: &step,
 	})
-	if err != nil || response.StatusCode() != http.StatusOK || response.JSON200 == nil {
-		t.Fatalf("read recovery metrics = status %d body %s error %v", response.StatusCode(), response.Body, err)
+	if err != nil {
+		t.Fatalf("read recovery metrics: %v", err)
+	}
+	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+		t.Fatalf("read recovery metrics = status %d body %s", response.StatusCode(), response.Body)
 	}
 	var points [][]*float64
 	for _, metric := range response.JSON200.Metrics {
@@ -605,8 +639,11 @@ func waitForRecoveryMetricID(t *testing.T, client *api.ClientWithResponses, inst
 func createTriggeredRecoveryAlert(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID, token string) (uuid.UUID, time.Time) {
 	t.Helper()
 	templates, err := client.ListAlertRuleTemplatesWithResponse(context.Background())
-	if err != nil || templates.JSON200 == nil {
+	if err != nil {
 		t.Fatalf("list alert templates: %v", err)
+	}
+	if templates.JSON200 == nil {
+		t.Fatalf("list alert templates = status %d body %s", templates.StatusCode(), templates.Body)
 	}
 	for _, template := range *templates.JSON200 {
 		if template.MetricId != "host.cpu.usage_percent" {
@@ -622,8 +659,11 @@ func createTriggeredRecoveryAlert(t *testing.T, client *api.ClientWithResponses,
 			Enabled: &enabled, ConsecutiveCount: &consecutive, RecoveryConsecutiveCount: &recoveryCount,
 			Scope: &scope, InstanceIds: &instances, Threshold: &threshold, RecoveryThreshold: &recoveryThreshold,
 		})
-		if err != nil || created.StatusCode() != http.StatusCreated {
-			t.Fatalf("create recovery alert rule = status %d body %s error %v", created.StatusCode(), created.Body, err)
+		if err != nil {
+			t.Fatalf("create recovery alert rule: %v", err)
+		}
+		if created.StatusCode() != http.StatusCreated {
+			t.Fatalf("create recovery alert rule = status %d body %s", created.StatusCode(), created.Body)
 		}
 		reportRecoveryMetric(t, client, instanceID, token, value)
 		alert := waitForRecoveryAlert(t, client, instanceID)
@@ -716,12 +756,15 @@ func assertRecoveryKeyringFailed(t *testing.T, client *api.ClientWithResponses) 
 func platformDatabaseURL(t *testing.T) string {
 	return requiredRecoveryEnv(t, "ACCEPTANCE_PLATFORM_DATABASE_URL")
 }
+
 func restoreDatabaseURL(t *testing.T) string {
 	return requiredRecoveryEnv(t, "ACCEPTANCE_RESTORE_DATABASE_URL")
 }
+
 func pg16DatabaseURL(t *testing.T) string {
 	return requiredRecoveryEnv(t, "ACCEPTANCE_PG16_DATABASE_URL")
 }
+
 func recoveryDatabaseServiceURL(t *testing.T) string {
 	return requiredRecoveryEnv(t, "ACCEPTANCE_RECOVERY_DATABASE_URL")
 }
@@ -839,9 +882,8 @@ func availableAddress(t *testing.T) string {
 func waitForProcessExit(t *testing.T, process *managedProcess, timeout time.Duration) error {
 	t.Helper()
 	select {
-	case err := <-process.done:
-		process.done <- err
-		return err
+	case <-process.done:
+		return process.exitErr
 	case <-time.After(timeout):
 		t.Fatalf("%s did not exit within %s", process.name, timeout)
 		return nil
@@ -851,9 +893,8 @@ func waitForProcessExit(t *testing.T, process *managedProcess, timeout time.Dura
 func assertProcessRunning(t *testing.T, process *managedProcess) {
 	t.Helper()
 	select {
-	case err := <-process.done:
-		process.done <- err
-		t.Fatalf("%s exited during recovery: %v", process.name, err)
+	case <-process.done:
+		t.Fatalf("%s exited during recovery: %v", process.name, process.exitErr)
 	default:
 	}
 }
@@ -926,13 +967,19 @@ func waitForPartitionFailure(t *testing.T, client *api.ClientWithResponses) {
 func assertPlatformUnavailable(t *testing.T, client *api.ClientWithResponses) {
 	t.Helper()
 	health, err := client.GetPlatformHealthWithResponse(context.Background())
-	if err != nil || health.JSON200 == nil || string(health.JSON200.Status) != "FAILED" {
-		t.Fatalf("unavailable database health = %+v, %v; want FAILED", health.JSON200, err)
+	if err != nil {
+		t.Fatalf("read unavailable database health: %v", err)
+	}
+	if health.JSON200 == nil || string(health.JSON200.Status) != "FAILED" {
+		t.Fatalf("unavailable database health = %+v; want FAILED", health.JSON200)
 	}
 	instances, err := client.ListInstancesWithResponse(context.Background())
-	if err != nil || instances.StatusCode() != http.StatusServiceUnavailable ||
+	if err != nil {
+		t.Fatalf("list instances during database outage: %v", err)
+	}
+	if instances.StatusCode() != http.StatusServiceUnavailable ||
 		instances.HTTPResponse.Header.Get("X-DBS-Platform-Fault") != "true" || !strings.Contains(string(instances.Body), "INTERNAL") {
-		t.Fatalf("business API during database outage = status %d body %s error %v", instances.StatusCode(), instances.Body, err)
+		t.Fatalf("business API during database outage = status %d body %s", instances.StatusCode(), instances.Body)
 	}
 }
 

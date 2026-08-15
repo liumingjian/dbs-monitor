@@ -202,7 +202,7 @@ func writeServerConfig(t *testing.T, work, databaseURL, keyDirectory, binaryDire
 type managedProcess struct {
 	name    string
 	command *exec.Cmd
-	done    chan error
+	done    chan struct{}
 	logPath string
 	stop    sync.Once
 	exitErr error
@@ -222,8 +222,11 @@ func startProcess(t *testing.T, name, binary, logPath string, environment []stri
 		logFile.Close()
 		t.Fatalf("start %s: %v", name, err)
 	}
-	process := &managedProcess{name: name, command: command, done: make(chan error, 1), logPath: logPath}
-	go func() { process.done <- command.Wait() }()
+	process := &managedProcess{name: name, command: command, done: make(chan struct{}), logPath: logPath}
+	go func() {
+		process.exitErr = command.Wait()
+		close(process.done)
+	}()
 	t.Cleanup(func() {
 		_ = process.Stop()
 		_ = logFile.Close()
@@ -239,16 +242,16 @@ func startProcess(t *testing.T, name, binary, logPath string, environment []stri
 func (process *managedProcess) Stop() error {
 	process.stop.Do(func() {
 		select {
-		case process.exitErr = <-process.done:
+		case <-process.done:
 			return
 		default:
 		}
 		_ = process.command.Process.Signal(os.Interrupt)
 		select {
-		case process.exitErr = <-process.done:
+		case <-process.done:
 		case <-time.After(5 * time.Second):
 			_ = process.command.Process.Kill()
-			process.exitErr = <-process.done
+			<-process.done
 		}
 	})
 	return process.exitErr
@@ -259,10 +262,9 @@ func waitForAPI(t *testing.T, server *managedProcess, baseURL, caPath string) *a
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
-		case err := <-server.done:
-			server.done <- err
+		case <-server.done:
 			contents, _ := os.ReadFile(server.logPath)
-			t.Fatalf("%s exited before readiness: %v\n%s", server.name, err, contents)
+			t.Fatalf("%s exited before readiness: %v\n%s", server.name, server.exitErr, contents)
 		default:
 		}
 		client, httpClient, err := generatedClient(baseURL, caPath)
