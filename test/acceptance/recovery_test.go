@@ -366,19 +366,41 @@ type recoveryStack struct {
 	work          string
 }
 
+type recoveryStackConfig struct {
+	databaseURL                  string
+	keyDirectory                 string
+	partitionSpan                time.Duration
+	partitionMaintenanceInterval time.Duration
+	alertHistoryRetention        time.Duration
+}
+
 func newRecoveryStack(t *testing.T, databaseURL string, span, interval time.Duration) *recoveryStack {
+	t.Helper()
 	return newRecoveryStackWithKey(t, databaseURL, newRecoveryKeyDirectory(t), span, interval)
 }
 
 func newRecoveryStackWithKey(t *testing.T, databaseURL, keyDirectory string, span, interval time.Duration) *recoveryStack {
-	return newConfiguredRecoveryStack(t, databaseURL, keyDirectory, span, interval, 0)
+	t.Helper()
+	return newRecoveryStackWithConfig(t, recoveryStackConfig{
+		databaseURL:                  databaseURL,
+		keyDirectory:                 keyDirectory,
+		partitionSpan:                span,
+		partitionMaintenanceInterval: interval,
+	})
 }
 
 func newRecoveryStackWithAlertRetention(t *testing.T, databaseURL string, retention time.Duration) *recoveryStack {
-	return newConfiguredRecoveryStack(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour, retention)
+	t.Helper()
+	return newRecoveryStackWithConfig(t, recoveryStackConfig{
+		databaseURL:                  databaseURL,
+		keyDirectory:                 newRecoveryKeyDirectory(t),
+		partitionSpan:                time.Minute,
+		partitionMaintenanceInterval: 24 * time.Hour,
+		alertHistoryRetention:        retention,
+	})
 }
 
-func newConfiguredRecoveryStack(t *testing.T, databaseURL, keyDirectory string, span, interval, alertHistoryRetention time.Duration) *recoveryStack {
+func newRecoveryStackWithConfig(t *testing.T, config recoveryStackConfig) *recoveryStack {
 	t.Helper()
 	serverBinary, agentBinary := recoveryBinaries(t)
 	work := t.TempDir()
@@ -390,10 +412,10 @@ func newConfiguredRecoveryStack(t *testing.T, databaseURL, keyDirectory string, 
 		}
 	}
 	address := availableAddress(t)
-	configPath := writeRecoveryConfig(t, work, databaseURL, keyDirectory, agentDirectory, span, interval, alertHistoryRetention)
+	configPath := writeRecoveryConfig(t, work, agentDirectory, config)
 	stack := &recoveryStack{
 		address: address, baseURL: "https://" + address, configPath: configPath,
-		keyDirectory: keyDirectory, certDirectory: certDirectory,
+		keyDirectory: config.keyDirectory, certDirectory: certDirectory,
 		serverBinary: serverBinary, agentBinary: agentBinary, work: work,
 	}
 	stack.start(t)
@@ -507,20 +529,20 @@ func cleanupRecoveryBinaries() {
 	}
 }
 
-func writeRecoveryConfig(t *testing.T, work, databaseURL, keyDirectory, agentDirectory string, span, interval, alertHistoryRetention time.Duration) string {
+func writeRecoveryConfig(t *testing.T, work, agentDirectory string, config recoveryStackConfig) string {
 	t.Helper()
-	config := map[string]string{
-		"platform_database_url":          databaseURL,
-		"master_key_path":                keyDirectory,
+	values := map[string]string{
+		"platform_database_url":          config.databaseURL,
+		"master_key_path":                config.keyDirectory,
 		"agent_binary_dir":               agentDirectory,
-		"partition_span":                 span.String(),
-		"partition_maintenance_interval": interval.String(),
+		"partition_span":                 config.partitionSpan.String(),
+		"partition_maintenance_interval": config.partitionMaintenanceInterval.String(),
 		"migration_lock_wait_timeout":    "10s",
 	}
-	if alertHistoryRetention > 0 {
-		config["alert_history_retention"] = alertHistoryRetention.String()
+	if config.alertHistoryRetention > 0 {
+		values["alert_history_retention"] = config.alertHistoryRetention.String()
 	}
-	contents, err := yaml.Marshal(config)
+	contents, err := yaml.Marshal(values)
 	if err != nil {
 		t.Fatalf("encode recovery config: %v", err)
 	}

@@ -32,9 +32,7 @@ func TestAcceptance_AC_03_F6(t *testing.T) {
 
 		waitUntil := expiredRecoveredAt.Add(acceptanceAlertHistoryRetention)
 		if delay := time.Until(waitUntil); delay > 0 {
-			timer := time.NewTimer(delay)
-			defer timer.Stop()
-			<-timer.C
+			time.Sleep(delay)
 		}
 
 		stopSession = startRetentionActiveSession(t)
@@ -61,16 +59,7 @@ func TestAcceptance_AC_03_F6(t *testing.T) {
 		stack.start(t)
 		stack.waitForApplication(t)
 
-		deadline := time.Now().Add(30 * time.Second)
-		for time.Now().Before(deadline) {
-			if readAlertHistoryCounts(t, connection, expiredAlert) == (alertHistoryCounts{}) {
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-		if counts := readAlertHistoryCounts(t, connection, expiredAlert); counts != (alertHistoryCounts{}) {
-			t.Fatalf("expired recovered alert history after cleanup = %+v, want all rows deleted", counts)
-		}
+		waitForAlertHistoryDeletion(t, connection, expiredAlert)
 		if counts := readAlertHistoryCounts(t, connection, freshAlert); counts != freshBaseline {
 			t.Fatalf("fresh recovered alert history after cleanup = %+v, want %+v", counts, freshBaseline)
 		}
@@ -196,6 +185,21 @@ func readAlertHistoryCounts(t *testing.T, connection *pgx.Conn, alertID uuid.UUI
 		t.Fatalf("read alert history counts for %s: %v", alertID, err)
 	}
 	return counts
+}
+
+func waitForAlertHistoryDeletion(t *testing.T, connection *pgx.Conn, alertID uuid.UUID) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if readAlertHistoryCounts(t, connection, alertID) == (alertHistoryCounts{}) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	counts := readAlertHistoryCounts(t, connection, alertID)
+	if counts != (alertHistoryCounts{}) {
+		t.Fatalf("expired recovered alert history after cleanup = %+v, want all rows deleted", counts)
+	}
 }
 
 func assertCompleteAlertHistory(t *testing.T, name string, counts alertHistoryCounts) {
