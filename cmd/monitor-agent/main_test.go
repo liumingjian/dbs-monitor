@@ -1,11 +1,47 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRunCommandRejectsUnsupportedArguments(t *testing.T) {
+	for _, arguments := range [][]string{
+		{"unsupported"},
+		{"--version", "unexpected"},
+	} {
+		err := runCommand(context.Background(), arguments, io.Discard)
+		if err == nil {
+			t.Fatalf("runCommand(%q) succeeded", arguments)
+		}
+		if got := err.Error(); got != commandUsage {
+			t.Fatalf("runCommand(%q) error = %q, want %q", arguments, got, commandUsage)
+		}
+	}
+}
+
+func TestRunCommandReportsCandidateIdentity(t *testing.T) {
+	previousVersion, previousCommitSHA := version, commitSHA
+	version = "2.1.0"
+	commitSHA = "fedcba9876543210fedcba9876543210fedcba98"
+	t.Cleanup(func() {
+		version, commitSHA = previousVersion, previousCommitSHA
+	})
+
+	var output bytes.Buffer
+	if err := runCommand(context.Background(), []string{"--version"}, &output); err != nil {
+		t.Fatalf("runCommand(--version): %v", err)
+	}
+	const want = "dbs-monitor-agent 2.1.0 (fedcba9876543210fedcba9876543210fedcba98)\n"
+	if output.String() != want {
+		t.Fatalf("version output = %q, want %q", output.String(), want)
+	}
+}
 
 func TestConfiguredAgentTokenPrefersDedicatedFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "token")

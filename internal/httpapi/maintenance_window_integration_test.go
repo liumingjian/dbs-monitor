@@ -22,7 +22,7 @@ func TestMaintenanceWindowManagementLifecycle(t *testing.T) {
 	platform, keyring := notificationHTTPTestDatabase(t, ctx)
 	defer platform.Close()
 
-	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	currentClock := &maintenanceClock{now: now}
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)

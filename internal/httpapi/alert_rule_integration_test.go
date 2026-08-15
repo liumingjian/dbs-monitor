@@ -60,7 +60,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}
-	currentClock := &fixedClock{now: time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)}
+	currentClock := newCurrentFixedClock()
 
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
@@ -823,6 +823,10 @@ func assertAlertIdentity(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 
 type fixedClock struct {
 	now time.Time
+}
+
+func newCurrentFixedClock() *fixedClock {
+	return &fixedClock{now: time.Now().UTC().Truncate(time.Microsecond)}
 }
 
 func (clock *fixedClock) Now() time.Time { return clock.now }

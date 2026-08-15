@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -39,24 +40,30 @@ const (
 	defaultCredentialDirectory   = "/opt/dbs-monitor/etc/credentials"
 	defaultPostgresDataDirectory = "/opt/dbs-monitor/var/lib/postgresql"
 	rotateMasterKeyCommand       = "rotate-master-key"
-	commandUsage                 = "usage: dbs-monitor-server [rotate-master-key|diagnostic-bundle [output]]"
+	commandUsage                 = "usage: dbs-monitor-server [--version|rotate-master-key|diagnostic-bundle [output]]"
 )
 
-var version = "1.0.0"
+var (
+	version   = "0.0.0-dev+unknown"
+	commitSHA = "unknown"
+)
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	if err := runCommand(ctx, os.Args[1:]); err != nil {
+	if err := runCommand(ctx, os.Args[1:], os.Stdout); err != nil {
 		log.Printf("monitor-server: %v", err)
 		os.Exit(1)
 	}
 }
 
-func runCommand(ctx context.Context, arguments []string) error {
+func runCommand(ctx context.Context, arguments []string, output io.Writer) error {
 	switch {
 	case len(arguments) == 0:
 		return run(ctx)
+	case len(arguments) == 1 && arguments[0] == "--version":
+		_, err := fmt.Fprintf(output, "dbs-monitor-server %s (%s)\n", version, commitSHA)
+		return err
 	case len(arguments) == 1 && arguments[0] == rotateMasterKeyCommand:
 		return runMasterKeyRotationCommand(ctx)
 	case len(arguments) == 1 && arguments[0] == diagnosticBundleCommand:
