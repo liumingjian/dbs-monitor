@@ -164,7 +164,9 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 		}
 		actorID := uuid.UUID(user.ID.Bytes)
 		return platformevent.Record(ctx, tx, platformevent.Event{
-			Kind: platformevent.LoginSucceeded, OccurredAt: now, ActorID: &actorID,
+			Kind:       platformevent.LoginSucceeded,
+			OccurredAt: now,
+			ActorID:    &actorID,
 		})
 	})
 	if errors.Is(err, errInvalidLogin) {
@@ -173,7 +175,9 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 			actorSubject = "<empty username>"
 		}
 		if recordErr := platformevent.Record(ctx, handler.platform, platformevent.Event{
-			Kind: platformevent.LoginFailed, OccurredAt: now, ActorSubject: actorSubject,
+			Kind:         platformevent.LoginFailed,
+			OccurredAt:   now,
+			ActorSubject: actorSubject,
 		}); recordErr != nil {
 			return nil, recordErr
 		}
@@ -487,6 +491,7 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 	}
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
 	actorID := authenticatedUserID(ctx)
+	subjectID := request.Id
 	updatedAt := handler.clock.Now().UTC()
 	var updatedUsername string
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
@@ -519,10 +524,11 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		if err != nil {
 			return err
 		}
-		subjectID := request.Id
 		return platformevent.Record(ctx, tx, platformevent.Event{
-			Kind: platformevent.InstanceCredentialUpdated, OccurredAt: updatedAt,
-			ActorID: &actorID, SubjectID: &subjectID,
+			Kind:       platformevent.InstanceCredentialUpdated,
+			OccurredAt: updatedAt,
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
 		})
 	})
 	if err != nil {
@@ -537,8 +543,9 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteInstanceRequestObject) (api.DeleteInstanceResponseObject, error) {
 	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
 	removedAt := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
-	actorUUID := authenticatedUserID(ctx)
-	actorID := databaseUserID(actorUUID)
+	actorID := authenticatedUserID(ctx)
+	databaseActorID := databaseUserID(actorID)
+	subjectID := request.Id
 	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
 		instanceQueries := instance.New(tx)
 		if _, err := instanceQueries.LockInstanceForRemoval(ctx, instanceID); err != nil {
@@ -547,14 +554,15 @@ func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteIn
 		if err := alerting.New(tx).CloseAlertsForInstanceRemoval(ctx, alerting.CloseAlertsForInstanceRemovalParams{
 			InstanceID: instanceID,
 			UpdatedAt:  removedAt,
-			ActorID:    actorID,
+			ActorID:    databaseActorID,
 		}); err != nil {
 			return err
 		}
-		subjectID := request.Id
 		if err := platformevent.Record(ctx, tx, platformevent.Event{
-			Kind: platformevent.InstanceRemoved, OccurredAt: removedAt.Time,
-			ActorID: &actorUUID, SubjectID: &subjectID,
+			Kind:       platformevent.InstanceRemoved,
+			OccurredAt: removedAt.Time,
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
 		}); err != nil {
 			return err
 		}

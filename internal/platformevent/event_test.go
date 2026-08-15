@@ -10,7 +10,16 @@ import (
 	"testing"
 )
 
-func TestSecurityEventContractIsClosedAndSecretFree(t *testing.T) {
+var forbiddenFieldNames = []string{
+	"password",
+	"old_password",
+	"new_password",
+	"initial_password",
+	"password_hash",
+	"password_ciphertext",
+}
+
+func TestPlatformEventKindsAreClosed(t *testing.T) {
 	wantKinds := []string{
 		"LOGIN_SUCCEEDED",
 		"LOGIN_FAILED",
@@ -22,26 +31,11 @@ func TestSecurityEventContractIsClosedAndSecretFree(t *testing.T) {
 		"INSTANCE_REMOVED",
 		"MASTER_KEY_ROTATED",
 	}
-	gotKinds := append([]string(nil), Kinds...)
+	gotKinds := append([]string(nil), eventKinds...)
 	sort.Strings(gotKinds)
 	sort.Strings(wantKinds)
 	if strings.Join(gotKinds, "\n") != strings.Join(wantKinds, "\n") {
 		t.Fatalf("platform event kinds = %v, want %v", gotKinds, wantKinds)
-	}
-
-	wantForbidden := []string{
-		"initial_password",
-		"new_password",
-		"old_password",
-		"password",
-		"password_ciphertext",
-		"password_hash",
-	}
-	gotForbidden := append([]string(nil), ForbiddenFieldNames...)
-	sort.Strings(gotForbidden)
-	sort.Strings(wantForbidden)
-	if strings.Join(gotForbidden, "\n") != strings.Join(wantForbidden, "\n") {
-		t.Fatalf("platform event forbidden fields = %v, want %v", gotForbidden, wantForbidden)
 	}
 }
 
@@ -75,7 +69,7 @@ func TestMigrationsUsePlatformEventsWithoutAuditLogOrSecretColumns(t *testing.T)
 	if tableMatch == nil {
 		t.Fatal("migrations do not create platform_event")
 	}
-	for _, field := range ForbiddenFieldNames {
+	for _, field := range forbiddenFieldNames {
 		fieldPattern := regexp.MustCompile(`(?mi)^\s*` + regexp.QuoteMeta(field) + `\s+`)
 		if fieldPattern.MatchString(tableMatch[1]) {
 			t.Errorf("platform_event contains forbidden field %q", field)

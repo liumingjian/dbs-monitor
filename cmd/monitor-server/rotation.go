@@ -59,7 +59,8 @@ func runMasterKeyRotationCommand(ctx context.Context) (returnedErr error) {
 		return err
 	}
 	if err := platformevent.Record(ctx, pool, platformevent.Event{
-		Kind: platformevent.MasterKeyRotated, OccurredAt: time.Now().UTC(),
+		Kind:         platformevent.MasterKeyRotated,
+		OccurredAt:   time.Now().UTC(),
 		ActorSubject: fmt.Sprintf("uid:%d", os.Geteuid()),
 	}); err != nil {
 		return fmt.Errorf("record master key rotation actor: %w", err)

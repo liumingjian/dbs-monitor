@@ -17,6 +17,10 @@ import (
 func TestA10PageAndWriteDecisionsAreComplete(t *testing.T) {
 	root := repositoryRoot(t)
 	routeRoot := filepath.Join(root, "web", "src", "routes")
+	doc, err := openapi3.NewLoader().LoadFromFile(filepath.Join(root, "api", "openapi.bundled.yaml"))
+	if err != nil {
+		t.Fatalf("load OpenAPI: %v", err)
+	}
 	registeredPages := map[string]PageAuthorization{}
 	sourcePages := map[string][]string{}
 	for _, page := range PageAuthorizations {
@@ -67,7 +71,7 @@ func TestA10PageAndWriteDecisionsAreComplete(t *testing.T) {
 		if !writeExistsInSources(discoveredWrites, page.Sources, write.Method, write.APIPath) {
 			t.Errorf("A10 write %s does not exist in page sources %v", key, page.Sources)
 		}
-		assertWriteRoleMatchesOpenAPI(t, root, write)
+		assertWriteRoleMatchesOpenAPI(t, doc, write)
 	}
 	for _, write := range discoveredWrites {
 		pages := sourcePages[write.Source]
@@ -134,12 +138,8 @@ func discoverWebSurfaces(t *testing.T, root, routeRoot string) (map[string]strin
 	return pages, writes
 }
 
-func assertWriteRoleMatchesOpenAPI(t *testing.T, root string, write PageWrite) {
+func assertWriteRoleMatchesOpenAPI(t *testing.T, doc *openapi3.T, write PageWrite) {
 	t.Helper()
-	doc, err := openapi3.NewLoader().LoadFromFile(filepath.Join(root, "api", "openapi.bundled.yaml"))
-	if err != nil {
-		t.Fatalf("load OpenAPI: %v", err)
-	}
 	item := doc.Paths.Find(write.APIPath)
 	if item == nil {
 		t.Fatalf("A10 write %s %s has no OpenAPI path", write.Method, write.APIPath)

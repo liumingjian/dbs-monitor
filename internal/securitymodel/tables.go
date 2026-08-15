@@ -31,7 +31,7 @@ var (
 	platformAdmin = RoleDecision{PlatformAdmin: true}
 )
 
-// PageAuthorizations is the page-visibility half of A10. All authenticated pages remain visible.
+// PageAuthorizations is the page-visibility half of A10. Every role can see every registered page.
 var PageAuthorizations = []PageAuthorization{
 	{Path: AuthenticatedShell, Sources: []string{"web/src/routes/root.tsx"}, Visible: allRoles},
 	{Path: "/login", Sources: []string{"web/src/routes/login.tsx"}, Visible: allRoles},

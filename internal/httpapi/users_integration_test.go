@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +22,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
-	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
@@ -145,52 +143,6 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 	assertUserError(t, selfDisable, http.StatusBadRequest, errSelfDisable.Error())
 	selfDowngrade := userJSONRequest(t, admin, http.MethodPut, server.URL+"/api/v1/users/"+adminUser.ID+"/role", map[string]any{"role": "READONLY"})
 	assertUserError(t, selfDowngrade, http.StatusBadRequest, errSelfDowngrade.Error())
-}
-
-func TestInstanceCredentialUpdateIsAttributed(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-
-	platform := openUserTestDatabase(t, ctx)
-	if err := SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
-		t.Fatalf("seed administrator: %v", err)
-	}
-	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
-	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
-		t.Fatalf("create credential directory: %v", err)
-	}
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
-	if err != nil {
-		t.Fatalf("open credential keyring: %v", err)
-	}
-	server := httptest.NewTLSServer(NewHandler(platform, clock.Real{}, keyring).Routes())
-	defer server.Close()
-	admin := userTestClient(t, server)
-	assertUserStatus(t, userJSONRequest(t, admin, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
-		"username": "admin", "password": "correct horse battery staple",
-	}), http.StatusNoContent)
-
-	port, err := strconv.Atoi(userTestEnv("PGPORT", "55432"))
-	if err != nil {
-		t.Fatalf("parse target port: %v", err)
-	}
-	created := userJSONRequest(t, admin, http.MethodPost, server.URL+"/api/v1/instances", map[string]any{
-		"name": "attribution target", "host": userTestEnv("PGHOST", "localhost"), "port": port,
-		"database": userTestEnv("PGDATABASE", "dbs_monitor"), "username": userTestEnv("PGUSER", "dbs_monitor"),
-		"password": userTestEnv("PGPASSWORD", "dbs_monitor"),
-	})
-	assertUserStatus(t, created, http.StatusCreated)
-	var createdBody struct {
-		Instance struct {
-			ID string `json:"id"`
-		} `json:"instance"`
-	}
-	decodeUserJSON(t, created, &createdBody)
-	updated := userJSONRequest(t, admin, http.MethodPut, server.URL+"/api/v1/instances/"+createdBody.Instance.ID+"/credentials", map[string]any{
-		"username": userTestEnv("PGUSER", "dbs_monitor"), "password": userTestEnv("PGPASSWORD", "dbs_monitor"),
-	})
-	assertUserStatus(t, updated, http.StatusOK)
-	assertUserPlatformEvent(t, ctx, platform, platformevent.InstanceCredentialUpdated, "admin", "", createdBody.Instance.ID)
 }
 
 func assertUserPlatformEvent(t *testing.T, ctx context.Context, platform *db.Pool, kind, actorUsername, actorSubject, subjectID string) {

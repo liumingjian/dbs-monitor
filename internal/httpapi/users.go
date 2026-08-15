@@ -57,24 +57,26 @@ func (handler *Handler) CreateUser(ctx context.Context, request api.CreateUserRe
 		return nil, err
 	}
 	actorID := authenticatedUserID(ctx)
-	userID := uuid.New()
-	now := handler.clock.Now().UTC()
-	var row CreateUserRow
+	newUserID := uuid.New()
+	occurredAt := handler.clock.Now().UTC()
+	var createdUser CreateUserRow
 	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
-		var createErr error
-		row, createErr = New(tx).CreateUser(ctx, CreateUserParams{
-			ID:           databaseUserID(userID),
+		row, err := New(tx).CreateUser(ctx, CreateUserParams{
+			ID:           databaseUserID(newUserID),
 			Username:     request.Body.Username,
 			PasswordHash: passwordHash,
 			Role:         string(request.Body.Role),
 			CreatedBy:    databaseUserID(actorID),
 		})
-		if createErr != nil {
-			return createErr
+		if err != nil {
+			return err
 		}
+		createdUser = row
 		return platformevent.Record(ctx, tx, platformevent.Event{
-			Kind: platformevent.UserCreated, OccurredAt: now,
-			ActorID: &actorID, SubjectID: &userID,
+			Kind:       platformevent.UserCreated,
+			OccurredAt: occurredAt,
+			ActorID:    &actorID,
+			SubjectID:  &newUserID,
 		})
 	})
 	if err != nil {
@@ -85,7 +87,7 @@ func (handler *Handler) CreateUser(ctx context.Context, request api.CreateUserRe
 		return nil, err
 	}
 	return api.CreateUser201JSONResponse{
-		User:            toAPIUser(row.ID, row.Username, row.Role, row.Enabled, row.CreatedAt),
+		User:            toAPIUser(createdUser.ID, createdUser.Username, createdUser.Role, createdUser.Enabled, createdUser.CreatedAt),
 		InitialPassword: password,
 	}, nil
 }
@@ -156,8 +158,10 @@ func (handler *Handler) ResetUserPassword(ctx context.Context, request api.Reset
 		actorID := authenticatedUserID(ctx)
 		subjectID := request.Id
 		return platformevent.Record(ctx, tx, platformevent.Event{
-			Kind: platformevent.UserPasswordReset, OccurredAt: handler.clock.Now().UTC(),
-			ActorID: &actorID, SubjectID: &subjectID,
+			Kind:       platformevent.UserPasswordReset,
+			OccurredAt: handler.clock.Now().UTC(),
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
 		})
 	})
 	if errors.Is(err, errUserNotFound) {
@@ -224,7 +228,9 @@ func (handler *Handler) setUserEnabled(ctx context.Context, actorID, targetID uu
 		}
 		now := handler.clock.Now().UTC()
 		if _, err := queries.SetUserEnabled(ctx, SetUserEnabledParams{
-			ID: target.ID, Enabled: newEnabled, EnabledUpdatedBy: databaseUserID(actorID),
+			ID:               target.ID,
+			Enabled:          newEnabled,
+			EnabledUpdatedBy: databaseUserID(actorID),
 			EnabledUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		}); err != nil {
 			return err
@@ -235,8 +241,10 @@ func (handler *Handler) setUserEnabled(ctx context.Context, actorID, targetID uu
 			}
 		}
 		return platformevent.Record(ctx, tx, platformevent.Event{
-			Kind: platformevent.UserStatusChanged, OccurredAt: now,
-			ActorID: &actorID, SubjectID: &targetID,
+			Kind:       platformevent.UserStatusChanged,
+			OccurredAt: now,
+			ActorID:    &actorID,
+			SubjectID:  &targetID,
 		})
 	})
 }
@@ -263,15 +271,19 @@ func (handler *Handler) setUserRole(ctx context.Context, actorID, targetID uuid.
 			return errLastPlatformAdmin
 		}
 		now := handler.clock.Now().UTC()
-		if _, err = queries.SetUserRole(ctx, SetUserRoleParams{
-			ID: target.ID, Role: newRole, RoleUpdatedBy: databaseUserID(actorID),
+		if _, err := queries.SetUserRole(ctx, SetUserRoleParams{
+			ID:            target.ID,
+			Role:          newRole,
+			RoleUpdatedBy: databaseUserID(actorID),
 			RoleUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		}); err != nil {
 			return err
 		}
 		return platformevent.Record(ctx, tx, platformevent.Event{
-			Kind: platformevent.UserRoleChanged, OccurredAt: now,
-			ActorID: &actorID, SubjectID: &targetID,
+			Kind:       platformevent.UserRoleChanged,
+			OccurredAt: now,
+			ActorID:    &actorID,
+			SubjectID:  &targetID,
 		})
 	})
 }

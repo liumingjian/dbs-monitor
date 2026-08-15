@@ -23,7 +23,7 @@ const (
 	MasterKeyRotated          = "MASTER_KEY_ROTATED"
 )
 
-var Kinds = []string{
+var eventKinds = []string{
 	LoginSucceeded,
 	LoginFailed,
 	UserCreated,
@@ -33,15 +33,6 @@ var Kinds = []string{
 	InstanceCredentialUpdated,
 	InstanceRemoved,
 	MasterKeyRotated,
-}
-
-var ForbiddenFieldNames = []string{
-	"password",
-	"old_password",
-	"new_password",
-	"initial_password",
-	"password_hash",
-	"password_ciphertext",
 }
 
 type Event struct {
@@ -56,8 +47,9 @@ func Record(ctx context.Context, database db.DBTX, event Event) error {
 	if !knownKind(event.Kind) {
 		return fmt.Errorf("unknown platform event kind %q", event.Kind)
 	}
-	actorSubject := event.ActorSubject
-	if (event.ActorID == nil) == (strings.TrimSpace(actorSubject) == "") {
+	hasActorID := event.ActorID != nil
+	hasActorSubject := strings.TrimSpace(event.ActorSubject) != ""
+	if hasActorID == hasActorSubject {
 		return errors.New("platform event requires exactly one actor identity")
 	}
 	if event.OccurredAt.IsZero() {
@@ -66,13 +58,13 @@ func Record(ctx context.Context, database db.DBTX, event Event) error {
 	_, err := database.Exec(ctx, `INSERT INTO platform_event
 		(kind, occurred_at, actor_id, actor_subject, subject_id)
 		VALUES ($1, $2, $3, NULLIF($4, ''), $5)`,
-		event.Kind, event.OccurredAt.UTC(), event.ActorID, actorSubject, event.SubjectID,
+		event.Kind, event.OccurredAt.UTC(), event.ActorID, event.ActorSubject, event.SubjectID,
 	)
 	return err
 }
 
 func knownKind(kind string) bool {
-	for _, candidate := range Kinds {
+	for _, candidate := range eventKinds {
 		if kind == candidate {
 			return true
 		}
