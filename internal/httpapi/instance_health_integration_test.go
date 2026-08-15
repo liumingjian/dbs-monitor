@@ -73,7 +73,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 	client := server.Client()
 	client.Jar = jar
 	serverURL, _ := url.Parse(server.URL)
-	jar.SetCookies(serverURL, []*http.Cookie{{Name: "dbs_monitor_session", Value: token, Path: "/"}})
+	jar.SetCookies(serverURL, []*http.Cookie{{Name: "__Host-dbs_monitor_session", Value: token, Path: "/"}})
 
 	targetID := uuid.New()
 	otherID := uuid.New()

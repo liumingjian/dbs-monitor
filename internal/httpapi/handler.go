@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,7 +33,9 @@ import (
 )
 
 const (
-	sessionCookie               = "dbs_monitor_session"
+	sessionCookieName           = "__Host-dbs_monitor_session"
+	defaultSessionAbsoluteTTL   = 12 * time.Hour
+	defaultSessionIdleTTL       = 2 * time.Hour
 	agentBackfillWindow         = 5 * time.Minute
 	agentClockSkew              = 30 * time.Second
 	agentClockSkewErrorCode     = "CLOCK_SKEW"
@@ -43,8 +46,16 @@ const (
 	agentVersionErrorMessage    = "版本过旧，需升级"
 )
 
+var errInvalidLogin = errors.New("invalid login")
+
 type authenticatedAgentKey struct{}
 type authenticatedUserKey struct{}
+type authenticatedSessionHashKey struct{}
+
+type SessionConfig struct {
+	AbsoluteTTL time.Duration
+	IdleTTL     time.Duration
+}
 
 type Handler struct {
 	platform                  *db.Pool
@@ -56,10 +67,17 @@ type Handler struct {
 	agentDistribution         *AgentDistribution
 	health                    *platformhealth.Store
 	notificationSnapshotStore *notify.ChannelSnapshotStore
+	sessionConfig             SessionConfig
 }
 
 func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {
 	return NewHandlerWithVersion(platform, currentClock, keyring, "1.0.0")
+}
+
+func NewHandlerWithSessionConfig(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, sessionConfig SessionConfig) *Handler {
+	handler := NewHandler(platform, currentClock, keyring)
+	handler.sessionConfig = sessionConfig
+	return handler
 }
 
 func NewHandlerWithVersion(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string) *Handler {
@@ -72,7 +90,18 @@ func NewHandlerWithDialer(platform *db.Pool, currentClock clock.Clock, keyring *
 }
 
 func NewHandlerWithPlatformHealth(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store) *Handler {
-	return &Handler{platform: platform, clock: currentClock, keyring: keyring, dialer: dialer, serverVersion: serverVersion, health: health}
+	return &Handler{
+		platform:      platform,
+		clock:         currentClock,
+		keyring:       keyring,
+		dialer:        dialer,
+		serverVersion: serverVersion,
+		health:        health,
+		sessionConfig: SessionConfig{
+			AbsoluteTTL: defaultSessionAbsoluteTTL,
+			IdleTTL:     defaultSessionIdleTTL,
+		},
+	}
 }
 
 func NewHandlerWithAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string, distribution AgentDistribution) *Handler {
@@ -89,6 +118,12 @@ func NewHandlerWithPlatformHealthAndAgentDistribution(platform *db.Pool, current
 	return handler
 }
 
+func NewHandlerWithPlatformHealthAndAgentDistributionAndSessionConfig(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store, distribution AgentDistribution, sessionConfig SessionConfig) *Handler {
+	handler := NewHandlerWithPlatformHealthAndAgentDistribution(platform, currentClock, keyring, dialer, serverVersion, health, distribution)
+	handler.sessionConfig = sessionConfig
+	return handler
+}
+
 func (handler *Handler) Routes() http.Handler {
 	strict := api.NewStrictHandler(handler, []api.StrictMiddlewareFunc{handler.authenticate})
 	mux := http.NewServeMux()
@@ -100,26 +135,60 @@ func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSes
 	if request.Body == nil {
 		return unauthorizedLogin(), nil
 	}
-	user, err := New(handler.platform).GetUserForLogin(ctx, request.Body.Username)
-	if err != nil || bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(request.Body.Password)) != nil {
-		return unauthorizedLogin(), nil
-	}
 	token, tokenHash, err := newToken()
 	if err != nil {
 		return nil, err
 	}
-	expires := handler.clock.Now().UTC().Add(24 * time.Hour)
-	if err := New(handler.platform).CreateSession(ctx, CreateSessionParams{
-		TokenHash: tokenHash, UserID: user.ID,
-		ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true},
-	}); err != nil {
+	now := handler.clock.Now().UTC()
+	expiresAt := now.Add(handler.sessionConfig.AbsoluteTTL)
+	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := New(tx)
+		user, err := queries.GetUserForLogin(ctx, request.Body.Username)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errInvalidLogin
+		}
+		if err != nil {
+			return err
+		}
+		if bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(request.Body.Password)) != nil {
+			return errInvalidLogin
+		}
+		return queries.CreateSession(ctx, CreateSessionParams{
+			TokenHash: tokenHash,
+			UserID:    user.ID,
+			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+			CreatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		})
+	})
+	if errors.Is(err, errInvalidLogin) {
+		return unauthorizedLogin(), nil
+	}
+	if err != nil {
 		return nil, err
 	}
-	cookie := (&http.Cookie{
-		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
-	}).String()
-	return api.CreateSession204Response{Headers: api.CreateSession204ResponseHeaders{SetCookie: cookie}}, nil
+	cookie := newSessionCookie(token, expiresAt)
+	return api.CreateSession204Response{Headers: api.CreateSession204ResponseHeaders{SetCookie: cookie.String()}}, nil
+}
+
+func (handler *Handler) DeleteSession(ctx context.Context, _ api.DeleteSessionRequestObject) (api.DeleteSessionResponseObject, error) {
+	if err := New(handler.platform).DeleteSession(ctx, authenticatedSessionHash(ctx)); err != nil {
+		return nil, err
+	}
+	cookie := newSessionCookie("", time.Unix(1, 0).UTC())
+	cookie.MaxAge = -1
+	return api.DeleteSession204Response{Headers: api.DeleteSession204ResponseHeaders{SetCookie: cookie.String()}}, nil
+}
+
+func newSessionCookie(value string, expiresAt time.Time) *http.Cookie {
+	return &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    value,
+		Path:     "/",
+		Expires:  expiresAt,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
 }
 
 func (handler *Handler) GetPlatformHealth(context.Context, api.GetPlatformHealthRequestObject) (api.GetPlatformHealthResponseObject, error) {
@@ -1108,6 +1177,13 @@ func majorVersion(version string) (int, bool) {
 
 func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
 	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value interface{}) (interface{}, error) {
+		if operationID == "CreateSession" || operationID == "DeleteSession" {
+			mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+			if err != nil || mediaType != "application/json" {
+				writer.WriteHeader(http.StatusUnsupportedMediaType)
+				return nil, nil
+			}
+		}
 		if operationID == "CreateSession" {
 			return next(ctx, writer, request, value)
 		}
@@ -1124,14 +1200,17 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			}
 			return next(context.WithValue(ctx, authenticatedAgentKey{}, report.Body.InstanceId), writer, request, value)
 		}
-		cookie, err := request.Cookie(sessionCookie)
+		cookie, err := request.Cookie(sessionCookieName)
 		if err != nil {
 			writer.WriteHeader(http.StatusUnauthorized)
 			return nil, nil
 		}
 		hash := sha256.Sum256([]byte(cookie.Value))
-		user, err := New(handler.platform).GetSessionUser(ctx, GetSessionUserParams{
-			TokenHash: hash[:], ExpiresAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+		now := handler.clock.Now().UTC()
+		user, err := New(handler.platform).AuthenticateSession(ctx, AuthenticateSessionParams{
+			TokenHash:  hash[:],
+			NowTime:    pgtype.Timestamptz{Time: now, Valid: true},
+			IdleCutoff: pgtype.Timestamptz{Time: now.Add(-handler.sessionConfig.IdleTTL), Valid: true},
 		})
 		if err != nil {
 			writer.WriteHeader(http.StatusUnauthorized)
@@ -1146,7 +1225,9 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		response, err := next(context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes)), writer, request, value)
+		authenticatedContext := context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes))
+		authenticatedContext = context.WithValue(authenticatedContext, authenticatedSessionHashKey{}, hash[:])
+		response, err := next(authenticatedContext, writer, request, value)
 		var credentialFault *instance.CredentialFault
 		if errors.As(err, &credentialFault) {
 			handler.health.Update(handler.clock.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{
@@ -1159,7 +1240,7 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 }
 
 var RequiredRoles = map[string]string{
-	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
+	"CreateSession": "READONLY", "DeleteSession": "READONLY", "ReportAgentMetrics": "AGENT",
 	"GetAgentRegistration": "READONLY", "RegisterAgent": "PLATFORM_ADMIN",
 	"RotateAgentToken": "PLATFORM_ADMIN", "RevokeAgentToken": "PLATFORM_ADMIN", "DisableAgent": "PLATFORM_ADMIN",
 	"GetPlatformHealth":           "PLATFORM_ADMIN",

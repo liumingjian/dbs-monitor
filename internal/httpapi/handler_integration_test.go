@@ -470,7 +470,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	readOnlyClient := *client
 	readOnlyClient.Jar = readOnlyJar
 	serverURL, _ := url.Parse(server.URL)
-	readOnlyJar.SetCookies(serverURL, []*http.Cookie{{Name: "dbs_monitor_session", Value: readOnlyToken, Path: "/"}})
+	readOnlyJar.SetCookies(serverURL, []*http.Cookie{{Name: "__Host-dbs_monitor_session", Value: readOnlyToken, Path: "/"}})
 	forbidden := requestJSON(t, &readOnlyClient, http.MethodPut, tasksURL+"/pg.stat_activity", map[string]any{"interval_seconds": 7}, "")
 	if forbidden.StatusCode != http.StatusForbidden {
 		t.Fatalf("read-only interval update status = %d, want 403", forbidden.StatusCode)

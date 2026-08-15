@@ -228,8 +228,13 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	apiHandler := httpapi.NewHandlerWithPlatformHealthAndAgentDistribution(
+	sessionConfig := httpapi.SessionConfig{
+		AbsoluteTTL: config.SessionAbsoluteTTL,
+		IdleTTL:     config.SessionIdleTTL,
+	}
+	apiHandler := httpapi.NewHandlerWithPlatformHealthAndAgentDistributionAndSessionConfig(
 		platform, clock.Real{}, keyring, monitorpg.DirectDialer{}, version, health, distribution,
+		sessionConfig,
 	)
 	apiHandler.SetNotificationSnapshotStore(notificationSnapshotStore)
 	apiRoutes := apiHandler.Routes()

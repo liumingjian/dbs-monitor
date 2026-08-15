@@ -18,11 +18,12 @@ import (
 )
 
 var (
-	errLastPlatformAdmin = errors.New("at least one enabled platform administrator is required")
-	errSelfDisable       = errors.New("you cannot disable your own account")
-	errSelfDowngrade     = errors.New("you cannot downgrade your own role")
-	errSelfPasswordReset = errors.New("use change password to update your own password")
-	errUserNotFound      = errors.New("user not found")
+	errLastPlatformAdmin  = errors.New("at least one enabled platform administrator is required")
+	errSelfDisable        = errors.New("you cannot disable your own account")
+	errSelfDowngrade      = errors.New("you cannot downgrade your own role")
+	errSelfPasswordReset  = errors.New("use change password to update your own password")
+	errUserNotFound       = errors.New("user not found")
+	errInvalidOwnPassword = errors.New("old password is incorrect")
 )
 
 func (handler *Handler) GetCurrentUser(ctx context.Context, _ api.GetCurrentUserRequestObject) (api.GetCurrentUserResponseObject, error) {
@@ -148,17 +149,29 @@ func (handler *Handler) ChangeOwnPassword(ctx context.Context, request api.Chang
 	if request.Body == nil || utf8.RuneCountInString(request.Body.NewPassword) < 12 {
 		return api.ChangeOwnPassword400JSONResponse(errorBody(api.VALIDATIONFAILED, "new password must be at least 12 characters")), nil
 	}
-	queries := New(handler.platform)
 	currentUserID := databaseUserID(authenticatedUserID(ctx))
-	oldHash, err := queries.GetUserPassword(ctx, currentUserID)
-	if err != nil || bcrypt.CompareHashAndPassword(oldHash, []byte(request.Body.OldPassword)) != nil {
-		return api.ChangeOwnPassword400JSONResponse(errorBody(api.VALIDATIONFAILED, "old password is incorrect")), nil
-	}
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.Body.NewPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := queries.SetUserPassword(ctx, SetUserPasswordParams{ID: currentUserID, PasswordHash: passwordHash}); err != nil {
+	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := New(tx)
+		oldHash, err := queries.GetUserPassword(ctx, currentUserID)
+		if err != nil || bcrypt.CompareHashAndPassword(oldHash, []byte(request.Body.OldPassword)) != nil {
+			return errInvalidOwnPassword
+		}
+		if _, err := queries.SetUserPassword(ctx, SetUserPasswordParams{ID: currentUserID, PasswordHash: passwordHash}); err != nil {
+			return err
+		}
+		return queries.DeleteOtherUserSessions(ctx, DeleteOtherUserSessionsParams{
+			UserID:    currentUserID,
+			TokenHash: authenticatedSessionHash(ctx),
+		})
+	})
+	if errors.Is(err, errInvalidOwnPassword) {
+		return api.ChangeOwnPassword400JSONResponse(errorBody(api.VALIDATIONFAILED, "old password is incorrect")), nil
+	}
+	if err != nil {
 		return nil, err
 	}
 	return api.ChangeOwnPassword204Response{}, nil
@@ -237,6 +250,10 @@ func validRole(role api.Role) bool {
 
 func authenticatedUserID(ctx context.Context) uuid.UUID {
 	return ctx.Value(authenticatedUserKey{}).(uuid.UUID)
+}
+
+func authenticatedSessionHash(ctx context.Context) []byte {
+	return ctx.Value(authenticatedSessionHashKey{}).([]byte)
 }
 
 func databaseUserID(id uuid.UUID) pgtype.UUID {

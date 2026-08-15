@@ -22,6 +22,36 @@ func (q *Queries) AdminExists(ctx context.Context) (bool, error) {
 	return exists, err
 }
 
+const authenticateSession = `-- name: AuthenticateSession :one
+UPDATE user_session AS session
+SET last_seen_at = $1
+FROM app_user AS u
+WHERE session.user_id = u.id
+  AND session.token_hash = $2
+  AND session.expires_at > $1
+  AND session.last_seen_at > $3
+  AND u.enabled
+RETURNING u.id, u.role
+`
+
+type AuthenticateSessionParams struct {
+	NowTime    pgtype.Timestamptz
+	TokenHash  []byte
+	IdleCutoff pgtype.Timestamptz
+}
+
+type AuthenticateSessionRow struct {
+	ID   pgtype.UUID
+	Role string
+}
+
+func (q *Queries) AuthenticateSession(ctx context.Context, arg AuthenticateSessionParams) (AuthenticateSessionRow, error) {
+	row := q.db.QueryRow(ctx, authenticateSession, arg.NowTime, arg.TokenHash, arg.IdleCutoff)
+	var i AuthenticateSessionRow
+	err := row.Scan(&i.ID, &i.Role)
+	return i, err
+}
+
 const countAlertObservations = `-- name: CountAlertObservations :one
 SELECT count(*)
 FROM alert_instance alert
@@ -154,18 +184,24 @@ func (q *Queries) CreateCollectionPauseEvents(ctx context.Context, arg CreateCol
 }
 
 const createSession = `-- name: CreateSession :exec
-INSERT INTO user_session (token_hash, user_id, expires_at)
-VALUES ($1, $2, $3)
+INSERT INTO user_session (token_hash, user_id, expires_at, created_at, last_seen_at)
+VALUES ($1, $2, $3, $4, $4)
 `
 
 type CreateSessionParams struct {
 	TokenHash []byte
 	UserID    pgtype.UUID
 	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
-	_, err := q.db.Exec(ctx, createSession, arg.TokenHash, arg.UserID, arg.ExpiresAt)
+	_, err := q.db.Exec(ctx, createSession,
+		arg.TokenHash,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
 	return err
 }
 
@@ -206,6 +242,32 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const deleteOtherUserSessions = `-- name: DeleteOtherUserSessions :exec
+DELETE FROM user_session
+WHERE user_id = $1
+  AND token_hash <> $2
+`
+
+type DeleteOtherUserSessionsParams struct {
+	UserID    pgtype.UUID
+	TokenHash []byte
+}
+
+func (q *Queries) DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) error {
+	_, err := q.db.Exec(ctx, deleteOtherUserSessions, arg.UserID, arg.TokenHash)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM user_session
+WHERE token_hash = $1
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
+	return err
 }
 
 const deleteUserSessions = `-- name: DeleteUserSessions :exec
@@ -516,32 +578,11 @@ func (q *Queries) GetRecentSessionSnapshot(ctx context.Context, arg GetRecentSes
 	return i, err
 }
 
-const getSessionUser = `-- name: GetSessionUser :one
-SELECT u.id, u.role
-FROM user_session session
-JOIN app_user u ON u.id = session.user_id
-WHERE session.token_hash = $1 AND session.expires_at > $2 AND u.enabled
-`
-
-type GetSessionUserParams struct {
-	TokenHash []byte
-	ExpiresAt pgtype.Timestamptz
-}
-
-type GetSessionUserRow struct {
-	ID   pgtype.UUID
-	Role string
-}
-
-func (q *Queries) GetSessionUser(ctx context.Context, arg GetSessionUserParams) (GetSessionUserRow, error) {
-	row := q.db.QueryRow(ctx, getSessionUser, arg.TokenHash, arg.ExpiresAt)
-	var i GetSessionUserRow
-	err := row.Scan(&i.ID, &i.Role)
-	return i, err
-}
-
 const getUserForLogin = `-- name: GetUserForLogin :one
-SELECT id, password_hash, role FROM app_user WHERE username = $1 AND enabled
+SELECT id, password_hash, role
+FROM app_user
+WHERE username = $1 AND enabled
+FOR SHARE
 `
 
 type GetUserForLoginRow struct {
@@ -586,7 +627,10 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id pgtype.UUID) (GetUser
 }
 
 const getUserPassword = `-- name: GetUserPassword :one
-SELECT password_hash FROM app_user WHERE id = $1 AND enabled
+SELECT password_hash
+FROM app_user
+WHERE id = $1 AND enabled
+FOR UPDATE
 `
 
 func (q *Queries) GetUserPassword(ctx context.Context, id pgtype.UUID) ([]byte, error) {

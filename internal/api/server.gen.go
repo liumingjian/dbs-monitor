@@ -1361,6 +1361,9 @@ type CreateSessionJSONBody struct {
 	Username string `json:"username"`
 }
 
+// DeleteSessionJSONBody defines parameters for DeleteSession.
+type DeleteSessionJSONBody = map[string]interface{}
+
 // ReportAgentMetricsJSONRequestBody defines body for ReportAgentMetrics for application/json ContentType.
 type ReportAgentMetricsJSONRequestBody = AgentReport
 
@@ -1399,6 +1402,9 @@ type UpdateInstanceCredentialJSONRequestBody = InstanceCredentialInput
 
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody CreateSessionJSONBody
+
+// DeleteSessionJSONRequestBody defines body for DeleteSession for application/json ContentType.
+type DeleteSessionJSONRequestBody = DeleteSessionJSONBody
 
 // CreateMaintenanceWindowJSONRequestBody defines body for CreateMaintenanceWindow for application/json ContentType.
 type CreateMaintenanceWindowJSONRequestBody = MaintenanceWindowInput
@@ -1588,6 +1594,9 @@ type ServerInterface interface {
 
 	// (POST /api/v1/login)
 	CreateSession(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/logout)
+	DeleteSession(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/maintenance-windows)
 	ListMaintenanceWindows(w http.ResponseWriter, r *http.Request)
@@ -2942,6 +2951,20 @@ func (siw *ServerInterfaceWrapper) CreateSession(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// DeleteSession operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListMaintenanceWindows operation middleware
 func (siw *ServerInterfaceWrapper) ListMaintenanceWindows(w http.ResponseWriter, r *http.Request) {
 
@@ -3760,6 +3783,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/query-stats", wrapper.GetQueryStatisticsSnapshot)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/sessions", wrapper.GetSessionSnapshot)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/logout", wrapper.DeleteSession)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/maintenance-windows", wrapper.ListMaintenanceWindows)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/maintenance-windows", wrapper.CreateMaintenanceWindow)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/maintenance-windows/{id}", wrapper.DeleteMaintenanceWindow)
@@ -4892,6 +4916,36 @@ func (response CreateSession401JSONResponse) VisitCreateSessionResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
+type DeleteSessionRequestObject struct {
+	Body *DeleteSessionJSONRequestBody
+}
+
+type DeleteSessionResponseObject interface {
+	VisitDeleteSessionResponse(w http.ResponseWriter) error
+}
+
+type DeleteSession204ResponseHeaders struct {
+	SetCookie string
+}
+
+type DeleteSession204Response struct {
+	Headers DeleteSession204ResponseHeaders
+}
+
+func (response DeleteSession204Response) VisitDeleteSessionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Set-Cookie", fmt.Sprint(response.Headers.SetCookie))
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteSession401Response struct {
+}
+
+func (response DeleteSession401Response) VisitDeleteSessionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(401)
+	return nil
+}
+
 type ListMaintenanceWindowsRequestObject struct {
 }
 
@@ -5935,6 +5989,9 @@ type StrictServerInterface interface {
 
 	// (POST /api/v1/login)
 	CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error)
+
+	// (POST /api/v1/logout)
+	DeleteSession(ctx context.Context, request DeleteSessionRequestObject) (DeleteSessionResponseObject, error)
 
 	// (GET /api/v1/maintenance-windows)
 	ListMaintenanceWindows(ctx context.Context, request ListMaintenanceWindowsRequestObject) (ListMaintenanceWindowsResponseObject, error)
@@ -7324,6 +7381,37 @@ func (sh *strictHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateSessionResponseObject); ok {
 		if err := validResponse.VisitCreateSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteSession operation middleware
+func (sh *strictHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
+	var request DeleteSessionRequestObject
+
+	var body DeleteSessionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteSession(ctx, request.(DeleteSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteSessionResponseObject); ok {
+		if err := validResponse.VisitDeleteSessionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -116,9 +116,21 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 	assertUserStatus(t, userJSONRequest(t, operator, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
 		"username": "operator", "password": resetBody.Password,
 	}), http.StatusNoContent)
+	secondOperatorSession := userTestClient(t, server)
+	assertUserStatus(t, userJSONRequest(t, secondOperatorSession, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
+		"username": "operator", "password": resetBody.Password,
+	}), http.StatusNoContent)
 	disabled := userJSONRequest(t, admin, http.MethodPut, server.URL+"/api/v1/users/"+createdUser.User.ID+"/status", map[string]any{"enabled": false})
 	assertUserStatus(t, disabled, http.StatusOK)
 	assertUserStatus(t, userJSONRequest(t, operator, http.MethodGet, server.URL+"/api/v1/users", nil), http.StatusUnauthorized)
+	assertUserStatus(t, userJSONRequest(t, secondOperatorSession, http.MethodGet, server.URL+"/api/v1/users", nil), http.StatusUnauthorized)
+	var disabledSessionCount int
+	if err := platform.QueryRow(ctx, `SELECT count(*) FROM user_session WHERE user_id = $1`, createdUser.User.ID).Scan(&disabledSessionCount); err != nil {
+		t.Fatalf("count disabled user sessions: %v", err)
+	}
+	if disabledSessionCount != 0 {
+		t.Fatalf("disabled user sessions = %d, want 0", disabledSessionCount)
+	}
 	assertUserStatus(t, userJSONRequest(t, userTestClient(t, server), http.MethodPost, server.URL+"/api/v1/login", map[string]any{
 		"username": "operator", "password": resetBody.Password,
 	}), http.StatusUnauthorized)

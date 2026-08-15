@@ -94,6 +94,56 @@ func TestAcceptanceCertificateFixturesHaveRealValidityWindows(t *testing.T) {
 	}
 }
 
+func TestAcceptanceRoleFixturesAreHarnessConsumable(t *testing.T) {
+	contents, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "test", "acceptance", "fixtures", "roles.yaml"))
+	if err != nil {
+		t.Fatalf("read role fixtures: %v", err)
+	}
+	var fixtures struct {
+		LongLived map[string]struct {
+			Username string `yaml:"username"`
+			Role     string `yaml:"role"`
+		} `yaml:"long_lived"`
+		Disposable struct {
+			UsernamePattern  string `yaml:"username_pattern"`
+			CreationEndpoint string `yaml:"creation_endpoint"`
+		} `yaml:"disposable"`
+	}
+	if err := yaml.Unmarshal(contents, &fixtures); err != nil {
+		t.Fatalf("parse role fixtures: %v", err)
+	}
+
+	wantRoles := map[string]string{
+		"platform_admin": "PLATFORM_ADMIN",
+		"alert_admin":    "ALERT_ADMIN",
+		"viewer":         "READONLY",
+	}
+	seenUsernames := make(map[string]bool, len(wantRoles))
+	for fixtureName, wantRole := range wantRoles {
+		fixture, exists := fixtures.LongLived[fixtureName]
+		if !exists {
+			t.Errorf("long-lived role fixture %q is missing", fixtureName)
+			continue
+		}
+		if fixture.Role != wantRole {
+			t.Errorf("role fixture %q role = %q, want %q", fixtureName, fixture.Role, wantRole)
+		}
+		if fixture.Username == "" || seenUsernames[fixture.Username] {
+			t.Errorf("role fixture %q username = %q, want a unique non-empty username", fixtureName, fixture.Username)
+		}
+		seenUsernames[fixture.Username] = true
+	}
+	if len(fixtures.LongLived) != len(wantRoles) {
+		t.Errorf("long-lived role fixture count = %d, want %d", len(fixtures.LongLived), len(wantRoles))
+	}
+	if !strings.HasPrefix(fixtures.Disposable.UsernamePattern, "{entry_id}-") {
+		t.Errorf("disposable username pattern = %q, want an entry ID prefix", fixtures.Disposable.UsernamePattern)
+	}
+	if fixtures.Disposable.CreationEndpoint != "POST /api/v1/users" {
+		t.Errorf("disposable creation endpoint = %q, want the user-management API", fixtures.Disposable.CreationEndpoint)
+	}
+}
+
 func readCertificateFixture(t *testing.T, directory, name string) *x509.Certificate {
 	t.Helper()
 	certificatePEM, err := os.ReadFile(filepath.Join(directory, name+".crt"))
