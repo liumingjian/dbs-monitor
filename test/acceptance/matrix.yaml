@@ -1301,7 +1301,7 @@ entries:
     operations: [getPlatformHealth, getDiskWatermark, getSchedulerSummary, getPartitionMaintenance, getCertificateStatus, getKeyringStatus, getPlatformVersion]
     crosscut: [INV-3]
     status: covered
-    test_ref: "test/acceptance/diagnostics_test.go::TestAcceptance_AC_09_F1"
+    test_ref: "TestAcceptance_AC_09_F1"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-09-F2

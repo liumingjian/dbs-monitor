@@ -77,20 +77,37 @@ func TestProductionGuardsRejectDrift(t *testing.T) {
 		}
 	})
 
-	t.Run("B12 missing test symbol", func(t *testing.T) {
+	t.Run("B12 matching entry ID", func(t *testing.T) {
 		root := t.TempDir()
 		writeGuardFixture(t, root, "test/acceptance/matrix.yaml", `entries:
   - id: AC-01-S1
     status: covered
-    test_ref: "test/acceptance/example_test.go::TestAcceptance_AC_01_S1"
+    test_ref: "TestAcceptance_AC_01_S1"
 `)
-		writeGuardFixture(t, root, "test/acceptance/example_test.go", "package acceptance\n")
+		writeGuardFixture(t, root, "test/acceptance/example_test.go", "package acceptance\n\nfunc TestAcceptance_AC_01_S1() {}\n")
 		violations, err := findBrokenAcceptanceReferences(root)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(violations) != 1 || !strings.Contains(violations[0], "symbol") {
-			t.Fatalf("violations = %v, want the missing symbol", violations)
+		if len(violations) != 0 {
+			t.Fatalf("violations = %v, want none", violations)
+		}
+	})
+
+	t.Run("B12 renamed test", func(t *testing.T) {
+		root := t.TempDir()
+		writeGuardFixture(t, root, "test/acceptance/matrix.yaml", `entries:
+  - id: AC-01-S1
+    status: covered
+    test_ref: "TestAcceptance_AC_01_S1"
+`)
+		writeGuardFixture(t, root, "test/acceptance/example_test.go", "package acceptance\n\nfunc TestAcceptance_AC_01_F1() {}\n")
+		violations, err := findBrokenAcceptanceReferences(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(violations) != 1 || !strings.Contains(violations[0], "absent from test source") {
+			t.Fatalf("violations = %v, want the renamed test", violations)
 		}
 	})
 
@@ -109,6 +126,24 @@ func TestProductionGuardsRejectDrift(t *testing.T) {
 		}
 		if len(violations) != 1 || !strings.Contains(violations[0], "service postgres uses postgres:16") {
 			t.Fatalf("violations = %v, want only the non-fixture platform service", violations)
+		}
+	})
+
+	t.Run("B14 yaml workflow platform image", func(t *testing.T) {
+		root := t.TempDir()
+		writeGuardFixture(t, root, "compose.yaml", "services:\n  postgres:\n    image: postgres:17\n")
+		writeGuardFixture(t, root, ".github/workflows/check.yaml", `jobs:
+  check:
+    services:
+      postgres:
+        image: postgres:16
+`)
+		violations, err := findPlatformDatabaseImageViolations(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(violations) != 1 || !strings.Contains(violations[0], "workflow check.yaml") {
+			t.Fatalf("violations = %v, want the workflow platform service", violations)
 		}
 	})
 }
@@ -215,6 +250,10 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 	if err := yaml.Unmarshal(contents, &matrix); err != nil {
 		return nil, err
 	}
+	testSource, err := acceptanceTestSource(root)
+	if err != nil {
+		return nil, err
+	}
 
 	var violations []string
 	for _, entry := range matrix.Entries {
@@ -225,31 +264,42 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 			violations = append(violations, entry.ID+" is covered without test_ref")
 			continue
 		}
-		testReference := *entry.TestRef
-		parts := strings.Split(testReference, "::")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-			violations = append(violations, fmt.Sprintf("%s has malformed test_ref %q", entry.ID, testReference))
-			continue
-		}
-		if !strings.Contains(parts[1], strings.ReplaceAll(entry.ID, "-", "_")) {
+		testReference := strings.TrimSpace(*entry.TestRef)
+		underscoredID := strings.ReplaceAll(entry.ID, "-", "_")
+		if !strings.Contains(testReference, entry.ID) && !strings.Contains(testReference, underscoredID) {
 			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
-		}
-		testPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(parts[0])))
-		relativePath, err := filepath.Rel(root, testPath)
-		if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
-			violations = append(violations, fmt.Sprintf("%s test_ref escapes the repository: %q", entry.ID, testReference))
 			continue
 		}
-		testSource, err := os.ReadFile(testPath)
-		if err != nil {
-			violations = append(violations, fmt.Sprintf("%s test_ref path %q cannot be read", entry.ID, parts[0]))
-			continue
-		}
-		if !strings.Contains(string(testSource), parts[1]) {
-			violations = append(violations, fmt.Sprintf("%s test_ref symbol %q is absent from %s", entry.ID, parts[1], parts[0]))
+		if !strings.Contains(testSource, testReference) {
+			violations = append(violations, fmt.Sprintf("%s test_ref %q is absent from test source", entry.ID, testReference))
 		}
 	}
 	return violations, nil
+}
+
+func acceptanceTestSource(root string) (string, error) {
+	var source strings.Builder
+	for _, target := range []string{filepath.Join(root, "test"), filepath.Join(root, "web", "e2e")} {
+		err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || !isGuardSource(path) {
+				return nil
+			}
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			source.Write(contents)
+			source.WriteByte('\n')
+			return nil
+		})
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+	}
+	return source.String(), nil
 }
 
 type imageService struct {
@@ -287,7 +337,8 @@ func findPlatformDatabaseImageViolations(root string) ([]string, error) {
 		return nil, err
 	}
 	for _, workflow := range workflows {
-		if workflow.IsDir() || !strings.HasSuffix(workflow.Name(), ".yml") {
+		extension := filepath.Ext(workflow.Name())
+		if workflow.IsDir() || (extension != ".yml" && extension != ".yaml") {
 			continue
 		}
 		var workflowDocument struct {

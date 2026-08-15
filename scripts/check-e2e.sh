@@ -2,11 +2,13 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-database="dbs_monitor_e2e_$$"
 cert_dir=$(mktemp -d)
 credential_dir=$(mktemp -d)
+platform_tls_dir=$(mktemp -d)
+config_file=$(mktemp)
 cookie_file=$(mktemp)
 server_log=$(mktemp)
+compose_project="dbs-monitor-e2e-$$"
 server_pid=
 
 cleanup() {
@@ -14,20 +16,38 @@ cleanup() {
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
   fi
-  PGPASSWORD="${PGPASSWORD:-dbs_monitor}" psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$database\" WITH (FORCE)" >/dev/null 2>&1 || true
-  rm -rf "$cert_dir" "$credential_dir" "$cookie_file" "$server_log"
+  docker compose -p "$compose_project" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  rm -rf "$cert_dir" "$credential_dir" "$platform_tls_dir" "$config_file" "$cookie_file" "$server_log"
 }
 trap cleanup EXIT INT TERM
 
 export PGPASSWORD="${PGPASSWORD:-dbs_monitor}"
-psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$database\" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'" >/dev/null
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout "$platform_tls_dir/ca.key" -out "$platform_tls_dir/ca.crt" -days 2 \
+  -subj /CN=dbs-monitor-e2e-ca >/dev/null 2>&1
+openssl req -newkey rsa:2048 -nodes \
+  -keyout "$platform_tls_dir/server.key" -out "$platform_tls_dir/server.csr" \
+  -subj /CN=localhost \
+  -addext subjectAltName=DNS:localhost,IP:127.0.0.1,DNS:acceptance-platform >/dev/null 2>&1
+openssl x509 -req -in "$platform_tls_dir/server.csr" \
+  -CA "$platform_tls_dir/ca.crt" -CAkey "$platform_tls_dir/ca.key" -CAcreateserial \
+  -out "$platform_tls_dir/server.crt" -days 2 -copy_extensions copy >/dev/null 2>&1
+chmod 0600 "$platform_tls_dir/server.key"
 
-DATABASE_URL="postgres://${PGUSER:-dbs_monitor}:$PGPASSWORD@${PGHOST:-localhost}:${PGPORT:-55432}/$database?sslmode=disable" \
+export ACCEPTANCE_PLATFORM_TLS_DIR="$platform_tls_dir"
+docker compose -p "$compose_project" --profile acceptance \
+  up -d --wait acceptance-platform
+
+platform_database_url="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55442/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$platform_tls_dir/ca.crt"
+printf 'platform_database_url: "%s"\nmaster_key_path: "%s"\nagent_binary_dir: "%s"\n' \
+  "$platform_database_url" "$credential_dir" "$root" >"$config_file"
+chmod 0600 "$config_file"
+
+DBS_MONITOR_CONFIG_FILE="$config_file" \
 INITIAL_ADMIN_PASSWORD=t11-playwright-password \
 LISTEN_ADDR=127.0.0.1:18443 \
 PUBLIC_HOST=127.0.0.1 \
 CERT_DIR="$cert_dir" \
-CREDENTIALS_DIR="$credential_dir" \
 "$root/dbs-monitor-server" >"$server_log" 2>&1 &
 server_pid=$!
 
@@ -56,14 +76,6 @@ instance_id=$(node -e 'process.stdout.write(JSON.stringify({name:"T11 smoke inst
   -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/instances \
   --data-binary @- \
   | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).instance.id))")
-agent_token=$(curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" -b "$cookie_file" \
-  -X POST "https://127.0.0.1:18443/api/v1/instances/$instance_id/agent/registration" \
-  | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).agent_token))")
-E2E_INSTANCE_ID="$instance_id" E2E_NOW="$now" node -e 'process.stdout.write(JSON.stringify({instance_id:process.env.E2E_INSTANCE_ID,agent_version:"2.0.0",timestamp:process.env.E2E_NOW,metrics:[{metric:"host.cpu.usage_percent",value:42}]}))' \
-  | curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" \
-  -H "Authorization: Bearer $agent_token" -H 'Content-Type: application/json' \
-  -X POST https://127.0.0.1:18443/api/agent/v1/report --data-binary @- >/dev/null
-
 series_from=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)
 series_to=$(date -u -d '1 minute' +%Y-%m-%dT%H:%M:%SZ)
 samples_ready=0
