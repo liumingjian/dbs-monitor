@@ -489,20 +489,39 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 0)", slotSeriesID, slotSampledAt); err != nil {
 		t.Fatalf("insert zero replication slot sample: %v", err)
 	}
-	slotSeries := getResponse(t, client, slotSeriesURL)
+	slotSeriesResponse := getResponse(t, client, slotSeriesURL)
 	var slotSeriesBody api.MetricSeriesResponse
-	if err := json.NewDecoder(slotSeries.Body).Decode(&slotSeriesBody); err != nil {
-		slotSeries.Body.Close()
+	if err := json.NewDecoder(slotSeriesResponse.Body).Decode(&slotSeriesBody); err != nil {
+		slotSeriesResponse.Body.Close()
 		t.Fatalf("decode replication slot metric series: %v", err)
 	}
-	slotSeries.Body.Close()
-	if len(slotSeriesBody.Metrics) != 1 || !slotSeriesBody.Metrics[0].Unavailability.IsNull() || len(slotSeriesBody.Metrics[0].Series) != 1 {
-		t.Fatalf("replication slot metric response = %+v, want one available series", slotSeriesBody.Metrics)
+	slotSeriesResponse.Body.Close()
+	if len(slotSeriesBody.Metrics) != 1 {
+		t.Fatalf("replication slot metrics = %+v, want one metric", slotSeriesBody.Metrics)
 	}
-	caughtUpSeries := slotSeriesBody.Metrics[0].Series[0]
-	if caughtUpSeries.Labels["slot"] != "caught-up" || len(caughtUpSeries.Points) != 1 || len(caughtUpSeries.Points[0]) != 2 ||
-		caughtUpSeries.Points[0][1] == nil || *caughtUpSeries.Points[0][1] != 0 {
-		t.Fatalf("replication slot metric series = %+v, want caught-up slot with zero backlog", caughtUpSeries)
+	slotMetric := slotSeriesBody.Metrics[0]
+	if !slotMetric.Unavailability.IsNull() {
+		t.Fatalf("replication slot unavailability = %+v, want null", slotMetric.Unavailability)
+	}
+	if len(slotMetric.Series) != 1 {
+		t.Fatalf("replication slot series = %+v, want one series", slotMetric.Series)
+	}
+	caughtUpSeries := slotMetric.Series[0]
+	if caughtUpSeries.Labels["slot"] != "caught-up" {
+		t.Fatalf("replication slot labels = %+v, want slot=caught-up", caughtUpSeries.Labels)
+	}
+	if len(caughtUpSeries.Points) != 1 {
+		t.Fatalf("replication slot points = %+v, want one point", caughtUpSeries.Points)
+	}
+	caughtUpPoint := caughtUpSeries.Points[0]
+	if len(caughtUpPoint) != 2 {
+		t.Fatalf("replication slot point = %+v, want timestamp and value", caughtUpPoint)
+	}
+	if caughtUpPoint[1] == nil {
+		t.Fatalf("replication slot point = %+v, want zero backlog", caughtUpPoint)
+	}
+	if *caughtUpPoint[1] != 0 {
+		t.Fatalf("replication slot backlog = %v, want 0", *caughtUpPoint[1])
 	}
 	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
 		SET states = jsonb_set(states, '{topo.has_slot}', '"NOT_APPLICABLE"')
