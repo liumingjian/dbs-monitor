@@ -132,5 +132,6 @@ var AttributableWrites = []AttributableWrite{
 	{ID: "instance_credential_update", Description: "update instance credentials", ActorLocations: []string{"instance.credential_updated_by", "platform_event.actor_id"}},
 	{ID: "instance_remove", Description: "remove instance", ActorLocations: []string{"platform_event.actor_id"}},
 	{ID: "alert_rule_or_disposition_change", Description: "change alert rule, acknowledge, or ignore", ActorLocations: []string{"alert_rule.created_by", "alert_rule.updated_by", "alert_rule.enabled_updated_by", "alert_event.actor_id"}},
+	{ID: "collection_task_interval_change", Description: "change a collection task interval", ActorLocations: []string{"collection_task_config.updated_by"}},
 	{ID: "collection_pause_or_key_rotation", Description: "pause or resume collection, or rotate the master key", ActorLocations: []string{"instance_collection_config.collection_pause_updated_by", "alert_event.actor_id", "platform_event.actor_subject"}},
 }
