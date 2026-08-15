@@ -6,27 +6,27 @@ import (
 )
 
 type securityResponseHeader struct {
-	Name  string
-	Value string
+	name  string
+	value string
 }
 
 var securityResponseHeaders = [...]securityResponseHeader{
 	{
-		Name: "Content-Security-Policy",
+		name: "Content-Security-Policy",
 		// AntD injects runtime style elements; allowing inline styles avoids rewriting embedded HTML while scripts remain strict.
-		Value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+		value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
 	},
-	{Name: "Strict-Transport-Security", Value: "max-age=31536000"},
-	{Name: "X-Content-Type-Options", Value: "nosniff"},
-	{Name: "X-Frame-Options", Value: "DENY"},
-	{Name: "Referrer-Policy", Value: "no-referrer"},
-	{Name: "Permissions-Policy", Value: "camera=(), microphone=(), geolocation=(), interest-cohort=()"},
+	{name: "Strict-Transport-Security", value: "max-age=31536000"},
+	{name: "X-Content-Type-Options", value: "nosniff"},
+	{name: "X-Frame-Options", value: "DENY"},
+	{name: "Referrer-Policy", value: "no-referrer"},
+	{name: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()"},
 }
 
 func securityHeadersHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		for _, header := range securityResponseHeaders {
-			writer.Header().Set(header.Name, header.Value)
+			writer.Header().Set(header.name, header.value)
 		}
 		next.ServeHTTP(writer, request)
 	})

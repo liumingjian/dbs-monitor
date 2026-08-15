@@ -207,18 +207,19 @@ func CertificateSource(now time.Time, expiresAt *time.Time) SourceSnapshot {
 	if expiresAt == nil {
 		return result
 	}
+	now = now.UTC()
 	expires := expiresAt.UTC()
 	result.ExpiresAt = &expires
-	daysRemaining := int(math.Ceil(expires.Sub(now.UTC()).Hours() / 24))
+	daysRemaining := int(math.Ceil(expires.Sub(now).Hours() / 24))
 	if daysRemaining < 0 {
 		daysRemaining = 0
 	}
 	result.ValidityDaysRemaining = &daysRemaining
 	switch {
-	case !now.UTC().Before(expires):
+	case !now.Before(expires):
 		result.Status = StatusDegraded
 		result.Code = "CERTIFICATE_EXPIRED"
-	case !expires.After(now.UTC().Add(30 * 24 * time.Hour)):
+	case !expires.After(now.Add(30 * 24 * time.Hour)):
 		result.Status = StatusDegraded
 		result.Code = "CERTIFICATE_EXPIRING"
 	default:

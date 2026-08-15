@@ -50,7 +50,8 @@ func TestEnsureCertificatesCreatesVerifiableSANAndPrivateKey(t *testing.T) {
 	if err := certificate.VerifyHostname("127.0.0.1"); err != nil {
 		t.Fatalf("verify certificate SAN: %v", err)
 	}
-	wantNotAfter := certificate.NotBefore.Add(time.Minute).AddDate(1, 0, 0)
+	generatedAt := certificate.NotBefore.Add(time.Minute)
+	wantNotAfter := generatedAt.AddDate(1, 0, 0)
 	if !certificate.NotAfter.Equal(wantNotAfter) {
 		t.Fatalf("server certificate NotAfter = %s, want one year after generation (%s)", certificate.NotAfter, wantNotAfter)
 	}

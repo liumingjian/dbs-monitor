@@ -204,8 +204,11 @@ func TestCertificateSourceReportsRemainingValidityWithoutFailedState(t *testing.
 				}
 				return
 			}
-			if source.ValidityDaysRemaining == nil || *source.ValidityDaysRemaining != *test.wantRemaining {
-				t.Fatalf("validity days remaining = %v, want %d", source.ValidityDaysRemaining, *test.wantRemaining)
+			if source.ValidityDaysRemaining == nil {
+				t.Fatalf("validity days remaining is unavailable, want %d", *test.wantRemaining)
+			}
+			if got := *source.ValidityDaysRemaining; got != *test.wantRemaining {
+				t.Fatalf("validity days remaining = %d, want %d", got, *test.wantRemaining)
 			}
 		})
 	}

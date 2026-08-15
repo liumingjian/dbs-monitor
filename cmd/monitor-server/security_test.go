@@ -18,7 +18,7 @@ func TestSecurityHeadersMatchB13Golden(t *testing.T) {
 
 	var got strings.Builder
 	for _, header := range securityResponseHeaders {
-		fmt.Fprintf(&got, "%s: %s\n", header.Name, header.Value)
+		fmt.Fprintf(&got, "%s: %s\n", header.name, header.value)
 	}
 	if got.String() != string(want) {
 		t.Fatalf("security headers changed:\n--- got ---\n%s--- want ---\n%s", got.String(), want)
@@ -39,8 +39,8 @@ func TestSecurityHeadersWrapAPIAndStaticHandlers(t *testing.T) {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusNoContent)
 			}
 			for _, header := range securityResponseHeaders {
-				if got := response.Header().Get(header.Name); got != header.Value {
-					t.Errorf("%s = %q, want %q", header.Name, got, header.Value)
+				if got := response.Header().Get(header.name); got != header.value {
+					t.Errorf("%s = %q, want %q", header.name, got, header.value)
 				}
 			}
 		})
@@ -55,25 +55,27 @@ func TestServerTLSConfigRejectsTLS12AndAcceptsTLS13(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	tls12Client := server.Client()
-	tls12Transport := tls12Client.Transport.(*http.Transport).Clone()
-	tls12Transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true, MaxVersion: tls.VersionTLS12}
-	tls12Client.Transport = tls12Transport
-	defer tls12Transport.CloseIdleConnections()
+	baseClient := server.Client()
+	baseTransport, ok := baseClient.Transport.(*http.Transport)
+	if !ok || baseTransport.TLSClientConfig == nil {
+		t.Fatalf("test server transport = %T, want TLS-enabled *http.Transport", baseClient.Transport)
+	}
+	clientForTLSVersion := func(version uint16) *http.Client {
+		transport := baseTransport.Clone()
+		transport.TLSClientConfig.MinVersion = version
+		transport.TLSClientConfig.MaxVersion = version
+		return &http.Client{Transport: transport}
+	}
+
+	tls12Client := clientForTLSVersion(tls.VersionTLS12)
+	defer tls12Client.CloseIdleConnections()
 	if response, err := tls12Client.Get(server.URL); err == nil {
 		response.Body.Close()
 		t.Fatal("TLS 1.2 handshake succeeded, want rejection")
 	}
 
-	tls13Client := server.Client()
-	tls13Transport := tls13Client.Transport.(*http.Transport).Clone()
-	tls13Transport.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: true,
-		MinVersion:         tls.VersionTLS13,
-		MaxVersion:         tls.VersionTLS13,
-	}
-	tls13Client.Transport = tls13Transport
-	defer tls13Transport.CloseIdleConnections()
+	tls13Client := clientForTLSVersion(tls.VersionTLS13)
+	defer tls13Client.CloseIdleConnections()
 	response, err := tls13Client.Get(server.URL)
 	if err != nil {
 		t.Fatalf("TLS 1.3 request: %v", err)

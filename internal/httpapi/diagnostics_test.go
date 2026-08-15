@@ -38,8 +38,11 @@ func TestFocusedDiagnosticsReadOnlyInMemorySources(t *testing.T) {
 	if !ok {
 		t.Fatalf("get certificate diagnostics returned %T", certificateResponse)
 	}
-	if certificate.ValidityDaysRemaining == nil || *certificate.ValidityDaysRemaining != 15 {
-		t.Fatalf("certificate validity days remaining = %v, want 15", certificate.ValidityDaysRemaining)
+	if certificate.ValidityDaysRemaining == nil {
+		t.Fatal("certificate validity days remaining is unavailable, want 15")
+	}
+	if got := *certificate.ValidityDaysRemaining; got != 15 {
+		t.Fatalf("certificate validity days remaining = %d, want 15", got)
 	}
 }
 
