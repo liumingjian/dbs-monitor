@@ -43,7 +43,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 
 	databaseName := fmt.Sprintf("dbs_monitor_http_%d", os.Getpid())
 	admin := openSQL(t, env("PGDATABASE", "dbs_monitor"))
-	defer admin.Close()
+	t.Cleanup(func() { admin.Close() })
 	identifier := pgx.Identifier{databaseName}.Sanitize()
 	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
 	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
@@ -99,13 +99,29 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	login.Body.Close()
 
+	targetUsername := fmt.Sprintf("onboarding_target_%d", os.Getpid())
+	targetPassword := "onboarding-target-secret"
+	targetRoleIdentifier := pgx.Identifier{targetUsername}.Sanitize()
+	if _, err := pool.Exec(ctx, fmt.Sprintf(
+		"CREATE ROLE %s LOGIN PASSWORD '%s'",
+		targetRoleIdentifier,
+		targetPassword,
+	)); err != nil {
+		t.Fatalf("create monitored target role: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := admin.ExecContext(context.Background(), "DROP ROLE IF EXISTS "+targetRoleIdentifier); err != nil {
+			t.Errorf("drop monitored target role: %v", err)
+		}
+	})
+
 	instanceInput := api.InstanceCreateInput{
 		Name:     "target",
 		Host:     env("PGHOST", "localhost"),
 		Port:     envInt("PGPORT", 55432),
 		Database: env("PGDATABASE", "dbs_monitor"),
-		Username: env("PGUSER", "dbs_monitor"),
-		Password: env("PGPASSWORD", "dbs_monitor"),
+		Username: targetUsername,
+		Password: targetPassword,
 	}
 	assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
 		Name:     "unreachable",
@@ -137,11 +153,17 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create instance status = %d, want 201", created.StatusCode)
 	}
+	createResponseBody := readResponseBody(t, created, "created instance")
+	if strings.Contains(strings.ToLower(string(createResponseBody)), "agent_token") {
+		t.Fatalf("create instance response exposes Agent token: %s", createResponseBody)
+	}
+	if bytes.Contains(createResponseBody, []byte(instanceInput.Password)) {
+		t.Fatalf("create instance response exposes submitted password: %s", createResponseBody)
+	}
 	var createBody api.InstanceCreated
-	if err := json.NewDecoder(created.Body).Decode(&createBody); err != nil {
+	if err := json.Unmarshal(createResponseBody, &createBody); err != nil {
 		t.Fatalf("decode created instance: %v", err)
 	}
-	created.Body.Close()
 	if createBody.Instance.Id == uuid.Nil {
 		t.Fatalf("create response missing instance: %+v", createBody)
 	}
@@ -300,11 +322,20 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if rotated.StatusCode != http.StatusOK {
 		t.Fatalf("credential update status = %d, want 200", rotated.StatusCode)
 	}
+	credentialResponseBody := readResponseBody(t, rotated, "credential update")
+	lowerCredentialResponse := strings.ToLower(string(credentialResponseBody))
+	for _, forbidden := range []string{"password", "ciphertext", "key_version", "credential_version", "dsn"} {
+		if strings.Contains(lowerCredentialResponse, forbidden) {
+			t.Fatalf("credential update response exposes forbidden field %q: %s", forbidden, credentialResponseBody)
+		}
+	}
+	if bytes.Contains(credentialResponseBody, []byte(instanceInput.Password)) {
+		t.Fatalf("credential update response exposes submitted password: %s", credentialResponseBody)
+	}
 	var credentialResponse api.InstanceCredentialUpdated
-	if err := json.NewDecoder(rotated.Body).Decode(&credentialResponse); err != nil {
+	if err := json.Unmarshal(credentialResponseBody, &credentialResponse); err != nil {
 		t.Fatalf("decode credential update response: %v", err)
 	}
-	rotated.Body.Close()
 	if credentialResponse.Username != instanceInput.Username {
 		t.Fatalf("credential response username = %q", credentialResponse.Username)
 	}
@@ -1066,6 +1097,16 @@ func getResponse(t *testing.T, client *http.Client, address string) *http.Respon
 		t.Fatalf("get %s: %v", address, err)
 	}
 	return response
+}
+
+func readResponseBody(t *testing.T, response *http.Response, description string) []byte {
+	t.Helper()
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatalf("read %s response: %v", description, err)
+	}
+	return body
 }
 
 func assertUnavailability(t *testing.T, client *http.Client, address, want string) {

@@ -109,45 +109,86 @@ func TestResponseSchemasDoNotExposeSecrets(t *testing.T) {
 				if responseRef == nil || responseRef.Value == nil {
 					continue
 				}
+				allowedTopLevelSecrets := responseSecretAllowlist(method, path, status)
 				for mediaType, media := range responseRef.Value.Content {
-					if media.Schema != nil {
-						allowOneTimeSecret := responseMayExposeOneTimeSecret(method, path, status)
-						assertNoSecretProperties(t, fmt.Sprintf("%s %s response %s %s", method, path, status, mediaType), media.Schema, map[*openapi3.Schema]bool{}, allowOneTimeSecret)
+					if media.Schema == nil {
+						continue
 					}
+					location := fmt.Sprintf("%s %s response %s %s", method, path, status, mediaType)
+					assertNoSecretProperties(t, location, media.Schema, map[*openapi3.Schema]bool{}, allowedTopLevelSecrets)
 				}
 			}
 		}
 	}
 }
 
-func TestOneTimeAgentTokenResponseExceptionIsNarrow(t *testing.T) {
-	for _, path := range []string{
-		"/api/v1/instances/{id}/agent/registration",
-		"/api/v1/instances/{id}/agent/token/rotation",
-	} {
-		if !responseMayExposeOneTimeSecret("POST", path, "200") {
-			t.Errorf("POST %s response 200 is not registered as a one-time secret response", path)
-		}
+func TestResponseSecretAllowlistIsEndpointSpecific(t *testing.T) {
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		status string
+		want   map[string]bool
+	}{
+		{
+			name:   "created user exposes only its initial password",
+			method: "POST",
+			path:   "/api/v1/users",
+			status: "201",
+			want:   map[string]bool{"initial_password": true},
+		},
+		{
+			name:   "password reset exposes only the generated password",
+			method: "POST",
+			path:   "/api/v1/users/{id}/password",
+			status: "200",
+			want:   map[string]bool{"password": true},
+		},
+		{
+			name:   "instance creation exposes no secret",
+			method: "POST",
+			path:   "/api/v1/instances",
+			status: "201",
+		},
+		{
+			name:   "agent registration exposes only its one-time token",
+			method: "POST",
+			path:   "/api/v1/instances/{id}/agent/registration",
+			status: "200",
+			want:   map[string]bool{"agent_token": true},
+		},
+		{
+			name:   "agent token rotation exposes only its one-time token",
+			method: "POST",
+			path:   "/api/v1/instances/{id}/agent/token/rotation",
+			status: "200",
+			want:   map[string]bool{"agent_token": true},
+		},
 	}
-	if responseMayExposeOneTimeSecret("POST", "/api/v1/instances", "201") {
-		t.Fatal("instance creation response must not expose a one-time secret")
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := responseSecretAllowlist(test.method, test.path, test.status); !reflect.DeepEqual(got, test.want) {
+				t.Fatalf("allowlist = %v, want %v", got, test.want)
+			}
+		})
 	}
 }
 
-func responseMayExposeOneTimeSecret(method, path, status string) bool {
+func responseSecretAllowlist(method, path, status string) map[string]bool {
 	switch {
-	case method == "POST" && status == "200" && (path == "/api/v1/instances/{id}/agent/registration" || path == "/api/v1/instances/{id}/agent/token/rotation"):
-		return true
 	case method == "POST" && status == "201" && path == "/api/v1/users":
-		return true
-	case method == "POST" && status == "200" && strings.HasSuffix(path, "/password"):
-		return true
+		return map[string]bool{"initial_password": true}
+	case method == "POST" && status == "200" && path == "/api/v1/users/{id}/password":
+		return map[string]bool{"password": true}
+	case method == "POST" && status == "200" && (path == "/api/v1/instances/{id}/agent/registration" || path == "/api/v1/instances/{id}/agent/token/rotation"):
+		return map[string]bool{"agent_token": true}
 	default:
-		return false
+		return nil
 	}
 }
 
-func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.SchemaRef, visited map[*openapi3.Schema]bool, allowOneTimeSecret bool) {
+func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.SchemaRef, visited map[*openapi3.Schema]bool, allowedTopLevelSecrets map[string]bool) {
 	t.Helper()
 	if ref == nil || ref.Value == nil || visited[ref.Value] {
 		return
@@ -155,7 +196,7 @@ func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.Schem
 	visited[ref.Value] = true
 
 	for name, property := range ref.Value.Properties {
-		if allowOneTimeSecret && (name == "agent_token" || name == "initial_password" || name == "password") {
+		if allowedTopLevelSecrets[name] {
 			continue
 		}
 		lower := strings.ToLower(name)
@@ -164,11 +205,11 @@ func assertNoSecretProperties(t *testing.T, location string, ref *openapi3.Schem
 				t.Errorf("%s exposes forbidden response property %q", location, name)
 			}
 		}
-		assertNoSecretProperties(t, location+"."+name, property, visited, false)
+		assertNoSecretProperties(t, location+"."+name, property, visited, nil)
 	}
-	assertNoSecretProperties(t, location+"[]", ref.Value.Items, visited, false)
+	assertNoSecretProperties(t, location+"[]", ref.Value.Items, visited, nil)
 	for _, child := range append(append(ref.Value.AllOf, ref.Value.OneOf...), ref.Value.AnyOf...) {
-		assertNoSecretProperties(t, location, child, visited, allowOneTimeSecret)
+		assertNoSecretProperties(t, location, child, visited, allowedTopLevelSecrets)
 	}
 }
 
