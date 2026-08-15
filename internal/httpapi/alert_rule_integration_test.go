@@ -57,40 +57,47 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	}
 	server := httptest.NewTLSServer(httpapi.NewHandler(platform, currentClock).Routes())
 	defer server.Close()
-	jar, _ := cookiejar.New(nil)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("create cookie jar: %v", err)
+	}
 	client := server.Client()
 	client.Jar = jar
 	apiClient, err := api.NewClientWithResponses(server.URL, api.WithHTTPClient(client))
 	if err != nil {
 		t.Fatalf("create API client: %v", err)
 	}
-	login, err := apiClient.CreateSessionWithResponse(ctx, api.CreateSessionJSONRequestBody{
-		Username: "admin", Password: "correct horse battery staple",
+	loginResponse, err := apiClient.CreateSessionWithResponse(ctx, api.CreateSessionJSONRequestBody{
+		Username: "admin",
+		Password: "correct horse battery staple",
 	})
 	if err != nil {
 		t.Fatalf("login: %v", err)
 	}
-	if login.StatusCode() != http.StatusNoContent {
-		t.Fatalf("login status = %d, want 204", login.StatusCode())
+	if loginResponse.StatusCode() != http.StatusNoContent {
+		t.Fatalf("login status = %d, want 204", loginResponse.StatusCode())
 	}
-	if cookies := client.Jar.Cookies(login.HTTPResponse.Request.URL); len(cookies) == 0 {
-		t.Fatalf("login response did not populate the cookie jar: %v", login.HTTPResponse.Header)
+	if cookies := jar.Cookies(loginResponse.HTTPResponse.Request.URL); len(cookies) == 0 {
+		t.Fatalf("login response did not populate the cookie jar: %v", loginResponse.HTTPResponse.Header)
 	}
 
-	createdInstance, err := apiClient.CreateInstanceWithResponse(ctx, api.InstanceInput{
-		Name: "target", Host: env("PGHOST", "localhost"), Port: envInt("PGPORT", 55432),
-		Database: databaseName, Username: env("PGUSER", "dbs_monitor"),
+	createdInstanceResponse, err := apiClient.CreateInstanceWithResponse(ctx, api.InstanceInput{
+		Name:     "target",
+		Host:     env("PGHOST", "localhost"),
+		Port:     envInt("PGPORT", 55432),
+		Database: databaseName,
+		Username: env("PGUSER", "dbs_monitor"),
 		Password: env("PGPASSWORD", "dbs_monitor"),
 	})
 	if err != nil {
 		t.Fatalf("create instance: %v", err)
 	}
-	if createdInstance.StatusCode() != http.StatusCreated || createdInstance.JSON201 == nil {
-		t.Fatalf("create instance status = %d, want 201", createdInstance.StatusCode())
+	if createdInstanceResponse.StatusCode() != http.StatusCreated || createdInstanceResponse.JSON201 == nil {
+		t.Fatalf("create instance status = %d, want 201", createdInstanceResponse.StatusCode())
 	}
-	instanceID := createdInstance.JSON201.Instance.Id
+	instanceID := createdInstanceResponse.JSON201.Instance.Id
 
-	created, err := apiClient.CreateAlertRuleWithResponse(ctx, api.AlertRuleInput{
+	createdRuleResponse, err := apiClient.CreateAlertRuleWithResponse(ctx, api.AlertRuleInput{
 		Name:                     "Any PostgreSQL connection",
 		MetricId:                 "pg.connection.total",
 		Aggregation:              api.Latest,
@@ -108,10 +115,10 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create alert rule: %v", err)
 	}
-	if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
-		t.Fatalf("create rule status = %d, want 201", created.StatusCode())
+	if createdRuleResponse.StatusCode() != http.StatusCreated || createdRuleResponse.JSON201 == nil {
+		t.Fatalf("create rule status = %d, want 201", createdRuleResponse.StatusCode())
 	}
-	createdRule := *created.JSON201
+	createdRule := *createdRuleResponse.JSON201
 	if createdRule.Version != 1 {
 		t.Fatalf("created rule = %+v, want version 1", createdRule)
 	}
@@ -121,9 +128,9 @@ func TestCreatedAlertRuleFiresOnNextEvaluationCycle(t *testing.T) {
 		t.Fatalf("collect rule sample: %v", err)
 	}
 
-	eval := evaluator.New(platform, currentClock)
+	ruleEvaluator := evaluator.New(platform, currentClock)
 	for range 2 {
-		if err := eval.RunOnce(ctx); err != nil {
+		if err := ruleEvaluator.RunOnce(ctx); err != nil {
 			t.Fatalf("evaluate rule: %v", err)
 		}
 	}
