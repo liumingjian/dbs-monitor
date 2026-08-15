@@ -250,7 +250,14 @@ func run(ctx context.Context) error {
 		Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY",
 	})
 	health.Update(time.Now().UTC(), platformhealth.DiskUnavailableSource(platformhealth.DiskNormal))
-	evaluation := evaluator.New(platform, clock.Real{}, collector.WithTriggerSnapshotConnection)
+	evaluationConfig, err := evaluationConfigFromEnvironment()
+	if err != nil {
+		return err
+	}
+	evaluation, err := evaluator.NewWithConfig(platform, clock.Real{}, collector.WithTriggerSnapshotConnection, evaluationConfig)
+	if err != nil {
+		return fmt.Errorf("alert evaluator config: %w", err)
+	}
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform, health)
 	go runAlertHistoryMaintenance(ctx, platform)
@@ -447,4 +454,22 @@ func diskThresholdsFromEnvironment() (platformhealth.DiskThresholds, error) {
 		return platformhealth.DiskThresholds{}, fmt.Errorf("disk thresholds: %w", err)
 	}
 	return thresholds, nil
+}
+
+func evaluationConfigFromEnvironment() (evaluator.Config, error) {
+	const setting = "ALERT_TRIGGER_SNAPSHOT_SESSION_LIMIT"
+	config := evaluator.DefaultConfig()
+	value := os.Getenv(setting)
+	if value == "" {
+		return config, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return evaluator.Config{}, fmt.Errorf("%s must be an integer", setting)
+	}
+	config.TriggerSnapshotSessionLimit = parsed
+	if err := config.Validate(); err != nil {
+		return evaluator.Config{}, fmt.Errorf("%s: %w", setting, err)
+	}
+	return config, nil
 }

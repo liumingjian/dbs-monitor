@@ -31,7 +31,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
-func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
+func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -127,11 +127,6 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 		t.Fatalf("open blocker connection: %v", err)
 	}
 	defer blocker.Close(context.Background())
-	waiter, err := pgx.Connect(ctx, snapshotConnectionString(databaseName))
-	if err != nil {
-		t.Fatalf("open waiter connection: %v", err)
-	}
-	defer waiter.Close(context.Background())
 	if _, err := blocker.Exec(ctx, "CREATE TABLE snapshot_lock_target (id integer)"); err != nil {
 		t.Fatalf("create lock target: %v", err)
 	}
@@ -141,25 +136,41 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	if _, err := blocker.Exec(ctx, "LOCK TABLE snapshot_lock_target IN ACCESS EXCLUSIVE MODE"); err != nil {
 		t.Fatalf("lock target: %v", err)
 	}
-	var blockerPID, waiterPID int32
+	var blockerPID int32
 	if err := blocker.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&blockerPID); err != nil {
 		t.Fatalf("read blocker PID: %v", err)
 	}
-	if _, err := waiter.Exec(ctx, "BEGIN"); err != nil {
-		t.Fatalf("begin waiter: %v", err)
+	const waiterCount = 5
+	waiters := make([]*pgx.Conn, 0, waiterCount)
+	waiterPIDs := make([]int32, 0, waiterCount)
+	waiterDone := make(chan error, waiterCount)
+	for index := 0; index < waiterCount; index++ {
+		waiter, err := pgx.Connect(ctx, snapshotConnectionString(databaseName))
+		if err != nil {
+			t.Fatalf("open waiter connection %d: %v", index, err)
+		}
+		waiters = append(waiters, waiter)
+		t.Cleanup(func() { waiter.Close(context.Background()) })
+		if _, err := waiter.Exec(ctx, "BEGIN"); err != nil {
+			t.Fatalf("begin waiter %d: %v", index, err)
+		}
+		var waiterPID int32
+		if err := waiter.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&waiterPID); err != nil {
+			t.Fatalf("read waiter PID %d: %v", index, err)
+		}
+		waiterPIDs = append(waiterPIDs, waiterPID)
+		go func(waitingConnection *pgx.Conn) {
+			_, waitErr := waitingConnection.Exec(ctx, "SELECT * FROM snapshot_lock_target")
+			waiterDone <- waitErr
+		}(waiter)
+		waitForBlocker(t, ctx, pool, waiterPID, blockerPID)
 	}
-	if err := waiter.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&waiterPID); err != nil {
-		t.Fatalf("read waiter PID: %v", err)
-	}
-	waiterDone := make(chan error, 1)
-	go func() {
-		_, waitErr := waiter.Exec(ctx, "SELECT * FROM snapshot_lock_target")
-		waiterDone <- waitErr
-	}()
-	waitForBlocker(t, ctx, pool, waiterPID, blockerPID)
 
 	snapshotConnections := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
-	service := New(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection)
+	service, err := NewWithConfig(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection, Config{TriggerSnapshotSessionLimit: 5})
+	if err != nil {
+		t.Fatalf("configure evaluator: %v", err)
+	}
 	if err := service.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate blocking alert: %v", err)
 	}
@@ -167,14 +178,18 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	if _, err := blocker.Exec(ctx, "ROLLBACK"); err != nil {
 		t.Fatalf("release blocker: %v", err)
 	}
-	if err := <-waiterDone; err != nil {
-		t.Fatalf("waiting query after lock release: %v", err)
+	for index := range waiters {
+		if err := <-waiterDone; err != nil {
+			t.Fatalf("waiting query %d after lock release: %v", index, err)
+		}
+	}
+	for index, waiter := range waiters {
+		if err := waiter.Close(ctx); err != nil {
+			t.Fatalf("close waiter connection %d: %v", index, err)
+		}
 	}
 	if err := blocker.Close(ctx); err != nil {
 		t.Fatalf("close blocker connection: %v", err)
-	}
-	if err := waiter.Close(ctx); err != nil {
-		t.Fatalf("close waiter connection: %v", err)
 	}
 
 	var alertInstanceID, snapshotID, eventSnapshotID uuid.UUID
@@ -190,16 +205,19 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 		Scan(&alertInstanceID, &snapshotID, &originalMatchCount, &truncated, &sessionCount); err != nil {
 		t.Fatalf("read successful trigger snapshot: %v", err)
 	}
-	if originalMatchCount != 2 || sessionCount != 2 || truncated {
-		t.Fatalf("blocking snapshot = original %d sessions %d truncated %t, want 2/2/false", originalMatchCount, sessionCount, truncated)
+	if originalMatchCount != 6 || sessionCount != 5 || !truncated {
+		t.Fatalf("blocking snapshot = original %d sessions %d truncated %t, want 6/5/true", originalMatchCount, sessionCount, truncated)
 	}
-	var storedBlockingPIDs []int32
-	if err := pool.QueryRow(ctx, `SELECT blocking_pids FROM alert_trigger_snapshot_session
-		WHERE snapshot_id = $1 AND pid = $2`, snapshotID, waiterPID).Scan(&storedBlockingPIDs); err != nil {
-		t.Fatalf("read waiting session blockers: %v", err)
+	var retainedBlockerCount, retainedWaiterCount int
+	if err := pool.QueryRow(ctx, `SELECT
+		count(*) FILTER (WHERE pid = $2),
+		count(*) FILTER (WHERE pid = ANY($3) AND blocking_pids = ARRAY[$2]::integer[])
+		FROM alert_trigger_snapshot_session WHERE snapshot_id = $1`, snapshotID, blockerPID, waiterPIDs).
+		Scan(&retainedBlockerCount, &retainedWaiterCount); err != nil {
+		t.Fatalf("read retained blocking chain: %v", err)
 	}
-	if len(storedBlockingPIDs) != 1 || storedBlockingPIDs[0] != blockerPID {
-		t.Fatalf("waiting session blockers = %v, want [%d]", storedBlockingPIDs, blockerPID)
+	if retainedBlockerCount != 1 || retainedWaiterCount != 4 {
+		t.Fatalf("retained blocking chain = blocker %d waiters %d, want 1/4", retainedBlockerCount, retainedWaiterCount)
 	}
 	if err := pool.QueryRow(ctx, `SELECT trigger_snapshot_id FROM alert_event
 		WHERE alert_instance_id = $1 AND kind = 'FIRED'`, alertInstanceID).Scan(&eventSnapshotID); err != nil {
@@ -228,30 +246,28 @@ func TestTriggerSnapshotCapturesRealBlockingChainOnce(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	client := server.Client()
 	client.Jar = jar
-	login := snapshotRequestJSON(t, client, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
-		"username": "snapshot-admin", "password": "correct horse battery staple",
+	apiClient, err := api.NewClientWithResponses(server.URL, api.WithHTTPClient(client))
+	if err != nil {
+		t.Fatalf("create generated snapshot API client: %v", err)
+	}
+	login, err := apiClient.CreateSessionWithResponse(ctx, api.CreateSessionJSONRequestBody{
+		Username: "snapshot-admin", Password: "correct horse battery staple",
 	})
-	login.Body.Close()
-	if login.StatusCode != http.StatusNoContent {
-		t.Fatalf("snapshot API login status = %d, want 204", login.StatusCode)
+	if err != nil {
+		t.Fatalf("log in with generated snapshot API client: %v", err)
 	}
-	snapshotResponse := snapshotRequestJSON(t, client, http.MethodGet,
-		server.URL+"/api/v1/alert-instances/"+alertInstanceID.String()+"/trigger-snapshot", nil)
-	defer snapshotResponse.Body.Close()
-	var snapshotBody struct {
-		Result             string `json:"result"`
-		OriginalMatchCount int    `json:"original_match_count"`
-		Sessions           []struct {
-			PID          int32   `json:"pid"`
-			BlockingPIDs []int32 `json:"blocking_pids"`
-		} `json:"sessions"`
+	if login.StatusCode() != http.StatusNoContent {
+		t.Fatalf("snapshot API login status = %d, want 204", login.StatusCode())
 	}
-	if err := json.NewDecoder(snapshotResponse.Body).Decode(&snapshotBody); err != nil {
-		t.Fatalf("decode successful snapshot API response: %v", err)
+	snapshotResponse, err := apiClient.GetAlertTriggerSnapshotWithResponse(ctx, alertInstanceID)
+	if err != nil {
+		t.Fatalf("read snapshot with generated API client: %v", err)
 	}
-	if snapshotResponse.StatusCode != http.StatusOK || snapshotBody.Result != "SUCCESS" ||
-		snapshotBody.OriginalMatchCount != 2 || len(snapshotBody.Sessions) != 2 {
-		t.Fatalf("successful snapshot API response = status %d body %+v", snapshotResponse.StatusCode, snapshotBody)
+	if snapshotResponse.StatusCode() != http.StatusOK || snapshotResponse.JSON200 == nil ||
+		snapshotResponse.JSON200.Result != api.TriggerSnapshotSuccess ||
+		snapshotResponse.JSON200.OriginalMatchCount != 6 || len(snapshotResponse.JSON200.Sessions) != 5 ||
+		!snapshotResponse.JSON200.Truncated {
+		t.Fatalf("successful snapshot API response = status %d body %+v", snapshotResponse.StatusCode(), snapshotResponse.JSON200)
 	}
 	eventListURL := fmt.Sprintf("%s/api/v1/instances/%s/performance-events?from=%s&to=%s",
 		server.URL, instanceID, now.Add(-time.Minute).Format(time.RFC3339Nano), now.Add(time.Minute).Format(time.RFC3339Nano))
