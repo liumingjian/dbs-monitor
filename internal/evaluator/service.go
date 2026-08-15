@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -16,9 +17,27 @@ import (
 	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
 )
 
+const defaultMaxTriggerSnapshotSessions = 100
+
+type Config struct {
+	MaxSessions int
+}
+
+func DefaultConfig() Config {
+	return Config{MaxSessions: defaultMaxTriggerSnapshotSessions}
+}
+
+func (config Config) Validate() error {
+	if config.MaxSessions < 1 {
+		return errors.New("trigger snapshot session limit must be at least 1")
+	}
+	return nil
+}
+
 type Service struct {
 	platform               *db.Pool
 	clock                  clock.Clock
+	config                 Config
 	withSnapshotConnection func(context.Context, alerting.GetEvaluationTargetRow, func(*monitorpg.TargetConn) error) error
 }
 
@@ -33,7 +52,28 @@ func New(
 	currentClock clock.Clock,
 	withSnapshotConnection func(context.Context, alerting.GetEvaluationTargetRow, func(*monitorpg.TargetConn) error) error,
 ) *Service {
-	return &Service{platform: platform, clock: currentClock, withSnapshotConnection: withSnapshotConnection}
+	service, err := NewWithConfig(platform, currentClock, withSnapshotConnection, DefaultConfig())
+	if err != nil {
+		panic(err)
+	}
+	return service
+}
+
+func NewWithConfig(
+	platform *db.Pool,
+	currentClock clock.Clock,
+	withSnapshotConnection func(context.Context, alerting.GetEvaluationTargetRow, func(*monitorpg.TargetConn) error) error,
+	config Config,
+) (*Service, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+	return &Service{
+		platform:               platform,
+		clock:                  currentClock,
+		config:                 config,
+		withSnapshotConnection: withSnapshotConnection,
+	}, nil
 }
 
 func (service *Service) RunOnce(ctx context.Context) error {

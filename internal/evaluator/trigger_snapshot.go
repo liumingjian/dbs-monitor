@@ -14,7 +14,6 @@ import (
 
 const (
 	triggerSnapshotTimeout         = 10 * time.Second
-	maxTriggerSnapshotSessions     = 100
 	longTransactionMinimumDuration = 5 * time.Minute
 	triggerSnapshotResultSuccess   = "SUCCESS"
 	triggerSnapshotResultFailed    = "FAILED"
@@ -94,7 +93,7 @@ func (service *Service) captureTriggerSnapshot(
 	}
 
 	sessions = markDirectTriggerSessions(scope, target.MetricID, target.Operator, target.Threshold, sessions)
-	selected, originalMatchCount, truncated := alerting.SelectTriggerSessions(scope, sessions, maxTriggerSnapshotSessions)
+	selected, originalMatchCount, truncated := alerting.SelectTriggerSessions(scope, sessions, service.config.MaxSessions)
 	return triggerSnapshotCapture{
 		result:             triggerSnapshotResultSuccess,
 		originalMatchCount: int32(originalMatchCount),

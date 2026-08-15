@@ -9,6 +9,21 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
 )
 
+func TestTriggerSnapshotConfigValidatesSessionLimit(t *testing.T) {
+	config := DefaultConfig()
+	if config.MaxSessions != 100 {
+		t.Fatalf("default trigger snapshot session limit = %d, want 100", config.MaxSessions)
+	}
+	if err := config.Validate(); err != nil {
+		t.Fatalf("validate default trigger snapshot config: %v", err)
+	}
+
+	config.MaxSessions = 0
+	if err := config.Validate(); err == nil {
+		t.Fatal("zero trigger snapshot session limit passed validation")
+	}
+}
+
 func TestActiveTriggerSessionsAreDurationOrderedAndCapped(t *testing.T) {
 	sessions := make([]alerting.TriggerSession, 60)
 	for index := range sessions {

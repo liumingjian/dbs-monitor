@@ -93,7 +93,14 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("collection scheduler config: %w", err)
 	}
-	evaluation := evaluator.New(platform, clock.Real{}, collector.WithTriggerSnapshotConnection)
+	evaluationConfig, err := evaluationConfigFromEnvironment()
+	if err != nil {
+		return err
+	}
+	evaluation, err := evaluator.NewWithConfig(platform, clock.Real{}, collector.WithTriggerSnapshotConnection, evaluationConfig)
+	if err != nil {
+		return fmt.Errorf("alert evaluator config: %w", err)
+	}
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform)
 	go func() {
@@ -193,6 +200,24 @@ func collectionConfigFromEnvironment() (collect.Config, error) {
 			return collect.Config{}, fmt.Errorf("%s must be an integer", setting.name)
 		}
 		*setting.target = parsed
+	}
+	return config, nil
+}
+
+func evaluationConfigFromEnvironment() (evaluator.Config, error) {
+	const setting = "ALERT_TRIGGER_SNAPSHOT_SESSION_LIMIT"
+	config := evaluator.DefaultConfig()
+	value := os.Getenv(setting)
+	if value == "" {
+		return config, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return evaluator.Config{}, fmt.Errorf("%s must be an integer", setting)
+	}
+	config.MaxSessions = parsed
+	if err := config.Validate(); err != nil {
+		return evaluator.Config{}, fmt.Errorf("%s: %w", setting, err)
 	}
 	return config, nil
 }
