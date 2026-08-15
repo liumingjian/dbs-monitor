@@ -52,7 +52,7 @@ func TestAcceptance_AC_08_S6(t *testing.T) {
 	client := diagnosticAcceptanceClient(t, server)
 	loginDiagnosticAcceptanceUser(t, ctx, client, "removal-admin", "correct horse battery staple")
 
-	input := api.InstanceCreateInput{
+	instanceInput := api.InstanceCreateInput{
 		Name:     "AC-08-S6 removal target",
 		Host:     diagnosticAcceptanceEnv("PGHOST", "localhost"),
 		Port:     dispositionAcceptancePort(t),
@@ -60,52 +60,52 @@ func TestAcceptance_AC_08_S6(t *testing.T) {
 		Username: diagnosticAcceptanceEnv("PGUSER", "dbs_monitor"),
 		Password: diagnosticAcceptanceEnv("PGPASSWORD", "dbs_monitor"),
 	}
-	created, err := client.CreateInstanceWithResponse(ctx, input)
+	createdInstance, err := client.CreateInstanceWithResponse(ctx, instanceInput)
 	if err != nil {
 		t.Fatalf("create removable instance through API: %v", err)
 	}
-	if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
-		t.Fatalf("create removable instance status/body = %d/%s", created.StatusCode(), created.Body)
+	if createdInstance.StatusCode() != http.StatusCreated || createdInstance.JSON201 == nil {
+		t.Fatalf("create removable instance status/body = %d/%s", createdInstance.StatusCode(), createdInstance.Body)
 	}
-	instanceID := created.JSON201.Instance.Id
+	instanceID := createdInstance.JSON201.Instance.Id
 
-	configured, err := client.UpdateCollectionTaskIntervalWithResponse(ctx, instanceID, "pg.probe", api.CollectionTaskIntervalInput{IntervalSeconds: 10})
+	configuredInterval, err := client.UpdateCollectionTaskIntervalWithResponse(ctx, instanceID, "pg.probe", api.CollectionTaskIntervalInput{IntervalSeconds: 10})
 	if err != nil {
 		t.Fatalf("configure collection plan through API: %v", err)
 	}
-	if configured.StatusCode() != http.StatusOK || configured.JSON200 == nil {
-		t.Fatalf("configure collection plan status/body = %d/%s", configured.StatusCode(), configured.Body)
+	if configuredInterval.StatusCode() != http.StatusOK || configuredInterval.JSON200 == nil {
+		t.Fatalf("configure collection plan status/body = %d/%s", configuredInterval.StatusCode(), configuredInterval.Body)
 	}
-	registered, err := client.RegisterAgentWithResponse(ctx, instanceID)
+	registeredAgent, err := client.RegisterAgentWithResponse(ctx, instanceID)
 	if err != nil {
 		t.Fatalf("register removable Agent through API: %v", err)
 	}
-	if registered.StatusCode() != http.StatusOK || registered.JSON200 == nil || registered.JSON200.AgentToken == nil {
-		t.Fatalf("register removable Agent status/body = %d/%s", registered.StatusCode(), registered.Body)
+	if registeredAgent.StatusCode() != http.StatusOK || registeredAgent.JSON200 == nil || registeredAgent.JSON200.AgentToken == nil {
+		t.Fatalf("register removable Agent status/body = %d/%s", registeredAgent.StatusCode(), registeredAgent.Body)
 	}
-	agentToken := *registered.JSON200.AgentToken
+	agentToken := *registeredAgent.JSON200.AgentToken
 
 	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
-	acknowledgedRuleID := createRemovalAlertRule(t, ctx, client, instanceID, "acknowledged", 80, api.Warning)
-	createRemovalAlertRule(t, ctx, client, instanceID, "unacknowledged", 85, api.Critical)
+	acknowledgedRuleID := createRemovalAlertRule(t, ctx, client, instanceID, "AC-08-S6 acknowledged high CPU", 80, api.Warning)
+	createRemovalAlertRule(t, ctx, client, instanceID, "AC-08-S6 unacknowledged high CPU", 85, api.Critical)
 	if err := evaluator.New(platform, currentClock, nil).RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate removable alert: %v", err)
 	}
-	alert := findCurrentDispositionAlert(t, ctx, client, instanceID, acknowledgedRuleID)
+	acknowledgedAlert := findCurrentDispositionAlert(t, ctx, client, instanceID, acknowledgedRuleID)
 	note := "Retain this disposition after instance removal"
-	dispositionBefore := updateDisposition(t, ctx, client, alert.Id, api.AlertDispositionInput{
+	dispositionBeforeRemoval := updateDisposition(t, ctx, client, acknowledgedAlert.Id, api.AlertDispositionInput{
 		Disposition: api.AlertDispositionACKED,
 		Note:        &note,
 	})
-	if dispositionBefore.DispositionBy == nil {
+	if dispositionBeforeRemoval.DispositionBy == nil {
 		t.Fatal("acknowledged alert has no attributed actor")
 	}
 
-	before := readRemovalFacts(t, ctx, platform, instanceID)
-	if before.credentialAndAgent != 1 || before.collectionConfig != 1 || before.collectionTaskOverrides != 1 ||
-		before.agentCollectionState != 1 || before.ruleTargets != 2 || before.series != 1 || before.samples != 1 ||
-		before.alerts < 2 || before.unresolvedAlerts != before.alerts || before.removalEvents != 0 {
-		t.Fatalf("pre-removal facts = %+v, want complete configuration, one sample, and every alert unresolved", before)
+	factsBeforeRemoval := readRemovalFacts(t, ctx, platform, instanceID)
+	if factsBeforeRemoval.credentialAndAgentCount != 1 || factsBeforeRemoval.collectionConfigCount != 1 || factsBeforeRemoval.collectionTaskOverrideCount != 1 ||
+		factsBeforeRemoval.agentCollectionStateCount != 1 || factsBeforeRemoval.ruleTargetCount != 2 || factsBeforeRemoval.seriesCount != 1 || factsBeforeRemoval.sampleCount != 1 ||
+		factsBeforeRemoval.alertCount < 2 || factsBeforeRemoval.unresolvedAlertCount != factsBeforeRemoval.alertCount || factsBeforeRemoval.removalEventCount != 0 {
+		t.Fatalf("pre-removal facts = %+v, want complete configuration, one sample, and every alert unresolved", factsBeforeRemoval)
 	}
 
 	removed, err := client.DeleteInstanceWithResponse(ctx, instanceID)
@@ -118,43 +118,50 @@ func TestAcceptance_AC_08_S6(t *testing.T) {
 
 	assertRemovedInstanceAbsent(t, ctx, client, instanceID)
 	assertRemovedAgentTokenRejected(t, ctx, client, instanceID, agentToken, currentClock.now.Add(time.Second))
-	after := readRemovalFacts(t, ctx, platform, instanceID)
-	if after.credentialAndAgent != 0 || after.collectionConfig != 0 || after.collectionTaskOverrides != 0 ||
-		after.agentCollectionState != 0 || after.ruleTargets != 0 {
-		t.Fatalf("configuration facts after removal = %+v, want all active configuration deleted", after)
+	factsAfterRemoval := readRemovalFacts(t, ctx, platform, instanceID)
+	if factsAfterRemoval.credentialAndAgentCount != 0 || factsAfterRemoval.collectionConfigCount != 0 || factsAfterRemoval.collectionTaskOverrideCount != 0 ||
+		factsAfterRemoval.agentCollectionStateCount != 0 || factsAfterRemoval.ruleTargetCount != 0 {
+		t.Fatalf("configuration facts after removal = %+v, want all active configuration deleted", factsAfterRemoval)
 	}
-	if after.identities != before.identities || after.removedIdentities != 1 || after.series != before.series ||
-		after.samples != before.samples || after.alerts != before.alerts || after.unresolvedAlerts != 0 ||
-		after.events != before.events+before.unresolvedAlerts || after.removalEvents != before.unresolvedAlerts {
-		t.Fatalf("history facts after removal = %+v, before %+v", after, before)
+	if factsAfterRemoval.identityCount != factsBeforeRemoval.identityCount || factsAfterRemoval.removedIdentityCount != 1 || factsAfterRemoval.seriesCount != factsBeforeRemoval.seriesCount ||
+		factsAfterRemoval.sampleCount != factsBeforeRemoval.sampleCount || factsAfterRemoval.alertCount != factsBeforeRemoval.alertCount || factsAfterRemoval.unresolvedAlertCount != 0 ||
+		factsAfterRemoval.eventCount != factsBeforeRemoval.eventCount+factsBeforeRemoval.unresolvedAlertCount || factsAfterRemoval.removalEventCount != factsBeforeRemoval.unresolvedAlertCount {
+		t.Fatalf("history facts after removal = %+v, before %+v", factsAfterRemoval, factsBeforeRemoval)
 	}
-	assertRemovalHistory(t, ctx, platform, client, instanceID, alert.Id, input.Name, *dispositionBefore.DispositionBy, len(dispositionBefore.History), before.alerts)
+	assertRemovalHistory(t, ctx, platform, client, removalHistoryExpectation{
+		instanceID:              instanceID,
+		alertID:                 acknowledgedAlert.Id,
+		instanceName:            instanceInput.Name,
+		actorID:                 *dispositionBeforeRemoval.DispositionBy,
+		dispositionHistoryCount: len(dispositionBeforeRemoval.History),
+		alertCount:              factsBeforeRemoval.alertCount,
+	})
 
-	replacement, err := client.CreateInstanceWithResponse(ctx, input)
+	replacementInstance, err := client.CreateInstanceWithResponse(ctx, instanceInput)
 	if err != nil {
 		t.Fatalf("re-onboard removed database through API: %v", err)
 	}
-	if replacement.StatusCode() != http.StatusCreated || replacement.JSON201 == nil {
-		t.Fatalf("re-onboard removed database status/body = %d/%s", replacement.StatusCode(), replacement.Body)
+	if replacementInstance.StatusCode() != http.StatusCreated || replacementInstance.JSON201 == nil {
+		t.Fatalf("re-onboard removed database status/body = %d/%s", replacementInstance.StatusCode(), replacementInstance.Body)
 	}
-	replacementID := replacement.JSON201.Instance.Id
+	replacementID := replacementInstance.JSON201.Instance.Id
 	if replacementID == instanceID {
 		t.Fatal("re-onboarding reused the removed instance identity")
 	}
 	assertReplacementHasNoHistory(t, ctx, client, replacementID)
 	replacementFacts := readRemovalFacts(t, ctx, platform, replacementID)
-	if replacementFacts.credentialAndAgent != 0 || replacementFacts.identities != 1 || replacementFacts.removedIdentities != 0 || replacementFacts.collectionConfig != 1 ||
-		replacementFacts.series != 0 || replacementFacts.samples != 0 || replacementFacts.alerts != 0 {
+	if replacementFacts.credentialAndAgentCount != 0 || replacementFacts.identityCount != 1 || replacementFacts.removedIdentityCount != 0 || replacementFacts.collectionConfigCount != 1 ||
+		replacementFacts.seriesCount != 0 || replacementFacts.sampleCount != 0 || replacementFacts.alertCount != 0 {
 		t.Fatalf("replacement facts = %+v, want fresh configuration without inherited history", replacementFacts)
 	}
 }
 
-func createRemovalAlertRule(t *testing.T, ctx context.Context, client *api.ClientWithResponses, instanceID uuid.UUID, suffix string, threshold float64, severity api.AlertSeverity) uuid.UUID {
+func createRemovalAlertRule(t *testing.T, ctx context.Context, client *api.ClientWithResponses, instanceID uuid.UUID, name string, threshold float64, severity api.AlertSeverity) uuid.UUID {
 	t.Helper()
 	recoveryThreshold := 50.0
 	recoveryCount := 1
 	created, err := client.CreateAlertRuleWithResponse(ctx, api.AlertRuleInput{
-		Name:                      "AC-08-S6 " + suffix + " high CPU",
+		Name:                      name,
 		MetricId:                  string(api.AgentMetricMetricHostCpuUsagePercent),
 		Aggregation:               api.Latest,
 		Operator:                  api.GreaterThanEqual,
@@ -181,19 +188,19 @@ func createRemovalAlertRule(t *testing.T, ctx context.Context, client *api.Clien
 }
 
 type removalFacts struct {
-	credentialAndAgent      int
-	identities              int
-	removedIdentities       int
-	collectionConfig        int
-	collectionTaskOverrides int
-	agentCollectionState    int
-	ruleTargets             int
-	series                  int
-	samples                 int
-	alerts                  int
-	unresolvedAlerts        int
-	events                  int
-	removalEvents           int
+	credentialAndAgentCount     int
+	identityCount               int
+	removedIdentityCount        int
+	collectionConfigCount       int
+	collectionTaskOverrideCount int
+	agentCollectionStateCount   int
+	ruleTargetCount             int
+	seriesCount                 int
+	sampleCount                 int
+	alertCount                  int
+	unresolvedAlertCount        int
+	eventCount                  int
+	removalEventCount           int
 }
 
 func readRemovalFacts(t *testing.T, ctx context.Context, platform *db.Pool, instanceID uuid.UUID) removalFacts {
@@ -208,24 +215,30 @@ func readRemovalFacts(t *testing.T, ctx context.Context, platform *db.Pool, inst
 		(SELECT count(*) FROM instance_collect_state WHERE instance_id = $1 AND source = 'AGENT'),
 		(SELECT count(*) FROM alert_rule_scope_instance WHERE instance_id = $1),
 		(SELECT count(*) FROM metric_series WHERE instance_id = $1),
-		(SELECT count(*) FROM metric_sample sample JOIN metric_series series ON series.series_id = sample.series_id WHERE series.instance_id = $1),
+		(SELECT count(*) FROM metric_sample AS sample
+			JOIN metric_series AS series ON series.series_id = sample.series_id
+			WHERE series.instance_id = $1),
 		(SELECT count(*) FROM alert_instance WHERE instance_id = $1),
 		(SELECT count(*) FROM alert_instance WHERE instance_id = $1 AND status <> 'RECOVERED'),
-		(SELECT count(*) FROM alert_event event JOIN alert_instance alert ON alert.id = event.alert_instance_id WHERE alert.instance_id = $1),
-		(SELECT count(*) FROM alert_event event JOIN alert_instance alert ON alert.id = event.alert_instance_id WHERE alert.instance_id = $1 AND event.kind = 'INSTANCE_REMOVED')`, instanceID).Scan(
-		&facts.credentialAndAgent,
-		&facts.identities,
-		&facts.removedIdentities,
-		&facts.collectionConfig,
-		&facts.collectionTaskOverrides,
-		&facts.agentCollectionState,
-		&facts.ruleTargets,
-		&facts.series,
-		&facts.samples,
-		&facts.alerts,
-		&facts.unresolvedAlerts,
-		&facts.events,
-		&facts.removalEvents,
+		(SELECT count(*) FROM alert_event AS event
+			JOIN alert_instance AS alert ON alert.id = event.alert_instance_id
+			WHERE alert.instance_id = $1),
+		(SELECT count(*) FROM alert_event AS event
+			JOIN alert_instance AS alert ON alert.id = event.alert_instance_id
+			WHERE alert.instance_id = $1 AND event.kind = 'INSTANCE_REMOVED')`, instanceID).Scan(
+		&facts.credentialAndAgentCount,
+		&facts.identityCount,
+		&facts.removedIdentityCount,
+		&facts.collectionConfigCount,
+		&facts.collectionTaskOverrideCount,
+		&facts.agentCollectionStateCount,
+		&facts.ruleTargetCount,
+		&facts.seriesCount,
+		&facts.sampleCount,
+		&facts.alertCount,
+		&facts.unresolvedAlertCount,
+		&facts.eventCount,
+		&facts.removalEventCount,
 	)
 	if err != nil {
 		t.Fatalf("read instance removal facts: %v", err)
@@ -249,13 +262,18 @@ func assertRemovedInstanceAbsent(t *testing.T, ctx context.Context, client *api.
 	}
 }
 
-func assertRemovedAgentTokenRejected(t *testing.T, ctx context.Context, client *api.ClientWithResponses, instanceID uuid.UUID, token string, reportedAt time.Time) {
+func assertRemovedAgentTokenRejected(t *testing.T, ctx context.Context, client *api.ClientWithResponses, instanceID uuid.UUID, agentToken string, reportedAt time.Time) {
 	t.Helper()
 	response, err := client.ReportAgentMetricsWithResponse(ctx, api.AgentReport{
-		InstanceId: instanceID, AgentVersion: "3.0.0", Timestamp: reportedAt,
-		Metrics: []api.AgentMetric{{Metric: api.AgentMetricMetricHostCpuUsagePercent, Value: 91}},
+		InstanceId:   instanceID,
+		AgentVersion: "3.0.0",
+		Timestamp:    reportedAt,
+		Metrics: []api.AgentMetric{{
+			Metric: api.AgentMetricMetricHostCpuUsagePercent,
+			Value:  91,
+		}},
 	}, func(_ context.Context, request *http.Request) error {
-		request.Header.Set("Authorization", "Bearer "+token)
+		request.Header.Set("Authorization", "Bearer "+agentToken)
 		return nil
 	})
 	if err != nil {
@@ -266,37 +284,46 @@ func assertRemovedAgentTokenRejected(t *testing.T, ctx context.Context, client *
 	}
 }
 
-func assertRemovalHistory(t *testing.T, ctx context.Context, platform *db.Pool, client *api.ClientWithResponses, instanceID, alertID uuid.UUID, instanceName string, actorID uuid.UUID, dispositionEventCount, alertCount int) {
+type removalHistoryExpectation struct {
+	instanceID              uuid.UUID
+	alertID                 uuid.UUID
+	instanceName            string
+	actorID                 uuid.UUID
+	dispositionHistoryCount int
+	alertCount              int
+}
+
+func assertRemovalHistory(t *testing.T, ctx context.Context, platform *db.Pool, client *api.ClientWithResponses, expected removalHistoryExpectation) {
 	t.Helper()
-	history, err := client.ListAlertHistoryWithResponse(ctx, &api.ListAlertHistoryParams{InstanceId: &instanceID})
+	history, err := client.ListAlertHistoryWithResponse(ctx, &api.ListAlertHistoryParams{InstanceId: &expected.instanceID})
 	if err != nil {
 		t.Fatalf("list retained alert history: %v", err)
 	}
-	if history.StatusCode() != http.StatusOK || history.JSON200 == nil || history.JSON200.Total != alertCount || len(history.JSON200.Items) != alertCount {
+	if history.StatusCode() != http.StatusOK || history.JSON200 == nil || history.JSON200.Total != expected.alertCount || len(history.JSON200.Items) != expected.alertCount {
 		t.Fatalf("retained alert history status/body = %d/%s", history.StatusCode(), history.Body)
 	}
-	var retained api.AlertObservation
+	var retainedAlert api.AlertObservation
 	for _, candidate := range history.JSON200.Items {
-		if candidate.Id == alertID {
-			retained = candidate
+		if candidate.Id == expected.alertID {
+			retainedAlert = candidate
 			break
 		}
 	}
-	if retained.Id != alertID || retained.Status != api.RECOVERED || retained.RecoveredAt == nil || retained.InstanceName != instanceName {
-		t.Fatalf("retained alert = %+v, want recovered alert %s attributed to %q", retained, alertID, instanceName)
+	if retainedAlert.Id != expected.alertID || retainedAlert.Status != api.RECOVERED || retainedAlert.RecoveredAt == nil || retainedAlert.InstanceName != expected.instanceName {
+		t.Fatalf("retained alert = %+v, want recovered alert %s attributed to %q", retainedAlert, expected.alertID, expected.instanceName)
 	}
-	disposition := getDispositionDetail(t, ctx, client, alertID)
-	if disposition.Disposition != api.AlertDispositionACKED || disposition.DispositionBy == nil || *disposition.DispositionBy != actorID ||
-		len(disposition.History) != dispositionEventCount {
-		t.Fatalf("retained disposition = %+v, want ACKED with actor %s and %d events", disposition, actorID, dispositionEventCount)
+	retainedDisposition := getDispositionDetail(t, ctx, client, expected.alertID)
+	if retainedDisposition.Disposition != api.AlertDispositionACKED || retainedDisposition.DispositionBy == nil || *retainedDisposition.DispositionBy != expected.actorID ||
+		len(retainedDisposition.History) != expected.dispositionHistoryCount {
+		t.Fatalf("retained disposition = %+v, want ACKED with actor %s and %d events", retainedDisposition, expected.actorID, expected.dispositionHistoryCount)
 	}
-	var removalActor uuid.UUID
+	var removalActorID uuid.UUID
 	if err := platform.QueryRow(ctx, `SELECT actor_id FROM alert_event
-		WHERE alert_instance_id = $1 AND kind = 'INSTANCE_REMOVED'`, alertID).Scan(&removalActor); err != nil {
+		WHERE alert_instance_id = $1 AND kind = 'INSTANCE_REMOVED'`, expected.alertID).Scan(&removalActorID); err != nil {
 		t.Fatalf("read attributed INSTANCE_REMOVED event: %v", err)
 	}
-	if removalActor != actorID {
-		t.Fatalf("INSTANCE_REMOVED actor = %s, want %s", removalActor, actorID)
+	if removalActorID != expected.actorID {
+		t.Fatalf("INSTANCE_REMOVED actor = %s, want %s", removalActorID, expected.actorID)
 	}
 }
 
