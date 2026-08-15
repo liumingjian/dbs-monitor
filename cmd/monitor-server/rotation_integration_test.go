@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,6 +27,37 @@ import (
 type rotationTestCredential struct {
 	id       uuid.UUID
 	password string
+}
+
+func TestMasterKeyRotationLockIsExclusiveAndReusable(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	connectionString := rotationConnectionString(env("PGDATABASE", "dbs_monitor"))
+	pool, err := pgxpool.New(ctx, connectionString)
+	if err != nil {
+		t.Fatalf("open platform pool: %v", err)
+	}
+	defer pool.Close()
+
+	initialLock, err := acquireMasterKeyRotationLock(ctx, pool)
+	if err != nil {
+		t.Fatalf("acquire initial rotation lock: %v", err)
+	}
+	if _, err := acquireMasterKeyRotationLock(ctx, pool); !errors.Is(err, errMasterKeyRotationLockUnavailable) {
+		t.Fatalf("contended rotation lock error = %v, want %v", err, errMasterKeyRotationLockUnavailable)
+	}
+	if err := initialLock.Release(); err != nil {
+		t.Fatalf("release initial rotation lock: %v", err)
+	}
+
+	reacquiredLock, err := acquireMasterKeyRotationLock(ctx, pool)
+	if err != nil {
+		t.Fatalf("reacquire released rotation lock: %v", err)
+	}
+	if err := reacquiredLock.Release(); err != nil {
+		t.Fatalf("release reacquired rotation lock: %v", err)
+	}
 }
 
 func TestRotateCredentialKeyringIsAtomicAndRerunnable(t *testing.T) {
