@@ -201,7 +201,7 @@ func run(ctx context.Context) error {
 			}
 		}()
 	})
-	if err := metric.EnsurePartitions(ctx, platform, time.Now()); err != nil {
+	if err := metric.EnsurePartitionsWithSpan(ctx, platform, time.Now(), config.PartitionSpan); err != nil {
 		health.Update(time.Now().UTC(), platformhealth.PartitionSource(platformhealth.PartitionFacts{
 			ConsecutiveFailures: 1, PrebuildDaysRemaining: 6,
 		}))
@@ -238,6 +238,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("collection scheduler config: %w", err)
 	}
 	collector.SetPlatformHealth(health)
+	collector.SetPartitionSpan(config.PartitionSpan)
 	diskThresholds, err := diskThresholdsFromEnvironment()
 	if err != nil {
 		return err
@@ -259,7 +260,7 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("alert evaluator config: %w", err)
 	}
 	go collector.Run(ctx, time.Second)
-	go runPartitionMaintenance(ctx, platform, health)
+	go runPartitionMaintenance(ctx, platform, health, config.PartitionSpan, config.PartitionMaintenanceInterval)
 	go runAlertHistoryMaintenance(ctx, platform)
 	go runNotificationDelivery(ctx, platform, keyring)
 	go func() {
@@ -291,6 +292,7 @@ func run(ctx context.Context) error {
 		platform, clock.Real{}, keyring, monitorpg.DirectDialer{}, version, health, distribution,
 		sessionConfig,
 	)
+	apiHandler.SetPartitionSpan(config.PartitionSpan)
 	apiHandler.SetNotificationSnapshotStore(notificationSnapshotStore)
 	apiRoutes := apiHandler.Routes()
 	fileServer := http.FileServer(http.FS(static))
@@ -333,8 +335,8 @@ func runAlertHistoryMaintenance(ctx context.Context, platform *db.Pool) {
 	}
 }
 
-func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *platformhealth.Store) {
-	ticker := time.NewTicker(time.Hour)
+func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *platformhealth.Store, span, interval time.Duration) {
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	lastSuccess := time.Now().UTC()
 	consecutiveFailures := 0
@@ -343,7 +345,7 @@ func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *pla
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			if err := metric.EnsurePartitions(ctx, platform, now); err != nil {
+			if err := metric.EnsurePartitionsWithSpan(ctx, platform, now, span); err != nil {
 				consecutiveFailures++
 				health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{
 					ConsecutiveFailures:   consecutiveFailures,
@@ -352,7 +354,7 @@ func runPartitionMaintenance(ctx context.Context, platform *db.Pool, health *pla
 				log.Printf("partition creation failed: %v", err)
 				continue
 			}
-			if err := metric.DropExpiredPartitions(ctx, platform, now); err != nil {
+			if err := metric.DropExpiredPartitionsWithSpan(ctx, platform, now, span); err != nil {
 				consecutiveFailures++
 				health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{
 					ConsecutiveFailures: consecutiveFailures, PrebuildDaysRemaining: 7,

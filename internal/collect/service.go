@@ -84,6 +84,7 @@ type Service struct {
 	config         Config
 	keyring        *instance.CredentialKeyring
 	health         *platformhealth.Store
+	partitionSpan  time.Duration
 	diskPath       string
 	diskThresholds platformhealth.DiskThresholds
 
@@ -96,6 +97,10 @@ type Service struct {
 
 func (service *Service) SetPlatformHealth(health *platformhealth.Store) {
 	service.health = health
+}
+
+func (service *Service) SetPartitionSpan(span time.Duration) {
+	service.partitionSpan = span
 }
 
 func (service *Service) SetDiskMonitor(path string, thresholds platformhealth.DiskThresholds) error {
@@ -128,6 +133,7 @@ func NewWithConfig(platform *db.Pool, dialer monitorpg.Dialer, currentClock cloc
 		clock:                   currentClock,
 		config:                  config,
 		keyring:                 keyring,
+		partitionSpan:           metric.DefaultPartitionSpan,
 		queryConnections:        map[string]cachedConnection{},
 		queryConnectionUseLocks: map[string]*sync.Mutex{},
 		statDatabaseRates:       newStatDatabaseRateState(),
@@ -638,7 +644,7 @@ func (service *Service) withPartitionRepair(ctx context.Context, observedAt time
 		if !metric.IsMissingPartition(err) {
 			return err
 		}
-		if err := metric.EnsurePartitions(ctx, service.platform, observedAt); err != nil {
+		if err := metric.EnsurePartitionsWithSpan(ctx, service.platform, observedAt, service.partitionSpan); err != nil {
 			service.publishPartitionWriteFailure(observedAt)
 			return err
 		}

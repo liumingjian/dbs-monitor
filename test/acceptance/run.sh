@@ -31,6 +31,15 @@ docker compose -p "$project" --profile acceptance --profile restore --profile sm
 
 ACCEPTANCE_CANDIDATE_SHA="$(git rev-parse HEAD)" \
 ACCEPTANCE_PLATFORM_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55442/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt" \
+ACCEPTANCE_RESTORE_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55439/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt" \
+ACCEPTANCE_PG16_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55446/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt" \
+ACCEPTANCE_RECOVERY_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55446/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt" \
+ACCEPTANCE_COMPOSE_PROJECT="$project" \
 ACCEPTANCE_TARGET_PORT=55447 \
 ACCEPTANCE_RESULT_PATH="$root/results/acceptance-result.json" \
+PGHOST=127.0.0.1 \
+PGPORT=55442 \
+PGUSER=dbs_monitor \
+PGDATABASE=dbs_monitor \
+PGPASSWORD=dbs_monitor \
 go test -count=1 -tags acceptance ./test/acceptance

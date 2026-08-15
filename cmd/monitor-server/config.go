@@ -132,6 +132,9 @@ func loadServerConfig(path string) (serverConfig, bool, error) {
 }
 
 func (config serverConfig) validate() error {
+	if config.PartitionSpan < time.Second {
+		return errors.New("partition_span must be at least one second")
+	}
 	if config.SnapshotTruncationLimit <= 0 {
 		return errors.New("snapshot_truncation_limit must be positive")
 	}

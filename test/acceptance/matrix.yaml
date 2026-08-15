@@ -1551,8 +1551,8 @@ entries:
       - "调度器按最新意图续采：重启窗口不补跑、不造占位样本"
       - "未恢复告警实例 ID 与首次触发时间保持，连续触发计数不重置，不谎报 RECOVERED"
       - "Agent token 仍有效、无需重新接入；重启窗口的缺数按 T14 不进 NO_DATA"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_1"
     owner_issue: 113
     reason: "18 号 D7「库是自描述的、无外部隐藏状态」在进程侧的唯一验收面。连接池刻意不进断言集（26 号 D5.1）——纯进程内实现细节，重启后必然重建，外部无可观测语义，不是漏了"
   - id: REC-2
@@ -1568,8 +1568,8 @@ entries:
       - "重启后自动恢复上报，无需重新接入"
       - "重启窗口在图表上按缺桶呈现，绝不补 0（承 04 不补 0）"
       - "该窗口不计入 NO_DATA：agent 侧中断是采集侧事实，不是目标库缺数"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_2"
     owner_issue: 113
     reason: "与 REC-1 分开而不合并（26 号 D5.2）：合成一条会让「谁重启导致的缺数」这个区分永远测不出来，而那正是 T14 要分开的两个域"
   - id: REC-3
@@ -1587,8 +1587,8 @@ entries:
       - "server 配置指向新库重启后：配置 / 规则 / 未恢复告警 / 加密凭据 / 样本全经业务 API 可读"
       - "带同一份 keyring 时密文可解，采集继续出点（keyring 正面，反面见 REC-4）"
       - "DB 层只读对账：分区子表随 dump 一起还原，外键级联完整"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_3"
     owner_issue: 113
     reason: "18 号 §8 D7 三条承诺（库自描述、标准工具可备份、恢复后直接可用）的唯一端到端验收面。靶库必须是真空 PG 而非同实例 createdb（26 号 D7）——共用 initdb 参数 / locale / 扩展 / 角色会掩盖「自描述」最容易翻车的那部分"
   - id: REC-4
@@ -1604,8 +1604,8 @@ entries:
       - "keyring 目录整个缺失时同样不拒绝启动（承 25 号 §5.3，不设快速失败例外）"
       - "两种情形下 keyring 目录内均不出现任何新生成的 master-key-v*：绝不静默生成"
       - "失败语义归平台自身故障，不出现 DB_UNREACHABLE / NO_DATA（承 T14）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_4"
     owner_issue: 113
     reason: "13 号 D7/D8「备份不含 keyring、遗失即不可恢复、无后门」在恢复链上的唯一验收面。与 AC-08-F4 按场景来源划界（26 号 D4.4）：AC-08-F4 管运行中的 keyring 故障（权限错、文件被改，库与密钥同机），本条管恢复链上的密钥—库分离（库来自备份、keyring 来自另一台机器）；AC-08-F4 一字不动"
   - id: REC-5
@@ -1621,8 +1621,8 @@ entries:
       - "goose session locker 生效：一个进程应用迁移，另一个等待而非并发 CREATE TABLE"
       - "DB 只读对账 goose 版本表：终态版本唯一、无重复行、无部分应用的中间态"
       - "锁等待超时参数化到秒级；超时后按迁移执行失败处理（非零退出，见 REC-7）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_5"
     owner_issue: 113
     reason: "迁移并发语义的唯一验收面。一手事实：goose v3.24.3 已提供 WithSessionLocker，而 migrations/migrate.go 当前未启用，是裸并发（26 号 D2.1）；两份迁移均无 NO TRANSACTION，故部分应用只可能发生在多笔之间"
   - id: REC-6
@@ -1639,8 +1639,8 @@ entries:
       - "业务端点一律 503 且响应体指名平台自身故障：绝不返回 13 码中任何一个（26 号 D3.3）"
       - "本条不断「可登录」——登录依赖平台库，25 号 §5.2 那句说的是 keyring 坏而库好的场景"
       - "平台库恢复后：后台自动重连并补跑迁移，业务面自愈，无需人工重启进程"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_6"
     owner_issue: 113
     reason: "18 号 §6 D5 第 1 条「不许把平台挂了渲染成没有数据」的唯一验收面。13 码是目标库的空状态词汇表，用它描述平台故障即两域混淆——那正是全矩阵九条 F4 存在的理由"
   - id: REC-7
@@ -1656,8 +1656,8 @@ entries:
       - "进程非零退出，不监听 HTTP：绝不带着半个 schema 对外提供服务"
       - "日志指名失败的迁移笔次与错误原文"
       - "绝不降级成「起 HTTP + FAILED + 业务 503 继续运行」（26 号 D13 否决记录）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_7"
     owner_issue: 113
     reason: "18 号 §8 D7「绝不带着半个 schema 对外提供服务」的唯一验收面。与 REC-6 按失败性质两分而非按启动阶段（26 号 D3.2）：连不上库不拒启动，连上了但迁移执行失败拒启动"
   - id: REC-8
@@ -1672,11 +1672,11 @@ entries:
       - "分区跨度沿用 21 号 D7 参数化取值（1min）"
       - "启动后预建覆盖面 = 当前 + 7 个跨度（04 D6 机制 1，幂等 CREATE TABLE IF NOT EXISTS）"
       - "过期分区被 DROP 而不是 DELETE：对账 pg_class，子表整体消失而非留下空表（这是唯一能区分两者的观测点）"
-      - "维护循环失败时平台健康出现「分区维护」事实源，且 journal 有结构化 error（04 D6 机制 4 + 14 号 §2）"
-    status: pending
-    test_ref: null
+      - "维护循环失败时平台健康出现「分区维护」事实源；journal 载体验证按 21 号移交真机验收，不在 make acceptance 内重复"
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_8"
     owner_issue: 113
-    reason: "04 §6 D6 机制 1/2/4 的唯一验收面。否定面（分区清单与最旧分区前后一致、绝不自动删旧分区、绝不缩短保留期）已由 AC-09-F5 断死，本条刻意不重复（26 号 D6）"
+    reason: "04 §6 D6 机制 1/2/4 的唯一验收面。否定面（分区清单与最旧分区前后一致、绝不自动删旧分区、绝不缩短保留期）已由 AC-09-F5 断死，本条刻意不重复（26 号 D6）；journal 载体按 21 号移交真机验收"
   - id: REC-9
     slice: crosscut
     kind: rec
@@ -1690,8 +1690,8 @@ entries:
       - "让时间走过预建边界，使真实采集写入撞上无匹配分区"
       - "CopyFrom 失败被识别为「无匹配分区」→ 同步触发一次分区维护 → 重试一次成功"
       - "该次采集最终成功出点，不表现为静默丢样本"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_9"
     owner_issue: 113
     reason: "04 §6 D6 机制 3 自称「凌晨炸的最后一道防线」，且是无人会手工验的那一类，故不降级为可 pending 的普通加深（26 号 D1）。手段定性为参数化而非模拟（26 号 D6.1）：否决 test-only 开关（往生产代码种测试分支）与 DB 层手工 DROP 未来分区（D4 禁止 DB 层写）"
   - id: REC-10
@@ -1707,8 +1707,8 @@ entries:
       - "错误信息指名「已有 server 实例在运行」，与「正在迁移」可区分"
       - "第一个实例不受影响，采集与 HTTP 面全程正常"
       - "三把锁互相独立可证：rotate 锁 / 迁移锁 / 进程锁 ID 不同、行为不同（26 号 D2.3）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_10"
     owner_issue: 113
     reason: "双起 server 的后果（两套采集调度器、两套分区维护循环、两套通知发送）无其他拦截点；是 25 号 D5「轮换时忘了停 server」那把锁的对称扩展。否决三把锁合成一把——会让「正在迁移」与「已经在跑」退化成同一句错误信息"
   - id: REC-11
@@ -1724,8 +1724,8 @@ entries:
       - "指向 schema 内预置了非平台对象的库 → 非零退出，日志指名该项（拦「配置指错库」）"
       - "两种情形下均未创建任何平台表、未写入 goose 版本表——不带着不合格的库对外服务"
       - "无任何配置项或命令行开关可跳过该校验（27 号 D9）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_11"
     owner_issue: 116
     reason: "27 号 D1 钉死 PG17 与 D3.1 硬门清单的唯一验收面。不断这条则硬门与建议无法区分，而钉死 17 的全部理由（sqlc 解析器固定 PG17，make gen 的护栏才为真）当场落空。schema 洁净那条断的是「配置指错到客户业务库」，比版本更能救命。与 REC-6（库不可达）、REC-7（迁移执行失败）判据不同、不重叠"
   - id: REC-12
@@ -1740,8 +1740,8 @@ entries:
       - "平台库 locale 非 C/POSIX 或同实例存在其他非系统 database → server 正常启动"
       - "健康为 DEGRADED（非 FAILED、非 OK），平台事件中含该具体项，绝不静默"
       - "业务端点全部可用，不返回 503、不返回 13 码"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_12"
     owner_issue: 116
     reason: "27 号 D3.2 的唯一验收面，守的是反向失效——告警档悄悄升级成硬门同样是产品事故（客户的库跑得好好的却起不来），而这类回归没有任何其他拦截点。locale 只影响 instance.name 的展示排序，同实例多库是 D2 承诺面与断言面之差额，两者都不构成正确性问题"
   - id: REC-13
@@ -1757,8 +1757,8 @@ entries:
       - "库回来后（换成一个不合格的库）自愈路径上前置校验失败 → 进程不退出"
       - "健康保持 FAILED 并指名具体校验项，平台事件记录该次失败"
       - "退避重试而非忙等；换回合格的库后自愈成功、补跑迁移、健康转 OK"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_13"
     owner_issue: 116
     reason: "27 号 D3.4 那道缝的唯一验收面：26 号 D5 的后台自愈路径上进程已在对外 503，无处可「拒启动」。不定死这一格，实现只有两种坏收场——自愈路径跳过校验（硬门半途失效）或调 os.Exit（杀掉一个正在服务的进程）。REC-11 断「必须退出」、本条断「必须不退出」，互斥，合并会让断言互相打架，而这恰是实现最容易写错的地方"
   # ── 横切组三 · 生产安全边界（#112，29 号 D8）

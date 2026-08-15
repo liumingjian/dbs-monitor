@@ -4,6 +4,7 @@ package acceptance
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -42,6 +43,37 @@ func TestAcceptanceExecutionOrder(t *testing.T) {
 	wantTail := []string{"SEC-3", "SEC-4", "SEC-5"}
 	if !slices.Equal(securityIDs[len(securityIDs)-len(wantTail):], wantTail) {
 		t.Fatalf("security group tail = %v, want %v", securityIDs[len(securityIDs)-len(wantTail):], wantTail)
+	}
+}
+
+func TestRecoveryEntriesAreCoveredAndIndependent(t *testing.T) {
+	matrix := loadMatrix(t, "matrix.yaml")
+	recoveryEntries := make(map[string]matrixEntry)
+	for _, entry := range matrix.Entries {
+		if strings.HasPrefix(entry.ID, "REC-") {
+			recoveryEntries[entry.ID] = entry
+		}
+	}
+
+	if len(recoveryEntries) != 13 {
+		t.Fatalf("REC entry count = %d, want 13", len(recoveryEntries))
+	}
+	for index := 1; index <= 13; index++ {
+		id := fmt.Sprintf("REC-%d", index)
+		entry, ok := recoveryEntries[id]
+		if !ok {
+			t.Errorf("%s is missing", id)
+			continue
+		}
+		if entry.Status != "covered" {
+			t.Errorf("%s status = %q, want covered", id, entry.Status)
+		}
+		if entry.TestRef == nil || !strings.Contains(*entry.TestRef, strings.ReplaceAll(id, "-", "_")) {
+			t.Errorf("%s test_ref = %v, want an independent ID-bearing reference", id, entry.TestRef)
+		}
+		if len(entry.RidesOn) != 0 {
+			t.Errorf("%s rides_on = %v, want []", id, entry.RidesOn)
+		}
 	}
 }
 
