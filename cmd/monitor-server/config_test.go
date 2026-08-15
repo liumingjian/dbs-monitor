@@ -63,6 +63,19 @@ master_key_path: /srv/dbs-monitor/credentials
 		}
 	})
 
+	t.Run("environment overrides only the master key path", func(t *testing.T) {
+		t.Setenv("DBS_MONITOR_MASTER_KEY_PATH", "/run/secrets/dbs-monitor-credentials")
+		path := writeServerConfig(t, "master_key_path: /srv/dbs-monitor/credentials\n", 0o600)
+
+		config, _, err := loadServerConfig(path)
+		if err != nil {
+			t.Fatalf("loadServerConfig: %v", err)
+		}
+		if config.MasterKeyPath != "/run/secrets/dbs-monitor-credentials" {
+			t.Fatalf("master key path = %q, want environment override", config.MasterKeyPath)
+		}
+	})
+
 	invalid := []struct {
 		name     string
 		contents string

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,6 +37,9 @@ func TestSendPlatformUnavailableNotificationFromSnapshot(t *testing.T) {
 	defer receiver.Close()
 
 	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
+		t.Fatalf("precreate credential directory: %v", err)
+	}
 	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("create direct notification keyring: %v", err)
@@ -82,6 +86,9 @@ func TestSendPlatformUnavailableNotificationReportsAllSnapshotErrors(t *testing.
 	t.Parallel()
 
 	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
+		t.Fatalf("precreate credential directory: %v", err)
+	}
 	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("create direct notification keyring: %v", err)

@@ -42,6 +42,9 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
 
 	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
+		t.Fatalf("precreate credential directory: %v", err)
+	}
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate test database: %v", err)
@@ -54,7 +57,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}

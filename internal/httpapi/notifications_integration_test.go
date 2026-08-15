@@ -353,6 +353,9 @@ func notificationHTTPTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, 
 		admin.Close()
 	})
 	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatalf("precreate Webhook credential directory: %v", err)
+	}
 	migrationDB := openSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, directory); err != nil {
 		migrationDB.Close()
@@ -363,7 +366,7 @@ func notificationHTTPTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, 
 	if err != nil {
 		t.Fatalf("open Webhook test database: %v", err)
 	}
-	keyring, err := instance.OpenCredentialKeyring(directory, true)
+	keyring, err := instance.OpenCredentialKeyring(directory, false)
 	if err != nil {
 		pool.Close()
 		t.Fatalf("open Webhook test keyring: %v", err)

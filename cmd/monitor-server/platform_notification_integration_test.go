@@ -47,6 +47,9 @@ func TestPlatformDatabaseFailureSendsSnapshotDirectlyWithoutProductWrites(t *tes
 	})
 
 	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
+		t.Fatalf("precreate credential directory: %v", err)
+	}
 	migrationDB := openRotationSQL(t, databaseName)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		migrationDB.Close()
@@ -59,7 +62,7 @@ func TestPlatformDatabaseFailureSendsSnapshotDirectlyWithoutProductWrites(t *tes
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("open issue 83 keyring: %v", err)
 	}

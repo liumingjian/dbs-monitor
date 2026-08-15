@@ -82,8 +82,10 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (appl
 		}
 		applied += len(results)
 	}
-	if err := migrateInstanceCredentials(ctx, database, credentialDirectory, current < plaintextPasswordRemovalVersion); err != nil {
-		return applied, err
+	if current < plaintextPasswordRemovalVersion {
+		if err := migrateInstanceCredentials(ctx, database, credentialDirectory); err != nil {
+			return applied, err
+		}
 	}
 	results, err := provider.Up(ctx)
 	if err != nil {
@@ -96,7 +98,15 @@ func Up(ctx context.Context, database *sql.DB, credentialDirectory string) (appl
 	return applied, nil
 }
 
-func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentialDirectory string, backfillPlaintext bool) error {
+func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentialDirectory string) error {
+	var hasPlaintextCredentials bool
+	if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NULL)").Scan(&hasPlaintextCredentials); err != nil {
+		return fmt.Errorf("inspect plaintext instance credentials: %w", err)
+	}
+	if !hasPlaintextCredentials {
+		return nil
+	}
+
 	var hasEncryptedCredentials bool
 	if err := database.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM instance WHERE password_ciphertext IS NOT NULL)").Scan(&hasEncryptedCredentials); err != nil {
 		return fmt.Errorf("inspect encrypted instance credentials: %w", err)
@@ -127,10 +137,6 @@ func migrateInstanceCredentials(ctx context.Context, database *sql.DB, credentia
 	if err != nil {
 		return err
 	}
-	if !backfillPlaintext {
-		return nil
-	}
-
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin instance credential migration: %w", err)

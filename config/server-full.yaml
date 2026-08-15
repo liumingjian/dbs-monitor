@@ -33,6 +33,7 @@ agent_binary_dir: /opt/dbs-monitor/bin
 platform_database_url: postgres://dbs_monitor:change-me@platform-db:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full
 
 # Directory containing current and versioned master-key files. Default shown.
+# DBS_MONITOR_MASTER_KEY_PATH may override this path; key material is never read from the environment.
 master_key_path: /etc/dbs-monitor/credentials
 
 # Intentionally not configurable: NO_DATA requires 2 periods and notification delivery

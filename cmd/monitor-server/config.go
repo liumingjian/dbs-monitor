@@ -122,6 +122,9 @@ func loadServerConfig(path string) (serverConfig, bool, error) {
 	if raw.MasterKeyPath != nil {
 		config.MasterKeyPath = *raw.MasterKeyPath
 	}
+	if masterKeyPath := os.Getenv("DBS_MONITOR_MASTER_KEY_PATH"); masterKeyPath != "" {
+		config.MasterKeyPath = masterKeyPath
+	}
 	if err := config.validate(); err != nil {
 		return serverConfig{}, permissionsSecure, err
 	}

@@ -53,9 +53,18 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	if applied == 0 {
 		t.Fatal("first migration run applied no migrations")
 	}
+	if err := os.Mkdir(keyringDirectory, 0o700); err != nil {
+		t.Fatalf("precreate credential directory: %v", err)
+	}
+	if _, err := instance.OpenCredentialKeyring(keyringDirectory, false); err != nil {
+		t.Fatalf("initialize credential keyring after migrations: %v", err)
+	}
 	firstKey, err := os.ReadFile(filepath.Join(keyringDirectory, "master-key-v1"))
 	if err != nil {
-		t.Fatalf("read generated migration key: %v", err)
+		t.Fatalf("read generated startup key: %v", err)
+	}
+	if err := os.RemoveAll(keyringDirectory); err != nil {
+		t.Fatalf("remove keyring before current-schema migration: %v", err)
 	}
 	applied, err = migrations.Up(ctx, database, keyringDirectory)
 	if err != nil {
@@ -64,12 +73,11 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	if applied != 0 {
 		t.Fatalf("second migration run applied %d migrations, want 0", applied)
 	}
-	secondKey, err := os.ReadFile(filepath.Join(keyringDirectory, "master-key-v1"))
-	if err != nil {
-		t.Fatalf("reread generated migration key: %v", err)
+	if _, err := os.Stat(keyringDirectory); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("current-schema migration recreated keyring: %v", err)
 	}
-	if !bytes.Equal(firstKey, secondKey) {
-		t.Fatal("second migration run replaced the master key")
+	if len(firstKey) == 0 {
+		t.Fatal("generated startup key was empty")
 	}
 
 	lockConnection, err := database.Conn(ctx)
@@ -448,6 +456,9 @@ func TestPlaintextCredentialMigration(t *testing.T) {
 	}
 
 	keyringDirectory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(keyringDirectory, 0o700); err != nil {
+		t.Fatalf("precreate legacy credential directory: %v", err)
+	}
 	if _, err := migrations.Up(ctx, database, keyringDirectory); err != nil {
 		t.Fatalf("migrate plaintext credential: %v", err)
 	}

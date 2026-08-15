@@ -501,6 +501,9 @@ func notificationTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, *ins
 		t.Fatal(err)
 	}
 	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := migrations.Up(ctx, migrationDB, directory); err != nil {
 		t.Fatalf("migrate notification test database: %v", err)
 	}
@@ -509,7 +512,7 @@ func notificationTestDatabase(t *testing.T, ctx context.Context) (*db.Pool, *ins
 	if err != nil {
 		t.Fatal(err)
 	}
-	keyring, err := instance.OpenCredentialKeyring(directory, true)
+	keyring, err := instance.OpenCredentialKeyring(directory, false)
 	if err != nil {
 		t.Fatal(err)
 	}

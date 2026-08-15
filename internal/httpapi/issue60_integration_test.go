@@ -70,6 +70,9 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	}
 
 	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(credentialDirectory, 0o700); err != nil {
+		t.Fatalf("precreate credential directory: %v", err)
+	}
 	migrationDB := openSQL(t, platformDatabase)
 	if _, err := migrations.Up(ctx, migrationDB, credentialDirectory); err != nil {
 		t.Fatalf("migrate issue 60 platform database: %v", err)
@@ -81,7 +84,7 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	}
 	defer pool.Close()
 	platform := &db.Pool{Pool: pool}
-	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, true)
+	keyring, err := instance.OpenCredentialKeyring(credentialDirectory, false)
 	if err != nil {
 		t.Fatalf("open issue 60 keyring: %v", err)
 	}
