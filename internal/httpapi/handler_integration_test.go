@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -90,13 +91,23 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	login.Body.Close()
 
+	targetUsername := fmt.Sprintf("onboarding_target_%d", os.Getpid())
+	targetPassword := "onboarding-target-secret"
+	if _, err := pool.Exec(ctx, fmt.Sprintf(
+		"CREATE ROLE %s LOGIN PASSWORD '%s'",
+		pgx.Identifier{targetUsername}.Sanitize(),
+		targetPassword,
+	)); err != nil {
+		t.Fatalf("create monitored target role: %v", err)
+	}
+
 	instanceInput := api.InstanceCreateInput{
 		Name:     "target",
 		Host:     env("PGHOST", "localhost"),
 		Port:     envInt("PGPORT", 55432),
 		Database: env("PGDATABASE", "dbs_monitor"),
-		Username: env("PGUSER", "dbs_monitor"),
-		Password: env("PGPASSWORD", "dbs_monitor"),
+		Username: targetUsername,
+		Password: targetPassword,
 	}
 	assertCreateRejected(t, ctx, client, server.URL, pool, api.InstanceCreateInput{
 		Name:     "unreachable",
@@ -128,11 +139,21 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if created.StatusCode != http.StatusCreated {
 		t.Fatalf("create instance status = %d, want 201", created.StatusCode)
 	}
-	var createBody api.InstanceCreated
-	if err := json.NewDecoder(created.Body).Decode(&createBody); err != nil {
-		t.Fatalf("decode created instance: %v", err)
+	createResponseBody, err := io.ReadAll(created.Body)
+	if err != nil {
+		t.Fatalf("read created instance response: %v", err)
 	}
 	created.Body.Close()
+	if strings.Contains(strings.ToLower(string(createResponseBody)), "agent_token") {
+		t.Fatalf("create instance response exposes Agent token: %s", createResponseBody)
+	}
+	if bytes.Contains(createResponseBody, []byte(instanceInput.Password)) {
+		t.Fatalf("create instance response exposes submitted password: %s", createResponseBody)
+	}
+	var createBody api.InstanceCreated
+	if err := json.Unmarshal(createResponseBody, &createBody); err != nil {
+		t.Fatalf("decode created instance: %v", err)
+	}
 	if createBody.Instance.Id == uuid.Nil {
 		t.Fatalf("create response missing instance: %+v", createBody)
 	}
@@ -224,11 +245,24 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if rotated.StatusCode != http.StatusOK {
 		t.Fatalf("credential update status = %d, want 200", rotated.StatusCode)
 	}
-	var credentialResponse api.InstanceCredentialUpdated
-	if err := json.NewDecoder(rotated.Body).Decode(&credentialResponse); err != nil {
-		t.Fatalf("decode credential update response: %v", err)
+	credentialResponseBody, err := io.ReadAll(rotated.Body)
+	if err != nil {
+		t.Fatalf("read credential update response: %v", err)
 	}
 	rotated.Body.Close()
+	lowerCredentialResponse := strings.ToLower(string(credentialResponseBody))
+	for _, forbidden := range []string{"password", "ciphertext", "key_version", "credential_version", "dsn"} {
+		if strings.Contains(lowerCredentialResponse, forbidden) {
+			t.Fatalf("credential update response exposes forbidden field %q: %s", forbidden, credentialResponseBody)
+		}
+	}
+	if bytes.Contains(credentialResponseBody, []byte(instanceInput.Password)) {
+		t.Fatalf("credential update response exposes submitted password: %s", credentialResponseBody)
+	}
+	var credentialResponse api.InstanceCredentialUpdated
+	if err := json.Unmarshal(credentialResponseBody, &credentialResponse); err != nil {
+		t.Fatalf("decode credential update response: %v", err)
+	}
 	if credentialResponse.Username != instanceInput.Username {
 		t.Fatalf("credential response username = %q", credentialResponse.Username)
 	}
