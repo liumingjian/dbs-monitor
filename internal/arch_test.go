@@ -12,6 +12,7 @@ import (
 
 var packageLayers = map[string]int{
 	"cmd/acceptance-report":     3,
+	"cmd/metric-appendix":       3,
 	"cmd/monitor-agent":         3,
 	"cmd/monitor-server":        3,
 	"cmd/pg-range-evidence":     3,

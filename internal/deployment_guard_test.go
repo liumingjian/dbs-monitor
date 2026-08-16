@@ -178,6 +178,8 @@ func TestDeliveryAndOperationsDocumentationContract(t *testing.T) {
 	)
 	requirePhrases("docs/deploy/prerequisites.md",
 		"PostgreSQL 17", "dbsmon", "schema owner", "superuser", "零扩展", "UTF8",
+		"被监控 PostgreSQL 支持 13–17", "升级窗口内产生的时序数据会有意丢失",
+		"整台平台主机宕机时", "客户必须使用外部基础设施探测",
 		"sslmode=verify-full", "install -d -m 0700 -o dbsmon -g dbsmon /etc/dbs-monitor/credentials",
 		"chmod 0600", "换机恢复", "不可恢复", "无后门", "升级到 PG 18+ 会导致平台拒绝启动",
 		"降级不受支持", "未备份即升级 = 不可回退",
