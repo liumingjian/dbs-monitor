@@ -82,14 +82,14 @@ func TestAcceptance_AC_01_S1(t *testing.T) {
 }
 
 func TestAcceptance_AC_01_S2(t *testing.T) {
-	testIssue60UnavailabilityProducers(t, "AC-01-S2", 18449)
+	runIssue60UnavailabilityEntry(t, "AC-01-S2", 18449)
 }
 
 func TestAcceptance_AC_05_F2(t *testing.T) {
-	testIssue60UnavailabilityProducers(t, "AC-05-F2", 18450)
+	runIssue60UnavailabilityEntry(t, "AC-05-F2", 18450)
 }
 
-func testIssue60UnavailabilityProducers(t *testing.T, entryID string, port int) {
+func runIssue60UnavailabilityEntry(t *testing.T, entryID string, serverPort int) {
 	t.Helper()
 	if os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL") == "" {
 		t.Skipf("ACCEPTANCE_PLATFORM_DATABASE_URL is required for %s", entryID)
@@ -97,7 +97,7 @@ func testIssue60UnavailabilityProducers(t *testing.T, entryID string, port int) 
 	started := time.Now()
 	defer recordIssue60Result(t, entryID, "whole dictionary reconciled and eleven real unavailability conditions were observed", started)
 
-	runtime := startIssue60Runtime(t, port)
+	runtime := startIssue60Runtime(t, serverPort)
 	admin := openIssue60Target(t, "monitored", "monitored", "monitored")
 	defer admin.Close(context.Background())
 	prepareIssue60Targets(t, admin)
