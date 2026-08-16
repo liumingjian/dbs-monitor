@@ -71,41 +71,41 @@ func NewChannelSnapshotStore(path string) *ChannelSnapshotStore {
 }
 
 func (store *ChannelSnapshotStore) ListArtifacts() ([]ChannelSnapshotArtifact, error) {
-	info, err := os.Lstat(store.path)
+	snapshotInfo, err := os.Lstat(store.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return []ChannelSnapshotArtifact{}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("inspect notification channel snapshot: %w", err)
 	}
-	if !info.Mode().IsRegular() {
+	if !snapshotInfo.Mode().IsRegular() {
 		return []ChannelSnapshotArtifact{}, nil
 	}
 	return []ChannelSnapshotArtifact{{
 		Name:       filepath.Base(store.path),
-		Bytes:      info.Size(),
-		ModifiedAt: info.ModTime().UTC(),
+		Bytes:      snapshotInfo.Size(),
+		ModifiedAt: snapshotInfo.ModTime().UTC(),
 	}}, nil
 }
 
 func (store *ChannelSnapshotStore) DeleteArtifact(
 	name string,
 	deletedAt time.Time,
-	record ChannelSnapshotDeletionRecorder,
+	recordDeletion ChannelSnapshotDeletionRecorder,
 ) error {
 	expectedName := filepath.Base(store.path)
 	if name != expectedName || filepath.Base(name) != name {
 		return fmt.Errorf("invalid notification channel snapshot name %q", name)
 	}
-	if record == nil {
+	if recordDeletion == nil {
 		return errors.New("notification channel snapshot deletion requires an event recorder")
 	}
 
-	info, err := os.Lstat(store.path)
+	snapshotInfo, err := os.Lstat(store.path)
 	if err != nil {
 		return fmt.Errorf("inspect notification channel snapshot %s: %w", name, err)
 	}
-	if !info.Mode().IsRegular() {
+	if !snapshotInfo.Mode().IsRegular() {
 		return fmt.Errorf("notification channel snapshot %s is not a regular file", name)
 	}
 
@@ -122,10 +122,10 @@ func (store *ChannelSnapshotStore) DeleteArtifact(
 	event := ChannelSnapshotDeletionEvent{
 		Event:        ChannelSnapshotDeletedEventType,
 		SnapshotName: name,
-		Bytes:        info.Size(),
+		Bytes:        snapshotInfo.Size(),
 		DeletedAt:    deletedAt.UTC(),
 	}
-	if err := record(event); err != nil {
+	if err := recordDeletion(event); err != nil {
 		if restoreErr := os.Rename(stagedPath, store.path); restoreErr != nil {
 			return fmt.Errorf("record notification channel snapshot deletion event: %v; restore snapshot: %w", err, restoreErr)
 		}

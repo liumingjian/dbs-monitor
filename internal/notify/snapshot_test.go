@@ -87,7 +87,9 @@ func TestChannelSnapshotStoreWritesEncryptedConfigurationAtomically(t *testing.T
 	}
 }
 
-func TestChannelSnapshotStoreListsAndDeletesOneSnapshotWithEvent(t *testing.T) {
+func TestChannelSnapshotStoreListsAndDeletesSnapshotWithEvent(t *testing.T) {
+	t.Parallel()
+
 	directory := t.TempDir()
 	name := "notification-channels.snapshot"
 	path := filepath.Join(directory, name)
@@ -105,34 +107,43 @@ func TestChannelSnapshotStoreListsAndDeletesOneSnapshotWithEvent(t *testing.T) {
 	if err := os.Chtimes(path, modifiedAt, modifiedAt); err != nil {
 		t.Fatalf("set channel snapshot time: %v", err)
 	}
-
-	artifacts, err := store.ListArtifacts()
-	if err != nil {
-		t.Fatalf("list channel snapshot artifacts: %v", err)
-	}
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("stat channel snapshot: %v", err)
 	}
-	if len(artifacts) != 1 || artifacts[0].Name != name || artifacts[0].Bytes != info.Size() ||
-		!artifacts[0].ModifiedAt.Equal(modifiedAt) {
-		t.Fatalf("listed channel snapshot artifacts = %+v", artifacts)
+
+	gotArtifacts, err := store.ListArtifacts()
+	if err != nil {
+		t.Fatalf("list channel snapshot artifacts: %v", err)
+	}
+	wantArtifacts := []ChannelSnapshotArtifact{{
+		Name:       name,
+		Bytes:      info.Size(),
+		ModifiedAt: modifiedAt,
+	}}
+	if !reflect.DeepEqual(gotArtifacts, wantArtifacts) {
+		t.Fatalf("listed channel snapshot artifacts = %+v, want %+v", gotArtifacts, wantArtifacts)
 	}
 
-	var event ChannelSnapshotDeletionEvent
+	var gotEvent ChannelSnapshotDeletionEvent
 	deletedAt := modifiedAt.Add(time.Hour)
 	if err := store.DeleteArtifact(name, deletedAt, func(candidate ChannelSnapshotDeletionEvent) error {
-		event = candidate
+		gotEvent = candidate
 		return nil
 	}); err != nil {
 		t.Fatalf("delete channel snapshot artifact: %v", err)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("deleted channel snapshot still exists: %v", err)
 	}
-	if event.Event != "notification_channel_snapshot_deleted" || event.SnapshotName != name ||
-		event.Bytes != info.Size() || !event.DeletedAt.Equal(deletedAt) {
-		t.Fatalf("channel snapshot deletion event = %+v", event)
+	wantEvent := ChannelSnapshotDeletionEvent{
+		Event:        "notification_channel_snapshot_deleted",
+		SnapshotName: name,
+		Bytes:        info.Size(),
+		DeletedAt:    deletedAt,
+	}
+	if !reflect.DeepEqual(gotEvent, wantEvent) {
+		t.Fatalf("channel snapshot deletion event = %+v, want %+v", gotEvent, wantEvent)
 	}
 	if _, err := os.Stat(filepath.Join(directory, "unmanaged.snapshot")); err != nil {
 		t.Fatalf("delete removed unmanaged file: %v", err)
@@ -140,6 +151,8 @@ func TestChannelSnapshotStoreListsAndDeletesOneSnapshotWithEvent(t *testing.T) {
 }
 
 func TestChannelSnapshotStoreRestoresSnapshotWhenDeletionEventFails(t *testing.T) {
+	t.Parallel()
+
 	directory := t.TempDir()
 	name := "notification-channels.snapshot"
 	path := filepath.Join(directory, name)
@@ -151,22 +164,29 @@ func TestChannelSnapshotStoreRestoresSnapshotWhenDeletionEventFails(t *testing.T
 		t.Fatalf("write channel snapshot: %v", err)
 	}
 
-	recordError := errors.New("platform event unavailable")
+	recorderError := errors.New("platform event unavailable")
 	err := store.DeleteArtifact(name, time.Now(), func(ChannelSnapshotDeletionEvent) error {
-		return recordError
+		return recorderError
 	})
-	if !errors.Is(err, recordError) {
+	if !errors.Is(err, recorderError) {
 		t.Fatalf("delete channel snapshot error = %v, want event error", err)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("channel snapshot was not restored after event failure: %v", err)
 	}
-	if err := store.DeleteArtifact("../"+name, time.Now(), func(ChannelSnapshotDeletionEvent) error {
+}
+
+func TestChannelSnapshotStoreRejectsInvalidDeletionRequests(t *testing.T) {
+	t.Parallel()
+
+	name := "notification-channels.snapshot"
+	store := NewChannelSnapshotStore(filepath.Join(t.TempDir(), name))
+	if err := store.DeleteArtifact("../"+name, time.Time{}, func(ChannelSnapshotDeletionEvent) error {
 		return nil
 	}); err == nil {
 		t.Fatal("delete channel snapshot accepted path traversal")
 	}
-	if err := store.DeleteArtifact(name, time.Now(), nil); err == nil {
+	if err := store.DeleteArtifact(name, time.Time{}, nil); err == nil {
 		t.Fatal("delete channel snapshot accepted a missing event recorder")
 	}
 }
