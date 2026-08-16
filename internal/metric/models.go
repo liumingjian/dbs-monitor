@@ -91,6 +91,8 @@ type AlertRule struct {
 	SourceTemplateVersion     pgtype.Int4
 	CreatedBy                 pgtype.UUID
 	UpdatedBy                 pgtype.UUID
+	DeletedBy                 pgtype.UUID
+	DeletedAt                 pgtype.Timestamptz
 }
 
 type AlertRuleEvaluationState struct {

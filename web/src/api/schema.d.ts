@@ -1163,6 +1163,10 @@ export interface components {
             source_template_id?: string;
             source_template_version?: number;
             /** Format: uuid */
+            created_by?: string;
+            /** Format: uuid */
+            updated_by?: string;
+            /** Format: uuid */
             enabled_updated_by?: string;
             /** Format: date-time */
             enabled_updated_at?: string;

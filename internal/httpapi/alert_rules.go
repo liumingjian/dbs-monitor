@@ -217,7 +217,11 @@ func (handler *Handler) DeleteAlertRule(ctx context.Context, request api.DeleteA
 	if code := alerting.BuiltinRuleRestriction(rule.BuiltinIdentifier.Valid, alerting.BuiltinRuleChange{Delete: true}); code != "" {
 		return api.DeleteAlertRule409JSONResponse(errorBody(code, "built-in collection rules cannot be deleted")), nil
 	}
-	if _, err := queries.DeleteAlertRule(ctx, ruleID); err != nil {
+	if _, err := queries.DeleteAlertRule(ctx, alerting.DeleteAlertRuleParams{
+		ID:        ruleID,
+		ActorID:   databaseUserID(authenticatedUserID(ctx)),
+		DeletedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+	}); err != nil {
 		return nil, err
 	}
 	return api.DeleteAlertRule204Response{}, nil
@@ -357,6 +361,7 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
 			SourceTemplateID:          databaseSourceTemplateID,
 			SourceTemplateVersion:     databaseSourceTemplateVersion,
+			ActorID:                   actorID,
 		})
 		if err != nil {
 			return err

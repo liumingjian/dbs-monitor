@@ -188,7 +188,7 @@ INSERT INTO alert_rule (
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1,
         $17, $17, $18, $18,
         $19, $20, $21)
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by, deleted_by, deleted_at
 `
 
 type CreateAlertRuleParams struct {
@@ -268,6 +268,8 @@ func (q *Queries) CreateAlertRule(ctx context.Context, arg CreateAlertRuleParams
 		&i.SourceTemplateVersion,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.DeletedBy,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -390,14 +392,25 @@ func (q *Queries) CreateTriggerSnapshotSession(ctx context.Context, arg CreateTr
 }
 
 const deleteAlertRule = `-- name: DeleteAlertRule :one
-DELETE FROM alert_rule
+UPDATE alert_rule
+SET enabled = false,
+    deleted_by = $2,
+    deleted_at = $3
 WHERE id = $1
   AND builtin_identifier IS NULL
+  AND deleted_at IS NULL
 RETURNING id
 `
 
-func (q *Queries) DeleteAlertRule(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, deleteAlertRule, id)
+type DeleteAlertRuleParams struct {
+	ID        pgtype.UUID
+	ActorID   pgtype.UUID
+	DeletedAt pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteAlertRule(ctx context.Context, arg DeleteAlertRuleParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteAlertRule, arg.ID, arg.ActorID, arg.DeletedAt)
+	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -506,7 +519,7 @@ func (q *Queries) GetAlertDispositionForUpdate(ctx context.Context, id pgtype.UU
 }
 
 const getAlertRule = `-- name: GetAlertRule :one
-SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by FROM alert_rule WHERE id = $1
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by, deleted_by, deleted_at FROM alert_rule WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, error) {
@@ -540,6 +553,8 @@ func (q *Queries) GetAlertRule(ctx context.Context, id pgtype.UUID) (AlertRule, 
 		&i.SourceTemplateVersion,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.DeletedBy,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -693,6 +708,7 @@ LEFT JOIN LATERAL (
 WHERE rule.id = $2
   AND instance.id = $3
   AND rule.enabled
+  AND rule.deleted_at IS NULL
 `
 
 type GetEvaluationTargetParams struct {
@@ -917,7 +933,7 @@ func (q *Queries) ListAlertRuleTemplates(ctx context.Context) ([]AlertRuleTempla
 }
 
 const listAlertRules = `-- name: ListAlertRules :many
-SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by FROM alert_rule ORDER BY created_at, id
+SELECT id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by, deleted_by, deleted_at FROM alert_rule WHERE deleted_at IS NULL ORDER BY created_at, id
 `
 
 func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
@@ -957,6 +973,8 @@ func (q *Queries) ListAlertRules(ctx context.Context) ([]AlertRule, error) {
 			&i.SourceTemplateVersion,
 			&i.CreatedBy,
 			&i.UpdatedBy,
+			&i.DeletedBy,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -995,6 +1013,7 @@ LEFT JOIN alert_rule_evaluation_state evaluation_state
  AND evaluation_state.instance_id = instance.id
  AND evaluation_state.metric_dimension_key = COALESCE(metric_dimension.metric_dimension_key, '{}')
 WHERE rule.enabled
+  AND rule.deleted_at IS NULL
   AND NOT collection_config.collection_paused
   AND (rule.scope = 'ALL' OR EXISTS (
       SELECT 1
@@ -1361,7 +1380,8 @@ SET enabled = $2,
     enabled_updated_by = $3,
     enabled_updated_at = $4
 WHERE id = $1
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by
+  AND deleted_at IS NULL
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by, deleted_by, deleted_at
 `
 
 type SetAlertRuleEnabledParams struct {
@@ -1407,6 +1427,8 @@ func (q *Queries) SetAlertRuleEnabled(ctx context.Context, arg SetAlertRuleEnabl
 		&i.SourceTemplateVersion,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.DeletedBy,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -1497,8 +1519,8 @@ SET name = $2,
     version = version + 1,
     updated_by = $17,
     updated_at = $18
-WHERE id = $1
-RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, name, metric_id, aggregation, operator, threshold, recovery_operator, recovery_threshold, window_seconds, consecutive_count, recovery_consecutive_count, severity, no_data_policy, enabled, version, created_at, updated_at, scope, evaluation_interval_seconds, enabled_updated_by, enabled_updated_at, builtin_identifier, notification_policy_id, source_template_id, source_template_version, created_by, updated_by, deleted_by, deleted_at
 `
 
 type UpdateAlertRuleParams struct {
@@ -1572,6 +1594,8 @@ func (q *Queries) UpdateAlertRule(ctx context.Context, arg UpdateAlertRuleParams
 		&i.SourceTemplateVersion,
 		&i.CreatedBy,
 		&i.UpdatedBy,
+		&i.DeletedBy,
+		&i.DeletedAt,
 	)
 	return i, err
 }

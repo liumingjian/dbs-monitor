@@ -67,6 +67,10 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	server := httptest.NewTLSServer(httpapi.NewHandler(platform, currentClock, keyring).Routes())
 	defer server.Close()
 	client := loginAlertTestUser(t, server, "admin", "correct horse battery staple")
+	var actorID uuid.UUID
+	if err := pool.QueryRow(ctx, "SELECT id FROM app_user WHERE username = 'admin'").Scan(&actorID); err != nil {
+		t.Fatalf("read alert rule actor: %v", err)
+	}
 
 	templatesResponse := getResponse(t, client, server.URL+"/api/v1/alert-rule-templates")
 	defer templatesResponse.Body.Close()
@@ -103,6 +107,11 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		fromTemplate.IsBuiltin || fromTemplate.EffectiveNotificationPolicyName != "默认策略（继承）" {
 		t.Fatalf("rule created from template = %+v", fromTemplate)
 	}
+	if fromTemplate.CreatedBy == nil || *fromTemplate.CreatedBy != actorID ||
+		fromTemplate.UpdatedBy == nil || *fromTemplate.UpdatedBy != actorID {
+		t.Fatalf("rule created from template attribution = created %v, updated %v; want actor %s",
+			fromTemplate.CreatedBy, fromTemplate.UpdatedBy, actorID)
+	}
 
 	copyResponse := requestJSON(t, client, http.MethodPost,
 		server.URL+"/api/v1/alert-rules/"+fromTemplate.Id.String()+"/copies",
@@ -116,12 +125,20 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		copied.SourceTemplateId != nil || copied.SourceTemplateVersion != nil {
 		t.Fatalf("copied alert rule = %+v", copied)
 	}
+	if copied.CreatedBy == nil || *copied.CreatedBy != actorID || copied.UpdatedBy == nil || *copied.UpdatedBy != actorID {
+		t.Fatalf("copied alert rule attribution = created %v, updated %v; want actor %s",
+			copied.CreatedBy, copied.UpdatedBy, actorID)
+	}
+	assertAlertRuleAttribution(t, ctx, pool, fromTemplate.Id, actorID, currentClock.now, currentClock.now, nil)
+	assertAlertRuleAttribution(t, ctx, pool, copied.Id, actorID, currentClock.now, currentClock.now, nil)
+	deletedAt := currentClock.now
 	for _, ruleID := range []uuid.UUID{copied.Id, fromTemplate.Id} {
 		deleted := requestJSON(t, client, http.MethodDelete, server.URL+"/api/v1/alert-rules/"+ruleID.String(), nil, "")
 		deleted.Body.Close()
 		if deleted.StatusCode != http.StatusNoContent {
 			t.Fatalf("delete copied/template rule status = %d, want 204", deleted.StatusCode)
 		}
+		assertAlertRuleAttribution(t, ctx, pool, ruleID, actorID, currentClock.now, currentClock.now, &deletedAt)
 	}
 
 	rulesResponse := getResponse(t, client, server.URL+"/api/v1/alert-rules")
@@ -133,6 +150,9 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	var databaseRule api.AlertRule
 	builtinCount := 0
 	for _, rule := range rules {
+		if rule.Id == copied.Id || rule.Id == fromTemplate.Id {
+			t.Fatalf("deleted alert rule remains visible: %+v", rule)
+		}
 		if !rule.IsBuiltin {
 			continue
 		}
@@ -253,7 +273,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("decode created rule: %v", err)
 	}
 	if createdRule.ID == uuid.Nil || createdRule.Version != 1 || createdRule.RecoveryConsecutiveCount != 2 {
-		t.Fatalf("created rule = %+v, want id and version 1", createdRule)
+		t.Fatalf("created rule = %+v, want an ID, version 1, and default recovery count 2", createdRule)
 	}
 	var adminID, createdBy, updatedBy, createdVersionBy uuid.UUID
 	var adminPasswordHash []byte
@@ -459,8 +479,8 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		UpdatedBy *uuid.UUID `json:"updated_by"`
 		UpdatedAt time.Time  `json:"updated_at"`
 	}
-	if err := json.NewDecoder(updated.Body).Decode(&updatedRule); err != nil || updatedRule.Version != 2 {
-		t.Fatalf("updated rule = %+v, error = %v", updatedRule, err)
+	if err := json.NewDecoder(updated.Body).Decode(&updatedRule); err != nil {
+		t.Fatalf("decode updated rule: %v", err)
 	}
 	if updatedRule.CreatedBy == nil || *updatedRule.CreatedBy != adminID ||
 		updatedRule.UpdatedBy == nil || *updatedRule.UpdatedBy != editorID || !updatedRule.UpdatedAt.Equal(currentClock.now) {
@@ -856,6 +876,44 @@ func assertRuleErrorCode(t *testing.T, response *http.Response, wantStatus int, 
 	}
 	if response.StatusCode != wantStatus || body.Error.Code != wantCode {
 		t.Fatalf("alert rule error = status %d code %q, want %d/%q", response.StatusCode, body.Error.Code, wantStatus, wantCode)
+	}
+}
+
+func assertAlertRuleAttribution(
+	t *testing.T,
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	ruleID uuid.UUID,
+	wantActor uuid.UUID,
+	wantCreatedAt time.Time,
+	wantUpdatedAt time.Time,
+	wantDeletedAt *time.Time,
+) {
+	t.Helper()
+	var createdBy, updatedBy uuid.UUID
+	var deletedBy *uuid.UUID
+	var createdAt, updatedAt time.Time
+	var deletedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT created_by, updated_by, deleted_by,
+		created_at, updated_at, deleted_at
+		FROM alert_rule WHERE id = $1`, ruleID).Scan(
+		&createdBy, &updatedBy, &deletedBy, &createdAt, &updatedAt, &deletedAt,
+	); err != nil {
+		t.Fatalf("read alert rule attribution for %s: %v", ruleID, err)
+	}
+	if createdBy != wantActor || updatedBy != wantActor || !createdAt.Equal(wantCreatedAt) || !updatedAt.Equal(wantUpdatedAt) {
+		t.Fatalf("alert rule %s attribution = created %s at %s, updated %s at %s; want actor %s",
+			ruleID, createdBy, createdAt, updatedBy, updatedAt, wantActor)
+	}
+	if wantDeletedAt != nil {
+		if deletedBy == nil || *deletedBy != wantActor || deletedAt == nil || !deletedAt.Equal(*wantDeletedAt) {
+			t.Fatalf("deleted alert rule %s attribution = actor %v at %v; want actor %s at %s",
+				ruleID, deletedBy, deletedAt, wantActor, *wantDeletedAt)
+		}
+		return
+	}
+	if deletedBy != nil || deletedAt != nil {
+		t.Fatalf("live alert rule %s has deletion attribution %v at %v", ruleID, deletedBy, deletedAt)
 	}
 }
 

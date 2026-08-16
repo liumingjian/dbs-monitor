@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { components } from '../../../api/schema'
-import { capabilityFit, consecutiveDurationLabel, formatRuleDuration } from './rules'
+import { canWriteAlertRules, capabilityFit, consecutiveDurationLabel, formatRuleDuration } from './rules'
 
 type CollectionTask = components['schemas']['CollectionTaskState']
 type Capability = components['schemas']['CapabilitySnapshotEntry']
@@ -48,5 +48,15 @@ describe('alert rule capability fit', () => {
 
   it('uses the instance Agent state for host metrics', () => {
     expect(capabilityFit('host.cpu.usage_percent', [], [], { ...instance, agent_status: 'offline' })).toBe('UNSATISFIED')
+  })
+})
+
+describe('alert rule write permissions', () => {
+  it.each([
+    ['READONLY', false],
+    ['ALERT_ADMIN', true],
+    ['PLATFORM_ADMIN', true],
+  ] as const)('allows %s to write = %s', (role, canWrite) => {
+    expect(canWriteAlertRules(role)).toBe(canWrite)
   })
 })
