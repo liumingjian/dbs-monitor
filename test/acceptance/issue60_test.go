@@ -82,18 +82,27 @@ func TestAcceptance_AC_01_S1(t *testing.T) {
 }
 
 func TestAcceptance_AC_01_S2(t *testing.T) {
+	testIssue60UnavailabilityProducers(t, "AC-01-S2", 18449)
+}
+
+func TestAcceptance_AC_05_F2(t *testing.T) {
+	testIssue60UnavailabilityProducers(t, "AC-05-F2", 18450)
+}
+
+func testIssue60UnavailabilityProducers(t *testing.T, entryID string, port int) {
+	t.Helper()
 	if os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL") == "" {
-		t.Skip("ACCEPTANCE_PLATFORM_DATABASE_URL is required for AC-01-S2")
+		t.Skipf("ACCEPTANCE_PLATFORM_DATABASE_URL is required for %s", entryID)
 	}
 	started := time.Now()
-	defer recordIssue60Result(t, "AC-01-S2", "whole dictionary reconciled and eleven real unavailability conditions were observed", started)
+	defer recordIssue60Result(t, entryID, "whole dictionary reconciled and eleven real unavailability conditions were observed", started)
 
-	runtime := startIssue60Runtime(t, 18449)
+	runtime := startIssue60Runtime(t, port)
 	admin := openIssue60Target(t, "monitored", "monitored", "monitored")
 	defer admin.Close(context.Background())
 	prepareIssue60Targets(t, admin)
 
-	healthyID := createIssue60Instance(t, runtime.client, "AC-01-S2 healthy", "monitored", "monitored", issue60TargetPort(t))
+	healthyID := createIssue60Instance(t, runtime.client, entryID+" healthy", "monitored", "monitored", issue60TargetPort(t))
 	setIssue60TaskIntervals(t, runtime.client, healthyID)
 	startIssue60Agent(t, runtime, healthyID)
 
@@ -132,16 +141,16 @@ func TestAcceptance_AC_01_S2(t *testing.T) {
 		}
 	}
 
-	freshID := createIssue60Instance(t, runtime.client, "AC-01-S2 fresh", "monitored", "monitored", issue60TargetPort(t))
+	freshID := createIssue60Instance(t, runtime.client, entryID+" fresh", "monitored", "monitored", issue60TargetPort(t))
 	produced[readIssue60MetricCode(t, runtime.client, freshID, metric.MetricCollectorLastSuccessTime, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))] = true
 
 	produced[readIssue60MetricCode(t, runtime.client, healthyID, metric.MetricConnectionTotal, time.Unix(1, 0), time.Unix(2, 0))] = true
 
-	offlineID := createIssue60Instance(t, runtime.client, "AC-01-S2 offline Agent", "monitored", "monitored", issue60TargetPort(t))
+	offlineID := createIssue60Instance(t, runtime.client, entryID+" offline Agent", "monitored", "monitored", issue60TargetPort(t))
 	registerIssue60Agent(t, runtime.client, offlineID)
 	produced[readIssue60MetricCode(t, runtime.client, offlineID, metric.MetricHostCPUUsagePercent, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))] = true
 
-	unreachableID := createIssue60Instance(t, runtime.client, "AC-01-S2 unreachable", "monitored", "monitored", 1)
+	unreachableID := createIssue60Instance(t, runtime.client, entryID+" unreachable", "monitored", "monitored", 1)
 	queryStats, err := runtime.client.GetQueryStatisticsSnapshotWithResponse(context.Background(), unreachableID)
 	if err != nil {
 		t.Fatalf("read feature-disabled query statistics: error=%v", err)
@@ -153,15 +162,15 @@ func TestAcceptance_AC_01_S2(t *testing.T) {
 	waitForIssue60MetricCode(t, runtime.client, unreachableID, metric.MetricConnectionTotal, api.DBUNREACHABLE)
 	produced[api.DBUNREACHABLE] = true
 
-	permissionID := createIssue60Instance(t, runtime.client, "AC-01-S2 permission", "monitored", "issue60-limited", issue60TargetPort(t))
+	permissionID := createIssue60Instance(t, runtime.client, entryID+" permission", "monitored", "issue60-limited", issue60TargetPort(t))
 	waitForIssue60MetricCode(t, runtime.client, permissionID, metric.MetricConnectionTotal, api.PERMISSIONDENIED)
 	produced[api.PERMISSIONDENIED] = true
 
-	missingExtensionID := createIssue60Instance(t, runtime.client, "AC-01-S2 no extension", "issue60_noext", "monitored", issue60TargetPort(t))
+	missingExtensionID := createIssue60Instance(t, runtime.client, entryID+" no extension", "issue60_noext", "monitored", issue60TargetPort(t))
 	waitForIssue60QueryStatisticsCode(t, runtime.client, missingExtensionID, api.EXTENSIONMISSING)
 	produced[api.EXTENSIONMISSING] = true
 
-	failingID := createIssue60Instance(t, runtime.client, "AC-01-S2 failed Task", "issue60_failed", "issue60-pgmon", issue60TargetPort(t))
+	failingID := createIssue60Instance(t, runtime.client, entryID+" failed Task", "issue60_failed", "issue60-pgmon", issue60TargetPort(t))
 	setIssue60TaskIntervals(t, runtime.client, failingID)
 	waitForIssue60MetricPoints(t, runtime.client, failingID, metric.MetricCollectorLastSuccessTime)
 	failingDB := openIssue60Target(t, "issue60_failed", "monitored", "monitored")
