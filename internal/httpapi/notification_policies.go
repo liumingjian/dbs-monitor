@@ -184,6 +184,12 @@ func (handler *Handler) DeleteNotificationContactGroup(ctx context.Context, requ
 	return api.DeleteNotificationContactGroup204Response{}, nil
 }
 
+func (handler *Handler) GetNotificationPolicySettings(context.Context, api.GetNotificationPolicySettingsRequestObject) (api.GetNotificationPolicySettingsResponseObject, error) {
+	return api.GetNotificationPolicySettings200JSONResponse{
+		RepeatIntervalMinimum: int(handler.notificationRepeatMinimum / time.Second),
+	}, nil
+}
+
 func (handler *Handler) ListNotificationPolicies(ctx context.Context, _ api.ListNotificationPoliciesRequestObject) (api.ListNotificationPoliciesResponseObject, error) {
 	queries := notify.New(handler.platform)
 	rows, err := queries.ListNotificationPolicies(ctx)

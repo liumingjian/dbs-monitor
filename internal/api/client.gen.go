@@ -367,6 +367,9 @@ type ClientInterface interface {
 
 	UpdateNotificationPolicy(ctx context.Context, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetNotificationPolicySettings request
+	GetNotificationPolicySettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ChangeOwnPasswordWithBody request with any body
 	ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1602,6 +1605,18 @@ func (c *Client) UpdateNotificationPolicyWithBody(ctx context.Context, id openap
 
 func (c *Client) UpdateNotificationPolicy(ctx context.Context, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateNotificationPolicyRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetNotificationPolicySettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetNotificationPolicySettingsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -4808,6 +4823,33 @@ func NewUpdateNotificationPolicyRequestWithBody(server string, id openapi_types.
 	return req, nil
 }
 
+// NewGetNotificationPolicySettingsRequest generates requests for GetNotificationPolicySettings
+func NewGetNotificationPolicySettingsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/notification-policy-settings")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewChangeOwnPasswordRequest calls the generic ChangeOwnPassword builder with application/json body
 func NewChangeOwnPasswordRequest(server string, body ChangeOwnPasswordJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -5423,6 +5465,9 @@ type ClientWithResponsesInterface interface {
 	UpdateNotificationPolicyWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateNotificationPolicyResponse, error)
 
 	UpdateNotificationPolicyWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateNotificationPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateNotificationPolicyResponse, error)
+
+	// GetNotificationPolicySettingsWithResponse request
+	GetNotificationPolicySettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPolicySettingsResponse, error)
 
 	// ChangeOwnPasswordWithBodyWithResponse request with any body
 	ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
@@ -7161,6 +7206,28 @@ func (r UpdateNotificationPolicyResponse) StatusCode() int {
 	return 0
 }
 
+type GetNotificationPolicySettingsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *NotificationPolicySettings
+}
+
+// Status returns HTTPResponse.Status
+func (r GetNotificationPolicySettingsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetNotificationPolicySettingsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ChangeOwnPasswordResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8227,6 +8294,15 @@ func (c *ClientWithResponses) UpdateNotificationPolicyWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseUpdateNotificationPolicyResponse(rsp)
+}
+
+// GetNotificationPolicySettingsWithResponse request returning *GetNotificationPolicySettingsResponse
+func (c *ClientWithResponses) GetNotificationPolicySettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPolicySettingsResponse, error) {
+	rsp, err := c.GetNotificationPolicySettings(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetNotificationPolicySettingsResponse(rsp)
 }
 
 // ChangeOwnPasswordWithBodyWithResponse request with arbitrary body returning *ChangeOwnPasswordResponse
@@ -10649,6 +10725,32 @@ func ParseUpdateNotificationPolicyResponse(rsp *http.Response) (*UpdateNotificat
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetNotificationPolicySettingsResponse parses an HTTP response from a GetNotificationPolicySettingsWithResponse call
+func ParseGetNotificationPolicySettingsResponse(rsp *http.Response) (*GetNotificationPolicySettingsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetNotificationPolicySettingsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest NotificationPolicySettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

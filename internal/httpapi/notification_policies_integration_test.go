@@ -160,6 +160,41 @@ func TestNotificationContactAndPolicyCRUD(t *testing.T) {
 	}
 }
 
+func TestNotificationPolicyPersistsConfiguredRepeatMinimum(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	platform, keyring := notificationHTTPTestDatabase(t, ctx)
+	defer platform.Close()
+
+	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
+		t.Fatalf("seed admin: %v", err)
+	}
+	handler := httpapi.NewHandler(platform, clock.Real{}, keyring)
+	handler.SetNotificationRepeatIntervalMinimum(30 * time.Second)
+	server := httptest.NewTLSServer(handler.Routes())
+	defer server.Close()
+	jar, _ := cookiejar.New(nil)
+	client := server.Client()
+	client.Jar = jar
+	login := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/login", map[string]any{
+		"username": "admin", "password": "correct horse battery staple",
+	}, "")
+	login.Body.Close()
+	if login.StatusCode != http.StatusNoContent {
+		t.Fatalf("login status = %d, want 204", login.StatusCode)
+	}
+
+	response := requestJSON(t, client, http.MethodPost, server.URL+"/api/v1/notification-policies", map[string]any{
+		"name": "Acceptance repeat", "contact_ids": []string{}, "contact_group_ids": []string{},
+		"channels": []map[string]any{{"channel": "SMTP"}}, "severity_filter": []string{"critical"},
+		"notify_on_fire": true, "notify_on_recovery": true, "repeat_interval": 30,
+	}, "")
+	policy := decodeNotificationResponse[api.NotificationPolicy](t, response, http.StatusCreated)
+	if policy.RepeatInterval != 30 {
+		t.Fatalf("repeat interval = %d, want 30", policy.RepeatInterval)
+	}
+}
+
 func decodeNotificationResponse[T any](t *testing.T, response *http.Response, wantStatus int) T {
 	t.Helper()
 	defer response.Body.Close()

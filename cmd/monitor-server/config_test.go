@@ -92,6 +92,8 @@ master_key_path: /srv/dbs-monitor/credentials
 		{name: "partition maintenance interval", contents: "partition_maintenance_interval: -1s\n", message: "partition_maintenance_interval"},
 		{name: "alert history retention", contents: "alert_history_retention: 0s\n", message: "alert_history_retention"},
 		{name: "repeat interval minimum", contents: "repeat_interval_minimum: never\n", message: "repeat_interval_minimum"},
+		{name: "repeat interval minimum below one second", contents: "repeat_interval_minimum: 500ms\n", message: "repeat_interval_minimum"},
+		{name: "fractional repeat interval minimum", contents: "repeat_interval_minimum: 1500ms\n", message: "repeat_interval_minimum"},
 		{name: "notification retry backoff cap", contents: "notification_retry_backoff_cap: 0s\n", message: "notification_retry_backoff_cap"},
 		{name: "snapshot truncation limit", contents: "snapshot_truncation_limit: 0\n", message: "snapshot_truncation_limit"},
 		{name: "collection freshness threshold", contents: "collection_freshness_threshold: 0s\n", message: "collection_freshness_threshold"},

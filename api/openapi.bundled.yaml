@@ -1358,6 +1358,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/notification-policy-settings:
+    get:
+      tags:
+        - notification-settings
+      operationId: getNotificationPolicySettings
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Deployment-time notification policy validation settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPolicySettings'
   /api/v1/notification-policies:
     get:
       tags:
@@ -2480,12 +2493,6 @@ components:
         enabled_updated_at:
           type: string
           format: date-time
-        created_by:
-          type: string
-          format: uuid
-        updated_by:
-          type: string
-          format: uuid
         version:
           type: integer
         created_at:
@@ -4258,6 +4265,16 @@ components:
             updated_at:
               type: string
               format: date-time
+    NotificationPolicySettings:
+      type: object
+      required:
+        - repeat_interval_minimum
+      properties:
+        repeat_interval_minimum:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          description: Lowest repeat interval accepted by this deployment, in seconds.
     NotificationPolicyChannel:
       type: object
       required:
@@ -4320,10 +4337,10 @@ components:
           default: true
         repeat_interval:
           type: integer
-          minimum: 900
+          minimum: 1
           maximum: 86400
           default: 3600
-          description: Repeat interval in seconds.
+          description: Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
         template_id:
           type: string
     NotificationPolicy:

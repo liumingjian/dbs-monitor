@@ -1342,6 +1342,7 @@ var RequiredRoles = map[string]string{
 	"UpdateNotificationContact": "ALERT_ADMIN", "DeleteNotificationContact": "ALERT_ADMIN",
 	"ListNotificationContactGroups": "READONLY", "CreateNotificationContactGroup": "ALERT_ADMIN",
 	"UpdateNotificationContactGroup": "ALERT_ADMIN", "DeleteNotificationContactGroup": "ALERT_ADMIN",
+	"GetNotificationPolicySettings": "READONLY",
 	"ListNotificationPolicies": "READONLY", "CreateNotificationPolicy": "ALERT_ADMIN",
 	"UpdateNotificationPolicy": "ALERT_ADMIN", "DeleteNotificationPolicy": "ALERT_ADMIN",
 	"ListMaintenanceWindows": "READONLY", "CreateMaintenanceWindow": "ALERT_ADMIN",

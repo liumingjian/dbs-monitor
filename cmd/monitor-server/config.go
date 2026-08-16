@@ -147,6 +147,9 @@ func (config serverConfig) validate() error {
 	if config.SnapshotTruncationLimit <= 0 {
 		return errors.New("snapshot_truncation_limit must be positive")
 	}
+	if config.RepeatIntervalMinimum < time.Second || config.RepeatIntervalMinimum%time.Second != 0 {
+		return errors.New("repeat_interval_minimum must be a whole number of seconds")
+	}
 	if config.RepeatIntervalMinimum > 24*time.Hour {
 		return errors.New("repeat_interval_minimum must not exceed 24h")
 	}

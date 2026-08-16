@@ -142,6 +142,15 @@ NotificationPolicyChannel:
       enum: [SMTP, WEBHOOK]
       x-enum-varnames: [PolicySMTP, PolicyWebhook]
     target_id: { type: string, format: uuid }
+NotificationPolicySettings:
+  type: object
+  required: [repeat_interval_minimum]
+  properties:
+    repeat_interval_minimum:
+      type: integer
+      minimum: 1
+      maximum: 86400
+      description: Lowest repeat interval accepted by this deployment, in seconds.
 NotificationPolicyInput:
   type: object
   required:
@@ -176,10 +185,10 @@ NotificationPolicyInput:
     notify_on_recovery: { type: boolean, default: true }
     repeat_interval:
       type: integer
-      minimum: 900
+      minimum: 1
       maximum: 86400
       default: 3600
-      description: Repeat interval in seconds.
+      description: Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
     template_id: { type: string }
 NotificationPolicy:
   allOf:

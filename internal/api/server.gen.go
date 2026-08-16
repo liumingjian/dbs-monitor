@@ -1067,7 +1067,7 @@ type NotificationPolicy struct {
 	NotifyOnFire     bool                        `json:"notify_on_fire"`
 	NotifyOnRecovery bool                        `json:"notify_on_recovery"`
 
-	// RepeatInterval Repeat interval in seconds.
+	// RepeatInterval Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
 	RepeatInterval int             `json:"repeat_interval"`
 	SeverityFilter []AlertSeverity `json:"severity_filter"`
 	TemplateId     *string         `json:"template_id,omitempty"`
@@ -1092,10 +1092,16 @@ type NotificationPolicyInput struct {
 	NotifyOnFire     bool                        `json:"notify_on_fire"`
 	NotifyOnRecovery bool                        `json:"notify_on_recovery"`
 
-	// RepeatInterval Repeat interval in seconds.
+	// RepeatInterval Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
 	RepeatInterval int             `json:"repeat_interval"`
 	SeverityFilter []AlertSeverity `json:"severity_filter"`
 	TemplateId     *string         `json:"template_id,omitempty"`
+}
+
+// NotificationPolicySettings defines model for NotificationPolicySettings.
+type NotificationPolicySettings struct {
+	// RepeatIntervalMinimum Lowest repeat interval accepted by this deployment, in seconds.
+	RepeatIntervalMinimum int `json:"repeat_interval_minimum"`
 }
 
 // NotificationQueued defines model for NotificationQueued.
@@ -1727,6 +1733,9 @@ type ServerInterface interface {
 
 	// (PUT /api/v1/notification-policies/{id})
 	UpdateNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-policy-settings)
+	GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
@@ -3567,6 +3576,20 @@ func (siw *ServerInterfaceWrapper) UpdateNotificationPolicy(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// GetNotificationPolicySettings operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationPolicySettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangeOwnPassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
@@ -3918,6 +3941,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-policies", wrapper.CreateNotificationPolicy)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.DeleteNotificationPolicy)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.UpdateNotificationPolicy)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-policy-settings", wrapper.GetNotificationPolicySettings)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/platform-events", wrapper.ListPlatformEvents)
@@ -5802,6 +5826,22 @@ func (response UpdateNotificationPolicy404JSONResponse) VisitUpdateNotificationP
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetNotificationPolicySettingsRequestObject struct {
+}
+
+type GetNotificationPolicySettingsResponseObject interface {
+	VisitGetNotificationPolicySettingsResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationPolicySettings200JSONResponse NotificationPolicySettings
+
+func (response GetNotificationPolicySettings200JSONResponse) VisitGetNotificationPolicySettingsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ChangeOwnPasswordRequestObject struct {
 	Body *ChangeOwnPasswordJSONRequestBody
 }
@@ -6254,6 +6294,9 @@ type StrictServerInterface interface {
 
 	// (PUT /api/v1/notification-policies/{id})
 	UpdateNotificationPolicy(ctx context.Context, request UpdateNotificationPolicyRequestObject) (UpdateNotificationPolicyResponseObject, error)
+
+	// (GET /api/v1/notification-policy-settings)
+	GetNotificationPolicySettings(ctx context.Context, request GetNotificationPolicySettingsRequestObject) (GetNotificationPolicySettingsResponseObject, error)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
@@ -8378,6 +8421,30 @@ func (sh *strictHandler) UpdateNotificationPolicy(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateNotificationPolicyResponseObject); ok {
 		if err := validResponse.VisitUpdateNotificationPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationPolicySettings operation middleware
+func (sh *strictHandler) GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request) {
+	var request GetNotificationPolicySettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationPolicySettings(ctx, request.(GetNotificationPolicySettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationPolicySettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationPolicySettingsResponseObject); ok {
+		if err := validResponse.VisitGetNotificationPolicySettingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

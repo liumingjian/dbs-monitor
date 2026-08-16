@@ -613,6 +613,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/notification-policy-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNotificationPolicySettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/notification-policies": {
         parameters: {
             query?: never;
@@ -1170,10 +1186,6 @@ export interface components {
             enabled_updated_by?: string;
             /** Format: date-time */
             enabled_updated_at?: string;
-            /** Format: uuid */
-            created_by?: string;
-            /** Format: uuid */
-            updated_by?: string;
             version: number;
             /** Format: date-time */
             created_at: string;
@@ -1880,6 +1892,10 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        NotificationPolicySettings: {
+            /** @description Lowest repeat interval accepted by this deployment, in seconds. */
+            repeat_interval_minimum: number;
+        };
         NotificationPolicyChannel: {
             /** @enum {string} */
             channel: "SMTP" | "WEBHOOK";
@@ -1897,7 +1913,7 @@ export interface components {
             /** @default true */
             notify_on_recovery: boolean;
             /**
-             * @description Repeat interval in seconds.
+             * @description Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
              * @default 3600
              */
             repeat_interval: number;
@@ -3503,6 +3519,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getNotificationPolicySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deployment-time notification policy validation settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPolicySettings"];
                 };
             };
         };

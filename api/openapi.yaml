@@ -88,6 +88,8 @@ paths:
     $ref: paths/notifications.yaml#/~1api~1v1~1notification-contact-groups
   /api/v1/notification-contact-groups/{id}:
     $ref: paths/notifications.yaml#/~1api~1v1~1notification-contact-groups~1{id}
+  /api/v1/notification-policy-settings:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-policy-settings
   /api/v1/notification-policies:
     $ref: paths/notifications.yaml#/~1api~1v1~1notification-policies
   /api/v1/notification-policies/{id}:

@@ -312,6 +312,17 @@
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/notification-policy-settings:
+  get:
+    tags: [notification-settings]
+    operationId: getNotificationPolicySettings
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Deployment-time notification policy validation settings.
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/notifications.yaml#/NotificationPolicySettings }
 /api/v1/notification-policies:
   get:
     tags: [notification-settings]

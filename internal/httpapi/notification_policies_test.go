@@ -1,11 +1,29 @@
 package httpapi
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/liumingjian/dbs-monitor/internal/api"
 )
+
+func TestGetNotificationPolicySettingsUsesConfiguredRepeatMinimum(t *testing.T) {
+	handler := &Handler{}
+	handler.SetNotificationRepeatIntervalMinimum(30 * time.Second)
+
+	response, err := handler.GetNotificationPolicySettings(context.Background(), api.GetNotificationPolicySettingsRequestObject{})
+	if err != nil {
+		t.Fatalf("get notification policy settings: %v", err)
+	}
+	settings, ok := response.(api.GetNotificationPolicySettings200JSONResponse)
+	if !ok {
+		t.Fatalf("response = %T, want 200 JSON response", response)
+	}
+	if settings.RepeatIntervalMinimum != 30 {
+		t.Fatalf("repeat interval minimum = %d, want 30", settings.RepeatIntervalMinimum)
+	}
+}
 
 func TestNotificationPolicyValuesUsesConfiguredRepeatMinimum(t *testing.T) {
 	handler := &Handler{}
