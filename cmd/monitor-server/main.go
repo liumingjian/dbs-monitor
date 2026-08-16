@@ -269,6 +269,7 @@ func run(ctx context.Context) error {
 	if err := collector.SetPlatformDatabaseCapacityMonitor(capacityBudgetBytes, capacityThresholds); err != nil {
 		return fmt.Errorf("platform database capacity monitor config: %w", err)
 	}
+	recordReclamation := databaseReclamationRecorder(ctx, platform, log.Default())
 	collector.SetLocalArtifactRetentionObserver(func(now time.Time) error {
 		return reclaimLocalArtifacts(
 			config.BundleDirectory,
@@ -276,7 +277,7 @@ func run(ctx context.Context) error {
 			notificationSnapshotStore,
 			config.SnapshotRetentionLimit,
 			now,
-			databaseReclamationRecorder(ctx, platform, log.Default()),
+			recordReclamation,
 		)
 	})
 	refreshPlatformDatabaseHealth(ctx, platform, health, time.Now().UTC())

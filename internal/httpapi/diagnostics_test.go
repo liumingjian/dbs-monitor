@@ -39,9 +39,23 @@ func TestFocusedDiagnosticsReadOnlyInMemorySources(t *testing.T) {
 	if healthErr != nil {
 		t.Fatalf("get platform health: %v", healthErr)
 	}
-	healthSnapshot := healthResponse.(api.GetPlatformHealth200JSONResponse)
-	capacity := healthSnapshot.Sources[len(healthSnapshot.Sources)-1]
-	if capacity.Source != api.HealthSourcePlatformDatabaseCapacity || capacity.CapacityUsagePercent == nil ||
+	healthSnapshot, ok := healthResponse.(api.GetPlatformHealth200JSONResponse)
+	if !ok {
+		t.Fatalf("get platform health returned %T", healthResponse)
+	}
+	var capacity api.PlatformHealthSourceSnapshot
+	capacityFound := false
+	for _, source := range healthSnapshot.Sources {
+		if source.Source == api.HealthSourcePlatformDatabaseCapacity {
+			capacity = source
+			capacityFound = true
+			break
+		}
+	}
+	if !capacityFound {
+		t.Fatal("platform database capacity health source is missing")
+	}
+	if capacity.CapacityUsagePercent == nil ||
 		*capacity.CapacityUsagePercent != 96 || capacity.CapacityBudgetBytes == nil || *capacity.CapacityBudgetBytes != 100 {
 		t.Fatalf("platform database capacity health facts = %+v", capacity)
 	}

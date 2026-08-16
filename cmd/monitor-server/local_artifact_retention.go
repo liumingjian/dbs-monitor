@@ -26,25 +26,25 @@ type localArtifactReclamationRecorder func(localArtifactReclamationEvent) error
 
 func reclaimLocalArtifacts(
 	bundleDirectory string,
-	bundleLimit int,
+	bundleRetentionLimit int,
 	snapshotStore *notify.ChannelSnapshotStore,
-	snapshotLimit int,
+	snapshotRetentionLimit int,
 	now time.Time,
-	record localArtifactReclamationRecorder,
+	recordReclamation localArtifactReclamationRecorder,
 ) error {
-	if bundleLimit <= 0 || snapshotLimit <= 0 {
+	if bundleRetentionLimit <= 0 || snapshotRetentionLimit <= 0 {
 		return errors.New("local artifact retention limits must be positive")
 	}
-	if record == nil {
+	if recordReclamation == nil {
 		return errors.New("local artifact reclamation requires an event recorder")
 	}
 	bundles, err := listDiagnosticBundles(bundleDirectory)
 	if err != nil {
 		return err
 	}
-	for _, bundle := range bundles[:max(0, len(bundles)-bundleLimit)] {
+	for _, bundle := range artifactsToReclaim(bundles, bundleRetentionLimit) {
 		if err := deleteDiagnosticBundle(bundleDirectory, bundle.Name, now, func(deletion diagnosticBundleDeletionEvent) error {
-			return record(localArtifactReclamationEvent{
+			return recordReclamation(localArtifactReclamationEvent{
 				Kind:         platformevent.DiagnosticBundleReclaimed,
 				ArtifactName: deletion.BundleName,
 				Bytes:        deletion.Bytes,
@@ -61,9 +61,9 @@ func reclaimLocalArtifacts(
 	if err != nil {
 		return err
 	}
-	for _, snapshot := range snapshots[:max(0, len(snapshots)-snapshotLimit)] {
+	for _, snapshot := range artifactsToReclaim(snapshots, snapshotRetentionLimit) {
 		if err := snapshotStore.DeleteArtifact(snapshot.Name, now, func(deletion notify.ChannelSnapshotDeletionEvent) error {
-			return record(localArtifactReclamationEvent{
+			return recordReclamation(localArtifactReclamationEvent{
 				Kind:         platformevent.NotificationSnapshotReclaimed,
 				ArtifactName: deletion.SnapshotName,
 				Bytes:        deletion.Bytes,
@@ -74,6 +74,14 @@ func reclaimLocalArtifacts(
 		}
 	}
 	return nil
+}
+
+func artifactsToReclaim[T any](artifacts []T, retentionLimit int) []T {
+	retainedStart := len(artifacts) - retentionLimit
+	if retainedStart <= 0 {
+		return nil
+	}
+	return artifacts[:retainedStart]
 }
 
 func databaseReclamationRecorder(ctx context.Context, database db.DBTX, logger *log.Logger) localArtifactReclamationRecorder {
