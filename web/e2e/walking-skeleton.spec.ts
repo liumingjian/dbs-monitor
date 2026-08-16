@@ -11,18 +11,22 @@ test('[AC-01-S1] [AC-05-S1] instance overview and standard monitoring expose the
   await expect(page).toHaveURL(/\/instances$/)
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
   const instanceRow = page.getByRole('row', { name: new RegExp(instanceName) })
-  const listHealth = await instanceRow.locator('.ant-tag').first().innerText()
-  const listAttribution = await instanceRow.locator('td').first().locator('.ant-typography-secondary').innerText()
-  const listCounts = await Promise.all(['C', 'W', 'I'].map(async (severity) => (
-    instanceRow.getByText(new RegExp(`^${severity}\\d+$`)).innerText()
-  )))
+  const listHealthText = await instanceRow.locator('.ant-tag').first().innerText()
+  const listAttributionText = await instanceRow.locator('td').first().locator('.ant-typography-secondary').innerText()
+  const listSeverityCounts = await Promise.all(
+    ['C', 'W', 'I'].map((severity) =>
+      instanceRow.getByText(new RegExp(`^${severity}\\d+$`)).innerText(),
+    ),
+  )
   await instanceRow.getByRole('link', { name: '总览' }).click()
 
   await expect(page.getByRole('tab', { name: '实例总览' })).toHaveAttribute('aria-selected', 'true')
-  const overviewStatus = page.locator('.overview-status')
-  await expect(overviewStatus.locator('.ant-tag').first()).toHaveText(listHealth)
-  await expect(overviewStatus.getByRole('heading')).toHaveText(listAttribution)
-  for (const count of listCounts) await expect(overviewStatus.getByText(count, { exact: true })).toBeVisible()
+  const overviewStatusSection = page.locator('.overview-status')
+  await expect(overviewStatusSection.locator('.ant-tag').first()).toHaveText(listHealthText)
+  await expect(overviewStatusSection.getByRole('heading')).toHaveText(listAttributionText)
+  for (const count of listSeverityCounts) {
+    await expect(overviewStatusSection.getByText(count, { exact: true })).toBeVisible()
+  }
 
   await expect(page.locator('[data-overview-module]')).toHaveCount(7)
   await expect(page.locator('[data-overview-module] .ant-card-head-title')).toHaveText([
@@ -36,20 +40,28 @@ test('[AC-01-S1] [AC-05-S1] instance overview and standard monitoring expose the
   ])
   await expect(page.getByText('近期没有性能事件')).toBeVisible()
 
+  const getLinkURL = async (accessibleName: string) => {
+    const href = await page.getByRole('link', { name: accessibleName, exact: true }).getAttribute('href')
+    if (href === null) {
+      throw new Error(`${accessibleName} link is missing an href`)
+    }
+    return new URL(href, page.url())
+  }
+
   const overviewURL = new URL(page.url())
-  const monitoringURL = new URL(await page.getByRole('link', { name: '标准监控', exact: true }).getAttribute('href') ?? '', page.url())
+  const monitoringURL = await getLinkURL('标准监控')
   expect(monitoringURL.searchParams.get('from')).toBe(overviewURL.searchParams.get('from'))
   expect(monitoringURL.searchParams.get('to')).toBe(overviewURL.searchParams.get('to'))
 
-  const sessionsURL = new URL(await page.getByRole('link', { name: '会话与阻塞', exact: true }).getAttribute('href') ?? '', page.url())
+  const sessionsURL = await getLinkURL('会话与阻塞')
   expect(sessionsURL.searchParams.get('from')).toBe(overviewURL.searchParams.get('from'))
   expect(sessionsURL.searchParams.get('to')).toBe(overviewURL.searchParams.get('to'))
   expect(sessionsURL.searchParams.get('filter')).toBe('lock_wait')
 
-  const collectionURL = new URL(await page.getByRole('link', { name: '采集状态', exact: true }).getAttribute('href') ?? '', page.url())
+  const collectionURL = await getLinkURL('采集状态')
   expect(collectionURL.searchParams.get('metric')).toBeNull()
 
-  const maintenanceURL = new URL(await page.getByRole('link', { name: '新建维护窗口', exact: true }).getAttribute('href') ?? '', page.url())
+  const maintenanceURL = await getLinkURL('新建维护窗口')
   expect(maintenanceURL.searchParams.get('instance_id')).toBe(overviewURL.pathname.split('/').at(-1))
 
   await page.setViewportSize({ width: 390, height: 844 })
