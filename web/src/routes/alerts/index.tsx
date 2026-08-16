@@ -164,7 +164,7 @@ const currentColumns: TableColumnsType<AlertObservation> = [
   { title: '阈值', width: 100, render: (_, alert) => optionalNumber(alert.threshold) },
   { title: '首次触发', width: 190, render: (_, alert) => optionalTime(alert.first_triggered_at) },
   { title: '持续时间', width: 120, render: (_, alert) => durationLabel(alert.duration_ms) },
-  { title: 'No Data 原因', width: 210, render: (_, alert) => <UnavailabilityReason alert={alert} /> },
+  { title: 'No Data 原因', width: 210, render: (_, alert) => <AlertUnavailabilityReason alert={alert} /> },
   {
     title: '操作',
     fixed: 'right',
@@ -176,14 +176,21 @@ const currentColumns: TableColumnsType<AlertObservation> = [
   },
 ]
 
-function UnavailabilityReason({ alert }: { alert: AlertObservation }) {
+type AlertUnavailabilityReasonProps = {
+  alert: Pick<AlertObservation, 'instance_id' | 'metric_id' | 'unavailability'> &
+    Partial<Pick<AlertObservation, 'id'>>
+}
+
+export function AlertUnavailabilityReason({ alert }: AlertUnavailabilityReasonProps) {
   if (!alert.unavailability) return '—'
   const copy = unavailabilityCopy(alert.unavailability)
   const href = unavailabilityHref(alert.unavailability, {
-    current: `/instances/${encodeURIComponent(alert.instance_id)}/alerts/${encodeURIComponent(alert.id)}`,
+    current: alert.id
+      ? `/instances/${encodeURIComponent(alert.instance_id)}/alerts/${encodeURIComponent(alert.id)}`
+      : `/instances/${encodeURIComponent(alert.instance_id)}/alerts`,
     collection: `/instances/${encodeURIComponent(alert.instance_id)}/collection?metric=${encodeURIComponent(alert.metric_id)}`,
   })
-  return <Space direction="vertical" size={0}>
+  return <Space orientation="vertical" size={0}>
     <Typography.Text>{copy.title}</Typography.Text>
     <a href={href}>{copy.action}</a>
   </Space>
