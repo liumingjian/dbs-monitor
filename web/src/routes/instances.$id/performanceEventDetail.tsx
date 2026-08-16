@@ -155,8 +155,8 @@ function EventMetricChart({ event, monitoringSearch }: {
     },
   })
   const view = performanceEventChartView(
-    event.metric_id,
-    metrics.data?.metrics.find((metric) => metric.metric === event.metric_id),
+    monitoringSearch.metric,
+    metrics.data?.metrics,
   )
   const currentHref = '#performance-event-metric-heading'
   const remediationHref = view.unavailability

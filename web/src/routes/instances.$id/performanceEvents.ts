@@ -86,16 +86,21 @@ export function eventMonitoringSearch(event: EventMonitoringContext): EventMonit
   }
 }
 
-export function performanceEventChartView(metricID: string, response: EventMetricResponse | undefined): {
+export function performanceEventChartView(
+  metricID: MetricID,
+  responseMetrics: readonly EventMetricResponse[] | undefined,
+): {
   series: MetricChartSeries[]
   unavailability: EventMetricResponse['unavailability']
 } {
-  const metric = response?.metric === metricID ? response : undefined
+  const metric = responseMetrics?.find((item) => item.metric === metricID)
+  if (!metric || metric.unavailability !== null) {
+    return { series: [], unavailability: metricUnavailability(metric) }
+  }
+
   return {
-    series: metric?.unavailability === null
-      ? metric.series.map((item) => ({ name: metricID, unit: metric.unit, points: item.points }))
-      : [],
-    unavailability: metricUnavailability(metric),
+    series: metric.series.map((item) => ({ name: metricID, unit: metric.unit, points: item.points })),
+    unavailability: null,
   }
 }
 

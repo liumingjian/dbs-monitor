@@ -48,18 +48,27 @@ describe('performance event search', () => {
   })
 
   it('builds event evidence without inventing missing metric values', () => {
-    expect(performanceEventChartView('pg.lock.waiting_count', {
+    expect(performanceEventChartView('pg.lock.waiting_count', [{
       metric: 'pg.lock.waiting_count',
       unit: 'count',
       unavailability: null,
       series: [{ labels: {}, points: [[1, 0]] }],
-    })).toEqual({
+    }])).toEqual({
       series: [{ name: 'pg.lock.waiting_count', unit: 'count', points: [[1, 0]] }],
       unavailability: null,
     })
     expect(performanceEventChartView('pg.lock.waiting_count', undefined)).toEqual({
       series: [],
       unavailability: 'NO_SAMPLES_YET',
+    })
+    expect(performanceEventChartView('pg.lock.waiting_count', [{
+      metric: 'pg.lock.waiting_count',
+      unit: 'count',
+      unavailability: 'COLLECTION_FAILED',
+      series: [{ labels: {}, points: [[1, 2]] }],
+    }])).toEqual({
+      series: [],
+      unavailability: 'COLLECTION_FAILED',
     })
   })
 
