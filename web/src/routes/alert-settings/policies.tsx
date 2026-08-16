@@ -13,9 +13,16 @@ type PolicyInput = components['schemas']['NotificationPolicyInput']
 type PolicyForm = Omit<PolicyInput, 'channels' | 'repeat_interval'> & {
   smtp_enabled: boolean
   webhook_target_ids: string[]
-  repeat_value: number
+  repeat_interval_value: number
 }
 type Feedback = { type: 'success' | 'error'; text: string }
+type RepeatIntervalUnitSeconds = 1 | 60
+
+const secondsPerMinute = 60
+const secondsPerHour = 60 * secondsPerMinute
+const fallbackRepeatIntervalMinimumSeconds = 15 * secondsPerMinute
+const defaultRepeatIntervalSeconds = secondsPerHour
+const maximumRepeatIntervalSeconds = 24 * secondsPerHour
 
 type PoliciesTableProps = {
   policies: Policy[]
@@ -47,16 +54,16 @@ function PolicySettingsPage() {
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const role = currentUserQuery.data?.role
   const canManage = role === 'ALERT_ADMIN' || role === 'PLATFORM_ADMIN'
-  const repeatIntervalMinimum = policySettingsQuery.data?.repeat_interval_minimum ?? 900
-  const repeatUnitSeconds = policyRepeatUnitSeconds(repeatIntervalMinimum)
-  const controlsEnabled = canManage && !policySettingsQuery.isPending
+  const repeatIntervalMinimum = policySettingsQuery.data?.repeat_interval_minimum ?? fallbackRepeatIntervalMinimumSeconds
+  const repeatUnitSeconds = repeatIntervalUnitSeconds(repeatIntervalMinimum)
+  const canManagePolicies = canManage && !policySettingsQuery.isPending
 
   function openEditor(policy?: Policy) {
     setEditing(policy ?? null)
     form.resetFields()
     form.setFieldsValue(policy ? policyFormValues(policy, repeatUnitSeconds) : {
       name: '', contact_ids: [], contact_group_ids: [], severity_filter: ['critical', 'warning', 'info'],
-      notify_on_fire: true, notify_on_recovery: true, repeat_value: 3600 / repeatUnitSeconds, smtp_enabled: true, webhook_target_ids: [],
+      notify_on_fire: true, notify_on_recovery: true, repeat_interval_value: defaultRepeatIntervalSeconds / repeatUnitSeconds, smtp_enabled: true, webhook_target_ids: [],
     })
     setOpen(true)
   }
@@ -92,12 +99,12 @@ function PolicySettingsPage() {
       {feedback && <Alert type={feedback.type} title={feedback.text} closable onClose={() => setFeedback(null)} />}
       <Space className="settings-section-heading" wrap>
         <Typography.Title level={4} style={{ margin: 0 }}>通知策略</Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} disabled={!controlsEnabled} onClick={() => openEditor()}>新建策略</Button>
+        <Button type="primary" icon={<PlusOutlined />} disabled={!canManagePolicies} onClick={() => openEditor()}>新建策略</Button>
       </Space>
       <PoliciesTable
         policies={policiesQuery.data ?? []}
         loading={policiesQuery.isPending}
-        canManage={controlsEnabled}
+        canManage={canManagePolicies}
         onEdit={openEditor}
         onDelete={remove}
       />
@@ -108,8 +115,8 @@ function PolicySettingsPage() {
             <Form.Item name="contact_ids" label="联系人"><Select mode="multiple" options={(contactsQuery.data ?? []).map((contact) => ({ value: contact.id, label: `${contact.name} · ${contact.email}` }))} /></Form.Item>
             <Form.Item name="contact_group_ids" label="联系人组"><Select mode="multiple" options={(groupsQuery.data ?? []).map((group) => ({ value: group.id, label: group.name }))} /></Form.Item>
             <Form.Item name="severity_filter" label="级别过滤" rules={[{ required: true, message: '请至少选择一个级别' }]}><Select mode="multiple" options={[{ value: 'critical', label: '严重' }, { value: 'warning', label: '警告' }, { value: 'info', label: '提示' }]} /></Form.Item>
-            <Form.Item name="repeat_value" label={`重复间隔（${repeatUnitSeconds === 60 ? '分钟' : '秒'}）`} rules={[{ required: true }]}>
-              <InputNumber min={repeatIntervalMinimum / repeatUnitSeconds} max={86400 / repeatUnitSeconds} precision={0} style={{ width: '100%' }} />
+            <Form.Item name="repeat_interval_value" label={`重复间隔（${repeatUnitSeconds === secondsPerMinute ? '分钟' : '秒'}）`} rules={[{ required: true }]}>
+              <InputNumber min={repeatIntervalMinimum / repeatUnitSeconds} max={maximumRepeatIntervalSeconds / repeatUnitSeconds} precision={0} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item name="notify_on_fire" label="触发通知" valuePropName="checked"><Switch /></Form.Item>
             <Form.Item name="notify_on_recovery" label="恢复通知" valuePropName="checked"><Switch /></Form.Item>
@@ -174,7 +181,7 @@ function PoliciesTable({ policies, loading, canManage, onEdit, onDelete }: Polic
   )
 }
 
-export function policyFormValues(policy: Policy, repeatUnitSeconds = 60): PolicyForm {
+export function policyFormValues(policy: Policy, repeatUnitSeconds: RepeatIntervalUnitSeconds): PolicyForm {
   return {
     name: policy.name,
     contact_ids: policy.contact_ids,
@@ -183,13 +190,13 @@ export function policyFormValues(policy: Policy, repeatUnitSeconds = 60): Policy
     notify_on_fire: policy.notify_on_fire,
     notify_on_recovery: policy.notify_on_recovery,
     template_id: policy.template_id,
-    repeat_value: policy.repeat_interval / repeatUnitSeconds,
+    repeat_interval_value: policy.repeat_interval / repeatUnitSeconds,
     smtp_enabled: policy.channels.some((channel) => channel.channel === 'SMTP'),
     webhook_target_ids: policy.channels.flatMap((channel) => channel.channel === 'WEBHOOK' && channel.target_id ? [channel.target_id] : []),
   }
 }
 
-export function policyInput(values: PolicyForm, repeatUnitSeconds = 60): PolicyInput {
+export function policyInput(values: PolicyForm, repeatUnitSeconds: RepeatIntervalUnitSeconds): PolicyInput {
   return {
     name: values.name,
     contact_ids: values.contact_ids,
@@ -197,7 +204,7 @@ export function policyInput(values: PolicyForm, repeatUnitSeconds = 60): PolicyI
     severity_filter: values.severity_filter,
     notify_on_fire: values.notify_on_fire,
     notify_on_recovery: values.notify_on_recovery,
-    repeat_interval: values.repeat_value * repeatUnitSeconds,
+    repeat_interval: values.repeat_interval_value * repeatUnitSeconds,
     template_id: values.template_id,
     channels: [
       ...(values.smtp_enabled ? [{ channel: 'SMTP' as const }] : []),
@@ -206,12 +213,12 @@ export function policyInput(values: PolicyForm, repeatUnitSeconds = 60): PolicyI
   }
 }
 
-export function policyRepeatUnitSeconds(repeatIntervalMinimum: number) {
-  return repeatIntervalMinimum % 60 === 0 ? 60 : 1
+export function repeatIntervalUnitSeconds(repeatIntervalMinimum: number): RepeatIntervalUnitSeconds {
+  return repeatIntervalMinimum % secondsPerMinute === 0 ? secondsPerMinute : 1
 }
 
 function repeatLabel(seconds: number) {
-  if (seconds < 60) return `${seconds} 秒`
-  if (seconds % 3600 === 0) return `${seconds / 3600} 小时`
-  return `${seconds / 60} 分钟`
+  if (seconds < secondsPerMinute) return `${seconds} 秒`
+  if (seconds % secondsPerHour === 0) return `${seconds / secondsPerHour} 小时`
+  return `${seconds / secondsPerMinute} 分钟`
 }
