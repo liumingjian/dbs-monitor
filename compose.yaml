@@ -112,7 +112,7 @@ services:
 
   acceptance-platform:
     image: postgres:17
-    profiles: [acceptance]
+    profiles: [acceptance, acceptance-server]
     entrypoint: ["sh", "/acceptance-postgres-entrypoint.sh"]
     command:
       - postgres
@@ -148,12 +148,38 @@ services:
       POSTGRES_PASSWORD: monitored
     volumes:
       - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
+      - ./test/acceptance/fixtures/target-init.sql:/docker-entrypoint-initdb.d/acceptance-target.sql:ro
     ports: ["55447:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
       interval: 1s
       timeout: 3s
       retries: 30
+
+  acceptance-server:
+    image: debian:bookworm-slim
+    profiles: [acceptance-server]
+    user: "65532:65532"
+    read_only: true
+    working_dir: /workspace
+    command: ["/workspace/results/acceptance-server"]
+    environment:
+      DBS_MONITOR_CONFIG_FILE: /etc/dbs-monitor/config.yaml
+      INITIAL_ADMIN_PASSWORD: acceptance-admin-password
+      LISTEN_ADDR: 0.0.0.0:8443
+      PUBLIC_HOST: 127.0.0.1
+      CERT_DIR: /etc/dbs-monitor/tls
+      PGDATA: /
+    volumes:
+      - .:/workspace:ro
+      - ./test/acceptance/fixtures/server-compose.yaml:/etc/dbs-monitor/config.yaml:ro
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+    tmpfs:
+      - /etc/dbs-monitor/credentials:uid=65532,gid=65532,mode=0700
+      - /etc/dbs-monitor/tls:uid=65532,gid=65532,mode=0700
+    depends_on:
+      acceptance-platform:
+        condition: service_healthy
 
   restore-target:
     image: postgres:17

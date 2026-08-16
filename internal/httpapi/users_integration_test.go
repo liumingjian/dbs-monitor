@@ -141,6 +141,19 @@ func TestUserLifecycleAndPasswordFlows(t *testing.T) {
 
 	selfDisable := userJSONRequest(t, admin, http.MethodPut, server.URL+"/api/v1/users/"+adminUser.ID+"/status", map[string]any{"enabled": false})
 	assertUserError(t, selfDisable, http.StatusBadRequest, errSelfDisable.Error())
+	assertUserPlatformEvent(t, ctx, platform, platformevent.UserStatusChangeRejected, "admin", "", adminUser.ID)
+	events := userJSONRequest(t, admin, http.MethodGet, server.URL+"/api/v1/platform-events", nil)
+	assertUserStatus(t, events, http.StatusOK)
+	var eventFeed []struct {
+		Kind    string `json:"kind"`
+		Actor   string `json:"actor"`
+		Subject string `json:"subject_id"`
+	}
+	decodeUserJSON(t, events, &eventFeed)
+	if len(eventFeed) == 0 || eventFeed[0].Kind != platformevent.UserStatusChangeRejected ||
+		eventFeed[0].Actor != "admin" || eventFeed[0].Subject != adminUser.ID {
+		t.Fatalf("latest platform event = %+v, want attributed rejected self-disable", eventFeed)
+	}
 	selfDowngrade := userJSONRequest(t, admin, http.MethodPut, server.URL+"/api/v1/users/"+adminUser.ID+"/role", map[string]any{"role": "READONLY"})
 	assertUserError(t, selfDowngrade, http.StatusBadRequest, errSelfDowngrade.Error())
 }

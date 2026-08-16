@@ -47,6 +47,15 @@ SELECT id, username, role, enabled, created_at
 FROM app_user
 ORDER BY username;
 
+-- name: ListPlatformEvents :many
+SELECT event.id, event.kind, event.occurred_at,
+       coalesce(actor.username, event.actor_subject)::text AS actor,
+       event.subject_id
+FROM platform_event event
+LEFT JOIN app_user actor ON actor.id = event.actor_id
+ORDER BY event.occurred_at DESC, event.id DESC
+LIMIT 100;
+
 -- name: CreateUser :one
 INSERT INTO app_user (id, username, password_hash, role, created_by)
 VALUES ($1, $2, $3, $4, $5)

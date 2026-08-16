@@ -25,6 +25,7 @@ chmod 0600 "$tls_dir/server.key"
 
 cd "$root"
 export ACCEPTANCE_PLATFORM_TLS_DIR="$tls_dir"
+export ACCEPTANCE_COMPOSE_PROJECT="$project"
 docker compose -p "$project" --profile acceptance down --volumes --remove-orphans >/dev/null 2>&1 || true
 docker compose -p "$project" --profile acceptance --profile restore --profile smtp --profile webhook \
   up -d --wait acceptance-platform acceptance-target restore-target smtp-sink webhook-sink

@@ -94,6 +94,23 @@ func TestProductionGuardsRejectDrift(t *testing.T) {
 		}
 	})
 
+	t.Run("B12 annotated Go test reference", func(t *testing.T) {
+		root := t.TempDir()
+		writeGuardFixture(t, root, "test/acceptance/matrix.yaml", `entries:
+  - id: SEC-1
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_1 [SEC-1]"
+`)
+		writeGuardFixture(t, root, "test/acceptance/security_test.go", "package acceptance\nfunc TestAcceptance_SEC_1() {}\n")
+		violations, err := findBrokenAcceptanceReferences(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(violations) != 0 {
+			t.Fatalf("violations = %v, want annotated Go test reference to resolve", violations)
+		}
+	})
+
 	t.Run("B14 non-fixture platform image", func(t *testing.T) {
 		root := t.TempDir()
 		writeGuardFixture(t, root, "compose.yaml", `services:
@@ -231,7 +248,7 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 			violations = append(violations, fmt.Sprintf("%s has malformed test_ref %q", entry.ID, testReference))
 			continue
 		}
-		if !strings.Contains(parts[1], strings.ReplaceAll(entry.ID, "-", "_")) {
+		if !strings.Contains(parts[1], entry.ID) && !strings.Contains(parts[1], strings.ReplaceAll(entry.ID, "-", "_")) {
 			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
 		}
 		testPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(parts[0])))
@@ -245,8 +262,12 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 			violations = append(violations, fmt.Sprintf("%s test_ref path %q cannot be read", entry.ID, parts[0]))
 			continue
 		}
-		if !strings.Contains(string(testSource), parts[1]) {
-			violations = append(violations, fmt.Sprintf("%s test_ref symbol %q is absent from %s", entry.ID, parts[1], parts[0]))
+		sourceReference := parts[1]
+		if strings.HasSuffix(parts[0], ".go") {
+			sourceReference, _, _ = strings.Cut(sourceReference, " ")
+		}
+		if !strings.Contains(string(testSource), sourceReference) {
+			violations = append(violations, fmt.Sprintf("%s test_ref symbol %q is absent from %s", entry.ID, sourceReference, parts[0]))
 		}
 	}
 	return violations, nil

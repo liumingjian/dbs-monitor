@@ -45,6 +45,32 @@ func TestAcceptanceExecutionOrder(t *testing.T) {
 	}
 }
 
+func TestSecurityEntriesHaveIndependentReferences(t *testing.T) {
+	matrix := loadMatrix(t, "matrix.yaml")
+	seenReferences := map[string]string{}
+	securityCount := 0
+	for _, entry := range matrix.Entries {
+		if !strings.HasPrefix(entry.ID, "SEC-") {
+			continue
+		}
+		securityCount++
+		if entry.Status != "covered" {
+			t.Errorf("%s status = %q, want covered", entry.ID, entry.Status)
+		}
+		if entry.TestRef == nil || !strings.Contains(*entry.TestRef, entry.ID) {
+			t.Errorf("%s test_ref = %v, want an independent reference containing the entry ID", entry.ID, entry.TestRef)
+			continue
+		}
+		if previous, exists := seenReferences[*entry.TestRef]; exists {
+			t.Errorf("%s and %s share test_ref %q", previous, entry.ID, *entry.TestRef)
+		}
+		seenReferences[*entry.TestRef] = entry.ID
+	}
+	if securityCount != 10 {
+		t.Fatalf("security entry count = %d, want 10", securityCount)
+	}
+}
+
 func TestAcceptanceResultRetainsEveryMatrixEntry(t *testing.T) {
 	matrix := loadMatrix(t, "matrix.yaml")
 	report := newResult(matrix, "0123456789012345678901234567890123456789")

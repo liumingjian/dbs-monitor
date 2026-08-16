@@ -438,10 +438,11 @@ func (store *Store) writeChangeEvent(previous, current Snapshot) {
 }
 
 type sourceChange struct {
-	Source         Source `json:"source"`
-	PreviousStatus Status `json:"previous_status"`
-	Status         Status `json:"status"`
-	Code           string `json:"code"`
+	Source                Source `json:"source"`
+	PreviousStatus        Status `json:"previous_status"`
+	Status                Status `json:"status"`
+	Code                  string `json:"code"`
+	ValidityDaysRemaining *int   `json:"validity_days_remaining,omitempty"`
 }
 
 type changeEvent struct {
@@ -483,6 +484,7 @@ func changedSources(previous, current []SourceSnapshot) []sourceChange {
 		}
 		changes = append(changes, sourceChange{
 			Source: source.Source, PreviousStatus: before.Status, Status: source.Status, Code: source.Code,
+			ValidityDaysRemaining: source.ValidityDaysRemaining,
 		})
 	}
 	return changes
