@@ -110,6 +110,7 @@ AlertEventKind:
     - AlertEventNotificationSent
     - AlertEventNotificationFailed
     - AlertEventMaintenanceSuppressed
+
 AlertEvent:
   type: object
   required:
