@@ -145,6 +145,11 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		t.Fatalf("seed alert facts: %v", err)
 	}
 
+	wantListQueryCounts := instanceListQueryCounts{
+		total:                    3,
+		listInstances:            1,
+		listInstanceHealthAlerts: 1,
+	}
 	list := func() []instanceProjectionResponse {
 		before := queryCounter.snapshot()
 		response := getResponse(t, client, server.URL+"/api/v1/instances")
@@ -157,7 +162,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 			t.Fatalf("decode instances: %v", err)
 		}
 		after := queryCounter.snapshot()
-		if got := after.subtract(before); got != (instanceListQueryCounts{total: 3, instances: 1, alerts: 1}) {
+		if got := after.subtract(before); got != wantListQueryCounts {
 			t.Fatalf("list instances queries = %+v, want one auth and two bulk projection queries", got)
 		}
 		return instances
@@ -233,16 +238,16 @@ type projectionCounts struct {
 }
 
 type instanceListQueryCounts struct {
-	total     int
-	instances int
-	alerts    int
+	total                    int
+	listInstances            int
+	listInstanceHealthAlerts int
 }
 
 func (counts instanceListQueryCounts) subtract(previous instanceListQueryCounts) instanceListQueryCounts {
 	return instanceListQueryCounts{
-		total:     counts.total - previous.total,
-		instances: counts.instances - previous.instances,
-		alerts:    counts.alerts - previous.alerts,
+		total:                    counts.total - previous.total,
+		listInstances:            counts.listInstances - previous.listInstances,
+		listInstanceHealthAlerts: counts.listInstanceHealthAlerts - previous.listInstanceHealthAlerts,
 	}
 }
 
@@ -256,10 +261,10 @@ func (counter *instanceListQueryCounter) TraceQueryStart(ctx context.Context, _ 
 	defer counter.mu.Unlock()
 	counter.counts.total++
 	if strings.Contains(data.SQL, "-- name: ListInstances") {
-		counter.counts.instances++
+		counter.counts.listInstances++
 	}
 	if strings.Contains(data.SQL, "-- name: ListInstanceHealthAlerts") {
-		counter.counts.alerts++
+		counter.counts.listInstanceHealthAlerts++
 	}
 	return ctx
 }
