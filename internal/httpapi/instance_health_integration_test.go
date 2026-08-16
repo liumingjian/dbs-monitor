@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,7 +46,13 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	migrationDB.Close()
-	pool, err := pgxpool.New(ctx, connectionString(databaseName))
+	poolConfig, err := pgxpool.ParseConfig(connectionString(databaseName))
+	if err != nil {
+		t.Fatalf("parse platform pool config: %v", err)
+	}
+	queryCounter := &instanceListQueryCounter{}
+	poolConfig.ConnConfig.Tracer = queryCounter
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		t.Fatalf("open platform pool: %v", err)
 	}
@@ -138,6 +146,7 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 	}
 
 	list := func() []instanceProjectionResponse {
+		before := queryCounter.snapshot()
 		response := getResponse(t, client, server.URL+"/api/v1/instances")
 		defer response.Body.Close()
 		if response.StatusCode != http.StatusOK {
@@ -146,6 +155,10 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		var instances []instanceProjectionResponse
 		if err := json.NewDecoder(response.Body).Decode(&instances); err != nil {
 			t.Fatalf("decode instances: %v", err)
+		}
+		after := queryCounter.snapshot()
+		if got := after.subtract(before); got != (instanceListQueryCounts{total: 3, instances: 1, alerts: 1}) {
+			t.Fatalf("list instances queries = %+v, want one auth and two bulk projection queries", got)
 		}
 		return instances
 	}
@@ -217,4 +230,44 @@ type projectionCounts struct {
 	Critical int `json:"critical"`
 	Warning  int `json:"warning"`
 	Info     int `json:"info"`
+}
+
+type instanceListQueryCounts struct {
+	total     int
+	instances int
+	alerts    int
+}
+
+func (counts instanceListQueryCounts) subtract(previous instanceListQueryCounts) instanceListQueryCounts {
+	return instanceListQueryCounts{
+		total:     counts.total - previous.total,
+		instances: counts.instances - previous.instances,
+		alerts:    counts.alerts - previous.alerts,
+	}
+}
+
+type instanceListQueryCounter struct {
+	mu     sync.Mutex
+	counts instanceListQueryCounts
+}
+
+func (counter *instanceListQueryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	counter.mu.Lock()
+	defer counter.mu.Unlock()
+	counter.counts.total++
+	if strings.Contains(data.SQL, "-- name: ListInstances") {
+		counter.counts.instances++
+	}
+	if strings.Contains(data.SQL, "-- name: ListInstanceHealthAlerts") {
+		counter.counts.alerts++
+	}
+	return ctx
+}
+
+func (*instanceListQueryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
+func (counter *instanceListQueryCounter) snapshot() instanceListQueryCounts {
+	counter.mu.Lock()
+	defer counter.mu.Unlock()
+	return counter.counts
 }
