@@ -16,6 +16,7 @@ const (
 	LoginFailed               = "LOGIN_FAILED"
 	UserCreated               = "USER_CREATED"
 	UserStatusChanged         = "USER_STATUS_CHANGED"
+	UserStatusChangeRejected  = "USER_STATUS_CHANGE_REJECTED"
 	UserRoleChanged           = "USER_ROLE_CHANGED"
 	UserPasswordReset         = "USER_PASSWORD_RESET"
 	InstanceCredentialUpdated = "INSTANCE_CREDENTIAL_UPDATED"
@@ -28,6 +29,7 @@ var eventKinds = []string{
 	LoginFailed,
 	UserCreated,
 	UserStatusChanged,
+	UserStatusChangeRejected,
 	UserRoleChanged,
 	UserPasswordReset,
 	InstanceCredentialUpdated,

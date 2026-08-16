@@ -111,6 +111,23 @@ func TestProductionGuardsRejectDrift(t *testing.T) {
 		}
 	})
 
+	t.Run("B12 annotated Go test reference", func(t *testing.T) {
+		root := t.TempDir()
+		writeGuardFixture(t, root, "test/acceptance/matrix.yaml", `entries:
+  - id: SEC-1
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_1 [SEC-1]"
+`)
+		writeGuardFixture(t, root, "test/acceptance/security_test.go", "package acceptance\nfunc TestAcceptance_SEC_1() {}\n")
+		violations, err := findBrokenAcceptanceReferences(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(violations) != 0 {
+			t.Fatalf("violations = %v, want annotated Go test reference to resolve", violations)
+		}
+	})
+
 	t.Run("B14 non-fixture platform image", func(t *testing.T) {
 		root := t.TempDir()
 		writeGuardFixture(t, root, "compose.yaml", `services:
@@ -265,13 +282,42 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 			continue
 		}
 		testReference := strings.TrimSpace(*entry.TestRef)
-		underscoredID := strings.ReplaceAll(entry.ID, "-", "_")
-		if !strings.Contains(testReference, entry.ID) && !strings.Contains(testReference, underscoredID) {
-			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
+		referenceParts := strings.Split(testReference, "::")
+		if len(referenceParts) == 1 {
+			underscoredID := strings.ReplaceAll(entry.ID, "-", "_")
+			if !strings.Contains(testReference, entry.ID) && !strings.Contains(testReference, underscoredID) {
+				violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
+				continue
+			}
+			if !strings.Contains(testSources, testReference) {
+				violations = append(violations, fmt.Sprintf("%s test_ref %q is absent from test source", entry.ID, testReference))
+			}
 			continue
 		}
-		if !strings.Contains(testSources, testReference) {
-			violations = append(violations, fmt.Sprintf("%s test_ref %q is absent from test source", entry.ID, testReference))
+		if len(referenceParts) != 2 || referenceParts[0] == "" || referenceParts[1] == "" {
+			violations = append(violations, fmt.Sprintf("%s has malformed test_ref %q", entry.ID, testReference))
+			continue
+		}
+		referencedPath, referencedSymbol := referenceParts[0], referenceParts[1]
+		if !strings.Contains(referencedSymbol, entry.ID) && !strings.Contains(referencedSymbol, strings.ReplaceAll(entry.ID, "-", "_")) {
+			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
+		}
+		testPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(referencedPath)))
+		relativePath, err := filepath.Rel(root, testPath)
+		if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
+			violations = append(violations, fmt.Sprintf("%s test_ref escapes the repository: %q", entry.ID, testReference))
+			continue
+		}
+		testSource, err := os.ReadFile(testPath)
+		if err != nil {
+			violations = append(violations, fmt.Sprintf("%s test_ref path %q cannot be read", entry.ID, referencedPath))
+			continue
+		}
+		if strings.HasSuffix(referencedPath, ".go") {
+			referencedSymbol, _, _ = strings.Cut(referencedSymbol, " ")
+		}
+		if !strings.Contains(string(testSource), referencedSymbol) {
+			violations = append(violations, fmt.Sprintf("%s test_ref symbol %q is absent from %s", entry.ID, referencedSymbol, referencedPath))
 		}
 	}
 	return violations, nil

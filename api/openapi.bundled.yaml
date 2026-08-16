@@ -14,6 +14,7 @@ tags:
   - name: agent
   - name: collection
   - name: users
+  - name: platform-events
   - name: diagnostics
   - name: notification-settings
 paths:
@@ -2051,6 +2052,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/platform-events:
+    get:
+      tags:
+        - platform-events
+      operationId: listPlatformEvents
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Most recent attributable platform events
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: '#/components/schemas/PlatformEvent'
   /api/v1/diagnostics/health:
     get:
       tags:
@@ -4385,3 +4402,37 @@ components:
             - '0600'
         restart_command:
           type: string
+    PlatformEventKind:
+      type: string
+      enum:
+        - LOGIN_SUCCEEDED
+        - LOGIN_FAILED
+        - USER_CREATED
+        - USER_STATUS_CHANGED
+        - USER_STATUS_CHANGE_REJECTED
+        - USER_ROLE_CHANGED
+        - USER_PASSWORD_RESET
+        - INSTANCE_CREDENTIAL_UPDATED
+        - INSTANCE_REMOVED
+        - MASTER_KEY_ROTATED
+    PlatformEvent:
+      type: object
+      required:
+        - id
+        - kind
+        - occurred_at
+        - actor
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          $ref: '#/components/schemas/PlatformEventKind'
+        occurred_at:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        subject_id:
+          type: string
+          format: uuid

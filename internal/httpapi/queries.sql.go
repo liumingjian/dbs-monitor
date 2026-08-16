@@ -1145,6 +1145,50 @@ func (q *Queries) ListPersistedCollectionTaskStates(ctx context.Context, instanc
 	return items, nil
 }
 
+const listPlatformEvents = `-- name: ListPlatformEvents :many
+SELECT event.id, event.kind, event.occurred_at,
+       coalesce(actor.username, event.actor_subject)::text AS actor,
+       event.subject_id
+FROM platform_event event
+LEFT JOIN app_user actor ON actor.id = event.actor_id
+ORDER BY event.occurred_at DESC, event.id DESC
+LIMIT 100
+`
+
+type ListPlatformEventsRow struct {
+	ID         int64
+	Kind       string
+	OccurredAt pgtype.Timestamptz
+	Actor      string
+	SubjectID  pgtype.UUID
+}
+
+func (q *Queries) ListPlatformEvents(ctx context.Context) ([]ListPlatformEventsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformEventsRow
+	for rows.Next() {
+		var i ListPlatformEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OccurredAt,
+			&i.Actor,
+			&i.SubjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listQueryStatisticsSnapshotEntries = `-- name: ListQueryStatisticsSnapshotEntries :many
 SELECT queryid, database_oid, user_oid, calls, total_exec_time_ms
 FROM query_statistics_snapshot_entry

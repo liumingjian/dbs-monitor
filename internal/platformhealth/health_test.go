@@ -307,7 +307,8 @@ func TestPublishSummaryEmitsCertificateLevelChange(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 2 || !strings.Contains(lines[0], `"event":"platform_health_change"`) ||
-		!strings.Contains(lines[0], `"source":"TLS_CERTIFICATE"`) || !strings.Contains(lines[0], `"status":"DEGRADED"`) {
+		!strings.Contains(lines[0], `"source":"TLS_CERTIFICATE"`) || !strings.Contains(lines[0], `"status":"DEGRADED"`) ||
+		!strings.Contains(lines[0], `"validity_days_remaining":29`) {
 		t.Fatalf("certificate transition journal = %q, want change event followed by summary", output.String())
 	}
 }

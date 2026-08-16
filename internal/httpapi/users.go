@@ -98,6 +98,15 @@ func (handler *Handler) UpdateUserStatus(ctx context.Context, request api.Update
 	}
 	err := handler.setUserEnabled(ctx, authenticatedUserID(ctx), request.Id, request.Body.Enabled)
 	if errors.Is(err, errSelfDisable) || errors.Is(err, errLastPlatformAdmin) {
+		actorID := authenticatedUserID(ctx)
+		if recordErr := platformevent.Record(ctx, handler.platform, platformevent.Event{
+			Kind:       platformevent.UserStatusChangeRejected,
+			OccurredAt: handler.clock.Now().UTC(),
+			ActorID:    &actorID,
+			SubjectID:  &request.Id,
+		}); recordErr != nil {
+			return nil, recordErr
+		}
 		return api.UpdateUserStatus400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
 	}
 	if errors.Is(err, errUserNotFound) {

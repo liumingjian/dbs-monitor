@@ -9,4 +9,4 @@ Both are self-signed localhost certificate/key pairs used for real TLS fault inj
 
 `roles.yaml` is the harness input for role-aware acceptance runs. The harness creates the three long-lived accounts once through the user-management API and uses them read-only across entries. Tests that mutate an account create a disposable user from the declared pattern, replacing `{entry_id}` with the lowercase matrix entry ID and `{sequence}` with a per-entry counter.
 
-Fixture files intentionally contain no passwords. The harness consumes the one-time password returned by `POST /api/v1/users` and never writes `app_user` or `user_session` directly.
+`roles.yaml` intentionally contains no passwords. The harness consumes the one-time password returned by `POST /api/v1/users` and never writes `app_user` or `user_session` directly.

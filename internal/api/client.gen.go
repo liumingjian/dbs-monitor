@@ -375,6 +375,9 @@ type ClientInterface interface {
 	// GetPerformanceEvent request
 	GetPerformanceEvent(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListPlatformEvents request
+	ListPlatformEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListUsers request
 	ListUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1635,6 +1638,18 @@ func (c *Client) ChangeOwnPassword(ctx context.Context, body ChangeOwnPasswordJS
 
 func (c *Client) GetPerformanceEvent(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetPerformanceEventRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListPlatformEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListPlatformEventsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -4867,6 +4882,33 @@ func NewGetPerformanceEventRequest(server string, id openapi_types.UUID) (*http.
 	return req, nil
 }
 
+// NewListPlatformEventsRequest generates requests for ListPlatformEvents
+func NewListPlatformEventsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/platform-events")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListUsersRequest generates requests for ListUsers
 func NewListUsersRequest(server string) (*http.Request, error) {
 	var err error
@@ -5389,6 +5431,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetPerformanceEventWithResponse request
 	GetPerformanceEventWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetPerformanceEventResponse, error)
+
+	// ListPlatformEventsWithResponse request
+	ListPlatformEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPlatformEventsResponse, error)
 
 	// ListUsersWithResponse request
 	ListUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListUsersResponse, error)
@@ -7161,6 +7206,28 @@ func (r GetPerformanceEventResponse) StatusCode() int {
 	return 0
 }
 
+type ListPlatformEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]PlatformEvent
+}
+
+// Status returns HTTPResponse.Status
+func (r ListPlatformEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListPlatformEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListUsersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8186,6 +8253,15 @@ func (c *ClientWithResponses) GetPerformanceEventWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseGetPerformanceEventResponse(rsp)
+}
+
+// ListPlatformEventsWithResponse request returning *ListPlatformEventsResponse
+func (c *ClientWithResponses) ListPlatformEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPlatformEventsResponse, error) {
+	rsp, err := c.ListPlatformEvents(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListPlatformEventsResponse(rsp)
 }
 
 // ListUsersWithResponse request returning *ListUsersResponse
@@ -10632,6 +10708,32 @@ func ParseGetPerformanceEventResponse(rsp *http.Response) (*GetPerformanceEventR
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListPlatformEventsResponse parses an HTTP response from a ListPlatformEventsWithResponse call
+func ParseListPlatformEventsResponse(rsp *http.Response) (*ListPlatformEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListPlatformEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []PlatformEvent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

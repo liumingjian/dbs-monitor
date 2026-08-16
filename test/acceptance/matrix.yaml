@@ -1776,8 +1776,8 @@ entries:
       - "对 Agent 上报端点同样输出（无条件 = 不按客户端类型分叉）"
       - "HSTS 取值恰为 max-age=31536000：不含 preload、不含 includeSubDomains"
       - "CSP 的 script-src 不含 'unsafe-inline' / 'unsafe-eval'"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_1 [SEC-1]"
     owner_issue: 112
     reason: "29 号 D1.3：现状 cmd/monitor-server/main.go 按 /api/ 前缀分叉成两条 handler 链，只在一条上挂中间件是最典型的漏法且症状极隐蔽（页面能开、接口能通、只扫 API 报绿）。与 B13 分工：B13 断取值逐字（防手滑删行照绿），本条断真的发出来了且两条链都发"
   - id: SEC-2
@@ -1793,8 +1793,8 @@ entries:
       - "以 TLS1.3 客户端握手：成功，且能完成一次业务 API 调用"
       - "首次启动自动生成的自签证书直接可用，全程钉扎 CA 指纹、无 -k（承 19 号）"
       - "不对密码套件作任何断言（29 号 D2：不列举即不承诺）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_2 [SEC-2]"
     owner_issue: 112
     reason: "29 号 D2。现状 main.go 的 MinVersion=TLS12 是 Go 默认值不是决策；交付目标 linux/amd64+arm64、客户端只有现代浏览器与我方 agent，无需迁就老客户端。刻意不断套件——断了就等于承诺一份会随 Go 版本过时的清单"
   - id: SEC-3
@@ -1810,8 +1810,8 @@ entries:
       - "健康快照中 tls 子系统 = DEGRADED（第九个子系统，29 号 D3）"
       - "平台事件含一条指名「证书已过期」的记录，绝不静默"
       - "tls 子系统不存在 FAILED 取值：整机健康不因证书过期被最坏归并判死"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_3 [SEC-3]"
     owner_issue: 112
     reason: "29 号 D3。与 25 号 D4 同构——证书过期时服务本身完全健康，拒启动会把计划内的换证逾期直接升级成「监控平台整个看不见」，而看不见的第一个后果就是没人知道证书到期了。手段是真放一张过期证书（客户自备证书路径本就支持），不加 test-only 开关、不新造配置项（承 26 号 D9）。与 AC-09-F7 同注入手段、两个断言点，不合并：本条断平台自身健康事实源如实降级，AC-09-F7 断它不污染目标库告警与 NO_DATA"
   - id: SEC-4
@@ -1826,8 +1826,8 @@ entries:
       - "以 fixtures 中 20 天后到期的证书启动：进程正常、HTTP 面可用"
       - "tls 子系统 = DEGRADED，事件内容指名「剩余有效期不足 30 天」并带剩余天数"
       - "该事件与 SEC-3 的「已过期」事件内容可区分，不是同一句话"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_4 [SEC-4]"
     owner_issue: 112
     reason: "29 号 D3。预警与已过期同为 DEGRADED，若事件内容不可区分则预警等于没有——运维看到 DEGRADED 却不知道还剩几天。与 SEC-3 分开而不合并：合并后「还有 20 天」和「已经过期」会退化成同一条断言，而这两种处境的动作完全不同"
   - id: SEC-5
@@ -1843,8 +1843,8 @@ entries:
       - "session_idle_ttl=30s 时：静默 30s 后的会话被拒，静默期内每 10s 请求一次则不过期"
       - "过期会话的请求返回鉴权失败，不返回 13 码、不返回业务数据"
       - "两个 TTL 均为部署期配置项（29 号 D4.2），非编译期常量"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_5 [SEC-5]"
     owner_issue: 112
     reason: "29 号 D4.2。单轮 ≤10 分钟（21 号 D7）下 12h/2h 不可直接验，参数化不是模拟——调小后跑的是同一段代码，做法同 22 号对 repeat_interval 的处置。不可配就等于「过期」这条腿永远测不到，因此 TTL 可配是外溢实现硬要求而非实现自由"
   - id: SEC-6
@@ -1860,8 +1860,8 @@ entries:
       - "用户被停用后其全部在用会话立即失效（17 号 D2 的硬要求）"
       - "口令自改或被管理员重置后，该用户其它会话全部失效、当前会话可继续"
       - "并发会话不受限制：同一用户两个会话可同时存在并各自工作"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_6 [SEC-6]"
     owner_issue: 112
     reason: "29 号 D4.1/D4.2。这三面正是「服务端会话表而非无状态 JWT」这条决策的唯一验收面——JWT 做不到即时失效除非再加吊销表。并发不限制一并断死：限制并发会在双人值班或一人两处盯屏时把人锁在门外，而这是监控平台"
   - id: SEC-7
@@ -1877,8 +1877,8 @@ entries:
       - "含 HttpOnly、Secure、SameSite=Strict 三项属性"
       - "登录及后续任一响应的 body 全文正则扫描：不含会话令牌值"
       - "会话令牌不出现在 URL、查询参数或任何自定义响应头中"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_7 [SEC-7]"
     owner_issue: 112
     reason: "29 号 D4.2/D4.3。全文正则而非字段白名单，防的是意料之外的字段（同 24 号 D11「凭据永不回显」的第三层做法）。__Host- 前缀强制 Secure + Path=/ + 无 Domain，正好匹配单 host 部署；SameSite=Strict 是「不引入 CSRF token」那条推理的前提之一，它一旦松动本条即刻变红"
   - id: SEC-8
@@ -1894,8 +1894,8 @@ entries:
       - "停用用户留下带 actor 的记录；被守卫拒绝的停用尝试同样留痕"
       - "凭据更新留下带 actor 的记录，且记录中不含凭据明文（承 13 号）"
       - "三项记录均可被全部登录用户只读检索（29 号 D5.1）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_8 [SEC-8]"
     owner_issue: 112
     reason: "29 号 D5.2。十一项登记表的完整性由 A12 表驱动单测承担——「有没有漏登记一项」是表驱动判定不是执行判定，端到端逐项跑十一次既贵又证明不了第十二项被忘了。这三项取三种最容易漏的形状：登录失败无 actor 主体（易被实现成匿名丢弃）、用户停用有守卫（易在拒绝路径上漏留痕）、凭据更新接触秘密（易连带把秘密写进留痕）"
   - id: SEC-9
@@ -1910,8 +1910,8 @@ entries:
       - "运行中的 server 进程 uid ≠ 0"
       - "凭据目录归该用户所有且为 0600 / 0700（承 25 号 D3）"
       - "该用户对 /etc/dbs-monitor 之外无写权限"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_9 [SEC-9]"
     owner_issue: 112
     reason: "29 号 D6，本票在最小权限上出的唯一一条——平台库权限归 #116（两票同写就是第二份真相），目标库权限已由 00 号 M1 冻结、片①能力四态覆盖。环境要求：compose 中 server 必须以非 root 跑，否则本条恒绿，是一条自欺条目"
   - id: SEC-10
@@ -1926,7 +1926,7 @@ entries:
       - "走一条关键路径（登录 → 实例列表 → 实例工作台图表）"
       - "全程 console 无任何 CSP violation 报告"
       - "AntD 组件样式正常渲染、ECharts 图表正常出图"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "web/e2e/security-boundary.spec.ts::[SEC-10]"
     owner_issue: 112
     reason: "29 号 D8.1，本组唯一浏览器条目。CSP 在真实世界的失败模式是砸自己的页面而不是被绕过——style-src 放行 'unsafe-inline' 这个取舍（29 号 D1.1，AntD 6.5.3 cssinjs 运行时注入 style）到底够不够，只有这一条能证明。img-src 带 data: 同样只在这里被真实使用（ECharts 导出）"

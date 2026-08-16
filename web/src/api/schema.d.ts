@@ -949,6 +949,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/platform-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPlatformEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/diagnostics/health": {
         parameters: {
             query?: never;
@@ -1913,6 +1929,18 @@ export interface components {
             /** @enum {string} */
             file_mode: "0600";
             restart_command: string;
+        };
+        /** @enum {string} */
+        PlatformEventKind: "LOGIN_SUCCEEDED" | "LOGIN_FAILED" | "USER_CREATED" | "USER_STATUS_CHANGED" | "USER_STATUS_CHANGE_REJECTED" | "USER_ROLE_CHANGED" | "USER_PASSWORD_RESET" | "INSTANCE_CREDENTIAL_UPDATED" | "INSTANCE_REMOVED" | "MASTER_KEY_ROTATED";
+        PlatformEvent: {
+            /** Format: int64 */
+            id: number;
+            kind: components["schemas"]["PlatformEventKind"];
+            /** Format: date-time */
+            occurred_at: string;
+            actor: string;
+            /** Format: uuid */
+            subject_id?: string;
         };
     };
     responses: never;
@@ -4320,6 +4348,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPlatformEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Most recent attributable platform events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformEvent"][];
                 };
             };
         };

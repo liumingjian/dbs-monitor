@@ -14,6 +14,7 @@ tags:
   - name: agent
   - name: collection
   - name: users
+  - name: platform-events
   - name: diagnostics
   - name: notification-settings
 paths:
@@ -125,6 +126,8 @@ paths:
     $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1password
   /api/v1/password:
     $ref: paths/users.yaml#/~1api~1v1~1password
+  /api/v1/platform-events:
+    $ref: paths/platform-events.yaml#/~1api~1v1~1platform-events
   /api/v1/diagnostics/health:
     $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1health
   /api/v1/diagnostics/disk:

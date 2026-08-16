@@ -264,6 +264,20 @@ const (
 	EventTempFilesSurge     PerformanceEventType = "TEMP_FILES_SURGE"
 )
 
+// Defines values for PlatformEventKind.
+const (
+	INSTANCECREDENTIALUPDATED PlatformEventKind = "INSTANCE_CREDENTIAL_UPDATED"
+	INSTANCEREMOVED           PlatformEventKind = "INSTANCE_REMOVED"
+	LOGINFAILED               PlatformEventKind = "LOGIN_FAILED"
+	LOGINSUCCEEDED            PlatformEventKind = "LOGIN_SUCCEEDED"
+	MASTERKEYROTATED          PlatformEventKind = "MASTER_KEY_ROTATED"
+	USERCREATED               PlatformEventKind = "USER_CREATED"
+	USERPASSWORDRESET         PlatformEventKind = "USER_PASSWORD_RESET"
+	USERROLECHANGED           PlatformEventKind = "USER_ROLE_CHANGED"
+	USERSTATUSCHANGED         PlatformEventKind = "USER_STATUS_CHANGED"
+	USERSTATUSCHANGEREJECTED  PlatformEventKind = "USER_STATUS_CHANGE_REJECTED"
+)
+
 // Defines values for PlatformHealthSource.
 const (
 	HealthSourceAgentIngress             PlatformHealthSource = "AGENT_INGRESS"
@@ -1133,6 +1147,18 @@ type PerformanceEventPage struct {
 // PerformanceEventType defines model for PerformanceEventType.
 type PerformanceEventType string
 
+// PlatformEvent defines model for PlatformEvent.
+type PlatformEvent struct {
+	Actor      string              `json:"actor"`
+	Id         int64               `json:"id"`
+	Kind       PlatformEventKind   `json:"kind"`
+	OccurredAt time.Time           `json:"occurred_at"`
+	SubjectId  *openapi_types.UUID `json:"subject_id,omitempty"`
+}
+
+// PlatformEventKind defines model for PlatformEventKind.
+type PlatformEventKind string
+
 // PlatformHealthSnapshot defines model for PlatformHealthSnapshot.
 type PlatformHealthSnapshot struct {
 	AssembledAt time.Time                      `json:"assembled_at"`
@@ -1707,6 +1733,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/performance-events/{id})
 	GetPerformanceEvent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/platform-events)
+	ListPlatformEvents(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/users)
 	ListUsers(w http.ResponseWriter, r *http.Request)
@@ -3577,6 +3606,20 @@ func (siw *ServerInterfaceWrapper) GetPerformanceEvent(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListPlatformEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListPlatformEvents(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPlatformEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -3877,6 +3920,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.UpdateNotificationPolicy)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/platform-events", wrapper.ListPlatformEvents)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users", wrapper.CreateUser)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users/{id}/password", wrapper.ResetUserPassword)
@@ -5809,6 +5853,22 @@ func (response GetPerformanceEvent404JSONResponse) VisitGetPerformanceEventRespo
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListPlatformEventsRequestObject struct {
+}
+
+type ListPlatformEventsResponseObject interface {
+	VisitListPlatformEventsResponse(w http.ResponseWriter) error
+}
+
+type ListPlatformEvents200JSONResponse []PlatformEvent
+
+func (response ListPlatformEvents200JSONResponse) VisitListPlatformEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ListUsersRequestObject struct {
 }
 
@@ -6200,6 +6260,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/performance-events/{id})
 	GetPerformanceEvent(ctx context.Context, request GetPerformanceEventRequestObject) (GetPerformanceEventResponseObject, error)
+
+	// (GET /api/v1/platform-events)
+	ListPlatformEvents(ctx context.Context, request ListPlatformEventsRequestObject) (ListPlatformEventsResponseObject, error)
 
 	// (GET /api/v1/users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -8372,6 +8435,30 @@ func (sh *strictHandler) GetPerformanceEvent(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetPerformanceEventResponseObject); ok {
 		if err := validResponse.VisitGetPerformanceEventResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPlatformEvents operation middleware
+func (sh *strictHandler) ListPlatformEvents(w http.ResponseWriter, r *http.Request) {
+	var request ListPlatformEventsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPlatformEvents(ctx, request.(ListPlatformEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPlatformEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPlatformEventsResponseObject); ok {
+		if err := validResponse.VisitListPlatformEventsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
