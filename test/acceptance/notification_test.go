@@ -60,7 +60,7 @@ func TestAcceptance_AC_04_S1(t *testing.T) {
 	started := time.Now()
 	defer recordNotificationResult(t, "AC-04-S1", "real evaluation delivered SMTP and signed Webhook firing, repeat, and recovery notifications after commit", started)
 
-	setWebhookSink(t, http.StatusNoContent, true)
+	resetNotificationSinks(t, http.StatusNoContent)
 	runtime := startNotificationRuntime(t, 18454)
 	assertNotificationSinks(t, notificationSinks{})
 	policyID := configureNotificationDelivery(t, runtime.client, "AC-04-S1")
@@ -135,11 +135,11 @@ func TestAcceptance_AC_04_F3(t *testing.T) {
 	started := time.Now()
 	defer recordNotificationResult(t, "AC-04-F3", "persisted deliveries resumed after restart and reached terminal failure after fixed exponential retries", started)
 
-	setWebhookSink(t, http.StatusInternalServerError, true)
+	resetNotificationSinks(t, http.StatusInternalServerError)
 	stopNotificationComposeService(t, "smtp-sink")
 	t.Cleanup(func() {
 		startNotificationComposeService(t, "smtp-sink")
-		setWebhookSink(t, http.StatusNoContent, true)
+		resetNotificationSinks(t, http.StatusNoContent)
 	})
 	runtime := startNotificationRuntime(t, 18455)
 	policyID := configureNotificationDelivery(t, runtime.client, "AC-04-F3")
@@ -429,24 +429,22 @@ func assertNotificationSinks(t *testing.T, want notificationSinks) {
 	}
 }
 
-func setWebhookSink(t *testing.T, status int, reset bool) {
+func resetNotificationSinks(t *testing.T, webhookStatus int) {
 	t.Helper()
-	postNotificationSink(t, fmt.Sprintf("%s/control/status/%d", webhookSinkAPI, status))
-	if reset {
-		postNotificationSink(t, webhookSinkAPI+"/control/reset")
-		request, err := http.NewRequest(http.MethodDelete, smtpSinkAPI+"/api/v1/messages", strings.NewReader(`{"IDs":[]}`))
-		if err != nil {
-			t.Fatalf("build SMTP reset request: %v", err)
-		}
-		request.Header.Set("Content-Type", "application/json")
-		response, err := http.DefaultClient.Do(request)
-		if err != nil {
-			t.Fatalf("reset SMTP sink: %v", err)
-		}
-		response.Body.Close()
-		if response.StatusCode != http.StatusOK {
-			t.Fatalf("reset SMTP sink status=%d", response.StatusCode)
-		}
+	postNotificationSink(t, fmt.Sprintf("%s/control/status/%d", webhookSinkAPI, webhookStatus))
+	postNotificationSink(t, webhookSinkAPI+"/control/reset")
+	request, err := http.NewRequest(http.MethodDelete, smtpSinkAPI+"/api/v1/messages", strings.NewReader(`{"IDs":[]}`))
+	if err != nil {
+		t.Fatalf("build SMTP reset request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("reset SMTP sink: %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("reset SMTP sink status=%d", response.StatusCode)
 	}
 }
 
@@ -512,11 +510,11 @@ func eventuallyNotification(t *testing.T, timeout time.Duration, condition func(
 	deadline := time.Now().Add(timeout)
 	var detail string
 	for time.Now().Before(deadline) {
-		if ok, currentDetail := condition(); ok {
+		ok, currentDetail := condition()
+		if ok {
 			return
-		} else {
-			detail = currentDetail
 		}
+		detail = currentDetail
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("notification condition not reached after %s: %s", timeout, detail)

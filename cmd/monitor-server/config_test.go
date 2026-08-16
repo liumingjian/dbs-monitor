@@ -35,7 +35,7 @@ func TestLoadServerConfig(t *testing.T) {
 partition_maintenance_interval: 2m
 alert_history_retention: 2m
 repeat_interval_minimum: 30s
-notification_retry_backoff_cap: 5s
+notification_retry_backoff_cap: 3s
 snapshot_truncation_limit: 5
 collection_freshness_threshold: 20s
 migration_lock_wait_timeout: 10s
@@ -55,7 +55,7 @@ master_key_path: /srv/dbs-monitor/credentials
 			PartitionMaintenanceInterval: 2 * time.Minute,
 			AlertHistoryRetention:        2 * time.Minute,
 			RepeatIntervalMinimum:        30 * time.Second,
-			NotificationRetryBackoffCap:  5 * time.Second,
+			NotificationRetryBackoffCap:  3 * time.Second,
 			SnapshotTruncationLimit:      5,
 			CollectionFreshnessThreshold: 20 * time.Second,
 			MigrationLockWaitTimeout:     10 * time.Second,

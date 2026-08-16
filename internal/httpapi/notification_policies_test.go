@@ -8,7 +8,8 @@ import (
 )
 
 func TestNotificationPolicyValuesUsesConfiguredRepeatMinimum(t *testing.T) {
-	handler := &Handler{notificationRepeatMinimum: 30 * time.Second}
+	handler := &Handler{}
+	handler.SetNotificationRepeatIntervalMinimum(30 * time.Second)
 	input := &api.NotificationPolicyInput{
 		Name:             "policy",
 		Channels:         []api.NotificationPolicyChannel{{Channel: api.PolicySMTP}},

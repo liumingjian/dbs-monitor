@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 	"gopkg.in/yaml.v3"
 )
 
@@ -52,7 +53,7 @@ func defaultServerConfig() serverConfig {
 		PartitionMaintenanceInterval: time.Hour,
 		AlertHistoryRetention:        90 * 24 * time.Hour,
 		RepeatIntervalMinimum:        15 * time.Minute,
-		NotificationRetryBackoffCap:  5 * time.Second,
+		NotificationRetryBackoffCap:  notify.DefaultRetryBackoffCap,
 		SnapshotTruncationLimit:      100,
 		CollectionFreshnessThreshold: 10 * time.Minute,
 		MigrationLockWaitTimeout:     time.Minute,

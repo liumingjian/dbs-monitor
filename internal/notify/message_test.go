@@ -41,16 +41,27 @@ func TestAlertMessageTemplates(t *testing.T) {
 	}
 }
 
-func TestRetryScheduleIsFixed(t *testing.T) {
+func TestRetryScheduleHasFixedAttemptCountAndConfigurableCap(t *testing.T) {
 	if MaxAttempts != 3 {
 		t.Fatalf("MaxAttempts = %d, want 3", MaxAttempts)
 	}
-	want := []time.Duration{time.Second, 2 * time.Second}
-	for failureCount, expected := range want {
-		cappedExpected := min(expected, 1500*time.Millisecond)
-		if got := RetryDelay(failureCount+1, 1500*time.Millisecond); got != cappedExpected {
-			t.Errorf("RetryDelay(%d) = %s, want %s", failureCount+1, got, cappedExpected)
-		}
+	tests := []struct {
+		name            string
+		failureCount    int
+		retryBackoffCap time.Duration
+		want            time.Duration
+	}{
+		{name: "before first failure", failureCount: 0, retryBackoffCap: 1500 * time.Millisecond, want: 0},
+		{name: "first failure", failureCount: 1, retryBackoffCap: 1500 * time.Millisecond, want: time.Second},
+		{name: "second failure", failureCount: 2, retryBackoffCap: DefaultRetryBackoffCap, want: 2 * time.Second},
+		{name: "second failure is capped", failureCount: 2, retryBackoffCap: 1500 * time.Millisecond, want: 1500 * time.Millisecond},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := RetryDelay(test.failureCount, test.retryBackoffCap); got != test.want {
+				t.Errorf("RetryDelay(%d) = %s, want %s", test.failureCount, got, test.want)
+			}
+		})
 	}
 }
 

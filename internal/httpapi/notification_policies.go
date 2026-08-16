@@ -366,8 +366,8 @@ type notificationPolicyInputValues struct {
 }
 
 func (handler *Handler) notificationPolicyValues(input *api.NotificationPolicyInput) (notificationPolicyInputValues, bool) {
-	minimumSeconds := int(handler.notificationRepeatMinimum / time.Second)
-	if input == nil || input.RepeatInterval < minimumSeconds || input.RepeatInterval > maximumNotificationRepeatIntervalSeconds {
+	minimumRepeatIntervalSeconds := int(handler.notificationRepeatMinimum / time.Second)
+	if input == nil || input.RepeatInterval < minimumRepeatIntervalSeconds || input.RepeatInterval > maximumNotificationRepeatIntervalSeconds {
 		return notificationPolicyInputValues{}, false
 	}
 	values := notificationPolicyInputValues{
