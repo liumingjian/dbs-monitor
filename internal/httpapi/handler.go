@@ -1345,7 +1345,7 @@ var RequiredRoles = map[string]string{
 	"ListAlertRuleTemplates":      "READONLY",
 	"CreateAlertRuleFromTemplate": "ALERT_ADMIN",
 	"GetAlertDisposition":         "READONLY", "UpdateAlertDisposition": "ALERT_ADMIN",
-	"GetAlertDetail": "READONLY", "GetAlertTriggerSnapshot": "READONLY",
+	"GetAlertDetail": "READONLY", "ListAlertEvents": "READONLY", "GetAlertTriggerSnapshot": "READONLY",
 	"ListCurrentAlerts": "READONLY", "ListAlertHistory": "READONLY",
 	"ListAlertNotifications": "READONLY",
 	"GetSMTPChannel":         "READONLY", "UpdateSMTPChannel": "ALERT_ADMIN", "TestSMTPChannel": "ALERT_ADMIN",

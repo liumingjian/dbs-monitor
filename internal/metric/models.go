@@ -312,6 +312,9 @@ type MaintenanceWindow struct {
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
+	UpdatedBy pgtype.UUID
+	EndedBy   pgtype.UUID
+	DeletedBy pgtype.UUID
 }
 
 type MaintenanceWindowInstance struct {

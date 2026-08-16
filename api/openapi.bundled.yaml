@@ -930,6 +930,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}/events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: listAlertEvents
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Complete alert event history with maintenance attribution
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertEvent'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/alert-instances/{id}/trigger-snapshot:
     parameters:
       - name: id
@@ -4232,6 +4260,97 @@ components:
         evaluated_at:
           type: string
           format: date-time
+    AlertEventKind:
+      type: string
+      enum:
+        - PENDING_STARTED
+        - FIRED
+        - UPDATED
+        - RECOVERED
+        - NO_DATA_ENTERED
+        - NO_DATA_EXITED
+        - FROZEN
+        - UNFROZEN
+        - ACKED
+        - IGNORED
+        - INSTANCE_REMOVED
+        - NOTIFICATION_SENT
+        - NOTIFICATION_FAILED
+        - MAINTENANCE_SUPPRESSED
+      x-enum-varnames:
+        - AlertEventPendingStarted
+        - AlertEventFired
+        - AlertEventUpdated
+        - AlertEventRecovered
+        - AlertEventNoDataEntered
+        - AlertEventNoDataExited
+        - AlertEventFrozen
+        - AlertEventUnfrozen
+        - AlertEventAcked
+        - AlertEventIgnored
+        - AlertEventInstanceRemoved
+        - AlertEventNotificationSent
+        - AlertEventNotificationFailed
+        - AlertEventMaintenanceSuppressed
+    AlertEvent:
+      type: object
+      required:
+        - id
+        - kind
+        - from_state
+        - to_state
+        - rule_version
+        - rule_snapshot
+        - evaluated_at
+        - in_maintenance
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          $ref: '#/components/schemas/AlertEventKind'
+        from_state:
+          $ref: '#/components/schemas/AlertStatus'
+        to_state:
+          $ref: '#/components/schemas/AlertStatus'
+        rule_version:
+          type: integer
+          minimum: 1
+        current_value:
+          type: number
+          format: double
+        unavailability:
+          $ref: '#/components/schemas/Unavailability'
+        rule_snapshot:
+          type: object
+          additionalProperties: true
+        evaluated_at:
+          type: string
+          format: date-time
+        actor_id:
+          type: string
+          format: uuid
+        acted_at:
+          type: string
+          format: date-time
+        from_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        to_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        disposition_note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+        trigger_snapshot_id:
+          type: string
+          format: uuid
+        in_maintenance:
+          type: boolean
+        maintenance_window_id:
+          type: string
+          format: uuid
     NotificationContactInput:
       type: object
       required:

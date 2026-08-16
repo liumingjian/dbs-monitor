@@ -361,7 +361,6 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
 			SourceTemplateID:          databaseSourceTemplateID,
 			SourceTemplateVersion:     databaseSourceTemplateVersion,
-			ActorID:                   actorID,
 		})
 		if err != nil {
 			return err

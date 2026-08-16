@@ -98,8 +98,6 @@ AlertRule:
     updated_by: { type: string, format: uuid }
     enabled_updated_by: { type: string, format: uuid }
     enabled_updated_at: { type: string, format: date-time }
-    created_by: { type: string, format: uuid }
-    updated_by: { type: string, format: uuid }
     version: { type: integer }
     created_at: { type: string, format: date-time }
     updated_at: { type: string, format: date-time }
