@@ -21,6 +21,28 @@ type BuiltinRule struct {
 	Enabled                   bool
 }
 
+type BuiltinRuleChange struct {
+	Delete   bool
+	Enabled  *bool
+	Severity *api.AlertSeverity
+}
+
+func BuiltinRuleRestriction(isBuiltin bool, change BuiltinRuleChange) api.ErrorErrorCode {
+	if !isBuiltin {
+		return ""
+	}
+	if change.Delete {
+		return api.BUILTINRULEDELETEFORBIDDEN
+	}
+	if change.Enabled != nil && !*change.Enabled {
+		return api.BUILTINRULEDISABLEFORBIDDEN
+	}
+	if change.Severity != nil && *change.Severity == api.Info {
+		return api.BUILTINRULESEVERITYTOOLOW
+	}
+	return ""
+}
+
 var BuiltinCollectionRules = []BuiltinRule{
 	{
 		ID: "00000000-0000-0000-0000-000000063001", Identifier: "database_unreachable", Name: "数据库不可达",

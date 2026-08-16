@@ -3,6 +3,8 @@ package alerting
 import (
 	"reflect"
 	"testing"
+
+	"github.com/liumingjian/dbs-monitor/internal/api"
 )
 
 func TestBuiltinCollectionRulesGolden(t *testing.T) {
@@ -39,5 +41,35 @@ func TestBuiltinCollectionRulesGolden(t *testing.T) {
 		if rule.Severity != "warning" && rule.Severity != "critical" {
 			t.Errorf("built-in rule %q severity %q is below warning", rule.Name, rule.Severity)
 		}
+	}
+}
+
+func TestBuiltinRuleRestriction(t *testing.T) {
+	info := api.Info
+	warning := api.Warning
+	critical := api.Critical
+	disabled := false
+	enabled := true
+	tests := []struct {
+		name      string
+		isBuiltin bool
+		change    BuiltinRuleChange
+		want      api.ErrorErrorCode
+	}{
+		{name: "delete", isBuiltin: true, change: BuiltinRuleChange{Delete: true}, want: api.BUILTINRULEDELETEFORBIDDEN},
+		{name: "disable", isBuiltin: true, change: BuiltinRuleChange{Enabled: &disabled}, want: api.BUILTINRULEDISABLEFORBIDDEN},
+		{name: "severity below warning", isBuiltin: true, change: BuiltinRuleChange{Severity: &info}, want: api.BUILTINRULESEVERITYTOOLOW},
+		{name: "keep enabled", isBuiltin: true, change: BuiltinRuleChange{Enabled: &enabled}},
+		{name: "warning severity", isBuiltin: true, change: BuiltinRuleChange{Severity: &warning}},
+		{name: "critical severity", isBuiltin: true, change: BuiltinRuleChange{Severity: &critical}},
+		{name: "user rule is unrestricted", change: BuiltinRuleChange{Delete: true, Enabled: &disabled, Severity: &info}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := BuiltinRuleRestriction(test.isBuiltin, test.change); got != test.want {
+				t.Fatalf("restriction = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
