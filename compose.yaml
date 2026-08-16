@@ -252,6 +252,12 @@ services:
   smtp-sink:
     image: axllent/mailpit:v1.30.7
     profiles: [smtp]
+    environment:
+      MP_SMTP_TLS_CERT: /acceptance-tls/server.crt
+      MP_SMTP_TLS_KEY: /acceptance-tls/server.key
+      MP_SMTP_REQUIRE_STARTTLS: "true"
+    volumes:
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
     ports:
       - "51025:1025"
       - "58025:8025"
@@ -270,6 +276,7 @@ services:
       - |
         const http = require('http');
         const requests = [];
+        let responseStatus = 204;
         http.createServer((request, response) => {
           if (request.method === 'GET' && request.url === '/health') {
             response.writeHead(200).end('ok');
@@ -278,6 +285,16 @@ services:
           if (request.method === 'GET' && request.url === '/requests') {
             response.writeHead(200, { 'content-type': 'application/json' })
               .end(JSON.stringify(requests));
+            return;
+          }
+          if (request.method === 'POST' && request.url === '/control/reset') {
+            requests.length = 0;
+            response.writeHead(204).end();
+            return;
+          }
+          if (request.method === 'POST' && request.url.startsWith('/control/status/')) {
+            responseStatus = Number(request.url.split('/').pop());
+            response.writeHead(204).end();
             return;
           }
           const chunks = [];
@@ -289,7 +306,7 @@ services:
               headers: request.headers,
               body: Buffer.concat(chunks).toString(),
             });
-            response.writeHead(204).end();
+            response.writeHead(responseStatus).end();
           });
         }).listen(8080, '0.0.0.0');
     ports: ["58080:8080"]

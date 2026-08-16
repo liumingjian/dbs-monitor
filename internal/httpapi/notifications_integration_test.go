@@ -93,6 +93,16 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	if err != nil || smtpResponse.StatusCode != http.StatusOK {
 		t.Fatalf("update SMTP channel = status %d, read error %v, body %s", smtpResponse.StatusCode, err, smtpBody)
 	}
+	var smtpActor string
+	var smtpUpdatedAt time.Time
+	if err := platform.QueryRow(ctx, `SELECT actor.username, smtp.updated_at
+		FROM smtp_channel smtp JOIN app_user actor ON actor.id = smtp.updated_by
+		WHERE smtp.singleton`).Scan(&smtpActor, &smtpUpdatedAt); err != nil {
+		t.Fatalf("read SMTP channel update attribution: %v", err)
+	}
+	if smtpActor != "admin" || smtpUpdatedAt.IsZero() {
+		t.Fatalf("SMTP channel attribution = actor %q at %s, want admin and a timestamp", smtpActor, smtpUpdatedAt)
+	}
 	var smtpCiphertext []byte
 	var smtpKeyVersion int32
 	if err := platform.QueryRow(ctx, `SELECT auth_ciphertext, auth_key_version FROM smtp_channel WHERE singleton`).

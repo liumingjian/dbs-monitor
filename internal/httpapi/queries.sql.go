@@ -683,6 +683,39 @@ func (q *Queries) HasSessionSnapshot(ctx context.Context, instanceID pgtype.UUID
 	return exists, err
 }
 
+const listAlertNotificationResults = `-- name: ListAlertNotificationResults :many
+SELECT kind, evaluated_at
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind IN ('NOTIFICATION_SENT', 'NOTIFICATION_FAILED')
+ORDER BY evaluated_at, id
+`
+
+type ListAlertNotificationResultsRow struct {
+	Kind        string
+	EvaluatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListAlertNotificationResults(ctx context.Context, alertInstanceID pgtype.UUID) ([]ListAlertNotificationResultsRow, error) {
+	rows, err := q.db.Query(ctx, listAlertNotificationResults, alertInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertNotificationResultsRow
+	for rows.Next() {
+		var i ListAlertNotificationResultsRow
+		if err := rows.Scan(&i.Kind, &i.EvaluatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAlertObservations = `-- name: ListAlertObservations :many
 SELECT alert.id, alert.instance_id, identity.name AS instance_name,
        alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,

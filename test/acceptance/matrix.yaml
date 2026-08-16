@@ -486,8 +486,8 @@ entries:
     pages: []
     operations: [createContact, createNotificationPolicy, putSmtpConfig, createWebhookTarget, listNotificationsByAlert]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: TestAcceptance_AC_04_S1
     owner_issue: 119
     reason: "条目内容由 #119 定稿；「凭据永不回显」在片④只并入本条 asserts（22 号 D6），INV-3 的端到端面引用本次执行"
   - id: AC-04-S2
@@ -577,8 +577,8 @@ entries:
     pages: ["告警设置/通知渠道"]
     operations: [listNotificationsByAlert, getChannelFailureSummary, listAlertEvents]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: TestAcceptance_AC_04_F3
     owner_issue: 119
     reason: "F3「外部依赖不可用」在通知域的语义映射：通知的外部依赖是出口而非被监控库，语义映射的记账见 22 号 D2；S1 判据「失败三次退避留终态」由本条承载"
   - id: AC-04-F4

@@ -68,6 +68,7 @@ type Handler struct {
 	agentDistribution         *AgentDistribution
 	health                    *platformhealth.Store
 	partitionSpan             time.Duration
+	notificationRepeatMinimum time.Duration
 	notificationSnapshotStore *notify.ChannelSnapshotStore
 	sessionConfig             SessionConfig
 }
@@ -93,13 +94,14 @@ func NewHandlerWithDialer(platform *db.Pool, currentClock clock.Clock, keyring *
 
 func NewHandlerWithPlatformHealth(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store) *Handler {
 	return &Handler{
-		platform:      platform,
-		clock:         currentClock,
-		keyring:       keyring,
-		dialer:        dialer,
-		serverVersion: serverVersion,
-		health:        health,
-		partitionSpan: metric.DefaultPartitionSpan,
+		platform:                  platform,
+		clock:                     currentClock,
+		keyring:                   keyring,
+		dialer:                    dialer,
+		serverVersion:             serverVersion,
+		health:                    health,
+		partitionSpan:             metric.DefaultPartitionSpan,
+		notificationRepeatMinimum: 15 * time.Minute,
 		sessionConfig: SessionConfig{
 			AbsoluteTTL: defaultSessionAbsoluteTTL,
 			IdleTTL:     defaultSessionIdleTTL,
@@ -109,6 +111,10 @@ func NewHandlerWithPlatformHealth(platform *db.Pool, currentClock clock.Clock, k
 
 func (handler *Handler) SetPartitionSpan(span time.Duration) {
 	handler.partitionSpan = span
+}
+
+func (handler *Handler) SetNotificationRepeatIntervalMinimum(minimum time.Duration) {
+	handler.notificationRepeatMinimum = minimum
 }
 
 func NewHandlerWithAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string, distribution AgentDistribution) *Handler {

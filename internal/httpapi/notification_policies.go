@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,10 +15,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/notify"
 )
 
-const (
-	minimumNotificationRepeatIntervalSeconds = 900
-	maximumNotificationRepeatIntervalSeconds = 86400
-)
+const maximumNotificationRepeatIntervalSeconds = 86400
 
 func (handler *Handler) ListNotificationContacts(ctx context.Context, _ api.ListNotificationContactsRequestObject) (api.ListNotificationContactsResponseObject, error) {
 	rows, err := notify.New(handler.platform).ListNotificationContacts(ctx)
@@ -204,7 +202,7 @@ func (handler *Handler) ListNotificationPolicies(ctx context.Context, _ api.List
 }
 
 func (handler *Handler) CreateNotificationPolicy(ctx context.Context, request api.CreateNotificationPolicyRequestObject) (api.CreateNotificationPolicyResponseObject, error) {
-	values, ok := notificationPolicyValues(request.Body)
+	values, ok := handler.notificationPolicyValues(request.Body)
 	if !ok {
 		return api.CreateNotificationPolicy400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid policy recipients, channels, severity filter, and repeat interval are required")), nil
 	}
@@ -247,7 +245,7 @@ func (handler *Handler) CreateNotificationPolicy(ctx context.Context, request ap
 }
 
 func (handler *Handler) UpdateNotificationPolicy(ctx context.Context, request api.UpdateNotificationPolicyRequestObject) (api.UpdateNotificationPolicyResponseObject, error) {
-	values, ok := notificationPolicyValues(request.Body)
+	values, ok := handler.notificationPolicyValues(request.Body)
 	if !ok {
 		return api.UpdateNotificationPolicy400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid policy recipients, channels, severity filter, and repeat interval are required")), nil
 	}
@@ -367,8 +365,9 @@ type notificationPolicyInputValues struct {
 	templateID       pgtype.Text
 }
 
-func notificationPolicyValues(input *api.NotificationPolicyInput) (notificationPolicyInputValues, bool) {
-	if input == nil || input.RepeatInterval < minimumNotificationRepeatIntervalSeconds || input.RepeatInterval > maximumNotificationRepeatIntervalSeconds {
+func (handler *Handler) notificationPolicyValues(input *api.NotificationPolicyInput) (notificationPolicyInputValues, bool) {
+	minimumRepeatIntervalSeconds := int(handler.notificationRepeatMinimum / time.Second)
+	if input == nil || input.RepeatInterval < minimumRepeatIntervalSeconds || input.RepeatInterval > maximumNotificationRepeatIntervalSeconds {
 		return notificationPolicyInputValues{}, false
 	}
 	values := notificationPolicyInputValues{

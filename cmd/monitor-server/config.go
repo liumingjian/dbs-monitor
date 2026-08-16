@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/liumingjian/dbs-monitor/internal/notify"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,6 +20,7 @@ type serverConfig struct {
 	PartitionMaintenanceInterval time.Duration
 	AlertHistoryRetention        time.Duration
 	RepeatIntervalMinimum        time.Duration
+	NotificationRetryBackoffCap  time.Duration
 	SnapshotTruncationLimit      int
 	CollectionFreshnessThreshold time.Duration
 	MigrationLockWaitTimeout     time.Duration
@@ -34,6 +36,7 @@ type rawServerConfig struct {
 	PartitionMaintenanceInterval *string `yaml:"partition_maintenance_interval"`
 	AlertHistoryRetention        *string `yaml:"alert_history_retention"`
 	RepeatIntervalMinimum        *string `yaml:"repeat_interval_minimum"`
+	NotificationRetryBackoffCap  *string `yaml:"notification_retry_backoff_cap"`
 	SnapshotTruncationLimit      *int    `yaml:"snapshot_truncation_limit"`
 	CollectionFreshnessThreshold *string `yaml:"collection_freshness_threshold"`
 	MigrationLockWaitTimeout     *string `yaml:"migration_lock_wait_timeout"`
@@ -50,6 +53,7 @@ func defaultServerConfig() serverConfig {
 		PartitionMaintenanceInterval: time.Hour,
 		AlertHistoryRetention:        90 * 24 * time.Hour,
 		RepeatIntervalMinimum:        15 * time.Minute,
+		NotificationRetryBackoffCap:  notify.DefaultRetryBackoffCap,
 		SnapshotTruncationLimit:      100,
 		CollectionFreshnessThreshold: 10 * time.Minute,
 		MigrationLockWaitTimeout:     time.Minute,
@@ -99,6 +103,7 @@ func loadServerConfig(path string) (serverConfig, bool, error) {
 		{name: "partition_maintenance_interval", value: raw.PartitionMaintenanceInterval, target: &config.PartitionMaintenanceInterval},
 		{name: "alert_history_retention", value: raw.AlertHistoryRetention, target: &config.AlertHistoryRetention},
 		{name: "repeat_interval_minimum", value: raw.RepeatIntervalMinimum, target: &config.RepeatIntervalMinimum},
+		{name: "notification_retry_backoff_cap", value: raw.NotificationRetryBackoffCap, target: &config.NotificationRetryBackoffCap},
 		{name: "collection_freshness_threshold", value: raw.CollectionFreshnessThreshold, target: &config.CollectionFreshnessThreshold},
 		{name: "migration_lock_wait_timeout", value: raw.MigrationLockWaitTimeout, target: &config.MigrationLockWaitTimeout},
 		{name: "session_absolute_ttl", value: raw.SessionAbsoluteTTL, target: &config.SessionAbsoluteTTL},

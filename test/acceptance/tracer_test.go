@@ -95,6 +95,7 @@ func TestAcceptance_AC_08_S1(t *testing.T) {
 		"LISTEN_ADDR=127.0.0.1:18443",
 		"PUBLIC_HOST=127.0.0.1",
 		"CERT_DIR=" + certDirectory,
+		"SSL_CERT_FILE=" + os.Getenv("ACCEPTANCE_SMTP_CA_FILE"),
 		"PGDATA=/",
 	})
 
@@ -180,13 +181,17 @@ func buildBinary(t *testing.T, root, output, pkg string) {
 func writeServerConfig(t *testing.T, work, databaseURL, keyDirectory, binaryDirectory string) string {
 	t.Helper()
 	config := struct {
-		AgentBinaryDirectory string `yaml:"agent_binary_dir"`
-		MasterKeyDirectory   string `yaml:"master_key_path"`
-		PlatformDatabaseURL  string `yaml:"platform_database_url"`
+		AgentBinaryDirectory  string `yaml:"agent_binary_dir"`
+		MasterKeyDirectory    string `yaml:"master_key_path"`
+		RepeatIntervalMinimum string `yaml:"repeat_interval_minimum"`
+		RetryBackoffCap       string `yaml:"notification_retry_backoff_cap"`
+		PlatformDatabaseURL   string `yaml:"platform_database_url"`
 	}{
-		AgentBinaryDirectory: binaryDirectory,
-		MasterKeyDirectory:   keyDirectory,
-		PlatformDatabaseURL:  databaseURL,
+		AgentBinaryDirectory:  binaryDirectory,
+		MasterKeyDirectory:    keyDirectory,
+		RepeatIntervalMinimum: "30s",
+		RetryBackoffCap:       "5s",
+		PlatformDatabaseURL:   databaseURL,
 	}
 	contents, err := yaml.Marshal(config)
 	if err != nil {

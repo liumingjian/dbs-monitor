@@ -78,9 +78,13 @@ func FormatTestMessage() Message {
 	}
 }
 
-func RetryDelay(failureCount int) time.Duration {
+func RetryDelay(failureCount int, retryBackoffCap time.Duration) time.Duration {
 	if failureCount <= 0 {
 		return 0
 	}
-	return time.Second << (failureCount - 1)
+	delay := time.Second << (failureCount - 1)
+	if delay > retryBackoffCap {
+		return retryBackoffCap
+	}
+	return delay
 }

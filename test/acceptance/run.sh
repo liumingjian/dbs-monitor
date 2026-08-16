@@ -36,6 +36,7 @@ ACCEPTANCE_RESTORE_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55
 ACCEPTANCE_PG16_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55446/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt" \
 ACCEPTANCE_RECOVERY_DATABASE_URL="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55446/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt" \
 ACCEPTANCE_COMPOSE_PROJECT="$project" \
+ACCEPTANCE_SMTP_CA_FILE="$tls_dir/ca.crt" \
 ACCEPTANCE_TARGET_PORT=55447 \
 ACCEPTANCE_RESULT_PATH="$root/results/acceptance-result.json" \
 PGHOST=127.0.0.1 \

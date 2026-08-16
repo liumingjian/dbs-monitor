@@ -120,7 +120,7 @@ func sendPlatformUnavailableWebhook(
 	return nil
 }
 
-func runNotificationDelivery(ctx context.Context, platform *db.Pool, keyring *instance.CredentialKeyring) {
+func runNotificationDelivery(ctx context.Context, platform *db.Pool, keyring *instance.CredentialKeyring, retryBackoffCap time.Duration) {
 	ticker := time.NewTicker(notificationPollInterval)
 	defer ticker.Stop()
 	for {
@@ -128,12 +128,12 @@ func runNotificationDelivery(ctx context.Context, platform *db.Pool, keyring *in
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			drainNotifications(ctx, platform, keyring, now.UTC())
+			drainNotifications(ctx, platform, keyring, retryBackoffCap, now.UTC())
 		}
 	}
 }
 
-func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instance.CredentialKeyring, now time.Time) {
+func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instance.CredentialKeyring, retryBackoffCap time.Duration, now time.Time) {
 	queries := notify.New(platform)
 	channels := make(map[string]notify.Channel)
 	config, err := queries.GetSMTPChannel(ctx)
@@ -180,7 +180,7 @@ func drainNotifications(ctx context.Context, platform *db.Pool, keyring *instanc
 			Timeout:         notificationDeliveryTimeout,
 		})
 	}
-	dispatcher := notify.NewDispatcher(platform)
+	dispatcher := notify.NewDispatcherWithRetryBackoffCap(platform, retryBackoffCap)
 	if _, err := dispatcher.EnqueueDueRepeats(ctx, now); err != nil {
 		log.Printf("schedule repeat notifications: %v", err)
 		return

@@ -99,6 +99,17 @@ func (handler *Handler) GetAlertDetail(ctx context.Context, request api.GetAlert
 			EvaluatedAt: version.EvaluatedAt.Time.UTC(),
 		})
 	}
+	notificationEvents, err := queries.ListAlertNotificationResults(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	notificationResults := make([]map[string]interface{}, 0, len(notificationEvents))
+	for _, event := range notificationEvents {
+		notificationResults = append(notificationResults, map[string]interface{}{
+			"kind":         event.Kind,
+			"evaluated_at": event.EvaluatedAt.Time.UTC(),
+		})
+	}
 	detail := api.AlertDetail{
 		Id:                  observation.Id,
 		InstanceId:          observation.InstanceId,
@@ -123,7 +134,7 @@ func (handler *Handler) GetAlertDetail(ctx context.Context, request api.GetAlert
 		DurationMs:          observation.DurationMs,
 		Unavailability:      observation.Unavailability,
 		RuleVersionHistory:  versionHistory,
-		NotificationResults: []map[string]interface{}{},
+		NotificationResults: notificationResults,
 	}
 	return api.GetAlertDetail200JSONResponse(detail), nil
 }

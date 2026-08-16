@@ -219,6 +219,13 @@ WHERE alert_instance_id = $1
   AND kind NOT IN ('ACKED', 'IGNORED')
 ORDER BY rule_version, evaluated_at;
 
+-- name: ListAlertNotificationResults :many
+SELECT kind, evaluated_at
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind IN ('NOTIFICATION_SENT', 'NOTIFICATION_FAILED')
+ORDER BY evaluated_at, id;
+
 -- name: GetAlertTriggerSnapshot :one
 SELECT id, captured_at, result, original_match_count, truncated, failure_reason
 FROM alert_trigger_snapshot

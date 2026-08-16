@@ -14,6 +14,9 @@ alert_history_retention: 2160h
 # Lowest repeat_interval accepted by notification policy validation. Default: 15m.
 repeat_interval_minimum: 15m
 
+# Maximum delay between notification delivery retries. Attempt count remains fixed at 3. Default: 5s.
+notification_retry_backoff_cap: 5s
+
 # Maximum sessions retained in a trigger snapshot before truncation. Default: 100.
 snapshot_truncation_limit: 100
 
@@ -40,4 +43,4 @@ platform_database_url: postgres://dbs_monitor:change-me@platform-db:5432/dbs_mon
 master_key_path: /etc/dbs-monitor/credentials
 
 # Intentionally not configurable: NO_DATA requires 2 periods and notification delivery
-# uses exactly 3 backoff attempts. Those values are product semantics, not deployment knobs.
+# uses exactly 3 attempts. Those values are product semantics, not deployment knobs.
