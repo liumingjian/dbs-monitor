@@ -409,6 +409,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alert-instances/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listAlertEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alert-instances/{id}/trigger-snapshot": {
         parameters: {
             query?: never;
@@ -1881,6 +1899,38 @@ export interface components {
             /** Format: date-time */
             evaluated_at: string;
         };
+        /** @enum {string} */
+        AlertEventKind: "PENDING_STARTED" | "FIRED" | "UPDATED" | "RECOVERED" | "NO_DATA_ENTERED" | "NO_DATA_EXITED" | "FROZEN" | "UNFROZEN" | "ACKED" | "IGNORED" | "INSTANCE_REMOVED" | "NOTIFICATION_SENT" | "NOTIFICATION_FAILED" | "MAINTENANCE_SUPPRESSED";
+        AlertEvent: {
+            /** Format: int64 */
+            id: number;
+            kind: components["schemas"]["AlertEventKind"];
+            from_state: components["schemas"]["AlertStatus"];
+            to_state: components["schemas"]["AlertStatus"];
+            rule_version: number;
+            /** Format: double */
+            current_value?: number;
+            unavailability?: components["schemas"]["Unavailability"];
+            rule_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            evaluated_at: string;
+            /** Format: uuid */
+            actor_id?: string;
+            /** Format: date-time */
+            acted_at?: string;
+            from_disposition?: components["schemas"]["AlertDisposition"];
+            to_disposition?: components["schemas"]["AlertDisposition"];
+            disposition_note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+            /** Format: uuid */
+            trigger_snapshot_id?: string;
+            in_maintenance: boolean;
+            /** Format: uuid */
+            maintenance_window_id?: string;
+        };
         NotificationContactInput: {
             name: string;
             /** Format: email */
@@ -2948,6 +2998,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertDetail"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete alert event history with maintenance attribution */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertEvent"][];
                 };
             };
             /** @description Alert instance not found */

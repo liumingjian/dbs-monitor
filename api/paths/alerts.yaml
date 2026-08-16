@@ -77,6 +77,30 @@
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
 
+/api/v1/alert-instances/{id}/events:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [alerts]
+    operationId: listAlertEvents
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Complete alert event history with maintenance attribution
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/alerts.yaml#/AlertEvent }
+      '404':
+        description: Alert instance not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+
 /api/v1/alert-instances/{id}/trigger-snapshot:
   parameters:
     - name: id

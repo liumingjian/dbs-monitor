@@ -683,6 +683,55 @@ func (q *Queries) HasSessionSnapshot(ctx context.Context, instanceID pgtype.UUID
 	return exists, err
 }
 
+const listAlertEvents = `-- name: ListAlertEvents :many
+SELECT id, alert_instance_id, rule_id, rule_version, kind, from_state, to_state, current_value, unavailability, rule_snapshot, evaluated_at, actor_id, acted_at, from_disposition, to_disposition, disposition_note, ignore_reason_code, ignore_reason_detail, trigger_snapshot_id, in_maintenance, maintenance_window_id
+FROM alert_event
+WHERE alert_instance_id = $1
+ORDER BY evaluated_at, id
+`
+
+func (q *Queries) ListAlertEvents(ctx context.Context, alertInstanceID pgtype.UUID) ([]AlertEvent, error) {
+	rows, err := q.db.Query(ctx, listAlertEvents, alertInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AlertEvent
+	for rows.Next() {
+		var i AlertEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.AlertInstanceID,
+			&i.RuleID,
+			&i.RuleVersion,
+			&i.Kind,
+			&i.FromState,
+			&i.ToState,
+			&i.CurrentValue,
+			&i.Unavailability,
+			&i.RuleSnapshot,
+			&i.EvaluatedAt,
+			&i.ActorID,
+			&i.ActedAt,
+			&i.FromDisposition,
+			&i.ToDisposition,
+			&i.DispositionNote,
+			&i.IgnoreReasonCode,
+			&i.IgnoreReasonDetail,
+			&i.TriggerSnapshotID,
+			&i.InMaintenance,
+			&i.MaintenanceWindowID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAlertNotificationResults = `-- name: ListAlertNotificationResults :many
 SELECT kind, evaluated_at
 FROM alert_event

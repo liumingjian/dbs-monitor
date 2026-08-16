@@ -128,6 +128,83 @@ func TestAcceptance_AC_04_S1(t *testing.T) {
 	assertNotificationHistory(t, runtime.client, alertID, "NOTIFICATION_SENT", 6)
 }
 
+func TestAcceptance_AC_04_S2(t *testing.T) {
+	if os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL") == "" {
+		t.Skip("ACCEPTANCE_PLATFORM_DATABASE_URL is required for AC-04-S2")
+	}
+	started := time.Now()
+	defer recordNotificationResult(t, "AC-04-S2", "maintenance suppressed firing and repeat without stopping marked history; early end produced no catch-up and the next repeat delivered naturally", started)
+
+	resetNotificationSinks(t, http.StatusNoContent)
+	runtime := startNotificationRuntime(t, 18456)
+	policyID := configureNotificationDelivery(t, runtime.client, "AC-04-S2")
+	instanceID := createIssue60Instance(t, runtime.client, "AC-04-S2 target", "monitored", "monitored", issue60TargetPort(t))
+	otherInstanceID := createIssue60Instance(t, runtime.client, "AC-04-S2 companion", "monitored", "monitored", issue60TargetPort(t))
+	setIssue60TaskIntervals(t, runtime.client, instanceID)
+	waitForIssue60MetricPoints(t, runtime.client, instanceID, metric.MetricConnectionTotal)
+
+	now := time.Now().UTC()
+	created, err := runtime.client.CreateMaintenanceWindowWithResponse(context.Background(), api.MaintenanceWindowInput{
+		InstanceIds: []uuid.UUID{instanceID, otherInstanceID},
+		StartsAt:    now.Add(-time.Minute), EndsAt: now.Add(5 * time.Minute), Reason: "AC-04-S2 planned restart",
+	})
+	if err != nil || created.StatusCode() != http.StatusCreated || created.JSON201 == nil || created.JSON201.Status != api.MaintenanceActive {
+		t.Fatalf("create maintenance window: status=%d body=%s response=%+v error=%v", created.StatusCode(), created.Body, created.JSON201, err)
+	}
+	windowID := created.JSON201.Id
+	windows, err := runtime.client.ListMaintenanceWindowsWithResponse(context.Background())
+	if err != nil || windows.StatusCode() != http.StatusOK || windows.JSON200 == nil || len(*windows.JSON200) != 1 || len((*windows.JSON200)[0].InstanceIds) != 2 {
+		t.Fatalf("list maintenance windows: status=%d body=%s response=%+v error=%v", windows.StatusCode(), windows.Body, windows.JSON200, err)
+	}
+
+	rule := createNotificationRule(t, runtime.client, "AC-04-S2 maintenance", instanceID, &policyID, true)
+	alertID := waitForNotificationAlert(t, runtime.client, instanceID, rule.Id)
+	eventuallyNotification(t, 40*time.Second, func() (bool, string) {
+		events, listErr := runtime.client.ListAlertEventsWithResponse(context.Background(), alertID)
+		if listErr != nil || events.StatusCode() != http.StatusOK || events.JSON200 == nil {
+			return false, fmt.Sprintf("events status=%d error=%v", events.StatusCode(), listErr)
+		}
+		fired, suppressed := 0, 0
+		for _, event := range *events.JSON200 {
+			if event.Kind != api.AlertEventFired && event.Kind != api.AlertEventMaintenanceSuppressed {
+				continue
+			}
+			if !event.InMaintenance || event.MaintenanceWindowId == nil || *event.MaintenanceWindowId != windowID {
+				return false, fmt.Sprintf("unmarked maintenance event=%+v", event)
+			}
+			if event.Kind == api.AlertEventFired {
+				fired++
+			} else {
+				suppressed++
+			}
+		}
+		return fired == 1 && suppressed >= 2, fmt.Sprintf("fired=%d suppressed=%d events=%d", fired, suppressed, len(*events.JSON200))
+	})
+	detail, err := runtime.client.GetAlertDetailWithResponse(context.Background(), alertID)
+	if err != nil || detail.StatusCode() != http.StatusOK || detail.JSON200 == nil || detail.JSON200.Status != api.FIRING ||
+		!detail.JSON200.InMaintenance || detail.JSON200.MaintenanceWindowId == nil || *detail.JSON200.MaintenanceWindowId != windowID {
+		t.Fatalf("maintenance alert detail: status=%d body=%s response=%+v error=%v", detail.StatusCode(), detail.Body, detail.JSON200, err)
+	}
+	assertNotificationSinks(t, notificationSinks{})
+	if attempts := readNotificationAttempts(t, runtime.client, alertID); len(attempts) != 0 {
+		t.Fatalf("maintenance notification attempts=%d, want 0", len(attempts))
+	}
+
+	ended, err := runtime.client.EndMaintenanceWindowWithResponse(context.Background(), windowID)
+	if err != nil || ended.StatusCode() != http.StatusOK || ended.JSON200 == nil || ended.JSON200.Status != api.MaintenanceEnded {
+		t.Fatalf("end maintenance window: status=%d body=%s response=%+v error=%v", ended.StatusCode(), ended.Body, ended.JSON200, err)
+	}
+	time.Sleep(2 * time.Second)
+	assertNotificationSinks(t, notificationSinks{})
+	eventuallyNotification(t, 40*time.Second, func() (bool, string) {
+		sinks := readNotificationSinks(t)
+		attempts := readNotificationAttempts(t, runtime.client, alertID)
+		return sinks.mailTotal == 1 && len(sinks.webhooks) == 1 && len(attempts) == 2,
+			fmt.Sprintf("natural repeat: mail=%d webhook=%d attempts=%d", sinks.mailTotal, len(sinks.webhooks), len(attempts))
+	})
+	assertWebhookSignatures(t, readNotificationSinks(t).webhooks)
+}
+
 func TestAcceptance_AC_04_F3(t *testing.T) {
 	if os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL") == "" {
 		t.Skip("ACCEPTANCE_PLATFORM_DATABASE_URL is required for AC-04-F3")

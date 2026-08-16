@@ -200,27 +200,35 @@ SELECT EXISTS (SELECT 1 FROM instance WHERE id = $1);
 
 -- name: CreateMaintenanceWindow :one
 INSERT INTO maintenance_window (
-    id, starts_at, ends_at, reason, created_by, created_at, updated_at
+    id, starts_at, ends_at, reason, created_by, created_at, updated_at, updated_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $6)
+VALUES (
+    sqlc.arg(id), sqlc.arg(starts_at), sqlc.arg(ends_at), sqlc.arg(reason),
+    sqlc.arg(actor_id), sqlc.arg(created_at), sqlc.arg(created_at), sqlc.arg(actor_id)
+)
 RETURNING *;
 
 -- name: UpdateMaintenanceWindow :one
 UPDATE maintenance_window
-SET starts_at = $2, ends_at = $3, reason = $4, updated_at = $5
-WHERE id = $1 AND deleted_at IS NULL AND ends_at > $5
+SET starts_at = sqlc.arg(starts_at), ends_at = sqlc.arg(ends_at),
+    reason = sqlc.arg(reason), updated_at = sqlc.arg(updated_at),
+    updated_by = sqlc.arg(actor_id)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL AND ends_at > sqlc.arg(updated_at)
 RETURNING *;
 
 -- name: EndMaintenanceWindow :one
 UPDATE maintenance_window
-SET ends_at = $2, updated_at = $2
-WHERE id = $1 AND deleted_at IS NULL AND starts_at <= $2 AND ends_at > $2
+SET ends_at = sqlc.arg(ends_at), updated_at = sqlc.arg(ends_at),
+    updated_by = sqlc.arg(actor_id), ended_by = sqlc.arg(actor_id)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL
+  AND starts_at <= sqlc.arg(ends_at) AND ends_at > sqlc.arg(ends_at)
 RETURNING *;
 
 -- name: DeleteMaintenanceWindow :execrows
 UPDATE maintenance_window
-SET deleted_at = $2, updated_at = $2
-WHERE id = $1 AND deleted_at IS NULL;
+SET deleted_at = sqlc.arg(deleted_at), updated_at = sqlc.arg(deleted_at),
+    updated_by = sqlc.arg(actor_id), deleted_by = sqlc.arg(actor_id)
+WHERE id = sqlc.arg(id) AND deleted_at IS NULL;
 
 -- name: ClearMaintenanceWindowInstances :exec
 DELETE FROM maintenance_window_instance WHERE maintenance_window_id = $1;

@@ -136,4 +136,5 @@ var AttributableWrites = []AttributableWrite{
 	{ID: "alert_rule_or_disposition_change", Description: "change alert rule, acknowledge, or ignore", ActorLocations: []string{"alert_rule.created_by", "alert_rule.updated_by", "alert_rule.enabled_updated_by", "alert_event.actor_id"}},
 	{ID: "collection_task_interval_change", Description: "change a collection task interval", ActorLocations: []string{"collection_task_config.updated_by"}},
 	{ID: "collection_pause_or_key_rotation", Description: "pause or resume collection, or rotate the master key", ActorLocations: []string{"instance_collection_config.collection_pause_updated_by", "alert_event.actor_id", "platform_event.actor_subject"}},
+	{ID: "maintenance_window_change", Description: "create, update, end, or delete a maintenance window", ActorLocations: []string{"maintenance_window.created_by", "maintenance_window.updated_by", "maintenance_window.ended_by", "maintenance_window.deleted_by"}},
 }

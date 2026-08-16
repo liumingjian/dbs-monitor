@@ -139,6 +139,71 @@ func (handler *Handler) GetAlertDetail(ctx context.Context, request api.GetAlert
 	return api.GetAlertDetail200JSONResponse(detail), nil
 }
 
+func (handler *Handler) ListAlertEvents(ctx context.Context, request api.ListAlertEventsRequestObject) (api.ListAlertEventsResponseObject, error) {
+	queries := New(handler.platform)
+	alertID := databaseUUID(request.Id)
+	_, err := queries.GetAlertObservation(ctx, alertID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.ListAlertEvents404JSONResponse(errorBody(api.NOTFOUND, "alert instance not found")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := queries.ListAlertEvents(ctx, alertID)
+	if err != nil {
+		return nil, err
+	}
+	response := make(api.ListAlertEvents200JSONResponse, 0, len(rows))
+	for _, row := range rows {
+		event, err := toAPIAlertEvent(row)
+		if err != nil {
+			return nil, err
+		}
+		response = append(response, event)
+	}
+	return response, nil
+}
+
+func toAPIAlertEvent(row AlertEvent) (api.AlertEvent, error) {
+	var ruleSnapshot map[string]interface{}
+	if err := json.Unmarshal(row.RuleSnapshot, &ruleSnapshot); err != nil {
+		return api.AlertEvent{}, err
+	}
+
+	event := api.AlertEvent{
+		Id:                  row.ID,
+		Kind:                api.AlertEventKind(row.Kind),
+		FromState:           api.AlertStatus(row.FromState),
+		ToState:             api.AlertStatus(row.ToState),
+		RuleVersion:         int(row.RuleVersion),
+		CurrentValue:        floatPointer(row.CurrentValue),
+		RuleSnapshot:        ruleSnapshot,
+		EvaluatedAt:         row.EvaluatedAt.Time.UTC(),
+		ActorId:             uuidPointer(row.ActorID),
+		ActedAt:             timePointer(row.ActedAt),
+		DispositionNote:     textPointer(row.DispositionNote),
+		IgnoreReasonCode:    ignoreReasonPointer(row.IgnoreReasonCode),
+		IgnoreReasonDetail:  textPointer(row.IgnoreReasonDetail),
+		TriggerSnapshotId:   uuidPointer(row.TriggerSnapshotID),
+		InMaintenance:       row.InMaintenance,
+		MaintenanceWindowId: uuidPointer(row.MaintenanceWindowID),
+	}
+	if row.Unavailability.Valid {
+		value := api.Unavailability(row.Unavailability.String)
+		event.Unavailability = &value
+	}
+	if row.FromDisposition.Valid {
+		value := api.AlertDisposition(row.FromDisposition.String)
+		event.FromDisposition = &value
+	}
+	if row.ToDisposition.Valid {
+		value := api.AlertDisposition(row.ToDisposition.String)
+		event.ToDisposition = &value
+	}
+	return event, nil
+}
+
 const (
 	defaultAlertObservationLimit = 50
 	maxAlertObservationLimit     = 200

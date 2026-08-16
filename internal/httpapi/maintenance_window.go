@@ -62,7 +62,7 @@ func (handler *Handler) CreateMaintenanceWindow(ctx context.Context, request api
 			StartsAt:  values.startsAt,
 			EndsAt:    values.endsAt,
 			Reason:    values.reason,
-			CreatedBy: databaseUUID(authenticatedUserID(ctx)),
+			ActorID:   databaseUUID(authenticatedUserID(ctx)),
 			CreatedAt: pgtype.Timestamptz{Time: now, Valid: true},
 		})
 		if err != nil {
@@ -103,6 +103,7 @@ func (handler *Handler) UpdateMaintenanceWindow(ctx context.Context, request api
 			EndsAt:    values.endsAt,
 			Reason:    values.reason,
 			UpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			ActorID:   databaseUUID(authenticatedUserID(ctx)),
 		})
 		if err != nil {
 			return err
@@ -140,8 +141,9 @@ func (handler *Handler) EndMaintenanceWindow(ctx context.Context, request api.En
 	windowID := databaseUUID(request.Id)
 	queries := notify.New(handler.platform)
 	endedWindow, err := queries.EndMaintenanceWindow(ctx, notify.EndMaintenanceWindowParams{
-		ID:     windowID,
-		EndsAt: pgtype.Timestamptz{Time: now, Valid: true},
+		ID:      windowID,
+		EndsAt:  pgtype.Timestamptz{Time: now, Valid: true},
+		ActorID: databaseUUID(authenticatedUserID(ctx)),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		exists, lookupErr := maintenanceWindowExists(ctx, queries, windowID)
@@ -167,6 +169,7 @@ func (handler *Handler) DeleteMaintenanceWindow(ctx context.Context, request api
 	deleted, err := notify.New(handler.platform).DeleteMaintenanceWindow(ctx, notify.DeleteMaintenanceWindowParams{
 		ID:        databaseUUID(request.Id),
 		DeletedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+		ActorID:   databaseUUID(authenticatedUserID(ctx)),
 	})
 	if err != nil {
 		return nil, err

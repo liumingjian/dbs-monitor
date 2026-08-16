@@ -86,8 +86,8 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 		t.Fatalf("create maintenance owner: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO maintenance_window
-		(id, starts_at, ends_at, reason, created_by, created_at, updated_at)
-		VALUES ($1, $2, $2::timestamptz + interval '1 minute', 'snapshot maintenance', $3, $2, $2)`, maintenanceWindowID, now, maintenanceOwnerID); err != nil {
+		(id, starts_at, ends_at, reason, created_by, created_at, updated_at, updated_by)
+		VALUES ($1, $2, $2::timestamptz + interval '1 minute', 'snapshot maintenance', $3, $2, $2, $3)`, maintenanceWindowID, now, maintenanceOwnerID); err != nil {
 		t.Fatalf("create snapshot maintenance window: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO maintenance_window_instance (maintenance_window_id, instance_id)

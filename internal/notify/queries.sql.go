@@ -168,10 +168,13 @@ func (q *Queries) ClearNotificationPolicyContacts(ctx context.Context, policyID 
 
 const createMaintenanceWindow = `-- name: CreateMaintenanceWindow :one
 INSERT INTO maintenance_window (
-    id, starts_at, ends_at, reason, created_by, created_at, updated_at
+    id, starts_at, ends_at, reason, created_by, created_at, updated_at, updated_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $6)
-RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at
+VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $6, $5
+)
+RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at, updated_by, ended_by, deleted_by
 `
 
 type CreateMaintenanceWindowParams struct {
@@ -179,7 +182,7 @@ type CreateMaintenanceWindowParams struct {
 	StartsAt  pgtype.Timestamptz
 	EndsAt    pgtype.Timestamptz
 	Reason    string
-	CreatedBy pgtype.UUID
+	ActorID   pgtype.UUID
 	CreatedAt pgtype.Timestamptz
 }
 
@@ -189,7 +192,7 @@ func (q *Queries) CreateMaintenanceWindow(ctx context.Context, arg CreateMainten
 		arg.StartsAt,
 		arg.EndsAt,
 		arg.Reason,
-		arg.CreatedBy,
+		arg.ActorID,
 		arg.CreatedAt,
 	)
 	var i MaintenanceWindow
@@ -202,6 +205,9 @@ func (q *Queries) CreateMaintenanceWindow(ctx context.Context, arg CreateMainten
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UpdatedBy,
+		&i.EndedBy,
+		&i.DeletedBy,
 	)
 	return i, err
 }
@@ -365,17 +371,19 @@ func (q *Queries) CreateWebhookTarget(ctx context.Context, arg CreateWebhookTarg
 
 const deleteMaintenanceWindow = `-- name: DeleteMaintenanceWindow :execrows
 UPDATE maintenance_window
-SET deleted_at = $2, updated_at = $2
-WHERE id = $1 AND deleted_at IS NULL
+SET deleted_at = $1, updated_at = $1,
+    updated_by = $2, deleted_by = $2
+WHERE id = $3 AND deleted_at IS NULL
 `
 
 type DeleteMaintenanceWindowParams struct {
-	ID        pgtype.UUID
 	DeletedAt pgtype.Timestamptz
+	ActorID   pgtype.UUID
+	ID        pgtype.UUID
 }
 
 func (q *Queries) DeleteMaintenanceWindow(ctx context.Context, arg DeleteMaintenanceWindowParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteMaintenanceWindow, arg.ID, arg.DeletedAt)
+	result, err := q.db.Exec(ctx, deleteMaintenanceWindow, arg.DeletedAt, arg.ActorID, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -441,18 +449,21 @@ func (q *Queries) DeleteWebhookTarget(ctx context.Context, id pgtype.UUID) (int6
 
 const endMaintenanceWindow = `-- name: EndMaintenanceWindow :one
 UPDATE maintenance_window
-SET ends_at = $2, updated_at = $2
-WHERE id = $1 AND deleted_at IS NULL AND starts_at <= $2 AND ends_at > $2
-RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at
+SET ends_at = $1, updated_at = $1,
+    updated_by = $2, ended_by = $2
+WHERE id = $3 AND deleted_at IS NULL
+  AND starts_at <= $1 AND ends_at > $1
+RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at, updated_by, ended_by, deleted_by
 `
 
 type EndMaintenanceWindowParams struct {
-	ID     pgtype.UUID
-	EndsAt pgtype.Timestamptz
+	EndsAt  pgtype.Timestamptz
+	ActorID pgtype.UUID
+	ID      pgtype.UUID
 }
 
 func (q *Queries) EndMaintenanceWindow(ctx context.Context, arg EndMaintenanceWindowParams) (MaintenanceWindow, error) {
-	row := q.db.QueryRow(ctx, endMaintenanceWindow, arg.ID, arg.EndsAt)
+	row := q.db.QueryRow(ctx, endMaintenanceWindow, arg.EndsAt, arg.ActorID, arg.ID)
 	var i MaintenanceWindow
 	err := row.Scan(
 		&i.ID,
@@ -463,6 +474,9 @@ func (q *Queries) EndMaintenanceWindow(ctx context.Context, arg EndMaintenanceWi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UpdatedBy,
+		&i.EndedBy,
+		&i.DeletedBy,
 	)
 	return i, err
 }
@@ -607,7 +621,7 @@ func (q *Queries) EnqueueTestWebhookNotification(ctx context.Context, arg Enqueu
 }
 
 const getMaintenanceWindow = `-- name: GetMaintenanceWindow :one
-SELECT id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at FROM maintenance_window
+SELECT id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at, updated_by, ended_by, deleted_by FROM maintenance_window
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -623,6 +637,9 @@ func (q *Queries) GetMaintenanceWindow(ctx context.Context, id pgtype.UUID) (Mai
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UpdatedBy,
+		&i.EndedBy,
+		&i.DeletedBy,
 	)
 	return i, err
 }
@@ -931,7 +948,7 @@ func (q *Queries) ListMaintenanceWindowInstances(ctx context.Context, maintenanc
 }
 
 const listMaintenanceWindows = `-- name: ListMaintenanceWindows :many
-SELECT id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at FROM maintenance_window
+SELECT id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at, updated_by, ended_by, deleted_by FROM maintenance_window
 WHERE deleted_at IS NULL
 ORDER BY starts_at DESC, id
 `
@@ -954,6 +971,9 @@ func (q *Queries) ListMaintenanceWindows(ctx context.Context) ([]MaintenanceWind
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.UpdatedBy,
+			&i.EndedBy,
+			&i.DeletedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -966,7 +986,7 @@ func (q *Queries) ListMaintenanceWindows(ctx context.Context) ([]MaintenanceWind
 }
 
 const listMaintenanceWindowsForInstance = `-- name: ListMaintenanceWindowsForInstance :many
-SELECT maintenance.id, maintenance.starts_at, maintenance.ends_at, maintenance.reason, maintenance.created_by, maintenance.created_at, maintenance.updated_at, maintenance.deleted_at
+SELECT maintenance.id, maintenance.starts_at, maintenance.ends_at, maintenance.reason, maintenance.created_by, maintenance.created_at, maintenance.updated_at, maintenance.deleted_at, maintenance.updated_by, maintenance.ended_by, maintenance.deleted_by
 FROM maintenance_window maintenance
 JOIN maintenance_window_instance scope ON scope.maintenance_window_id = maintenance.id
 WHERE scope.instance_id = $1
@@ -992,6 +1012,9 @@ func (q *Queries) ListMaintenanceWindowsForInstance(ctx context.Context, instanc
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.UpdatedBy,
+			&i.EndedBy,
+			&i.DeletedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -1585,26 +1608,30 @@ func (q *Queries) SuppressNotificationForMaintenance(ctx context.Context, arg Su
 
 const updateMaintenanceWindow = `-- name: UpdateMaintenanceWindow :one
 UPDATE maintenance_window
-SET starts_at = $2, ends_at = $3, reason = $4, updated_at = $5
-WHERE id = $1 AND deleted_at IS NULL AND ends_at > $5
-RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at
+SET starts_at = $1, ends_at = $2,
+    reason = $3, updated_at = $4,
+    updated_by = $5
+WHERE id = $6 AND deleted_at IS NULL AND ends_at > $4
+RETURNING id, starts_at, ends_at, reason, created_by, created_at, updated_at, deleted_at, updated_by, ended_by, deleted_by
 `
 
 type UpdateMaintenanceWindowParams struct {
-	ID        pgtype.UUID
 	StartsAt  pgtype.Timestamptz
 	EndsAt    pgtype.Timestamptz
 	Reason    string
 	UpdatedAt pgtype.Timestamptz
+	ActorID   pgtype.UUID
+	ID        pgtype.UUID
 }
 
 func (q *Queries) UpdateMaintenanceWindow(ctx context.Context, arg UpdateMaintenanceWindowParams) (MaintenanceWindow, error) {
 	row := q.db.QueryRow(ctx, updateMaintenanceWindow,
-		arg.ID,
 		arg.StartsAt,
 		arg.EndsAt,
 		arg.Reason,
 		arg.UpdatedAt,
+		arg.ActorID,
+		arg.ID,
 	)
 	var i MaintenanceWindow
 	err := row.Scan(
@@ -1616,6 +1643,9 @@ func (q *Queries) UpdateMaintenanceWindow(ctx context.Context, arg UpdateMainten
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.UpdatedBy,
+		&i.EndedBy,
+		&i.DeletedBy,
 	)
 	return i, err
 }

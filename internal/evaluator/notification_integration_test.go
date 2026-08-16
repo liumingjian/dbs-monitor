@@ -357,8 +357,8 @@ func TestMaintenanceWindowSuppressesWithoutStoppingEvaluationOrReplaying(t *test
 		VALUES ($1, 1, '{"name":"Maintenance tracer","metric_id":"agent.status"}')`, ruleID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := platform.Exec(ctx, `INSERT INTO maintenance_window (id, starts_at, ends_at, reason, created_by, created_at, updated_at)
-		VALUES ($1, $2::timestamptz - interval '1 minute', $2::timestamptz + interval '10 minutes', 'planned restart', $3, $2, $2)`, windowID, now, actorID); err != nil {
+	if _, err := platform.Exec(ctx, `INSERT INTO maintenance_window (id, starts_at, ends_at, reason, created_by, created_at, updated_at, updated_by)
+		VALUES ($1, $2::timestamptz - interval '1 minute', $2::timestamptz + interval '10 minutes', 'planned restart', $3, $2, $2, $3)`, windowID, now, actorID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := platform.Exec(ctx, `INSERT INTO maintenance_window_instance (maintenance_window_id, instance_id) VALUES ($1, $2)`, windowID, instanceID); err != nil {

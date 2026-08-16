@@ -109,6 +109,9 @@ type ClientInterface interface {
 
 	UpdateAlertDisposition(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListAlertEvents request
+	ListAlertEvents(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListAlertNotifications request
 	ListAlertNotifications(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -477,6 +480,18 @@ func (c *Client) UpdateAlertDispositionWithBody(ctx context.Context, id openapi_
 
 func (c *Client) UpdateAlertDisposition(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateAlertDispositionRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListAlertEvents(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertEventsRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1967,6 +1982,40 @@ func NewUpdateAlertDispositionRequestWithBody(server string, id openapi_types.UU
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListAlertEventsRequest generates requests for ListAlertEvents
+func NewListAlertEventsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-instances/%s/events", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -5208,6 +5257,9 @@ type ClientWithResponsesInterface interface {
 
 	UpdateAlertDispositionWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateAlertDispositionJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertDispositionResponse, error)
 
+	// ListAlertEventsWithResponse request
+	ListAlertEventsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListAlertEventsResponse, error)
+
 	// ListAlertNotificationsWithResponse request
 	ListAlertNotificationsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListAlertNotificationsResponse, error)
 
@@ -5615,6 +5667,29 @@ func (r UpdateAlertDispositionResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateAlertDispositionResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListAlertEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]AlertEvent
+	JSON404      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertEventsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7474,6 +7549,15 @@ func (c *ClientWithResponses) UpdateAlertDispositionWithResponse(ctx context.Con
 	return ParseUpdateAlertDispositionResponse(rsp)
 }
 
+// ListAlertEventsWithResponse request returning *ListAlertEventsResponse
+func (c *ClientWithResponses) ListAlertEventsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListAlertEventsResponse, error) {
+	rsp, err := c.ListAlertEvents(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertEventsResponse(rsp)
+}
+
 // ListAlertNotificationsWithResponse request returning *ListAlertNotificationsResponse
 func (c *ClientWithResponses) ListAlertNotificationsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListAlertNotificationsResponse, error) {
 	rsp, err := c.ListAlertNotifications(ctx, id, reqEditors...)
@@ -8596,6 +8680,39 @@ func ParseUpdateAlertDispositionResponse(rsp *http.Response) (*UpdateAlertDispos
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAlertEventsResponse parses an HTTP response from a ListAlertEventsWithResponse call
+func ParseListAlertEventsResponse(rsp *http.Response) (*ListAlertEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []AlertEvent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 

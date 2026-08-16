@@ -218,6 +218,7 @@ func TestA12AttributableWritesAreComplete(t *testing.T) {
 		"alert_rule_or_disposition_change": {"alert_rule.created_by", "alert_rule.updated_by", "alert_rule.enabled_updated_by", "alert_event.actor_id"},
 		"collection_task_interval_change":  {"collection_task_config.updated_by"},
 		"collection_pause_or_key_rotation": {"instance_collection_config.collection_pause_updated_by", "alert_event.actor_id", "platform_event.actor_subject"},
+		"maintenance_window_change":        {"maintenance_window.created_by", "maintenance_window.updated_by", "maintenance_window.ended_by", "maintenance_window.deleted_by"},
 	}
 
 	seen := make(map[string]bool, len(AttributableWrites))

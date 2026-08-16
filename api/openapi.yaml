@@ -64,6 +64,8 @@ paths:
     $ref: paths/alerts.yaml#/~1api~1v1~1alerts~1history
   /api/v1/alert-instances/{id}:
     $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}
+  /api/v1/alert-instances/{id}/events:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1events
   /api/v1/alert-instances/{id}/trigger-snapshot:
     $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1trigger-snapshot
   /api/v1/alert-instances/{id}/notifications:

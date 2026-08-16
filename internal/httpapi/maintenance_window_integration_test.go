@@ -102,14 +102,20 @@ func TestMaintenanceWindowManagementLifecycle(t *testing.T) {
 		t.Fatalf("maintenance windows after delete = %+v", listed)
 	}
 	var retainedWindow, retainedScopes int
+	var updatedBy, endedBy, deletedBy uuid.UUID
 	if err := platform.QueryRow(ctx, `SELECT
 		(SELECT count(*) FROM maintenance_window WHERE id = $1 AND deleted_at = $2),
-		(SELECT count(*) FROM maintenance_window_instance WHERE maintenance_window_id = $1)`, created.Id, now).
-		Scan(&retainedWindow, &retainedScopes); err != nil {
+		(SELECT count(*) FROM maintenance_window_instance WHERE maintenance_window_id = $1),
+		updated_by, ended_by, deleted_by
+		FROM maintenance_window WHERE id = $1`, created.Id, now).
+		Scan(&retainedWindow, &retainedScopes, &updatedBy, &endedBy, &deletedBy); err != nil {
 		t.Fatal(err)
 	}
 	if retainedWindow != 1 || retainedScopes != 2 {
 		t.Fatalf("retained deleted history = %d window, %d scopes; want 1, 2", retainedWindow, retainedScopes)
+	}
+	if updatedBy != created.CreatedBy || endedBy != created.CreatedBy || deletedBy != created.CreatedBy {
+		t.Fatalf("maintenance actors = updated %s, ended %s, deleted %s; want %s", updatedBy, endedBy, deletedBy, created.CreatedBy)
 	}
 }
 
