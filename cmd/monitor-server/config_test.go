@@ -35,6 +35,7 @@ func TestLoadServerConfig(t *testing.T) {
 partition_maintenance_interval: 2m
 alert_history_retention: 2m
 repeat_interval_minimum: 30s
+notification_retry_backoff_cap: 5s
 snapshot_truncation_limit: 5
 collection_freshness_threshold: 20s
 migration_lock_wait_timeout: 10s
@@ -54,6 +55,7 @@ master_key_path: /srv/dbs-monitor/credentials
 			PartitionMaintenanceInterval: 2 * time.Minute,
 			AlertHistoryRetention:        2 * time.Minute,
 			RepeatIntervalMinimum:        30 * time.Second,
+			NotificationRetryBackoffCap:  5 * time.Second,
 			SnapshotTruncationLimit:      5,
 			CollectionFreshnessThreshold: 20 * time.Second,
 			MigrationLockWaitTimeout:     10 * time.Second,
@@ -90,6 +92,7 @@ master_key_path: /srv/dbs-monitor/credentials
 		{name: "partition maintenance interval", contents: "partition_maintenance_interval: -1s\n", message: "partition_maintenance_interval"},
 		{name: "alert history retention", contents: "alert_history_retention: 0s\n", message: "alert_history_retention"},
 		{name: "repeat interval minimum", contents: "repeat_interval_minimum: never\n", message: "repeat_interval_minimum"},
+		{name: "notification retry backoff cap", contents: "notification_retry_backoff_cap: 0s\n", message: "notification_retry_backoff_cap"},
 		{name: "snapshot truncation limit", contents: "snapshot_truncation_limit: 0\n", message: "snapshot_truncation_limit"},
 		{name: "collection freshness threshold", contents: "collection_freshness_threshold: 0s\n", message: "collection_freshness_threshold"},
 		{name: "migration lock wait timeout", contents: "migration_lock_wait_timeout: 0s\n", message: "migration_lock_wait_timeout"},

@@ -47,8 +47,9 @@ func TestRetryScheduleIsFixed(t *testing.T) {
 	}
 	want := []time.Duration{time.Second, 2 * time.Second}
 	for failureCount, expected := range want {
-		if got := RetryDelay(failureCount + 1); got != expected {
-			t.Errorf("RetryDelay(%d) = %s, want %s", failureCount+1, got, expected)
+		cappedExpected := min(expected, 1500*time.Millisecond)
+		if got := RetryDelay(failureCount+1, 1500*time.Millisecond); got != cappedExpected {
+			t.Errorf("RetryDelay(%d) = %s, want %s", failureCount+1, got, cappedExpected)
 		}
 	}
 }

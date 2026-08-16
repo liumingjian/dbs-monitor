@@ -130,6 +130,7 @@ var AttributableWrites = []AttributableWrite{
 	{ID: "user_password_reset", Description: "reset another user's password", ActorLocations: []string{"platform_event.actor_id"}},
 	{ID: "instance_create", Description: "create instance", ActorLocations: []string{"instance.created_by"}},
 	{ID: "instance_credential_update", Description: "update instance credentials", ActorLocations: []string{"instance.credential_updated_by", "platform_event.actor_id"}},
+	{ID: "smtp_channel_update", Description: "update SMTP channel credentials or settings", ActorLocations: []string{"smtp_channel.updated_by"}},
 	{ID: "instance_remove", Description: "remove instance", ActorLocations: []string{"platform_event.actor_id"}},
 	{ID: "alert_rule_or_disposition_change", Description: "change alert rule, acknowledge, or ignore", ActorLocations: []string{"alert_rule.created_by", "alert_rule.updated_by", "alert_rule.enabled_updated_by", "alert_event.actor_id"}},
 	{ID: "collection_task_interval_change", Description: "change a collection task interval", ActorLocations: []string{"collection_task_config.updated_by"}},

@@ -233,6 +233,7 @@ func startIssue60Runtime(t *testing.T, port int) issue60Runtime {
 		fmt.Sprintf("LISTEN_ADDR=127.0.0.1:%d", port),
 		"PUBLIC_HOST=127.0.0.1",
 		"CERT_DIR=" + certDirectory,
+		"SSL_CERT_FILE=" + os.Getenv("ACCEPTANCE_SMTP_CA_FILE"),
 		"PGDATA=/",
 	})
 	client := waitForAPI(t, server, baseURL, filepath.Join(certDirectory, "ca.crt"))

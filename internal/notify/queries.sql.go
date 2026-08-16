@@ -701,7 +701,7 @@ func (q *Queries) GetNotificationPolicy(ctx context.Context, id pgtype.UUID) (No
 }
 
 const getSMTPChannel = `-- name: GetSMTPChannel :one
-SELECT singleton, enabled, host, port, from_address, recipient, auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at FROM smtp_channel WHERE singleton
+SELECT singleton, enabled, host, port, from_address, recipient, auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at, updated_by FROM smtp_channel WHERE singleton
 `
 
 func (q *Queries) GetSMTPChannel(ctx context.Context) (SmtpChannel, error) {
@@ -720,12 +720,13 @@ func (q *Queries) GetSMTPChannel(ctx context.Context) (SmtpChannel, error) {
 		&i.AuthKeyVersion,
 		&i.TlsMode,
 		&i.UpdatedAt,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
 
 const getSMTPChannelForKeyRotation = `-- name: GetSMTPChannelForKeyRotation :one
-SELECT singleton, enabled, host, port, from_address, recipient, auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at FROM smtp_channel WHERE singleton AND auth_key_version IS NOT NULL FOR UPDATE
+SELECT singleton, enabled, host, port, from_address, recipient, auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at, updated_by FROM smtp_channel WHERE singleton AND auth_key_version IS NOT NULL FOR UPDATE
 `
 
 func (q *Queries) GetSMTPChannelForKeyRotation(ctx context.Context) (SmtpChannel, error) {
@@ -744,6 +745,7 @@ func (q *Queries) GetSMTPChannelForKeyRotation(ctx context.Context) (SmtpChannel
 		&i.AuthKeyVersion,
 		&i.TlsMode,
 		&i.UpdatedAt,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
@@ -1814,9 +1816,9 @@ func (q *Queries) UpdateWebhookTargetSigningKey(ctx context.Context, arg UpdateW
 const upsertSMTPChannel = `-- name: UpsertSMTPChannel :one
 INSERT INTO smtp_channel (
     singleton, enabled, host, port, from_address, recipient,
-    auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at
+    auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at, updated_by
 )
-VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (singleton) DO UPDATE SET
     enabled = EXCLUDED.enabled,
     host = EXCLUDED.host,
@@ -1828,8 +1830,9 @@ ON CONFLICT (singleton) DO UPDATE SET
     auth_ciphertext = EXCLUDED.auth_ciphertext,
     auth_key_version = EXCLUDED.auth_key_version,
     tls_mode = EXCLUDED.tls_mode,
-    updated_at = EXCLUDED.updated_at
-RETURNING singleton, enabled, host, port, from_address, recipient, auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at
+    updated_at = EXCLUDED.updated_at,
+    updated_by = EXCLUDED.updated_by
+RETURNING singleton, enabled, host, port, from_address, recipient, auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at, updated_by
 `
 
 type UpsertSMTPChannelParams struct {
@@ -1844,6 +1847,7 @@ type UpsertSMTPChannelParams struct {
 	AuthKeyVersion pgtype.Int4
 	TlsMode        string
 	UpdatedAt      pgtype.Timestamptz
+	UpdatedBy      pgtype.UUID
 }
 
 func (q *Queries) UpsertSMTPChannel(ctx context.Context, arg UpsertSMTPChannelParams) (SmtpChannel, error) {
@@ -1859,6 +1863,7 @@ func (q *Queries) UpsertSMTPChannel(ctx context.Context, arg UpsertSMTPChannelPa
 		arg.AuthKeyVersion,
 		arg.TlsMode,
 		arg.UpdatedAt,
+		arg.UpdatedBy,
 	)
 	var i SmtpChannel
 	err := row.Scan(
@@ -1874,6 +1879,7 @@ func (q *Queries) UpsertSMTPChannel(ctx context.Context, arg UpsertSMTPChannelPa
 		&i.AuthKeyVersion,
 		&i.TlsMode,
 		&i.UpdatedAt,
+		&i.UpdatedBy,
 	)
 	return i, err
 }

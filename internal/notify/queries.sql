@@ -154,9 +154,9 @@ DELETE FROM webhook_target WHERE id = $1;
 -- name: UpsertSMTPChannel :one
 INSERT INTO smtp_channel (
     singleton, enabled, host, port, from_address, recipient,
-    auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at
+    auth_type, username, auth_ciphertext, auth_key_version, tls_mode, updated_at, updated_by
 )
-VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+VALUES (true, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (singleton) DO UPDATE SET
     enabled = EXCLUDED.enabled,
     host = EXCLUDED.host,
@@ -168,7 +168,8 @@ ON CONFLICT (singleton) DO UPDATE SET
     auth_ciphertext = EXCLUDED.auth_ciphertext,
     auth_key_version = EXCLUDED.auth_key_version,
     tls_mode = EXCLUDED.tls_mode,
-    updated_at = EXCLUDED.updated_at
+    updated_at = EXCLUDED.updated_at,
+    updated_by = EXCLUDED.updated_by
 RETURNING *;
 
 -- name: ListMaintenanceWindows :many

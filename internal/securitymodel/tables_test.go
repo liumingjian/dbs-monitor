@@ -212,6 +212,7 @@ func TestA12AttributableWritesAreComplete(t *testing.T) {
 		"user_password_reset":              {"platform_event.actor_id"},
 		"instance_create":                  {"instance.created_by"},
 		"instance_credential_update":       {"instance.credential_updated_by", "platform_event.actor_id"},
+		"smtp_channel_update":              {"smtp_channel.updated_by"},
 		"instance_remove":                  {"platform_event.actor_id"},
 		"alert_rule_or_disposition_change": {"alert_rule.created_by", "alert_rule.updated_by", "alert_rule.enabled_updated_by", "alert_event.actor_id"},
 		"collection_task_interval_change":  {"collection_task_config.updated_by"},

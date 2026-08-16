@@ -455,6 +455,7 @@ type SmtpChannel struct {
 	AuthKeyVersion pgtype.Int4
 	TlsMode        string
 	UpdatedAt      pgtype.Timestamptz
+	UpdatedBy      pgtype.UUID
 }
 
 type UserSession struct {

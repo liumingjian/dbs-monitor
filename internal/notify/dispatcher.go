@@ -12,13 +12,21 @@ import (
 )
 
 type Dispatcher struct {
-	queries *Queries
+	queries         *Queries
+	retryBackoffCap time.Duration
 }
 
-const SMTPChannelKey = "SMTP"
+const (
+	SMTPChannelKey         = "SMTP"
+	DefaultRetryBackoffCap = 5 * time.Second
+)
 
 func NewDispatcher(database DBTX) *Dispatcher {
-	return &Dispatcher{queries: New(database)}
+	return NewDispatcherWithRetryBackoffCap(database, DefaultRetryBackoffCap)
+}
+
+func NewDispatcherWithRetryBackoffCap(database DBTX, retryBackoffCap time.Duration) *Dispatcher {
+	return &Dispatcher{queries: New(database), retryBackoffCap: retryBackoffCap}
 }
 
 func WebhookChannelKey(targetID pgtype.UUID) string {
@@ -133,7 +141,7 @@ func (dispatcher *Dispatcher) DispatchOne(ctx context.Context, now time.Time, ch
 	terminal := failureCount >= MaxAttempts
 	nextAttemptAt := now.UTC()
 	if !terminal {
-		nextAttemptAt = nextAttemptAt.Add(RetryDelay(failureCount))
+		nextAttemptAt = nextAttemptAt.Add(RetryDelay(failureCount, dispatcher.retryBackoffCap))
 	}
 	if recordErr := dispatcher.queries.RecordNotificationFailure(ctx, RecordNotificationFailureParams{
 		NotificationID: delivery.ID,

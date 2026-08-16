@@ -98,6 +98,7 @@ func (handler *Handler) UpdateSMTPChannel(ctx context.Context, request api.Updat
 		AuthKeyVersion: authKeyVersion,
 		TlsMode:        string(input.TlsMode),
 		UpdatedAt:      pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+		UpdatedBy:      databaseUserID(authenticatedUserID(ctx)),
 	})
 	if err != nil {
 		return nil, err

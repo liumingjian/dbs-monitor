@@ -262,7 +262,7 @@ func run(ctx context.Context) error {
 	go collector.Run(ctx, time.Second)
 	go runPartitionMaintenance(ctx, platform, health, config.PartitionSpan, config.PartitionMaintenanceInterval)
 	go runAlertHistoryMaintenance(ctx, platform, config.AlertHistoryRetention)
-	go runNotificationDelivery(ctx, platform, keyring)
+	go runNotificationDelivery(ctx, platform, keyring, config.NotificationRetryBackoffCap)
 	go func() {
 		timer := time.NewTimer(time.Second)
 		defer timer.Stop()
@@ -293,6 +293,7 @@ func run(ctx context.Context) error {
 		sessionConfig,
 	)
 	apiHandler.SetPartitionSpan(config.PartitionSpan)
+	apiHandler.SetNotificationRepeatIntervalMinimum(config.RepeatIntervalMinimum)
 	apiHandler.SetNotificationSnapshotStore(notificationSnapshotStore)
 	apiRoutes := apiHandler.Routes()
 	fileServer := http.FileServer(http.FS(static))
