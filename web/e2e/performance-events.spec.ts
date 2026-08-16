@@ -166,6 +166,8 @@ test('alert-derived event writes disposition back and preserves trigger evidence
   await page.getByRole('row', { name: /锁等待 \/ 阻塞/ }).getByRole('link', { name: '详情' }).click()
 
   await expect(page.getByRole('heading', { name: '锁等待 / 阻塞' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '关联指标图' })).toBeVisible()
+  await expect(page.getByLabel('锁等待 / 阻塞趋势')).toBeVisible()
   await expect(page.getByRole('heading', { name: '原因摘要' })).toBeVisible()
   await expect(page.getByText('检查阻塞链顶端会话，并与业务方确认后处理阻塞事务。')).toBeVisible()
   await expect(page.getByRole('heading', { name: '告警触发时现场' })).toBeVisible()

@@ -5,12 +5,16 @@ import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import type { components } from '../../api/schema'
 import { AlertStatus } from '../../domain/AlertStatus'
+import { MetricChart } from '../../domain/MetricChart'
+import { unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { DispositionSection, TriggerSnapshotSection, triggerSnapshotPresentation } from './alertEvidence'
 import {
   eventMonitoringSearch,
   parsePerformanceEventSearch,
+  performanceEventChartView,
   serializePerformanceEventSearch,
+  type EventMonitoringSearch,
   type PerformanceEventSearch,
 } from './performanceEvents'
 import {
@@ -113,6 +117,8 @@ function PerformanceEventDetailContent({ event, instanceName, search, onDisposit
       { key: 'snapshot', label: '现场快照', children: snapshot.label },
     ]} />
 
+    {monitoringSearch && <EventMetricChart event={event} monitoringSearch={monitoringSearch} />}
+
     <section className="event-guidance" aria-labelledby="event-cause-heading">
       <div>
         <Typography.Title id="event-cause-heading" level={3}>原因摘要</Typography.Title>
@@ -131,4 +137,44 @@ function PerformanceEventDetailContent({ event, instanceName, search, onDisposit
     />
     <TriggerSnapshotSection alertInstanceID={event.alert_instance_id} eventEvidence />
   </Space>
+}
+
+function EventMetricChart({ event, monitoringSearch }: {
+  event: PerformanceEvent
+  monitoringSearch: EventMonitoringSearch
+}) {
+  const metrics = $api.useQuery('get', '/api/v1/instances/{id}/metrics/series', {
+    params: {
+      path: { id: event.instance_id },
+      query: {
+        metric: [monitoringSearch.metric],
+        from: monitoringSearch.from,
+        to: monitoringSearch.to,
+        step: monitoringSearch.step,
+      },
+    },
+  })
+  const view = performanceEventChartView(
+    event.metric_id,
+    metrics.data?.metrics.find((metric) => metric.metric === event.metric_id),
+  )
+  const currentHref = '#performance-event-metric-heading'
+  const remediationHref = view.unavailability
+    ? unavailabilityHref(view.unavailability, {
+        current: currentHref,
+        collection: `/instances/${encodeURIComponent(event.instance_id)}/collection?metric=${encodeURIComponent(event.metric_id)}`,
+      })
+    : currentHref
+
+  return <section className="alert-detail-section" aria-labelledby="performance-event-metric-heading">
+    <Typography.Title id="performance-event-metric-heading" level={3}>关联指标图</Typography.Title>
+    <MetricChart
+      label={performanceEventTypeLabel(event.event_type)}
+      series={view.series}
+      step={metrics.data?.step ?? monitoringSearch.step}
+      unavailability={view.unavailability}
+      unavailabilityHref={remediationHref}
+      loading={metrics.isFetching}
+    />
+  </section>
 }

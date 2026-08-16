@@ -1,7 +1,8 @@
 import type { components } from '../../api/schema'
+import { metricUnavailability, type MetricChartSeries } from '../../domain/MetricChart'
 import type { MonitoringSearch } from './timeRange'
 import { isRFC3339 } from './timeRange'
-import { metricOptions } from './metricOptions'
+import { metricOptions, type MetricID } from './metricOptions'
 
 export type PerformanceEventTab = 'firing' | 'recovered' | 'disposed'
 export type PerformanceEventDisposition = Extract<components['schemas']['AlertDisposition'], 'ACKED' | 'IGNORED'>
@@ -21,6 +22,15 @@ type EventMonitoringContext = {
   derived_at: string
   recovered_at?: string
   updated_at: string
+}
+
+type EventMetricResponse = components['schemas']['MetricSeriesResponse']['metrics'][number]
+
+export type EventMonitoringSearch = MonitoringSearch & {
+  metric: MetricID
+  step: 'auto'
+  columns: 2
+  connect: true
 }
 
 export function parsePerformanceEventSearch(
@@ -59,7 +69,7 @@ export function serializePerformanceEventSearch(
   }
 }
 
-export function eventMonitoringSearch(event: EventMonitoringContext): MonitoringSearch | undefined {
+export function eventMonitoringSearch(event: EventMonitoringContext): EventMonitoringSearch | undefined {
   const metric = metricOptions.find((option) => option.id === event.metric_id)
   if (!metric) return undefined
 
@@ -73,6 +83,19 @@ export function eventMonitoringSearch(event: EventMonitoringContext): Monitoring
     step: 'auto',
     columns: 2,
     connect: true,
+  }
+}
+
+export function performanceEventChartView(metricID: string, response: EventMetricResponse | undefined): {
+  series: MetricChartSeries[]
+  unavailability: EventMetricResponse['unavailability']
+} {
+  const metric = response?.metric === metricID ? response : undefined
+  return {
+    series: metric?.unavailability === null
+      ? metric.series.map((item) => ({ name: metricID, unit: metric.unit, points: item.points }))
+      : [],
+    unavailability: metricUnavailability(metric),
   }
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   eventMonitoringSearch,
   parsePerformanceEventSearch,
+  performanceEventChartView,
   performanceEventRecoveryFilter,
   serializePerformanceEventSearch,
   type PerformanceEventSearch,
@@ -43,6 +44,22 @@ describe('performance event search', () => {
       step: 'auto',
       columns: 2,
       connect: true,
+    })
+  })
+
+  it('builds event evidence without inventing missing metric values', () => {
+    expect(performanceEventChartView('pg.lock.waiting_count', {
+      metric: 'pg.lock.waiting_count',
+      unit: 'count',
+      unavailability: null,
+      series: [{ labels: {}, points: [[1, 0]] }],
+    })).toEqual({
+      series: [{ name: 'pg.lock.waiting_count', unit: 'count', points: [[1, 0]] }],
+      unavailability: null,
+    })
+    expect(performanceEventChartView('pg.lock.waiting_count', undefined)).toEqual({
+      series: [],
+      unavailability: 'NO_SAMPLES_YET',
     })
   })
 
