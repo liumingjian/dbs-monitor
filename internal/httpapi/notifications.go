@@ -27,6 +27,9 @@ func (handler *Handler) refreshNotificationSnapshot(ctx context.Context) error {
 		return nil
 	}
 	if err := handler.notificationSnapshotStore.Sync(ctx, handler.platform); err != nil {
+		if errors.Is(err, notify.ErrLocalLargeWriteRejected) {
+			return nil
+		}
 		return fmt.Errorf("refresh notification channel snapshot: %w", err)
 	}
 	return nil

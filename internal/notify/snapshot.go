@@ -18,6 +18,8 @@ const (
 	ChannelSnapshotDeletedEventType = "notification_channel_snapshot_deleted"
 )
 
+var ErrLocalLargeWriteRejected = errors.New("local large writes rejected at disk emergency watermark")
+
 type ChannelSnapshot struct {
 	FormatVersion int                     `json:"format_version"`
 	SMTP          *SnapshotSMTPChannel    `json:"smtp,omitempty"`
@@ -48,7 +50,8 @@ type SnapshotWebhookTarget struct {
 }
 
 type ChannelSnapshotStore struct {
-	path string
+	path              string
+	localWriteAllowed func() bool
 }
 
 type ChannelSnapshotArtifact struct {
@@ -68,6 +71,10 @@ type ChannelSnapshotDeletionRecorder func(ChannelSnapshotDeletionEvent) error
 
 func NewChannelSnapshotStore(path string) *ChannelSnapshotStore {
 	return &ChannelSnapshotStore{path: path}
+}
+
+func (store *ChannelSnapshotStore) SetLocalWriteAllowed(allowed func() bool) {
+	store.localWriteAllowed = allowed
 }
 
 func (store *ChannelSnapshotStore) ListArtifacts() ([]ChannelSnapshotArtifact, error) {
@@ -146,6 +153,9 @@ func (store *ChannelSnapshotStore) Sync(ctx context.Context, database DBTX) erro
 }
 
 func (store *ChannelSnapshotStore) Write(snapshot ChannelSnapshot) error {
+	if store.localWriteAllowed != nil && !store.localWriteAllowed() {
+		return ErrLocalLargeWriteRejected
+	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		return fmt.Errorf("encode notification channel snapshot: %w", err)

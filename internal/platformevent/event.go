@@ -22,6 +22,9 @@ const (
 	InstanceCredentialUpdated = "INSTANCE_CREDENTIAL_UPDATED"
 	InstanceRemoved           = "INSTANCE_REMOVED"
 	MasterKeyRotated          = "MASTER_KEY_ROTATED"
+
+	DiagnosticBundleReclaimed     = "DIAGNOSTIC_BUNDLE_RECLAIMED"
+	NotificationSnapshotReclaimed = "NOTIFICATION_SNAPSHOT_RECLAIMED"
 )
 
 var eventKinds = []string{
@@ -35,6 +38,8 @@ var eventKinds = []string{
 	InstanceCredentialUpdated,
 	InstanceRemoved,
 	MasterKeyRotated,
+	DiagnosticBundleReclaimed,
+	NotificationSnapshotReclaimed,
 }
 
 type Event struct {

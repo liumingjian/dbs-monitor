@@ -15,7 +15,7 @@ func TestCollectionErrorMessages(t *testing.T) {
 		{code: errorCodeQueryFailed, want: "collection query failed"},
 		{code: errorCodeTimeout, want: "collection deadline exceeded"},
 		{code: errorCodeCounterReset, want: "database statistics counters reset"},
-		{code: errorCodeDiskEmergency, want: "sample writes rejected at disk emergency watermark"},
+		{code: errorCodePlatformDatabaseCapacityEmergency, want: "sample writes rejected at platform database capacity emergency watermark"},
 		{code: string(metric.CapabilityBlockPermissionDenied), want: "required database role is missing"},
 		{code: string(metric.CapabilityBlockExtensionMissing), want: "required database extension is missing"},
 		{code: string(metric.CapabilityBlockFeatureDisabled), want: "required database feature is not enabled"},

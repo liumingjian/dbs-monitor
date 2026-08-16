@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shirou/gopsutil/v4/disk"
+
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
@@ -27,6 +29,8 @@ const (
 	diagnosticJournalUnit     = "dbs-monitor-server.service"
 	diagnosticRedactedValue   = "[REDACTED]"
 )
+
+var errLocalLargeWriteRejected = errors.New("local large writes rejected at disk emergency watermark")
 
 type diagnosticManifest struct {
 	GeneratedAt      time.Time `json:"generated_at"`
@@ -46,6 +50,11 @@ type diagnosticConfigSummary struct {
 	PartitionMaintenanceInterval string `json:"partition_maintenance_interval"`
 	RepeatIntervalMinimum        string `json:"repeat_interval_minimum"`
 	SnapshotTruncationLimit      int    `json:"snapshot_truncation_limit"`
+	CapacityBudgetBytes          int64  `json:"platform_database_capacity_budget_bytes"`
+	LocalDiskPath                string `json:"local_disk_path"`
+	BundleDirectory              string `json:"diagnostic_bundle_directory"`
+	BundleRetentionLimit         int    `json:"diagnostic_bundle_retention_limit"`
+	SnapshotRetentionLimit       int    `json:"notification_snapshot_retention_limit"`
 	CollectionFreshnessThreshold string `json:"collection_freshness_threshold"`
 	MigrationLockWaitTimeout     string `json:"migration_lock_wait_timeout"`
 	SessionAbsoluteTTL           string `json:"session_absolute_ttl"`
@@ -66,8 +75,9 @@ type diagnosticFile struct {
 }
 
 type diagnosticBundleOptions struct {
-	InputTruncated bool
-	Config         *serverConfig
+	InputTruncated    bool
+	Config            *serverConfig
+	LocalWriteAllowed func() bool
 }
 
 func runDiagnosticBundleCommand(ctx context.Context, output string) error {
@@ -75,13 +85,29 @@ func runDiagnosticBundleCommand(ctx context.Context, output string) error {
 	if err != nil {
 		return err
 	}
+	if output == "" {
+		output = filepath.Join(config.BundleDirectory, defaultDiagnosticBundleOutput(time.Now().UTC()))
+	}
+	thresholds, err := diskThresholdsFromEnvironment()
+	if err != nil {
+		return err
+	}
+	localWriteAllowed := func() bool {
+		usage, usageErr := disk.Usage(config.LocalDiskPath)
+		return usageErr != nil || platformhealth.ClassifyWatermarkLevel(
+			usage.UsedPercent, platformhealth.DiskNormal, thresholds,
+		) != platformhealth.DiskEmergency
+	}
+	if !localWriteAllowed() {
+		return errLocalLargeWriteRejected
+	}
 	journal, inputTruncated, err := readPlatformJournal(ctx, diagnosticBundleMaxBytes)
 	if err != nil {
 		return err
 	}
 	return createDiagnosticBundleWithOptions(
 		output, journal, time.Now().UTC(), "linux-systemd", diagnosticBundleMaxBytes,
-		diagnosticBundleOptions{InputTruncated: inputTruncated, Config: &config},
+		diagnosticBundleOptions{InputTruncated: inputTruncated, Config: &config, LocalWriteAllowed: localWriteAllowed},
 	)
 }
 
@@ -157,6 +183,9 @@ func createDiagnosticBundle(output string, journal []byte, generatedAt time.Time
 }
 
 func createDiagnosticBundleWithOptions(output string, journal []byte, generatedAt time.Time, shape string, maximumBytes int64, options diagnosticBundleOptions) error {
+	if options.LocalWriteAllowed != nil && !options.LocalWriteAllowed() {
+		return errLocalLargeWriteRejected
+	}
 	if maximumBytes <= 0 {
 		return errors.New("diagnostic bundle maximum size must be positive")
 	}
@@ -204,6 +233,9 @@ func createDiagnosticBundleWithOptions(output string, journal []byte, generatedA
 		if err != nil {
 			return err
 		}
+	}
+	if options.LocalWriteAllowed != nil && !options.LocalWriteAllowed() {
+		return errLocalLargeWriteRejected
 	}
 	return publishDiagnosticArchive(output, archive)
 }
@@ -317,6 +349,11 @@ func effectiveDiagnosticConfigSummary(config serverConfig) (diagnosticConfigSumm
 		PartitionMaintenanceInterval: config.PartitionMaintenanceInterval.String(),
 		RepeatIntervalMinimum:        config.RepeatIntervalMinimum.String(),
 		SnapshotTruncationLimit:      config.SnapshotTruncationLimit,
+		CapacityBudgetBytes:          config.CapacityBudgetBytes,
+		LocalDiskPath:                config.LocalDiskPath,
+		BundleDirectory:              config.BundleDirectory,
+		BundleRetentionLimit:         config.BundleRetentionLimit,
+		SnapshotRetentionLimit:       config.SnapshotRetentionLimit,
 		CollectionFreshnessThreshold: config.CollectionFreshnessThreshold.String(),
 		MigrationLockWaitTimeout:     config.MigrationLockWaitTimeout.String(),
 		SessionAbsoluteTTL:           config.SessionAbsoluteTTL.String(),

@@ -87,6 +87,21 @@ func TestChannelSnapshotStoreWritesEncryptedConfigurationAtomically(t *testing.T
 	}
 }
 
+func TestChannelSnapshotStoreStopsWritesAtLocalDiskEmergency(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "notification-channels.snapshot")
+	store := NewChannelSnapshotStore(path)
+	store.SetLocalWriteAllowed(func() bool { return false })
+	err := store.Write(ChannelSnapshot{FormatVersion: ChannelSnapshotFormatVersion})
+	if !errors.Is(err, ErrLocalLargeWriteRejected) {
+		t.Fatalf("snapshot write error = %v, want local large write rejection", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("snapshot was written at local disk emergency: %v", err)
+	}
+}
+
 func TestChannelSnapshotStoreListsAndDeletesSnapshotWithEvent(t *testing.T) {
 	t.Parallel()
 

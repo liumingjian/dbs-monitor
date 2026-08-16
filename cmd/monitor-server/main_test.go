@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/liumingjian/dbs-monitor/internal/notify"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
 	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
@@ -263,6 +265,76 @@ func TestDiagnosticBundleStoreListsAndDeletesOneArchiveWithEvent(t *testing.T) {
 	}
 }
 
+func TestDiagnosticBundleStopsBeforeWritingAtLocalDiskEmergency(t *testing.T) {
+	now := time.Now().UTC()
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), nil)
+	health.Update(now, platformhealth.DiskSource(
+		1,
+		platformhealth.DiskNormal,
+		platformhealth.DiskThresholds{Warning: 0.25, Critical: 0.5, Emergency: 0.75, Hysteresis: 0.1},
+	))
+	if source := health.Source(platformhealth.SourceDisk); source.Status != platformhealth.StatusFailed {
+		t.Fatalf("local disk source = %+v, want FAILED after lowering emergency threshold", source)
+	}
+	output := filepath.Join(t.TempDir(), "dbs-monitor-diagnostics-20260816T120000Z.tar.gz")
+	err := createDiagnosticBundleWithOptions(
+		output, nil, now, "linux-systemd", diagnosticBundleMaxBytes,
+		diagnosticBundleOptions{LocalWriteAllowed: func() bool { return !health.RejectLocalLargeWrites() }},
+	)
+	if !errors.Is(err, errLocalLargeWriteRejected) {
+		t.Fatalf("diagnostic bundle error = %v, want local large write rejection", err)
+	}
+	if _, err := os.Stat(output); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("diagnostic bundle was written at local disk emergency: %v", err)
+	}
+}
+
+func TestLocalArtifactReclamationKeepsConfiguredLimitsAndRecordsEvents(t *testing.T) {
+	bundleDirectory := t.TempDir()
+	base := time.Date(2026, time.August, 16, 10, 0, 0, 0, time.UTC)
+	for index, name := range []string{
+		"dbs-monitor-diagnostics-20260816T100000Z.tar.gz",
+		"dbs-monitor-diagnostics-20260816T110000Z.tar.gz",
+		"dbs-monitor-diagnostics-20260816T120000Z.tar.gz",
+	} {
+		path := filepath.Join(bundleDirectory, name)
+		if err := os.WriteFile(path, []byte(name), diagnosticArchiveFileMode); err != nil {
+			t.Fatalf("write diagnostic bundle: %v", err)
+		}
+		modified := base.Add(time.Duration(index) * time.Hour)
+		if err := os.Chtimes(path, modified, modified); err != nil {
+			t.Fatalf("set diagnostic bundle time: %v", err)
+		}
+	}
+
+	snapshotPath := filepath.Join(t.TempDir(), "notification-channels.snapshot")
+	snapshotStore := notify.NewChannelSnapshotStore(snapshotPath)
+	if err := snapshotStore.Write(notify.ChannelSnapshot{FormatVersion: notify.ChannelSnapshotFormatVersion}); err != nil {
+		t.Fatalf("write notification snapshot: %v", err)
+	}
+	var events []localArtifactReclamationEvent
+	if err := reclaimLocalArtifacts(bundleDirectory, 1, snapshotStore, 1, base.Add(3*time.Hour), func(event localArtifactReclamationEvent) error {
+		events = append(events, event)
+		return nil
+	}); err != nil {
+		t.Fatalf("reclaim local artifacts: %v", err)
+	}
+
+	bundles, err := listDiagnosticBundles(bundleDirectory)
+	if err != nil {
+		t.Fatalf("list retained diagnostic bundles: %v", err)
+	}
+	if len(bundles) != 1 || bundles[0].Name != "dbs-monitor-diagnostics-20260816T120000Z.tar.gz" {
+		t.Fatalf("retained diagnostic bundles = %+v, want newest only", bundles)
+	}
+	if len(events) != 2 || events[0].Kind != platformevent.DiagnosticBundleReclaimed || events[1].Kind != platformevent.DiagnosticBundleReclaimed {
+		t.Fatalf("reclamation events = %+v, want two diagnostic bundle events", events)
+	}
+	if _, err := os.Stat(snapshotPath); err != nil {
+		t.Fatalf("bounded notification snapshot was reclaimed: %v", err)
+	}
+}
+
 func TestDeleteDiagnosticBundleRestoresArchiveWhenEventRecordingFails(t *testing.T) {
 	directory := t.TempDir()
 	name := "dbs-monitor-diagnostics-20260815T120000Z.tar.gz"
@@ -350,8 +422,9 @@ func TestDiskThresholdsFromEnvironment(t *testing.T) {
 				"DISK_WARNING_PERCENT":   "75.5",
 				"DISK_CRITICAL_PERCENT":  "85",
 				"DISK_EMERGENCY_PERCENT": "92.5",
+				"DISK_HYSTERESIS_POINTS": "1.5",
 			},
-			want: platformhealth.DiskThresholds{Warning: 75.5, Critical: 85, Emergency: 92.5, Hysteresis: 2},
+			want: platformhealth.DiskThresholds{Warning: 75.5, Critical: 85, Emergency: 92.5, Hysteresis: 1.5},
 		},
 		{name: "non numeric", values: map[string]string{"DISK_WARNING_PERCENT": "high"}, wantError: true},
 		{name: "non finite", values: map[string]string{"DISK_WARNING_PERCENT": "NaN"}, wantError: true},
@@ -363,7 +436,7 @@ func TestDiskThresholdsFromEnvironment(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			for _, name := range []string{"DISK_WARNING_PERCENT", "DISK_CRITICAL_PERCENT", "DISK_EMERGENCY_PERCENT"} {
+			for _, name := range []string{"DISK_WARNING_PERCENT", "DISK_CRITICAL_PERCENT", "DISK_EMERGENCY_PERCENT", "DISK_HYSTERESIS_POINTS"} {
 				t.Setenv(name, "")
 			}
 			for name, value := range test.values {
@@ -377,6 +450,25 @@ func TestDiskThresholdsFromEnvironment(t *testing.T) {
 				t.Fatalf("disk thresholds = %+v, want %+v", got, test.want)
 			}
 		})
+	}
+}
+
+func TestPlatformDatabaseCapacityThresholdsFromEnvironment(t *testing.T) {
+	for name, value := range map[string]string{
+		"PLATFORM_DATABASE_CAPACITY_WARNING_PERCENT":   "70",
+		"PLATFORM_DATABASE_CAPACITY_CRITICAL_PERCENT":  "85",
+		"PLATFORM_DATABASE_CAPACITY_EMERGENCY_PERCENT": "93",
+		"PLATFORM_DATABASE_CAPACITY_HYSTERESIS_POINTS": "1",
+	} {
+		t.Setenv(name, value)
+	}
+	got, err := platformDatabaseCapacityThresholdsFromEnvironment()
+	if err != nil {
+		t.Fatalf("platformDatabaseCapacityThresholdsFromEnvironment: %v", err)
+	}
+	want := platformhealth.DiskThresholds{Warning: 70, Critical: 85, Emergency: 93, Hysteresis: 1}
+	if got != want {
+		t.Fatalf("platform database capacity thresholds = %+v, want %+v", got, want)
 	}
 }
 

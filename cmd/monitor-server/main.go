@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shirou/gopsutil/v4/disk"
+
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/collect"
@@ -33,9 +35,8 @@ import (
 )
 
 const (
-	defaultPostgresDataDirectory = "/opt/dbs-monitor/var/lib/postgresql"
-	rotateMasterKeyCommand       = "rotate-master-key"
-	commandUsage                 = "usage: dbs-monitor-server [--version|rotate-master-key|diagnostic-bundle [output]]"
+	rotateMasterKeyCommand = "rotate-master-key"
+	commandUsage           = "usage: dbs-monitor-server [--version|rotate-master-key|diagnostic-bundle [output]]"
 )
 
 var (
@@ -62,7 +63,7 @@ func runCommand(ctx context.Context, arguments []string, output io.Writer) error
 	case len(arguments) == 1 && arguments[0] == rotateMasterKeyCommand:
 		return runMasterKeyRotationCommand(ctx)
 	case len(arguments) == 1 && arguments[0] == diagnosticBundleCommand:
-		return runDiagnosticBundleCommand(ctx, defaultDiagnosticBundleOutput(time.Now().UTC()))
+		return runDiagnosticBundleCommand(ctx, "")
 	case len(arguments) == 2 && arguments[0] == diagnosticBundleCommand:
 		return runDiagnosticBundleCommand(ctx, arguments[1])
 	default:
@@ -82,6 +83,18 @@ func run(ctx context.Context) error {
 		return err
 	}
 	health := platformhealth.NewStore(version, startedAt, log.Default())
+	diskThresholds, err := diskThresholdsFromEnvironment()
+	if err != nil {
+		return err
+	}
+	localDiskPath := env("LOCAL_DISK_PATH", config.LocalDiskPath)
+	if usage, usageErr := disk.Usage(localDiskPath); usageErr != nil {
+		health.Update(time.Now().UTC(), platformhealth.DiskUnavailableSource(platformhealth.DiskNormal))
+	} else {
+		health.Update(time.Now().UTC(), platformhealth.DiskSource(
+			usage.UsedPercent, platformhealth.DiskNormal, diskThresholds,
+		))
+	}
 	reportConfigPermissions(health, log.Default(), configPath, configPermissionsSecure, time.Now().UTC())
 	certificate, key, err := ensureCertificates(env("CERT_DIR", "certs"), env("PUBLIC_HOST", ""))
 	if err != nil {
@@ -187,8 +200,11 @@ func run(ctx context.Context) error {
 		return err
 	}
 	notificationSnapshotStore := notify.NewChannelSnapshotStore(notificationSnapshotPath(credentialDirectory))
+	notificationSnapshotStore.SetLocalWriteAllowed(func() bool {
+		return !health.RejectLocalLargeWrites()
+	})
 	if keyring.Fault() == nil {
-		if err := notificationSnapshotStore.Sync(ctx, platform); err != nil {
+		if err := notificationSnapshotStore.Sync(ctx, platform); err != nil && !errors.Is(err, notify.ErrLocalLargeWriteRejected) {
 			return fmt.Errorf("initialize notification channel snapshot: %w", err)
 		}
 	}
@@ -239,18 +255,34 @@ func run(ctx context.Context) error {
 	}
 	collector.SetPlatformHealth(health)
 	collector.SetPartitionSpan(config.PartitionSpan)
-	diskThresholds, err := diskThresholdsFromEnvironment()
+	if err := collector.SetDiskMonitor(localDiskPath, diskThresholds); err != nil {
+		return fmt.Errorf("disk monitor config: %w", err)
+	}
+	capacityThresholds, err := platformDatabaseCapacityThresholdsFromEnvironment()
 	if err != nil {
 		return err
 	}
-	if err := collector.SetDiskMonitor(env("PGDATA", defaultPostgresDataDirectory), diskThresholds); err != nil {
-		return fmt.Errorf("disk monitor config: %w", err)
+	var capacityBudgetBytes *int64
+	if config.CapacityBudgetBytes > 0 {
+		capacityBudgetBytes = &config.CapacityBudgetBytes
 	}
+	if err := collector.SetPlatformDatabaseCapacityMonitor(capacityBudgetBytes, capacityThresholds); err != nil {
+		return fmt.Errorf("platform database capacity monitor config: %w", err)
+	}
+	collector.SetLocalArtifactRetentionObserver(func(now time.Time) error {
+		return reclaimLocalArtifacts(
+			config.BundleDirectory,
+			config.BundleRetentionLimit,
+			notificationSnapshotStore,
+			config.SnapshotRetentionLimit,
+			now,
+			databaseReclamationRecorder(ctx, platform, log.Default()),
+		)
+	})
 	refreshPlatformDatabaseHealth(ctx, platform, health, time.Now().UTC())
 	health.Update(time.Now().UTC(), platformhealth.SourceSnapshot{
 		Source: platformhealth.SourceAgentIngress, Status: platformhealth.StatusOK, Code: "AGENT_INGRESS_READY",
 	})
-	health.Update(time.Now().UTC(), platformhealth.DiskUnavailableSource(platformhealth.DiskNormal))
 	evaluationConfig, err := evaluationConfigFromEnvironment()
 	if err != nil {
 		return err
@@ -434,27 +466,37 @@ func collectionConfigFromEnvironment() (collect.Config, error) {
 }
 
 func diskThresholdsFromEnvironment() (platformhealth.DiskThresholds, error) {
+	return watermarkThresholdsFromEnvironment("DISK")
+}
+
+func platformDatabaseCapacityThresholdsFromEnvironment() (platformhealth.DiskThresholds, error) {
+	return watermarkThresholdsFromEnvironment("PLATFORM_DATABASE_CAPACITY")
+}
+
+func watermarkThresholdsFromEnvironment(prefix string) (platformhealth.DiskThresholds, error) {
 	thresholds := platformhealth.DefaultDiskThresholds()
 	for _, setting := range []struct {
-		name   string
+		suffix string
 		target *float64
 	}{
-		{name: "DISK_WARNING_PERCENT", target: &thresholds.Warning},
-		{name: "DISK_CRITICAL_PERCENT", target: &thresholds.Critical},
-		{name: "DISK_EMERGENCY_PERCENT", target: &thresholds.Emergency},
+		{suffix: "WARNING_PERCENT", target: &thresholds.Warning},
+		{suffix: "CRITICAL_PERCENT", target: &thresholds.Critical},
+		{suffix: "EMERGENCY_PERCENT", target: &thresholds.Emergency},
+		{suffix: "HYSTERESIS_POINTS", target: &thresholds.Hysteresis},
 	} {
-		value := os.Getenv(setting.name)
+		name := prefix + "_" + setting.suffix
+		value := os.Getenv(name)
 		if value == "" {
 			continue
 		}
 		parsed, err := strconv.ParseFloat(value, 64)
 		if err != nil {
-			return platformhealth.DiskThresholds{}, fmt.Errorf("%s must be a number", setting.name)
+			return platformhealth.DiskThresholds{}, fmt.Errorf("%s must be a number", name)
 		}
 		*setting.target = parsed
 	}
 	if err := thresholds.Validate(); err != nil {
-		return platformhealth.DiskThresholds{}, fmt.Errorf("disk thresholds: %w", err)
+		return platformhealth.DiskThresholds{}, fmt.Errorf("%s thresholds: %w", prefix, err)
 	}
 	return thresholds, nil
 }

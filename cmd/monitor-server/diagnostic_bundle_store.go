@@ -33,6 +33,9 @@ type diagnosticBundleDeletionRecorder func(diagnosticBundleDeletionEvent) error
 
 func listDiagnosticBundles(directory string) ([]diagnosticBundleInfo, error) {
 	entries, err := os.ReadDir(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return []diagnosticBundleInfo{}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list diagnostic bundle directory: %w", err)
 	}

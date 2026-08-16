@@ -11,6 +11,8 @@ PlatformEventKind:
     - INSTANCE_CREDENTIAL_UPDATED
     - INSTANCE_REMOVED
     - MASTER_KEY_ROTATED
+    - DIAGNOSTIC_BUNDLE_RECLAIMED
+    - NOTIFICATION_SNAPSHOT_RECLAIMED
 PlatformEvent:
   type: object
   required: [id, kind, occurred_at, actor]

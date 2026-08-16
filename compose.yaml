@@ -182,7 +182,7 @@ services:
       LISTEN_ADDR: 0.0.0.0:8443
       PUBLIC_HOST: 127.0.0.1
       CERT_DIR: /etc/dbs-monitor/tls
-      PGDATA: /
+      LOCAL_DISK_PATH: /
     volumes:
       - .:/workspace:ro
       - ./test/acceptance/fixtures/server-compose.yaml:/etc/dbs-monitor/config.yaml:ro

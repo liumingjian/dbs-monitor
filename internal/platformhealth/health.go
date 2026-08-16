@@ -80,6 +80,10 @@ func (thresholds DiskThresholds) Validate() error {
 }
 
 func ClassifyDiskLevel(usagePercent float64, previousLevel DiskLevel, thresholds DiskThresholds) DiskLevel {
+	return ClassifyWatermarkLevel(usagePercent, previousLevel, thresholds)
+}
+
+func ClassifyWatermarkLevel(usagePercent float64, previousLevel DiskLevel, thresholds DiskThresholds) DiskLevel {
 	switch {
 	case usagePercent >= thresholds.Emergency:
 		return DiskEmergency
@@ -134,6 +138,15 @@ type SourceSnapshot struct {
 	DiskCriticalPercent   *float64   `json:"disk_critical_percent,omitempty"`
 	DiskEmergencyPercent  *float64   `json:"disk_emergency_percent,omitempty"`
 	DiskHysteresisPoints  *float64   `json:"disk_hysteresis_points,omitempty"`
+
+	CapacityLevel            *DiskLevel `json:"capacity_level,omitempty"`
+	CapacityUsedBytes        *int64     `json:"capacity_used_bytes,omitempty"`
+	CapacityBudgetBytes      *int64     `json:"capacity_budget_bytes,omitempty"`
+	CapacityUsagePercent     *float64   `json:"capacity_usage_percent,omitempty"`
+	CapacityWarningPercent   *float64   `json:"capacity_warning_percent,omitempty"`
+	CapacityCriticalPercent  *float64   `json:"capacity_critical_percent,omitempty"`
+	CapacityEmergencyPercent *float64   `json:"capacity_emergency_percent,omitempty"`
+	CapacityHysteresisPoints *float64   `json:"capacity_hysteresis_points,omitempty"`
 }
 
 type Snapshot struct {
@@ -304,6 +317,59 @@ func DiskUnavailableSource(lastKnownLevel DiskLevel) SourceSnapshot {
 	}
 }
 
+func PlatformDatabaseCapacitySource(usedBytes, budgetBytes int64, previousLevel DiskLevel, thresholds DiskThresholds) SourceSnapshot {
+	if usedBytes < 0 || budgetBytes <= 0 {
+		return PlatformDatabaseCapacityUnavailableSource(previousLevel)
+	}
+	usagePercent := float64(usedBytes) / float64(budgetBytes) * 100
+	if math.IsNaN(usagePercent) || math.IsInf(usagePercent, 0) || usagePercent < 0 {
+		return PlatformDatabaseCapacityUnavailableSource(previousLevel)
+	}
+	level := ClassifyWatermarkLevel(usagePercent, previousLevel, thresholds)
+	result := SourceSnapshot{
+		Source:                   SourcePlatformDatabaseCapacity,
+		Status:                   StatusOK,
+		Code:                     "PLATFORM_DATABASE_CAPACITY_NORMAL",
+		CapacityLevel:            &level,
+		CapacityUsedBytes:        int64Pointer(usedBytes),
+		CapacityBudgetBytes:      int64Pointer(budgetBytes),
+		CapacityUsagePercent:     float64Pointer(usagePercent),
+		CapacityWarningPercent:   float64Pointer(thresholds.Warning),
+		CapacityCriticalPercent:  float64Pointer(thresholds.Critical),
+		CapacityEmergencyPercent: float64Pointer(thresholds.Emergency),
+		CapacityHysteresisPoints: float64Pointer(thresholds.Hysteresis),
+	}
+	switch level {
+	case DiskWarning:
+		result.Status = StatusDegraded
+		result.Code = "PLATFORM_DATABASE_CAPACITY_WARNING_WATERMARK"
+	case DiskCritical:
+		result.Status = StatusDegraded
+		result.Code = "PLATFORM_DATABASE_CAPACITY_CRITICAL_WATERMARK"
+	case DiskEmergency:
+		result.Status = StatusFailed
+		result.Code = "PLATFORM_DATABASE_CAPACITY_EMERGENCY_WATERMARK"
+	}
+	return result
+}
+
+func PlatformDatabaseCapacityUnconfiguredSource() SourceSnapshot {
+	return SourceSnapshot{
+		Source: SourcePlatformDatabaseCapacity,
+		Status: StatusUnknown,
+		Code:   "PLATFORM_DATABASE_CAPACITY_BUDGET_UNCONFIGURED",
+	}
+}
+
+func PlatformDatabaseCapacityUnavailableSource(lastKnownLevel DiskLevel) SourceSnapshot {
+	return SourceSnapshot{
+		Source:        SourcePlatformDatabaseCapacity,
+		Status:        StatusUnknown,
+		Code:          "PLATFORM_DATABASE_CAPACITY_USAGE_UNAVAILABLE",
+		CapacityLevel: &lastKnownLevel,
+	}
+}
+
 type Store struct {
 	mu              sync.RWMutex
 	sources         map[Source]SourceSnapshot
@@ -396,6 +462,20 @@ func (store *Store) DiskLevel() DiskLevel {
 }
 
 func (store *Store) RejectSampleWrites() bool {
+	return store.PlatformDatabaseCapacityLevel() == DiskEmergency
+}
+
+func (store *Store) PlatformDatabaseCapacityLevel() DiskLevel {
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	level := store.sources[SourcePlatformDatabaseCapacity].CapacityLevel
+	if level == nil {
+		return DiskNormal
+	}
+	return *level
+}
+
+func (store *Store) RejectLocalLargeWrites() bool {
 	return store.DiskLevel() == DiskEmergency
 }
 

@@ -1374,8 +1374,8 @@ entries:
     pages: []
     operations: [getPlatformHealth, listInstanceCollectionTasks]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "internal/collect/service_integration_test.go::TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle"
     owner_issue: 126
     reason: "32 号 D8 改写触发源但不降低原判据：平台库容量紧急拒写可证且不删旧数据；本组唯一需要「注入前取基线、注入后取对比」的条目，保持加深基线"
   - id: AC-09-F6

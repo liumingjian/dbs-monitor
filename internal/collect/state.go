@@ -24,11 +24,11 @@ const (
 )
 
 const (
-	errorCodeConnectionFailed = "CONNECTION_FAILED"
-	errorCodeQueryFailed      = "QUERY_FAILED"
-	errorCodeTimeout          = "TIMEOUT"
-	errorCodeCounterReset     = string(metric.ResetCounter)
-	errorCodeDiskEmergency    = "DISK_EMERGENCY_WATERMARK"
+	errorCodeConnectionFailed                  = "CONNECTION_FAILED"
+	errorCodeQueryFailed                       = "QUERY_FAILED"
+	errorCodeTimeout                           = "TIMEOUT"
+	errorCodeCounterReset                      = string(metric.ResetCounter)
+	errorCodePlatformDatabaseCapacityEmergency = "PLATFORM_DATABASE_CAPACITY_EMERGENCY_WATERMARK"
 )
 
 type collectedSample struct {
@@ -347,9 +347,9 @@ func advanceCollectionWatermarkIfComplete(ctx context.Context, tx pgx.Tx, instan
 	})
 }
 
-func (service *Service) recordDiskEmergency(ctx context.Context, run scheduledRun) error {
+func (service *Service) recordPlatformDatabaseCapacityEmergency(ctx context.Context, run scheduledRun) error {
 	finished := service.clock.Now().UTC()
-	message := collectionErrorMessage(errorCodeDiskEmergency)
+	message := collectionErrorMessage(errorCodePlatformDatabaseCapacityEmergency)
 	return service.platform.InTx(ctx, func(tx pgx.Tx) error {
 		collectionActive, err := lockInstanceAndCheckCollectionActive(ctx, tx, run.target.ID)
 		if err != nil {
@@ -368,10 +368,10 @@ func (service *Service) recordDiskEmergency(ctx context.Context, run scheduledRu
 			last_error_code = $6,
 			last_error_message = $7
 			WHERE instance_id = $1 AND task_id = $2`,
-			run.target.ID, run.task.ID, run.dueAt, run.startedAt, finished, errorCodeDiskEmergency, message); err != nil {
+			run.target.ID, run.task.ID, run.dueAt, run.startedAt, finished, errorCodePlatformDatabaseCapacityEmergency, message); err != nil {
 			return err
 		}
-		return setSourceFailure(ctx, tx, run.target.ID, errorCodeDiskEmergency, message)
+		return setSourceFailure(ctx, tx, run.target.ID, errorCodePlatformDatabaseCapacityEmergency, message)
 	})
 }
 
@@ -485,8 +485,8 @@ func collectionErrorMessage(code string) string {
 		return "collection deadline exceeded"
 	case errorCodeCounterReset:
 		return "database statistics counters reset"
-	case errorCodeDiskEmergency:
-		return "sample writes rejected at disk emergency watermark"
+	case errorCodePlatformDatabaseCapacityEmergency:
+		return "sample writes rejected at platform database capacity emergency watermark"
 	case string(metric.CapabilityBlockPermissionDenied):
 		return "required database role is missing"
 	case string(metric.CapabilityBlockExtensionMissing):

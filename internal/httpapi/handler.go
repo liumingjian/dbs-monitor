@@ -264,6 +264,11 @@ func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.Platfor
 		value := string(*source.DiskLevel)
 		diskLevel = &value
 	}
+	var capacityLevel *string
+	if source.CapacityLevel != nil {
+		value := string(*source.CapacityLevel)
+		capacityLevel = &value
+	}
 	return api.PlatformHealthSourceSnapshot{
 		Source:                api.PlatformHealthSource(source.Source),
 		Status:                api.PlatformHealthStatus(source.Status),
@@ -287,6 +292,15 @@ func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.Platfor
 		DiskCriticalPercent:   source.DiskCriticalPercent,
 		DiskEmergencyPercent:  source.DiskEmergencyPercent,
 		DiskHysteresisPoints:  source.DiskHysteresisPoints,
+
+		CapacityLevel:            capacityLevel,
+		CapacityUsedBytes:        source.CapacityUsedBytes,
+		CapacityBudgetBytes:      source.CapacityBudgetBytes,
+		CapacityUsagePercent:     source.CapacityUsagePercent,
+		CapacityWarningPercent:   source.CapacityWarningPercent,
+		CapacityCriticalPercent:  source.CapacityCriticalPercent,
+		CapacityEmergencyPercent: source.CapacityEmergencyPercent,
+		CapacityHysteresisPoints: source.CapacityHysteresisPoints,
 	}
 }
 

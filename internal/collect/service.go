@@ -88,6 +88,11 @@ type Service struct {
 	diskPath       string
 	diskThresholds platformhealth.DiskThresholds
 
+	capacityMonitorConfigured      bool
+	capacityBudgetBytes            *int64
+	capacityThresholds             platformhealth.DiskThresholds
+	localArtifactRetentionObserver func(time.Time) error
+
 	queryConnectionMu       sync.Mutex
 	queryConnections        map[string]cachedConnection
 	queryConnectionUseLocks map[string]*sync.Mutex
@@ -113,6 +118,28 @@ func (service *Service) SetDiskMonitor(path string, thresholds platformhealth.Di
 	service.diskPath = path
 	service.diskThresholds = thresholds
 	return nil
+}
+
+func (service *Service) SetPlatformDatabaseCapacityMonitor(budgetBytes *int64, thresholds platformhealth.DiskThresholds) error {
+	if err := thresholds.Validate(); err != nil {
+		return err
+	}
+	if budgetBytes != nil && *budgetBytes <= 0 {
+		return errors.New("platform database capacity budget must be positive")
+	}
+	service.capacityMonitorConfigured = true
+	service.capacityThresholds = thresholds
+	if budgetBytes == nil {
+		service.capacityBudgetBytes = nil
+	} else {
+		budget := *budgetBytes
+		service.capacityBudgetBytes = &budget
+	}
+	return nil
+}
+
+func (service *Service) SetLocalArtifactRetentionObserver(observer func(time.Time) error) {
+	service.localArtifactRetentionObserver = observer
 }
 
 func New(platform *db.Pool, dialer monitorpg.Dialer, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Service {
@@ -193,7 +220,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 	startedWall := time.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
 	if service.health != nil && service.health.RejectSampleWrites() {
-		outcome.err = service.recordDiskEmergency(ctx, run)
+		outcome.err = service.recordPlatformDatabaseCapacityEmergency(ctx, run)
 		outcome.duration = time.Since(startedWall)
 		return outcome
 	}

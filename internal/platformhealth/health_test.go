@@ -63,6 +63,56 @@ func TestClassifyDiskLevel(t *testing.T) {
 	}
 }
 
+func TestClassifyPlatformDatabaseCapacityLevel(t *testing.T) {
+	thresholds := DefaultDiskThresholds()
+	tests := []struct {
+		name     string
+		usage    float64
+		previous DiskLevel
+		want     DiskLevel
+	}{
+		{name: "normal", usage: 79.9, previous: DiskNormal, want: DiskNormal},
+		{name: "warning", usage: 80, previous: DiskNormal, want: DiskWarning},
+		{name: "critical", usage: 90, previous: DiskWarning, want: DiskCritical},
+		{name: "emergency", usage: 95, previous: DiskCritical, want: DiskEmergency},
+		{name: "emergency remains latched in hysteresis band", usage: 93, previous: DiskEmergency, want: DiskEmergency},
+		{name: "emergency clears below hysteresis band", usage: 92.9, previous: DiskEmergency, want: DiskCritical},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ClassifyWatermarkLevel(test.usage, test.previous, thresholds); got != test.want {
+				t.Fatalf("ClassifyWatermarkLevel(%v, %s) = %s, want %s", test.usage, test.previous, got, test.want)
+			}
+		})
+	}
+}
+
+func TestPlatformDatabaseCapacitySourceControlsOnlySampleWrites(t *testing.T) {
+	now := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
+	store := NewStore("3.0.0", now.Add(-time.Hour), nil)
+
+	store.Update(now, PlatformDatabaseCapacityUnconfiguredSource())
+	if source := store.Source(SourcePlatformDatabaseCapacity); source.Status != StatusUnknown ||
+		source.Code != "PLATFORM_DATABASE_CAPACITY_BUDGET_UNCONFIGURED" || store.RejectSampleWrites() {
+		t.Fatalf("unconfigured capacity source = %+v reject=%t, want UNKNOWN without rejection", source, store.RejectSampleWrites())
+	}
+	if store.Current().Status == StatusOK {
+		t.Fatal("unconfigured platform database capacity produced aggregate OK health")
+	}
+
+	store.Update(now.Add(time.Minute), PlatformDatabaseCapacitySource(
+		96, 100, store.PlatformDatabaseCapacityLevel(), DefaultDiskThresholds(),
+	))
+	if source := store.Source(SourcePlatformDatabaseCapacity); source.Status != StatusFailed ||
+		source.Code != "PLATFORM_DATABASE_CAPACITY_EMERGENCY_WATERMARK" || !store.RejectSampleWrites() {
+		t.Fatalf("emergency capacity source = %+v reject=%t, want FAILED with sample rejection", source, store.RejectSampleWrites())
+	}
+	if store.RejectLocalLargeWrites() {
+		t.Fatal("platform database capacity emergency rejected local large writes")
+	}
+}
+
 func TestDiskSourceTransitionsAreVisible(t *testing.T) {
 	var output bytes.Buffer
 	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
@@ -85,12 +135,14 @@ func TestDiskSourceTransitionsAreVisible(t *testing.T) {
 
 	disk := store.Source(SourceDisk)
 	if disk.Status != StatusFailed || disk.DiskLevel == nil || *disk.DiskLevel != DiskEmergency ||
-		disk.DiskUsagePercent == nil || *disk.DiskUsagePercent != 95 || !store.RejectSampleWrites() {
-		t.Fatalf("emergency disk source = %+v reject=%t", disk, store.RejectSampleWrites())
+		disk.DiskUsagePercent == nil || *disk.DiskUsagePercent != 95 || store.RejectSampleWrites() || !store.RejectLocalLargeWrites() {
+		t.Fatalf("emergency disk source = %+v reject_samples=%t reject_local=%t",
+			disk, store.RejectSampleWrites(), store.RejectLocalLargeWrites())
 	}
 	store.Update(now.Add(3*time.Minute), DiskUnavailableSource(store.DiskLevel()))
-	if source := store.Source(SourceDisk); source.Status != StatusUnknown || !store.RejectSampleWrites() {
-		t.Fatalf("unavailable disk sample source = %+v reject=%t, want UNKNOWN with emergency rejection latched", source, store.RejectSampleWrites())
+	if source := store.Source(SourceDisk); source.Status != StatusUnknown || store.RejectSampleWrites() || !store.RejectLocalLargeWrites() {
+		t.Fatalf("unavailable disk sample source = %+v reject_samples=%t reject_local=%t, want UNKNOWN with local rejection latched",
+			source, store.RejectSampleWrites(), store.RejectLocalLargeWrites())
 	}
 }
 

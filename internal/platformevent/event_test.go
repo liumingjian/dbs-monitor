@@ -31,6 +31,8 @@ func TestPlatformEventKindsAreClosed(t *testing.T) {
 		"INSTANCE_CREDENTIAL_UPDATED",
 		"INSTANCE_REMOVED",
 		"MASTER_KEY_ROTATED",
+		"DIAGNOSTIC_BUNDLE_RECLAIMED",
+		"NOTIFICATION_SNAPSHOT_RECLAIMED",
 	}
 	gotKinds := append([]string(nil), eventKinds...)
 	sort.Strings(gotKinds)

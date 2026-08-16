@@ -29,6 +29,12 @@ type serverConfig struct {
 	AgentBinaryDir               string
 	PlatformDatabaseURL          string
 	MasterKeyPath                string
+
+	CapacityBudgetBytes    int64
+	LocalDiskPath          string
+	BundleDirectory        string
+	BundleRetentionLimit   int
+	SnapshotRetentionLimit int
 }
 
 type rawServerConfig struct {
@@ -45,6 +51,12 @@ type rawServerConfig struct {
 	AgentBinaryDir               *string `yaml:"agent_binary_dir"`
 	PlatformDatabaseURL          *string `yaml:"platform_database_url"`
 	MasterKeyPath                *string `yaml:"master_key_path"`
+
+	CapacityBudgetBytes    *int64  `yaml:"platform_database_capacity_budget_bytes"`
+	LocalDiskPath          *string `yaml:"local_disk_path"`
+	BundleDirectory        *string `yaml:"diagnostic_bundle_directory"`
+	BundleRetentionLimit   *int    `yaml:"diagnostic_bundle_retention_limit"`
+	SnapshotRetentionLimit *int    `yaml:"notification_snapshot_retention_limit"`
 }
 
 func defaultServerConfig() serverConfig {
@@ -62,6 +74,11 @@ func defaultServerConfig() serverConfig {
 		AgentBinaryDir:               "/opt/dbs-monitor/bin",
 		PlatformDatabaseURL:          "postgres://dbs_monitor@localhost:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full",
 		MasterKeyPath:                "/etc/dbs-monitor/credentials",
+
+		LocalDiskPath:          "/var/lib/dbs-monitor",
+		BundleDirectory:        "/var/lib/dbs-monitor/diagnostics",
+		BundleRetentionLimit:   5,
+		SnapshotRetentionLimit: 1,
 	}
 }
 
@@ -122,6 +139,24 @@ func loadServerConfig(path string) (serverConfig, bool, error) {
 	if raw.SnapshotTruncationLimit != nil {
 		config.SnapshotTruncationLimit = *raw.SnapshotTruncationLimit
 	}
+	if raw.CapacityBudgetBytes != nil {
+		if *raw.CapacityBudgetBytes <= 0 {
+			return serverConfig{}, permissionsSecure, errors.New("platform_database_capacity_budget_bytes must be positive when configured")
+		}
+		config.CapacityBudgetBytes = *raw.CapacityBudgetBytes
+	}
+	if raw.LocalDiskPath != nil {
+		config.LocalDiskPath = *raw.LocalDiskPath
+	}
+	if raw.BundleDirectory != nil {
+		config.BundleDirectory = *raw.BundleDirectory
+	}
+	if raw.BundleRetentionLimit != nil {
+		config.BundleRetentionLimit = *raw.BundleRetentionLimit
+	}
+	if raw.SnapshotRetentionLimit != nil {
+		config.SnapshotRetentionLimit = *raw.SnapshotRetentionLimit
+	}
 	if raw.AgentBinaryDir != nil {
 		config.AgentBinaryDir = *raw.AgentBinaryDir
 	}
@@ -146,6 +181,21 @@ func (config serverConfig) validate() error {
 	}
 	if config.SnapshotTruncationLimit <= 0 {
 		return errors.New("snapshot_truncation_limit must be positive")
+	}
+	if config.CapacityBudgetBytes < 0 {
+		return errors.New("platform_database_capacity_budget_bytes must be positive when configured")
+	}
+	if !filepath.IsAbs(config.LocalDiskPath) {
+		return errors.New("local_disk_path must be an absolute path")
+	}
+	if !filepath.IsAbs(config.BundleDirectory) {
+		return errors.New("diagnostic_bundle_directory must be an absolute path")
+	}
+	if config.BundleRetentionLimit <= 0 {
+		return errors.New("diagnostic_bundle_retention_limit must be positive")
+	}
+	if config.SnapshotRetentionLimit <= 0 {
+		return errors.New("notification_snapshot_retention_limit must be positive")
 	}
 	if config.RepeatIntervalMinimum < time.Second || config.RepeatIntervalMinimum%time.Second != 0 {
 		return errors.New("repeat_interval_minimum must be a whole number of seconds")

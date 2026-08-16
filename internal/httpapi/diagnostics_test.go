@@ -14,6 +14,7 @@ func TestFocusedDiagnosticsReadOnlyInMemorySources(t *testing.T) {
 	certificateExpiresAt := now.Add(15 * 24 * time.Hour)
 	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), nil)
 	health.Update(now, platformhealth.DiskSource(91, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds()))
+	health.Update(now, platformhealth.PlatformDatabaseCapacitySource(96, 100, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds()))
 	health.Update(now, platformhealth.SchedulerSource(platformhealth.SchedulerFacts{Pending: 2}))
 	health.Update(now, platformhealth.PartitionSource(platformhealth.PartitionFacts{PrebuildDaysRemaining: 6}))
 	health.Update(now, platformhealth.CertificateSource(now, &certificateExpiresAt))
@@ -27,6 +28,7 @@ func TestFocusedDiagnosticsReadOnlyInMemorySources(t *testing.T) {
 	certificateResponse, certificateErr := handler.GetCertificateDiagnostics(ctx, api.GetCertificateDiagnosticsRequestObject{})
 	keyringResponse, keyringErr := handler.GetKeyringDiagnostics(ctx, api.GetKeyringDiagnosticsRequestObject{})
 	platformResponse, platformErr := handler.GetPlatformDiagnostics(ctx, api.GetPlatformDiagnosticsRequestObject{})
+	healthResponse, healthErr := handler.GetPlatformHealth(ctx, api.GetPlatformHealthRequestObject{})
 
 	assertDiagnosticSource(t, "disk", diskResponse, diskErr, api.HealthSourceDisk)
 	assertDiagnosticSource(t, "scheduler", schedulerResponse, schedulerErr, api.HealthSourceCollectionScheduler)
@@ -34,6 +36,15 @@ func TestFocusedDiagnosticsReadOnlyInMemorySources(t *testing.T) {
 	assertDiagnosticSource(t, "certificate", certificateResponse, certificateErr, api.HealthSourceTLSCertificate)
 	assertDiagnosticSource(t, "keyring", keyringResponse, keyringErr, api.HealthSourceCredentialKeyring)
 	assertDiagnosticSource(t, "platform", platformResponse, platformErr, api.HealthSourceServerProcess)
+	if healthErr != nil {
+		t.Fatalf("get platform health: %v", healthErr)
+	}
+	healthSnapshot := healthResponse.(api.GetPlatformHealth200JSONResponse)
+	capacity := healthSnapshot.Sources[len(healthSnapshot.Sources)-1]
+	if capacity.Source != api.HealthSourcePlatformDatabaseCapacity || capacity.CapacityUsagePercent == nil ||
+		*capacity.CapacityUsagePercent != 96 || capacity.CapacityBudgetBytes == nil || *capacity.CapacityBudgetBytes != 100 {
+		t.Fatalf("platform database capacity health facts = %+v", capacity)
+	}
 	certificate, ok := certificateResponse.(api.GetCertificateDiagnostics200JSONResponse)
 	if !ok {
 		t.Fatalf("get certificate diagnostics returned %T", certificateResponse)

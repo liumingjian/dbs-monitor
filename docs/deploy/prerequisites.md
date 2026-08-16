@@ -36,6 +36,7 @@ useradd --system --home-dir /opt/dbs-monitor --shell /usr/sbin/nologin dbsmon
 install -d -m 0755 -o root -g root /opt/dbs-monitor /opt/dbs-monitor/bin
 install -d -m 0750 -o root -g dbsmon /etc/dbs-monitor
 install -d -m 0700 -o dbsmon -g dbsmon /etc/dbs-monitor/credentials
+install -d -m 0750 -o dbsmon -g dbsmon /var/lib/dbs-monitor/diagnostics
 install -d -m 0700 -o dbsmon -g dbsmon /etc/dbs-monitor/tls
 ```
 
@@ -56,6 +57,15 @@ PUBLIC_HOST=monitor.example.com
 CERT_DIR=/etc/dbs-monitor/tls
 LISTEN_ADDR=:8443
 DBS_MONITOR_CONFIG_FILE=/etc/dbs-monitor/config.yaml
+# Optional independent overrides; defaults are 80/90/95 with 2 percentage points of hysteresis.
+DISK_WARNING_PERCENT=80
+DISK_CRITICAL_PERCENT=90
+DISK_EMERGENCY_PERCENT=95
+DISK_HYSTERESIS_POINTS=2
+PLATFORM_DATABASE_CAPACITY_WARNING_PERCENT=80
+PLATFORM_DATABASE_CAPACITY_CRITICAL_PERCENT=90
+PLATFORM_DATABASE_CAPACITY_EMERGENCY_PERCENT=95
+PLATFORM_DATABASE_CAPACITY_HYSTERESIS_POINTS=2
 ```
 
 ```bash

@@ -37,6 +37,11 @@ alert_history_retention: 2m
 repeat_interval_minimum: 30s
 notification_retry_backoff_cap: 3s
 snapshot_truncation_limit: 5
+platform_database_capacity_budget_bytes: 52720723558
+local_disk_path: /srv/dbs-monitor
+diagnostic_bundle_directory: /srv/dbs-monitor/diagnostics
+diagnostic_bundle_retention_limit: 3
+notification_snapshot_retention_limit: 1
 collection_freshness_threshold: 20s
 migration_lock_wait_timeout: 10s
 session_absolute_ttl: 90s
@@ -57,6 +62,11 @@ master_key_path: /srv/dbs-monitor/credentials
 			RepeatIntervalMinimum:        30 * time.Second,
 			NotificationRetryBackoffCap:  3 * time.Second,
 			SnapshotTruncationLimit:      5,
+			CapacityBudgetBytes:          52720723558,
+			LocalDiskPath:                "/srv/dbs-monitor",
+			BundleDirectory:              "/srv/dbs-monitor/diagnostics",
+			BundleRetentionLimit:         3,
+			SnapshotRetentionLimit:       1,
 			CollectionFreshnessThreshold: 20 * time.Second,
 			MigrationLockWaitTimeout:     10 * time.Second,
 			SessionAbsoluteTTL:           90 * time.Second,
@@ -96,6 +106,11 @@ master_key_path: /srv/dbs-monitor/credentials
 		{name: "fractional repeat interval minimum", contents: "repeat_interval_minimum: 1500ms\n", message: "repeat_interval_minimum"},
 		{name: "notification retry backoff cap", contents: "notification_retry_backoff_cap: 0s\n", message: "notification_retry_backoff_cap"},
 		{name: "snapshot truncation limit", contents: "snapshot_truncation_limit: 0\n", message: "snapshot_truncation_limit"},
+		{name: "platform database capacity budget", contents: "platform_database_capacity_budget_bytes: 0\n", message: "platform_database_capacity_budget_bytes"},
+		{name: "local disk path", contents: "local_disk_path: relative\n", message: "local_disk_path"},
+		{name: "diagnostic bundle directory", contents: "diagnostic_bundle_directory: relative\n", message: "diagnostic_bundle_directory"},
+		{name: "diagnostic bundle retention", contents: "diagnostic_bundle_retention_limit: 0\n", message: "diagnostic_bundle_retention_limit"},
+		{name: "notification snapshot retention", contents: "notification_snapshot_retention_limit: 0\n", message: "notification_snapshot_retention_limit"},
 		{name: "collection freshness threshold", contents: "collection_freshness_threshold: 0s\n", message: "collection_freshness_threshold"},
 		{name: "migration lock wait timeout", contents: "migration_lock_wait_timeout: 0s\n", message: "migration_lock_wait_timeout"},
 		{name: "session absolute ttl", contents: "session_absolute_ttl: 0s\n", message: "session_absolute_ttl"},

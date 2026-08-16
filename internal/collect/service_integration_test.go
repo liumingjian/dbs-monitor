@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
-func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
+func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -149,12 +150,13 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
 		JOIN metric_series series ON series.series_id = sample.series_id
 		WHERE series.instance_id = $1`, pgID).Scan(&samplesBeforeEmergency); err != nil {
-		t.Fatalf("count samples before disk emergency: %v", err)
+		t.Fatalf("count samples before storage emergencies: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `CREATE TABLE metric_sample_20000101 PARTITION OF metric_sample
 		FOR VALUES FROM ('2000-01-01T00:00:00Z') TO ('2000-01-02T00:00:00Z')`); err != nil {
 		t.Fatalf("create retention sentinel partition: %v", err)
 	}
+	partitionsBeforeEmergency := metricSamplePartitionNames(t, ctx, pool)
 	var alertsBeforeEmergency int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alert_instance WHERE instance_id = $1", pgID).Scan(&alertsBeforeEmergency); err != nil {
 		t.Fatalf("count alerts before disk emergency: %v", err)
@@ -164,10 +166,41 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	))
 	currentClock.Advance(30 * time.Second)
 	if err := collector.RunOnce(ctx); err != nil {
-		t.Fatalf("collect at disk emergency: %v", err)
+		t.Fatalf("collect at local disk emergency: %v", err)
+	}
+	var samplesAtDiskEmergency int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM metric_sample sample
+		JOIN metric_series series ON series.series_id = sample.series_id
+		WHERE series.instance_id = $1`, pgID).Scan(&samplesAtDiskEmergency); err != nil {
+		t.Fatalf("count samples at local disk emergency: %v", err)
+	}
+	if samplesAtDiskEmergency <= samplesBeforeEmergency {
+		t.Fatalf("samples at local disk emergency = %d, want more than %d", samplesAtDiskEmergency, samplesBeforeEmergency)
+	}
+	if err := pool.QueryRow(ctx, `SELECT last_success_at FROM instance_collect_state
+		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, pgID).Scan(&healthyWatermark); err != nil {
+		t.Fatalf("refresh healthy integrity watermark at local disk emergency: %v", err)
+	}
+	samplesBeforeEmergency = samplesAtDiskEmergency
+
+	capacityBudget := int64(1)
+	if err := collector.SetPlatformDatabaseCapacityMonitor(&capacityBudget, platformhealth.DefaultDiskThresholds()); err != nil {
+		t.Fatalf("configure platform database capacity monitor: %v", err)
+	}
+	(&centralScheduler{service: collector}).refreshPlatformDatabaseCapacityHealth(ctx, currentClock.now)
+	capacitySource := health.Source(platformhealth.SourcePlatformDatabaseCapacity)
+	if capacitySource.Status != platformhealth.StatusFailed || capacitySource.Code != "PLATFORM_DATABASE_CAPACITY_EMERGENCY_WATERMARK" {
+		t.Fatalf("platform database capacity source = %+v, want emergency failure", capacitySource)
+	}
+	if health.Current().Status != platformhealth.StatusFailed {
+		t.Fatalf("aggregate platform health = %s, want FAILED", health.Current().Status)
+	}
+	currentClock.Advance(30 * time.Second)
+	if err := collector.RunOnce(ctx); err != nil {
+		t.Fatalf("collect at platform database capacity emergency: %v", err)
 	}
 	if err := eval.RunOnce(ctx); err != nil {
-		t.Fatalf("evaluate naturally at disk emergency: %v", err)
+		t.Fatalf("evaluate naturally at platform database capacity emergency: %v", err)
 	}
 	var samplesAfterEmergency, alertsAfterEmergency int
 	var emergencyWatermark time.Time
@@ -180,40 +213,44 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 	}
 	if err := pool.QueryRow(ctx, `SELECT last_success_at FROM instance_collect_state
 		WHERE instance_id = $1 AND source = 'SERVER_DIRECT'`, pgID).Scan(&emergencyWatermark); err != nil {
-		t.Fatalf("read disk emergency integrity watermark: %v", err)
+		t.Fatalf("read capacity emergency integrity watermark: %v", err)
 	}
 	if err := pool.QueryRow(ctx, `SELECT last_result, last_error_code, last_error_message
 		FROM instance_collection_task_state WHERE instance_id = $1 AND task_id = 'pg.probe'`, pgID).
 		Scan(&emergencyResult, &emergencyCode, &emergencyMessage); err != nil {
-		t.Fatalf("read disk emergency task state: %v", err)
+		t.Fatalf("read capacity emergency task state: %v", err)
 	}
 	if err := pool.QueryRow(ctx, "SELECT to_regclass('metric_sample_20000101') IS NOT NULL").Scan(&retentionSentinelExists); err != nil {
 		t.Fatalf("check retention sentinel partition: %v", err)
 	}
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alert_instance WHERE instance_id = $1", pgID).Scan(&alertsAfterEmergency); err != nil {
-		t.Fatalf("count alerts after disk emergency: %v", err)
+		t.Fatalf("count alerts after capacity emergency: %v", err)
 	}
 	if samplesAfterEmergency != samplesBeforeEmergency {
-		t.Fatalf("samples after disk emergency = %d, want unchanged %d", samplesAfterEmergency, samplesBeforeEmergency)
+		t.Fatalf("samples after capacity emergency = %d, want unchanged %d", samplesAfterEmergency, samplesBeforeEmergency)
 	}
 	if !emergencyWatermark.Equal(healthyWatermark) {
-		t.Fatalf("watermark after disk emergency = %s, want unchanged %s", emergencyWatermark, healthyWatermark)
+		t.Fatalf("watermark after capacity emergency = %s, want unchanged %s", emergencyWatermark, healthyWatermark)
 	}
-	if emergencyResult != "FAILED" || emergencyCode != errorCodeDiskEmergency || emergencyMessage == "" {
-		t.Fatalf("task state after disk emergency = %s/%s/%q, want FAILED/%s/non-empty message",
-			emergencyResult, emergencyCode, emergencyMessage, errorCodeDiskEmergency)
+	if emergencyResult != "FAILED" || emergencyCode != errorCodePlatformDatabaseCapacityEmergency || emergencyMessage == "" {
+		t.Fatalf("task state after capacity emergency = %s/%s/%q, want FAILED/%s/non-empty message",
+			emergencyResult, emergencyCode, emergencyMessage, errorCodePlatformDatabaseCapacityEmergency)
 	}
 	if !retentionSentinelExists {
-		t.Fatal("retention sentinel partition was removed during disk emergency")
+		t.Fatal("retention sentinel partition was removed during capacity emergency")
+	}
+	if partitionsAfterEmergency := metricSamplePartitionNames(t, ctx, pool); !slices.Equal(partitionsAfterEmergency, partitionsBeforeEmergency) {
+		t.Fatalf("metric sample partitions changed during capacity emergency: before=%v after=%v",
+			partitionsBeforeEmergency, partitionsAfterEmergency)
 	}
 	if alertsAfterEmergency != alertsBeforeEmergency {
-		t.Fatalf("alerts after disk emergency = %d, want unchanged %d", alertsAfterEmergency, alertsBeforeEmergency)
+		t.Fatalf("alerts after capacity emergency = %d, want unchanged %d", alertsAfterEmergency, alertsBeforeEmergency)
 	}
 	if _, err := pool.Exec(ctx, "UPDATE instance SET name = 'emergency control write' WHERE id = $1", pgID); err != nil {
-		t.Fatalf("control-plane write during disk emergency: %v", err)
+		t.Fatalf("control-plane write during capacity emergency: %v", err)
 	}
-	health.Update(currentClock.now, platformhealth.DiskSource(
-		77, health.DiskLevel(), platformhealth.DefaultDiskThresholds(),
+	health.Update(currentClock.now, platformhealth.PlatformDatabaseCapacitySource(
+		77, 100, health.PlatformDatabaseCapacityLevel(), platformhealth.DefaultDiskThresholds(),
 	))
 	collector.queryConnectionMu.Lock()
 	cached := collector.queryConnections[instanceID.String()]
@@ -390,6 +427,32 @@ func TestServerDirectCollectionAndAlertLifecycle(t *testing.T) {
 		t.Fatalf("query statistics snapshot entries = %d, want 1..%d", queryStatisticsEntries, queryStatisticsSnapshotLimit)
 	}
 	assertReplicationSlotSemantics(t, ctx, admin, platform, collector, targets[0], pgID, currentClock)
+}
+
+func metricSamplePartitionNames(t *testing.T, ctx context.Context, pool *pgxpool.Pool) []string {
+	t.Helper()
+	rows, err := pool.Query(ctx, `SELECT child.relname
+		FROM pg_inherits
+		JOIN pg_class parent ON parent.oid = inhparent
+		JOIN pg_class child ON child.oid = inhrelid
+		WHERE parent.relname = 'metric_sample'
+		ORDER BY child.relname`)
+	if err != nil {
+		t.Fatalf("list metric sample partitions: %v", err)
+	}
+	defer rows.Close()
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan metric sample partition: %v", err)
+		}
+		names = append(names, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read metric sample partitions: %v", err)
+	}
+	return names
 }
 
 func assertReplicationSlotSemantics(

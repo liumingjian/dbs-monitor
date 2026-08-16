@@ -8,6 +8,7 @@ Type=simple
 User=dbsmon
 Group=dbsmon
 WorkingDirectory=/opt/dbs-monitor
+StateDirectory=dbs-monitor dbs-monitor/diagnostics
 EnvironmentFile=/etc/dbs-monitor/server.env
 ExecStart=/opt/dbs-monitor/bin/dbs-monitor-server
 Restart=always

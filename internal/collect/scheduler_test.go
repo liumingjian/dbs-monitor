@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"context"
 	"io"
 	"log"
 	"testing"
@@ -190,7 +191,7 @@ func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.
 	scheduler.counts.skipped = 7
 
 	scheduler.refreshDiskHealth(now)
-	scheduler.publishPlatformHealth(now, nil, nil)
+	scheduler.publishPlatformHealth(context.Background(), now, nil, nil)
 
 	source := health.Source(platformhealth.SourceCollectionScheduler)
 	if source.Status != platformhealth.StatusDegraded || source.Pending == nil || *source.Pending != 1 ||
@@ -203,5 +204,24 @@ func TestSchedulerSummaryUpdatesPlatformHealthWithBackpressureDetail(t *testing.
 	}
 	if got := health.Current().Status; got != platformhealth.StatusDegraded {
 		t.Fatalf("aggregate platform health = %s, want DEGRADED", got)
+	}
+}
+
+func TestUnconfiguredPlatformDatabaseCapacityIsUnknownWithoutRejection(t *testing.T) {
+	now := time.Date(2026, time.August, 16, 12, 0, 0, 0, time.UTC)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), nil)
+	service := &Service{health: health}
+	if err := service.SetPlatformDatabaseCapacityMonitor(nil, platformhealth.DefaultDiskThresholds()); err != nil {
+		t.Fatalf("configure unconfigured capacity monitor: %v", err)
+	}
+
+	(&centralScheduler{service: service}).refreshPlatformDatabaseCapacityHealth(context.Background(), now)
+
+	source := health.Source(platformhealth.SourcePlatformDatabaseCapacity)
+	if source.Status != platformhealth.StatusUnknown || source.Code != "PLATFORM_DATABASE_CAPACITY_BUDGET_UNCONFIGURED" {
+		t.Fatalf("unconfigured platform database capacity = %+v", source)
+	}
+	if health.Current().Status == platformhealth.StatusOK || health.RejectSampleWrites() {
+		t.Fatalf("unconfigured capacity aggregate=%s reject=%t, want non-OK without rejection", health.Current().Status, health.RejectSampleWrites())
 	}
 }

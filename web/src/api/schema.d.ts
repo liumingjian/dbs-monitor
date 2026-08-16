@@ -1811,6 +1811,21 @@ export interface components {
             disk_emergency_percent?: number;
             /** Format: double */
             disk_hysteresis_points?: number;
+            capacity_level?: string;
+            /** Format: int64 */
+            capacity_used_bytes?: number;
+            /** Format: int64 */
+            capacity_budget_bytes?: number;
+            /** Format: double */
+            capacity_usage_percent?: number;
+            /** Format: double */
+            capacity_warning_percent?: number;
+            /** Format: double */
+            capacity_critical_percent?: number;
+            /** Format: double */
+            capacity_emergency_percent?: number;
+            /** Format: double */
+            capacity_hysteresis_points?: number;
         };
         PlatformHealthSnapshot: {
             status: components["schemas"]["PlatformHealthStatus"];
@@ -1951,7 +1966,7 @@ export interface components {
             restart_command: string;
         };
         /** @enum {string} */
-        PlatformEventKind: "LOGIN_SUCCEEDED" | "LOGIN_FAILED" | "USER_CREATED" | "USER_STATUS_CHANGED" | "USER_STATUS_CHANGE_REJECTED" | "USER_ROLE_CHANGED" | "USER_PASSWORD_RESET" | "INSTANCE_CREDENTIAL_UPDATED" | "INSTANCE_REMOVED" | "MASTER_KEY_ROTATED";
+        PlatformEventKind: "LOGIN_SUCCEEDED" | "LOGIN_FAILED" | "USER_CREATED" | "USER_STATUS_CHANGED" | "USER_STATUS_CHANGE_REJECTED" | "USER_ROLE_CHANGED" | "USER_PASSWORD_RESET" | "INSTANCE_CREDENTIAL_UPDATED" | "INSTANCE_REMOVED" | "MASTER_KEY_ROTATED" | "DIAGNOSTIC_BUNDLE_RECLAIMED" | "NOTIFICATION_SNAPSHOT_RECLAIMED";
         PlatformEvent: {
             /** Format: int64 */
             id: number;

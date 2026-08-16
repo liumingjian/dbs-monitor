@@ -266,16 +266,18 @@ const (
 
 // Defines values for PlatformEventKind.
 const (
-	INSTANCECREDENTIALUPDATED PlatformEventKind = "INSTANCE_CREDENTIAL_UPDATED"
-	INSTANCEREMOVED           PlatformEventKind = "INSTANCE_REMOVED"
-	LOGINFAILED               PlatformEventKind = "LOGIN_FAILED"
-	LOGINSUCCEEDED            PlatformEventKind = "LOGIN_SUCCEEDED"
-	MASTERKEYROTATED          PlatformEventKind = "MASTER_KEY_ROTATED"
-	USERCREATED               PlatformEventKind = "USER_CREATED"
-	USERPASSWORDRESET         PlatformEventKind = "USER_PASSWORD_RESET"
-	USERROLECHANGED           PlatformEventKind = "USER_ROLE_CHANGED"
-	USERSTATUSCHANGED         PlatformEventKind = "USER_STATUS_CHANGED"
-	USERSTATUSCHANGEREJECTED  PlatformEventKind = "USER_STATUS_CHANGE_REJECTED"
+	DIAGNOSTICBUNDLERECLAIMED     PlatformEventKind = "DIAGNOSTIC_BUNDLE_RECLAIMED"
+	INSTANCECREDENTIALUPDATED     PlatformEventKind = "INSTANCE_CREDENTIAL_UPDATED"
+	INSTANCEREMOVED               PlatformEventKind = "INSTANCE_REMOVED"
+	LOGINFAILED                   PlatformEventKind = "LOGIN_FAILED"
+	LOGINSUCCEEDED                PlatformEventKind = "LOGIN_SUCCEEDED"
+	MASTERKEYROTATED              PlatformEventKind = "MASTER_KEY_ROTATED"
+	NOTIFICATIONSNAPSHOTRECLAIMED PlatformEventKind = "NOTIFICATION_SNAPSHOT_RECLAIMED"
+	USERCREATED                   PlatformEventKind = "USER_CREATED"
+	USERPASSWORDRESET             PlatformEventKind = "USER_PASSWORD_RESET"
+	USERROLECHANGED               PlatformEventKind = "USER_ROLE_CHANGED"
+	USERSTATUSCHANGED             PlatformEventKind = "USER_STATUS_CHANGED"
+	USERSTATUSCHANGEREJECTED      PlatformEventKind = "USER_STATUS_CHANGE_REJECTED"
 )
 
 // Defines values for PlatformHealthSource.
@@ -1177,28 +1179,36 @@ type PlatformHealthSource string
 
 // PlatformHealthSourceSnapshot defines model for PlatformHealthSourceSnapshot.
 type PlatformHealthSourceSnapshot struct {
-	Backoff               *int64               `json:"backoff,omitempty"`
-	Code                  string               `json:"code"`
-	ConsecutiveFailures   *int                 `json:"consecutive_failures,omitempty"`
-	DiskCriticalPercent   *float64             `json:"disk_critical_percent,omitempty"`
-	DiskEmergencyPercent  *float64             `json:"disk_emergency_percent,omitempty"`
-	DiskHysteresisPoints  *float64             `json:"disk_hysteresis_points,omitempty"`
-	DiskLevel             *string              `json:"disk_level,omitempty"`
-	DiskUsagePercent      *float64             `json:"disk_usage_percent,omitempty"`
-	DiskWarningPercent    *float64             `json:"disk_warning_percent,omitempty"`
-	ExpiresAt             *time.Time           `json:"expires_at,omitempty"`
-	Pending               *int                 `json:"pending,omitempty"`
-	PrebuildDaysRemaining *int                 `json:"prebuild_days_remaining,omitempty"`
-	ProbeActive           *int                 `json:"probe_active,omitempty"`
-	ProbeCapacity         *int                 `json:"probe_capacity,omitempty"`
-	QueryActive           *int                 `json:"query_active,omitempty"`
-	QueryCapacity         *int                 `json:"query_capacity,omitempty"`
-	SkippedBackpressure   *int64               `json:"skipped_backpressure,omitempty"`
-	Source                PlatformHealthSource `json:"source"`
-	StartedAt             *time.Time           `json:"started_at,omitempty"`
-	Status                PlatformHealthStatus `json:"status"`
-	ValidityDaysRemaining *int                 `json:"validity_days_remaining,omitempty"`
-	Version               *string              `json:"version,omitempty"`
+	Backoff                  *int64               `json:"backoff,omitempty"`
+	CapacityBudgetBytes      *int64               `json:"capacity_budget_bytes,omitempty"`
+	CapacityCriticalPercent  *float64             `json:"capacity_critical_percent,omitempty"`
+	CapacityEmergencyPercent *float64             `json:"capacity_emergency_percent,omitempty"`
+	CapacityHysteresisPoints *float64             `json:"capacity_hysteresis_points,omitempty"`
+	CapacityLevel            *string              `json:"capacity_level,omitempty"`
+	CapacityUsagePercent     *float64             `json:"capacity_usage_percent,omitempty"`
+	CapacityUsedBytes        *int64               `json:"capacity_used_bytes,omitempty"`
+	CapacityWarningPercent   *float64             `json:"capacity_warning_percent,omitempty"`
+	Code                     string               `json:"code"`
+	ConsecutiveFailures      *int                 `json:"consecutive_failures,omitempty"`
+	DiskCriticalPercent      *float64             `json:"disk_critical_percent,omitempty"`
+	DiskEmergencyPercent     *float64             `json:"disk_emergency_percent,omitempty"`
+	DiskHysteresisPoints     *float64             `json:"disk_hysteresis_points,omitempty"`
+	DiskLevel                *string              `json:"disk_level,omitempty"`
+	DiskUsagePercent         *float64             `json:"disk_usage_percent,omitempty"`
+	DiskWarningPercent       *float64             `json:"disk_warning_percent,omitempty"`
+	ExpiresAt                *time.Time           `json:"expires_at,omitempty"`
+	Pending                  *int                 `json:"pending,omitempty"`
+	PrebuildDaysRemaining    *int                 `json:"prebuild_days_remaining,omitempty"`
+	ProbeActive              *int                 `json:"probe_active,omitempty"`
+	ProbeCapacity            *int                 `json:"probe_capacity,omitempty"`
+	QueryActive              *int                 `json:"query_active,omitempty"`
+	QueryCapacity            *int                 `json:"query_capacity,omitempty"`
+	SkippedBackpressure      *int64               `json:"skipped_backpressure,omitempty"`
+	Source                   PlatformHealthSource `json:"source"`
+	StartedAt                *time.Time           `json:"started_at,omitempty"`
+	Status                   PlatformHealthStatus `json:"status"`
+	ValidityDaysRemaining    *int                 `json:"validity_days_remaining,omitempty"`
+	Version                  *string              `json:"version,omitempty"`
 }
 
 // PlatformHealthStatus defines model for PlatformHealthStatus.

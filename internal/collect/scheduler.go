@@ -422,12 +422,12 @@ func (scheduler *centralScheduler) logSummary(ctx context.Context, now time.Time
 		pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		databaseErr := scheduler.service.platform.Ping(pingCtx)
 		cancel()
-		scheduler.publishPlatformHealth(now, refreshErr, databaseErr)
+		scheduler.publishPlatformHealth(ctx, now, refreshErr, databaseErr)
 	}
 	scheduler.counts = newSchedulerCounts()
 }
 
-func (scheduler *centralScheduler) publishPlatformHealth(now time.Time, refreshErr, databaseErr error) {
+func (scheduler *centralScheduler) publishPlatformHealth(ctx context.Context, now time.Time, refreshErr, databaseErr error) {
 	if scheduler.service.health == nil {
 		return
 	}
@@ -438,7 +438,30 @@ func (scheduler *centralScheduler) publishPlatformHealth(now time.Time, refreshE
 		Pending: scheduler.pending.len(), SkippedBackpressure: scheduler.counts.skipped,
 		Backoff: scheduler.counts.backoff, RefreshFailed: refreshErr != nil,
 	}))
+	scheduler.refreshPlatformDatabaseCapacityHealth(ctx, now)
 	scheduler.service.health.PublishSummary(now)
+}
+
+func (scheduler *centralScheduler) refreshPlatformDatabaseCapacityHealth(ctx context.Context, now time.Time) {
+	service := scheduler.service
+	if service.health == nil || !service.capacityMonitorConfigured {
+		return
+	}
+	if service.capacityBudgetBytes == nil {
+		service.health.Update(now, platformhealth.PlatformDatabaseCapacityUnconfiguredSource())
+		return
+	}
+	var usedBytes int64
+	if err := service.platform.QueryRow(ctx,
+		"SELECT pg_database_size(current_database())::bigint").Scan(&usedBytes); err != nil {
+		service.health.Update(now, platformhealth.PlatformDatabaseCapacityUnavailableSource(
+			service.health.PlatformDatabaseCapacityLevel(),
+		))
+		return
+	}
+	service.health.Update(now, platformhealth.PlatformDatabaseCapacitySource(
+		usedBytes, *service.capacityBudgetBytes, service.health.PlatformDatabaseCapacityLevel(), service.capacityThresholds,
+	))
 }
 
 func (scheduler *centralScheduler) refreshDiskHealth(now time.Time) {
@@ -453,6 +476,11 @@ func (scheduler *centralScheduler) refreshDiskHealth(now time.Time) {
 	scheduler.service.health.Update(now, platformhealth.DiskSource(
 		usage.UsedPercent, scheduler.service.health.DiskLevel(), scheduler.service.diskThresholds,
 	))
+	if scheduler.service.localArtifactRetentionObserver != nil {
+		if err := scheduler.service.localArtifactRetentionObserver(now); err != nil {
+			log.Printf("local artifact reclamation failed: %v", err)
+		}
+	}
 }
 
 func newSchedulerCounts() schedulerCounts {

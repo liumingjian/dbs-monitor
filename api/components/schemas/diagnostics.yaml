@@ -24,6 +24,14 @@ PlatformHealthSourceSnapshot:
     disk_critical_percent: { type: number, format: double, minimum: 0, maximum: 100 }
     disk_emergency_percent: { type: number, format: double, minimum: 0, maximum: 100 }
     disk_hysteresis_points: { type: number, format: double, minimum: 0 }
+    capacity_level: { type: string }
+    capacity_used_bytes: { type: integer, format: int64, minimum: 0 }
+    capacity_budget_bytes: { type: integer, format: int64, minimum: 1 }
+    capacity_usage_percent: { type: number, format: double, minimum: 0 }
+    capacity_warning_percent: { type: number, format: double, minimum: 0, maximum: 100 }
+    capacity_critical_percent: { type: number, format: double, minimum: 0, maximum: 100 }
+    capacity_emergency_percent: { type: number, format: double, minimum: 0, maximum: 100 }
+    capacity_hysteresis_points: { type: number, format: double, minimum: 0 }
 PlatformHealthSnapshot:
   type: object
   required: [status, sources, assembled_at]
