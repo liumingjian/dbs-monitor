@@ -27,6 +27,10 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
 连接串示例见 [`config/server-minimal.yaml`](../../config/server-minimal.yaml)。主机名必须与数据库证书匹配；不得把 `sslmode` 降为 `verify-ca`、`require`、`prefer` 或 `disable`。
 
+## 被监控 PostgreSQL
+
+被监控 PostgreSQL 支持 13–17，版本 12 及以下在接入时即被拒绝。这个范围只适用于监控目标，不改变平台数据库必须使用 PostgreSQL 17 的前置条件。
+
 ## Server 主机与文件权限
 
 server 以专用非 root 用户 `dbsmon` 运行。安装动作需要 root，常驻进程不需要 root。以下命令创建约定目录；尤其是 keyring 目录必须由 root 预建，server 不会创建父目录，也不会自动修复权限。
@@ -77,6 +81,8 @@ systemctl enable --now dbs-monitor-server.service
 
 首次启动仅在 keyring 中没有任何版本化密钥、平台库中没有任何密文行、且目录存在可写时生成 `master-key-v1`。主密钥材料不得放入环境变量、命令行、数据库或日志。
 
+整台平台主机宕机时，平台健康、诊断与本地通知出口会同时失效，平台自身无法发出宕机告警。客户必须使用外部基础设施探测平台主机与服务存活；这是 v1 不在平台内部消除的残余风险。
+
 ## 换机恢复与 keyring 搬迁
 
 数据库备份和 keyring 是两个独立制品，但必须标记为同一个恢复点。换机恢复按以下顺序执行：
@@ -113,3 +119,5 @@ keyring 遗失、版本不匹配或文件损坏时，已有密文数据不可恢
 4. v1.0.0 是首发版本，不存在从 0.x 升级的路径；v1 之前的 walking skeleton 部署必须重装。
 
 客户计划升级平台数据库大版本时，还必须先停止平台 server。升级后主版本只要离开 17，平台就会直接拒绝启动。
+
+回退到升级前备份时，升级窗口内产生的时序数据会有意丢失，控制面数据则恢复到备份点。这是采用控制面备份换取可控回退时间的明确代价，升级计划必须预留并告知该数据缺口。
