@@ -12,21 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
-      postgres:
-        image: postgres:17
-        command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
-        env:
-          POSTGRES_DB: dbs_monitor
-          POSTGRES_USER: dbs_monitor
-          POSTGRES_PASSWORD: dbs_monitor
-          POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
-        ports:
-          - 55432:5432
-        options: >-
-          --health-cmd "pg_isready -U dbs_monitor -d dbs_monitor"
-          --health-interval 1s
-          --health-timeout 3s
-          --health-retries 30
       postgres12:
         image: postgres:12
         env:
@@ -51,7 +36,6 @@ jobs:
       PG12USER: monitored
       PG12DATABASE: monitored
       PG12PASSWORD: monitored
-      PGHOST_EXTERNAL: "1"
       DATABASE_URL: postgres://dbs_monitor:dbs_monitor@localhost:55432/dbs_monitor?sslmode=disable
     steps:
       - uses: actions/checkout@v4
