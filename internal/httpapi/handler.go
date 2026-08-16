@@ -5,10 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,55 +21,287 @@ import (
 	"github.com/oapi-codegen/nullable"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/api"
 	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
+	"github.com/liumingjian/dbs-monitor/internal/notify"
+	monitorpg "github.com/liumingjian/dbs-monitor/internal/pgconn"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
 )
 
-const sessionCookie = "dbs_monitor_session"
+const (
+	sessionCookieName           = "__Host-dbs_monitor_session"
+	defaultSessionAbsoluteTTL   = 12 * time.Hour
+	defaultSessionIdleTTL       = 2 * time.Hour
+	agentBackfillWindow         = 5 * time.Minute
+	agentClockSkew              = 30 * time.Second
+	agentClockSkewErrorCode     = "CLOCK_SKEW"
+	agentClockSkewMessage       = "时钟偏移"
+	agentDiskEmergencyErrorCode = "DISK_EMERGENCY_WATERMARK"
+	agentDiskEmergencyMessage   = "磁盘紧急水位，样本写入已拒绝"
+	agentVersionErrorCode       = "AGENT_VERSION_TOO_OLD"
+	agentVersionErrorMessage    = "版本过旧，需升级"
+)
+
+var errInvalidLogin = errors.New("invalid login")
 
 type authenticatedAgentKey struct{}
+type authenticatedUserKey struct{}
+type authenticatedSessionHashKey struct{}
 
-type Handler struct {
-	platform *db.Pool
-	clock    clock.Clock
+type SessionConfig struct {
+	AbsoluteTTL time.Duration
+	IdleTTL     time.Duration
 }
 
-func NewHandler(platform *db.Pool, currentClock clock.Clock) *Handler {
-	return &Handler{platform: platform, clock: currentClock}
+type Handler struct {
+	platform                  *db.Pool
+	clock                     clock.Clock
+	keyring                   *instance.CredentialKeyring
+	dialer                    monitorpg.Dialer
+	serverVersion             string
+	caFingerprint             string
+	agentDistribution         *AgentDistribution
+	health                    *platformhealth.Store
+	partitionSpan             time.Duration
+	notificationRepeatMinimum time.Duration
+	notificationSnapshotStore *notify.ChannelSnapshotStore
+	sessionConfig             SessionConfig
+}
+
+func NewHandler(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring) *Handler {
+	return NewHandlerWithVersion(platform, currentClock, keyring, "1.0.0")
+}
+
+func NewHandlerWithSessionConfig(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, sessionConfig SessionConfig) *Handler {
+	handler := NewHandler(platform, currentClock, keyring)
+	handler.sessionConfig = sessionConfig
+	return handler
+}
+
+func NewHandlerWithVersion(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string) *Handler {
+	return NewHandlerWithDialer(platform, currentClock, keyring, monitorpg.DirectDialer{}, serverVersion)
+}
+
+func NewHandlerWithDialer(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string) *Handler {
+	health := platformhealth.NewStore(serverVersion, time.Now().UTC(), nil)
+	return NewHandlerWithPlatformHealth(platform, currentClock, keyring, dialer, serverVersion, health)
+}
+
+func NewHandlerWithPlatformHealth(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store) *Handler {
+	return &Handler{
+		platform:                  platform,
+		clock:                     currentClock,
+		keyring:                   keyring,
+		dialer:                    dialer,
+		serverVersion:             serverVersion,
+		health:                    health,
+		partitionSpan:             metric.DefaultPartitionSpan,
+		notificationRepeatMinimum: 15 * time.Minute,
+		sessionConfig: SessionConfig{
+			AbsoluteTTL: defaultSessionAbsoluteTTL,
+			IdleTTL:     defaultSessionIdleTTL,
+		},
+	}
+}
+
+func (handler *Handler) SetPartitionSpan(span time.Duration) {
+	handler.partitionSpan = span
+}
+
+func (handler *Handler) SetNotificationRepeatIntervalMinimum(minimum time.Duration) {
+	handler.notificationRepeatMinimum = minimum
+}
+
+func NewHandlerWithAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, serverVersion string, distribution AgentDistribution) *Handler {
+	health := platformhealth.NewStore(serverVersion, time.Now().UTC(), nil)
+	return NewHandlerWithPlatformHealthAndAgentDistribution(
+		platform, currentClock, keyring, monitorpg.DirectDialer{}, serverVersion, health, distribution,
+	)
+}
+
+func NewHandlerWithPlatformHealthAndAgentDistribution(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store, distribution AgentDistribution) *Handler {
+	handler := NewHandlerWithPlatformHealth(platform, currentClock, keyring, dialer, serverVersion, health)
+	handler.caFingerprint = distribution.CAFingerprint
+	handler.agentDistribution = &distribution
+	return handler
+}
+
+func NewHandlerWithPlatformHealthAndAgentDistributionAndSessionConfig(platform *db.Pool, currentClock clock.Clock, keyring *instance.CredentialKeyring, dialer monitorpg.Dialer, serverVersion string, health *platformhealth.Store, distribution AgentDistribution, sessionConfig SessionConfig) *Handler {
+	handler := NewHandlerWithPlatformHealthAndAgentDistribution(platform, currentClock, keyring, dialer, serverVersion, health, distribution)
+	handler.sessionConfig = sessionConfig
+	return handler
 }
 
 func (handler *Handler) Routes() http.Handler {
 	strict := api.NewStrictHandler(handler, []api.StrictMiddlewareFunc{handler.authenticate})
-	return api.HandlerFromMux(strict, http.NewServeMux())
+	mux := http.NewServeMux()
+	handler.registerAgentDistributionRoutes(mux)
+	return api.HandlerFromMux(strict, mux)
 }
 
 func (handler *Handler) CreateSession(ctx context.Context, request api.CreateSessionRequestObject) (api.CreateSessionResponseObject, error) {
 	if request.Body == nil {
 		return unauthorizedLogin(), nil
 	}
-	user, err := New(handler.platform).GetUserForLogin(ctx, request.Body.Username)
-	if err != nil || bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(request.Body.Password)) != nil {
-		return unauthorizedLogin(), nil
-	}
 	token, tokenHash, err := newToken()
 	if err != nil {
 		return nil, err
 	}
-	expires := handler.clock.Now().UTC().Add(24 * time.Hour)
-	if err := New(handler.platform).CreateSession(ctx, CreateSessionParams{
-		TokenHash: tokenHash, UserID: user.ID,
-		ExpiresAt: pgtype.Timestamptz{Time: expires, Valid: true},
-	}); err != nil {
+	now := handler.clock.Now().UTC()
+	expiresAt := now.Add(handler.sessionConfig.AbsoluteTTL)
+	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := New(tx)
+		user, err := queries.GetUserForLogin(ctx, request.Body.Username)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errInvalidLogin
+		}
+		if err != nil {
+			return err
+		}
+		if bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(request.Body.Password)) != nil {
+			return errInvalidLogin
+		}
+		if err := queries.CreateSession(ctx, CreateSessionParams{
+			TokenHash: tokenHash,
+			UserID:    user.ID,
+			ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+			CreatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		}); err != nil {
+			return err
+		}
+		actorID := uuid.UUID(user.ID.Bytes)
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.LoginSucceeded,
+			OccurredAt: now,
+			ActorID:    &actorID,
+		})
+	})
+	if errors.Is(err, errInvalidLogin) {
+		actorSubject := request.Body.Username
+		if strings.TrimSpace(actorSubject) == "" {
+			actorSubject = "<empty username>"
+		}
+		if recordErr := platformevent.Record(ctx, handler.platform, platformevent.Event{
+			Kind:         platformevent.LoginFailed,
+			OccurredAt:   now,
+			ActorSubject: actorSubject,
+		}); recordErr != nil {
+			return nil, recordErr
+		}
+		return unauthorizedLogin(), nil
+	}
+	if err != nil {
 		return nil, err
 	}
-	cookie := (&http.Cookie{
-		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
-	}).String()
-	return api.CreateSession204Response{Headers: api.CreateSession204ResponseHeaders{SetCookie: cookie}}, nil
+	cookie := newSessionCookie(token, expiresAt)
+	return api.CreateSession204Response{Headers: api.CreateSession204ResponseHeaders{SetCookie: cookie.String()}}, nil
+}
+
+func (handler *Handler) DeleteSession(ctx context.Context, _ api.DeleteSessionRequestObject) (api.DeleteSessionResponseObject, error) {
+	if err := New(handler.platform).DeleteSession(ctx, authenticatedSessionHash(ctx)); err != nil {
+		return nil, err
+	}
+	cookie := newSessionCookie("", time.Unix(1, 0).UTC())
+	cookie.MaxAge = -1
+	return api.DeleteSession204Response{Headers: api.DeleteSession204ResponseHeaders{SetCookie: cookie.String()}}, nil
+}
+
+func newSessionCookie(value string, expiresAt time.Time) *http.Cookie {
+	return &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    value,
+		Path:     "/",
+		Expires:  expiresAt,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	}
+}
+
+func (handler *Handler) GetPlatformHealth(context.Context, api.GetPlatformHealthRequestObject) (api.GetPlatformHealthResponseObject, error) {
+	snapshot := handler.health.Current()
+	sources := make([]api.PlatformHealthSourceSnapshot, 0, len(snapshot.Sources))
+	for _, source := range snapshot.Sources {
+		sources = append(sources, toAPIPlatformHealthSource(source))
+	}
+	return api.GetPlatformHealth200JSONResponse{
+		Status: api.PlatformHealthStatus(snapshot.Status), Sources: sources, AssembledAt: snapshot.AssembledAt,
+	}, nil
+}
+
+func (handler *Handler) GetDiskDiagnostics(context.Context, api.GetDiskDiagnosticsRequestObject) (api.GetDiskDiagnosticsResponseObject, error) {
+	return api.GetDiskDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceDisk))), nil
+}
+
+func (handler *Handler) GetSchedulerDiagnostics(context.Context, api.GetSchedulerDiagnosticsRequestObject) (api.GetSchedulerDiagnosticsResponseObject, error) {
+	return api.GetSchedulerDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceCollectionScheduler))), nil
+}
+
+func (handler *Handler) GetPartitionDiagnostics(context.Context, api.GetPartitionDiagnosticsRequestObject) (api.GetPartitionDiagnosticsResponseObject, error) {
+	return api.GetPartitionDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourcePartitionMaintenance))), nil
+}
+
+func (handler *Handler) GetCertificateDiagnostics(context.Context, api.GetCertificateDiagnosticsRequestObject) (api.GetCertificateDiagnosticsResponseObject, error) {
+	return api.GetCertificateDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceTLSCertificate))), nil
+}
+
+func (handler *Handler) GetKeyringDiagnostics(context.Context, api.GetKeyringDiagnosticsRequestObject) (api.GetKeyringDiagnosticsResponseObject, error) {
+	return api.GetKeyringDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceCredentialKeyring))), nil
+}
+
+func (handler *Handler) GetPlatformDiagnostics(context.Context, api.GetPlatformDiagnosticsRequestObject) (api.GetPlatformDiagnosticsResponseObject, error) {
+	return api.GetPlatformDiagnostics200JSONResponse(toAPIPlatformHealthSource(handler.health.Source(platformhealth.SourceServerProcess))), nil
+}
+
+func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.PlatformHealthSourceSnapshot {
+	var diskLevel *string
+	if source.DiskLevel != nil {
+		value := string(*source.DiskLevel)
+		diskLevel = &value
+	}
+	var capacityLevel *string
+	if source.CapacityLevel != nil {
+		value := string(*source.CapacityLevel)
+		capacityLevel = &value
+	}
+	return api.PlatformHealthSourceSnapshot{
+		Source:                api.PlatformHealthSource(source.Source),
+		Status:                api.PlatformHealthStatus(source.Status),
+		Code:                  source.Code,
+		Version:               source.Version,
+		StartedAt:             source.StartedAt,
+		ExpiresAt:             source.ExpiresAt,
+		ValidityDaysRemaining: source.ValidityDaysRemaining,
+		ProbeCapacity:         source.ProbeCapacity,
+		ProbeActive:           source.ProbeActive,
+		QueryCapacity:         source.QueryCapacity,
+		QueryActive:           source.QueryActive,
+		Pending:               source.Pending,
+		SkippedBackpressure:   source.SkippedBackpressure,
+		Backoff:               source.Backoff,
+		ConsecutiveFailures:   source.ConsecutiveFailures,
+		PrebuildDaysRemaining: source.PrebuildDaysRemaining,
+		DiskLevel:             diskLevel,
+		DiskUsagePercent:      source.DiskUsagePercent,
+		DiskWarningPercent:    source.DiskWarningPercent,
+		DiskCriticalPercent:   source.DiskCriticalPercent,
+		DiskEmergencyPercent:  source.DiskEmergencyPercent,
+		DiskHysteresisPoints:  source.DiskHysteresisPoints,
+
+		CapacityLevel:            capacityLevel,
+		CapacityUsedBytes:        source.CapacityUsedBytes,
+		CapacityBudgetBytes:      source.CapacityBudgetBytes,
+		CapacityUsagePercent:     source.CapacityUsagePercent,
+		CapacityWarningPercent:   source.CapacityWarningPercent,
+		CapacityCriticalPercent:  source.CapacityCriticalPercent,
+		CapacityEmergencyPercent: source.CapacityEmergencyPercent,
+		CapacityHysteresisPoints: source.CapacityHysteresisPoints,
+	}
 }
 
 func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
@@ -74,13 +309,39 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 	if err != nil {
 		return nil, err
 	}
+	now := handler.clock.Now().UTC()
+	alertsByInstance, err := handler.loadInstanceHealthAlerts(ctx, now)
+	if err != nil {
+		return nil, err
+	}
 	response := make(api.ListInstances200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		status, err := alertStatus(ctx, handler.platform, row.ID)
+		projection, err := projectInstanceHealth(instanceHealthProjectionInput{
+			paused:                 row.CollectionPaused,
+			collectorLastSuccessAt: row.CollectorLastSuccessAt,
+			agentExpected:          row.AgentExpected,
+			agentLastReportAt:      row.AgentLastReportAt,
+			agentLastErrorCode:     row.AgentLastErrorCode,
+			capabilityObservedAt:   row.CapabilityObservedAt,
+			capabilityStates:       row.CapabilityStates,
+			alerts:                 alertsByInstance[uuid.UUID(row.ID.Bytes)],
+			now:                    now,
+		})
 		if err != nil {
 			return nil, err
 		}
-		response = append(response, toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, status))
+		response = append(response, toAPIInstance(
+			row.ID,
+			row.Name,
+			row.Host,
+			row.Port,
+			row.DatabaseName,
+			row.Username,
+			row.AgentVersion,
+			row.AgentMetricsEnabled,
+			toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+			projection,
+		))
 	}
 	return response, nil
 }
@@ -89,22 +350,58 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
+	if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
+		host:     request.Body.Host,
+		port:     request.Body.Port,
+		database: request.Body.Database,
+		username: request.Body.Username,
+		password: request.Body.Password,
+	}); err != nil {
+		if responseBody, ok := targetValidationResponseBody(err); ok {
+			return api.CreateInstance400JSONResponse(responseBody), nil
+		}
+		return nil, err
+	}
 	id := uuid.New()
-	token, tokenHash, err := newToken()
+	ciphertext, keyVersion, err := handler.keyring.EncryptPassword(id, request.Body.Password)
 	if err != nil {
 		return nil, err
 	}
 	row, err := instance.New(handler.platform).CreateInstance(ctx, instance.CreateInstanceParams{
-		ID: pgtype.UUID{Bytes: id, Valid: true}, Name: request.Body.Name,
-		Host: request.Body.Host, Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
-		Username: request.Body.Username, Password: request.Body.Password, AgentTokenHash: tokenHash,
+		ID:                 pgtype.UUID{Bytes: id, Valid: true},
+		Name:               request.Body.Name,
+		Host:               request.Body.Host,
+		Port:               int32(request.Body.Port),
+		DatabaseName:       request.Body.Database,
+		Username:           request.Body.Username,
+		PasswordCiphertext: ciphertext,
+		PasswordKeyVersion: keyVersion,
+		CreatedBy:          databaseUserID(authenticatedUserID(ctx)),
 	})
 	if err != nil {
 		return nil, err
 	}
 	return api.CreateInstance201JSONResponse{
-		AgentToken: token,
-		Instance:   toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, api.OK),
+		Instance: toAPIInstance(
+			row.ID,
+			row.Name,
+			row.Host,
+			row.Port,
+			row.DatabaseName,
+			row.Username,
+			row.AgentVersion,
+			true,
+			api.CollectionPauseStatus{Paused: false},
+			instanceHealthProjection{
+				health: api.InstanceHealth{
+					Status: api.HealthUnknown,
+					Counts: api.HealthAlertCounts{},
+					Flags:  api.HealthFlags{},
+				},
+				alertStatus: api.OK,
+				agentStatus: api.InstanceAgentNotInstalled,
+			},
+		),
 	}, nil
 }
 
@@ -113,37 +410,440 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	if err != nil {
 		return nil, err
 	}
-	status, err := alertStatus(ctx, handler.platform, row.ID)
+	projection, err := handler.loadInstanceHealthProjection(ctx, instanceHealthProjectionInput{
+		instanceID:             uuid.UUID(row.ID.Bytes),
+		paused:                 row.CollectionPaused,
+		collectorLastSuccessAt: row.CollectorLastSuccessAt,
+		agentExpected:          row.AgentExpected,
+		agentLastReportAt:      row.AgentLastReportAt,
+		agentLastErrorCode:     row.AgentLastErrorCode,
+		capabilityObservedAt:   row.CapabilityObservedAt,
+		capabilityStates:       row.CapabilityStates,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return api.GetInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, status)), nil
+	return api.GetInstance200JSONResponse(toAPIInstance(
+		row.ID,
+		row.Name,
+		row.Host,
+		row.Port,
+		row.DatabaseName,
+		row.Username,
+		row.AgentVersion,
+		row.AgentMetricsEnabled,
+		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+		projection,
+	)), nil
 }
 
 func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateInstanceRequestObject) (api.UpdateInstanceResponseObject, error) {
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
-	row, err := instance.New(handler.platform).UpdateInstance(ctx, instance.UpdateInstanceParams{
-		ID: pgtype.UUID{Bytes: request.Id, Valid: true}, Name: request.Body.Name,
-		Host: request.Body.Host, Port: int32(request.Body.Port), DatabaseName: request.Body.Database,
-		Username: request.Body.Username, Password: request.Body.Password,
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	var updatedInstance instance.UpdateInstanceMetadataRow
+	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := instance.New(tx)
+		storedInstance, err := queries.GetInstanceForUpdate(ctx, instanceID)
+		if err != nil {
+			return err
+		}
+		connectionTargetChanged := storedInstance.Host != request.Body.Host ||
+			storedInstance.Port != int32(request.Body.Port) ||
+			storedInstance.DatabaseName != request.Body.Database
+		if connectionTargetChanged {
+			password, err := handler.keyring.DecryptPassword(
+				request.Id,
+				storedInstance.PasswordCiphertext,
+				storedInstance.PasswordKeyVersion,
+			)
+			if err != nil {
+				return err
+			}
+			if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
+				host:     request.Body.Host,
+				port:     request.Body.Port,
+				database: request.Body.Database,
+				username: storedInstance.Username,
+				password: password,
+			}); err != nil {
+				return err
+			}
+		}
+		updatedInstance, err = queries.UpdateInstanceMetadata(ctx, instance.UpdateInstanceMetadataParams{
+			ID:           instanceID,
+			Name:         request.Body.Name,
+			Host:         request.Body.Host,
+			Port:         int32(request.Body.Port),
+			DatabaseName: request.Body.Database,
+		})
+		return err
+	})
+	if err != nil {
+		if responseBody, ok := targetValidationResponseBody(err); ok {
+			return api.UpdateInstance400JSONResponse(responseBody), nil
+		}
+		return nil, err
+	}
+	row, err := instance.New(handler.platform).GetInstance(ctx, updatedInstance.ID)
+	if err != nil {
+		return nil, err
+	}
+	projection, err := handler.loadInstanceHealthProjection(ctx, instanceHealthProjectionInput{
+		instanceID:             uuid.UUID(row.ID.Bytes),
+		paused:                 row.CollectionPaused,
+		collectorLastSuccessAt: row.CollectorLastSuccessAt,
+		agentExpected:          row.AgentExpected,
+		agentLastReportAt:      row.AgentLastReportAt,
+		agentLastErrorCode:     row.AgentLastErrorCode,
+		capabilityObservedAt:   row.CapabilityObservedAt,
+		capabilityStates:       row.CapabilityStates,
 	})
 	if err != nil {
 		return nil, err
 	}
-	status, err := alertStatus(ctx, handler.platform, row.ID)
+	return api.UpdateInstance200JSONResponse(toAPIInstance(
+		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion,
+		row.AgentMetricsEnabled,
+		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
+		projection,
+	)), nil
+}
+
+func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request api.UpdateInstanceCredentialRequestObject) (api.UpdateInstanceCredentialResponseObject, error) {
+	if request.Body == nil {
+		return nil, errors.New("instance credential body is required")
+	}
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	actorID := authenticatedUserID(ctx)
+	subjectID := request.Id
+	updatedAt := handler.clock.Now().UTC()
+	var updatedUsername string
+	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := instance.New(tx)
+		storedInstance, err := queries.GetInstanceForUpdate(ctx, instanceID)
+		if err != nil {
+			return err
+		}
+		if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
+			host:     storedInstance.Host,
+			port:     int(storedInstance.Port),
+			database: storedInstance.DatabaseName,
+			username: request.Body.Username,
+			password: request.Body.Password,
+		}); err != nil {
+			return err
+		}
+		ciphertext, keyVersion, err := handler.keyring.EncryptPassword(request.Id, request.Body.Password)
+		if err != nil {
+			return err
+		}
+		updatedUsername, err = queries.UpdateInstanceCredential(ctx, instance.UpdateInstanceCredentialParams{
+			ID:                  instanceID,
+			Username:            request.Body.Username,
+			PasswordCiphertext:  ciphertext,
+			PasswordKeyVersion:  keyVersion,
+			CredentialUpdatedBy: databaseUserID(actorID),
+			CredentialUpdatedAt: pgtype.Timestamptz{Time: updatedAt, Valid: true},
+		})
+		if err != nil {
+			return err
+		}
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.InstanceCredentialUpdated,
+			OccurredAt: updatedAt,
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
+		})
+	})
 	if err != nil {
+		if responseBody, ok := targetValidationResponseBody(err); ok {
+			return api.UpdateInstanceCredential400JSONResponse(responseBody), nil
+		}
 		return nil, err
 	}
-	return api.UpdateInstance200JSONResponse(toAPIInstance(row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, status)), nil
+	return api.UpdateInstanceCredential200JSONResponse{Username: updatedUsername}, nil
 }
 
 func (handler *Handler) DeleteInstance(ctx context.Context, request api.DeleteInstanceRequestObject) (api.DeleteInstanceResponseObject, error) {
-	if err := instance.New(handler.platform).DeleteInstance(ctx, pgtype.UUID{Bytes: request.Id, Valid: true}); err != nil {
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	removedAt := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := authenticatedUserID(ctx)
+	databaseActorID := databaseUserID(actorID)
+	subjectID := request.Id
+	err := handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		instanceQueries := instance.New(tx)
+		if _, err := instanceQueries.LockInstanceForRemoval(ctx, instanceID); err != nil {
+			return err
+		}
+		if err := alerting.New(tx).CloseAlertsForInstanceRemoval(ctx, alerting.CloseAlertsForInstanceRemovalParams{
+			InstanceID: instanceID,
+			UpdatedAt:  removedAt,
+			ActorID:    databaseActorID,
+		}); err != nil {
+			return err
+		}
+		if err := platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.InstanceRemoved,
+			OccurredAt: removedAt.Time,
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
+		}); err != nil {
+			return err
+		}
+		return instanceQueries.DeleteInstance(ctx, instance.DeleteInstanceParams{ID: instanceID, RemovedAt: removedAt})
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.DeleteInstance204Response{}, nil
+	}
+	if err != nil {
 		return nil, err
 	}
 	return api.DeleteInstance204Response{}, nil
+}
+
+func (handler *Handler) GetAgentRegistration(ctx context.Context, request api.GetAgentRegistrationRequestObject) (api.GetAgentRegistrationResponseObject, error) {
+	row, err := instance.New(handler.platform).GetAgentRegistration(ctx, databaseUUID(request.Id))
+	if err != nil {
+		return nil, err
+	}
+	registration := handler.agentRegistration(
+		row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+		row.AgentFirstRegisteredAt, row.AgentVersion,
+	)
+	registration.LastReportedAt = timePointer(row.LastReportedAt)
+	return api.GetAgentRegistration200JSONResponse(registration), nil
+}
+
+func (handler *Handler) RegisterAgent(ctx context.Context, request api.RegisterAgentRequestObject) (api.RegisterAgentResponseObject, error) {
+	token, tokenHash, err := newAgentToken()
+	if err != nil {
+		return nil, err
+	}
+	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	row, err := instance.New(handler.platform).RegisterAgent(ctx, instance.RegisterAgentParams{
+		ID:                 databaseUUID(request.Id),
+		AgentTokenHash:     tokenHash,
+		AgentTokenIssuedAt: now,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.RegisterAgent409JSONResponse(errorBody(api.CONFLICT, "Agent is already registered or cannot be re-enabled")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.RegisterAgent200JSONResponse{
+		AgentToken: &token,
+		Registration: handler.agentRegistration(
+			row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+			row.AgentFirstRegisteredAt, row.AgentVersion,
+		),
+	}, nil
+}
+
+func (handler *Handler) RotateAgentToken(ctx context.Context, request api.RotateAgentTokenRequestObject) (api.RotateAgentTokenResponseObject, error) {
+	token, tokenHash, err := newAgentToken()
+	if err != nil {
+		return nil, err
+	}
+	row, err := instance.New(handler.platform).RotateAgentToken(ctx, instance.RotateAgentTokenParams{
+		ID:                 databaseUUID(request.Id),
+		AgentTokenHash:     tokenHash,
+		AgentTokenIssuedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.RotateAgentToken409JSONResponse(errorBody(api.CONFLICT, "Agent has no active token to rotate")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.RotateAgentToken200JSONResponse{
+		AgentToken: &token,
+		Registration: handler.agentRegistration(
+			row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+			row.AgentFirstRegisteredAt, row.AgentVersion,
+		),
+	}, nil
+}
+
+func (handler *Handler) RevokeAgentToken(ctx context.Context, request api.RevokeAgentTokenRequestObject) (api.RevokeAgentTokenResponseObject, error) {
+	row, err := instance.New(handler.platform).RevokeAgentToken(ctx, instance.RevokeAgentTokenParams{
+		ID:                  databaseUUID(request.Id),
+		AgentTokenRevokedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.RevokeAgentToken409JSONResponse(errorBody(api.CONFLICT, "Agent has no active token to revoke")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.RevokeAgentToken200JSONResponse(handler.agentRegistration(
+		row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+		row.AgentFirstRegisteredAt, row.AgentVersion,
+	)), nil
+}
+
+func (handler *Handler) DisableAgent(ctx context.Context, request api.DisableAgentRequestObject) (api.DisableAgentResponseObject, error) {
+	row, err := instance.New(handler.platform).DisableAgent(ctx, databaseUUID(request.Id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return api.DisableAgent409JSONResponse(errorBody(api.CONFLICT, "Agent is not currently expected online")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.DisableAgent200JSONResponse(handler.agentRegistration(
+		row.AgentExpected, row.AgentTokenIssuedAt, row.AgentTokenRevokedAt,
+		row.AgentFirstRegisteredAt, row.AgentVersion,
+	)), nil
+}
+
+func (handler *Handler) ListCollectionTaskStates(ctx context.Context, request api.ListCollectionTaskStatesRequestObject) (api.ListCollectionTaskStatesResponseObject, error) {
+	states, err := handler.collectionTaskStates(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	return api.ListCollectionTaskStates200JSONResponse(states), nil
+}
+
+func (handler *Handler) ListCapabilitySnapshot(ctx context.Context, request api.ListCapabilitySnapshotRequestObject) (api.ListCapabilitySnapshotResponseObject, error) {
+	states, observedAt, err := handler.currentCapabilitySnapshot(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	response := make(api.ListCapabilitySnapshot200JSONResponse, 0, len(metric.Capabilities))
+	for _, declaration := range metric.Capabilities {
+		entry := api.CapabilitySnapshotEntry{
+			AffectedMetricCount: metric.CapabilityAffectedMetricCount(declaration.ID),
+			CapabilityId:        api.CapabilitySnapshotEntryCapabilityId(declaration.ID),
+			Class:               api.CapabilitySnapshotEntryClass(declaration.Class),
+			Status:              api.CapabilityStatus(states[declaration.ID]),
+		}
+		if observedAt != nil {
+			value := *observedAt
+			entry.ObservedAt = &value
+		}
+		if declaration.FixHint != "" {
+			value := declaration.FixHint
+			entry.FixHint = &value
+		}
+		if declaration.NAReason != "" {
+			value := declaration.NAReason
+			entry.NaReason = &value
+		}
+		response = append(response, entry)
+	}
+	return response, nil
+}
+
+func (handler *Handler) currentCapabilitySnapshot(ctx context.Context, instanceID pgtype.UUID) (map[metric.CapabilityID]metric.CapabilityStatus, *time.Time, error) {
+	var encoded []byte
+	var observedAt time.Time
+	err := handler.platform.QueryRow(ctx, `SELECT states, observed_at FROM instance_capability_snapshot WHERE instance_id = $1`, instanceID).Scan(&encoded, &observedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return metric.ProjectCapabilitySnapshot(nil, time.Time{}, handler.clock.Now().UTC()), nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	states, err := metric.DecodeCapabilitySnapshot(encoded)
+	if err != nil {
+		return nil, nil, err
+	}
+	observedAt = observedAt.UTC()
+	return metric.ProjectCapabilitySnapshot(states, observedAt, handler.clock.Now().UTC()), &observedAt, nil
+}
+
+func (handler *Handler) UpdateCollectionTaskInterval(ctx context.Context, request api.UpdateCollectionTaskIntervalRequestObject) (api.UpdateCollectionTaskIntervalResponseObject, error) {
+	if request.Body == nil {
+		return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, "collection task interval body is required")), nil
+	}
+	taskID := metric.TaskID(request.TaskId)
+	interval := time.Duration(request.Body.IntervalSeconds) * time.Second
+	if err := metric.ValidateTaskInterval(taskID, interval); err != nil {
+		return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
+	}
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	if err := metric.New(handler.platform).SetTaskInterval(ctx, metric.SetTaskIntervalParams{
+		InstanceID:      instanceID,
+		TaskID:          request.TaskId,
+		IntervalSeconds: int32(request.Body.IntervalSeconds),
+		UpdatedBy:       databaseUserID(authenticatedUserID(ctx)),
+	}); err != nil {
+		return nil, err
+	}
+	states, err := handler.collectionTaskStates(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	for _, state := range states {
+		if string(state.TaskId) == request.TaskId {
+			return api.UpdateCollectionTaskInterval200JSONResponse(state), nil
+		}
+	}
+	return api.UpdateCollectionTaskInterval400JSONResponse(errorBody(api.VALIDATIONFAILED, "unknown collection task")), nil
+}
+
+func (handler *Handler) collectionTaskStates(ctx context.Context, instanceID pgtype.UUID) ([]api.CollectionTaskState, error) {
+	persistedRows, err := New(handler.platform).ListPersistedCollectionTaskStates(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	persistedStates := make(map[metric.TaskID]ListPersistedCollectionTaskStatesRow, len(persistedRows))
+	for _, row := range persistedRows {
+		persistedStates[metric.TaskID(row.TaskID)] = row
+	}
+	configuredRows, err := metric.New(handler.platform).ListTaskIntervals(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	configuredIntervals := make(map[metric.TaskID]int, len(configuredRows))
+	for _, row := range configuredRows {
+		configuredIntervals[metric.TaskID(row.TaskID)] = int(row.IntervalSeconds)
+	}
+
+	states := make([]api.CollectionTaskState, 0, len(metric.Tasks))
+	for _, task := range metric.Tasks {
+		intervalSeconds := int(task.Interval / time.Second)
+		if configuredInterval, exists := configuredIntervals[task.ID]; exists {
+			intervalSeconds = configuredInterval
+		}
+		state := api.CollectionTaskState{
+			TaskId:               api.CollectionTaskStateTaskId(task.ID),
+			Kind:                 api.CollectionTaskStateKind(task.Kind),
+			IntervalSeconds:      intervalSeconds,
+			MetricIds:            make([]string, 0, len(task.Yields)),
+			RequiredCapabilities: make([]string, 0, len(task.Requires)),
+		}
+		for _, yield := range task.Yields {
+			state.MetricIds = append(state.MetricIds, string(yield.Metric))
+		}
+		for _, required := range task.Requires {
+			state.RequiredCapabilities = append(state.RequiredCapabilities, string(required))
+		}
+		if persistedState, exists := persistedStates[task.ID]; exists {
+			state.ConsecutiveFailures = int(persistedState.ConsecutiveFailures)
+			state.LastDueAt = timePointer(persistedState.LastDueAt)
+			state.LastStartedAt = timePointer(persistedState.LastStartedAt)
+			state.LastFinishedAt = timePointer(persistedState.LastFinishedAt)
+			state.LastSuccessAt = timePointer(persistedState.LastSuccessAt)
+			state.NextEligibleAt = timePointer(persistedState.NextEligibleAt)
+			if persistedState.LastResult.Valid {
+				value := api.CollectionTaskResult(persistedState.LastResult.String)
+				state.LastResult = &value
+			}
+			if persistedState.LastErrorCode.Valid {
+				value := persistedState.LastErrorCode.String
+				state.LastErrorCode = &value
+			}
+			if persistedState.LastErrorMessage.Valid {
+				value := persistedState.LastErrorMessage.String
+				state.LastErrorMessage = &value
+			}
+		}
+		states = append(states, state)
+	}
+	return states, nil
 }
 
 func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetricSeriesRequestObject) (api.GetMetricSeriesResponseObject, error) {
@@ -156,8 +856,22 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 		return api.GetMetricSeries400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
 	}
 	result := api.MetricSeriesResponse{From: request.Params.From, To: request.Params.To, Step: step.name}
+	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
+	pause, err := New(handler.platform).GetCollectionPause(ctx, instanceID)
+	if err != nil {
+		return nil, err
+	}
 	queries := metric.New(handler.platform)
-	for _, metricID := range request.Params.Metric {
+	controlPlaneFacts, err := metric.ReadControlPlaneFacts(ctx, handler.platform, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	now := handler.clock.Now().UTC()
+	agentStatus := metric.AgentStatusAt(controlPlaneFacts, now)
+	var capabilityStates map[metric.CapabilityID]metric.CapabilityStatus
+	capabilityStatesLoaded := false
+	for _, requestedMetricID := range request.Params.Metric {
+		metricID := metric.MetricID(requestedMetricID)
 		entry := struct {
 			Metric string `json:"metric"`
 			Series []struct {
@@ -166,25 +880,87 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			} `json:"series"`
 			Unavailability nullable.Nullable[api.Unavailability] `json:"unavailability"`
 			Unit           string                                `json:"unit"`
-		}{Metric: string(metricID), Unit: metricUnit(string(metricID)), Series: []struct {
+		}{Metric: metricID.String(), Unit: metricUnit(metricID.String()), Series: []struct {
 			Labels map[string]string `json:"labels"`
 			Points [][]*float64      `json:"points"`
 		}{}, Unavailability: nullable.NewNullNullable[api.Unavailability]()}
+		counterReset := false
+		if pause.CollectionPaused {
+			entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONPAUSED)
+			result.Metrics = append(result.Metrics, entry)
+			continue
+		}
 
-		if strings.HasPrefix(string(metricID), "pg.") {
-			state, err := instance.New(handler.platform).GetCollectState(ctx, pgtype.UUID{Bytes: request.Id, Valid: true})
-			if err == nil && state.LastErrorCode.Valid && state.LastErrorCode.String == string(api.DBUNREACHABLE) {
-				entry.Unavailability = nullable.NewNullableWithValue(api.DBUNREACHABLE)
+		switch metric.ProducerFor(metricID) {
+		case metric.ProducerControlPlane:
+			projected, hasProjection := metric.ProjectControlPlaneMetric(metricID, controlPlaneFacts, now)
+			if !hasProjection {
+				reason := api.NOSAMPLESYET
+				if controlPlaneFacts.CollectorLastErrorCode != "" {
+					reason = api.COLLECTIONFAILED
+				}
+				entry.Unavailability = nullable.NewNullableWithValue(reason)
+			} else if projected.ObservedAt.Before(request.Params.From) || projected.ObservedAt.After(request.Params.To) {
+				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
+			} else {
+				timestamp, value := float64(projected.ObservedAt.Unix()), projected.Value
+				entry.Series = append(entry.Series, struct {
+					Labels map[string]string `json:"labels"`
+					Points [][]*float64      `json:"points"`
+				}{Labels: projected.Labels, Points: [][]*float64{{&timestamp, &value}}})
+			}
+			result.Metrics = append(result.Metrics, entry)
+			continue
+		case metric.ProducerAgent:
+			if reason, unavailable := agentMetricUnavailability(controlPlaneFacts, agentStatus); unavailable {
+				entry.Unavailability = nullable.NewNullableWithValue(reason)
 				result.Metrics = append(result.Metrics, entry)
 				continue
 			}
+		}
+
+		collectionState := metricCollectionState{}
+		if strings.HasPrefix(metricID.String(), "pg.") {
+			var probeResult pgtype.Text
+			err := handler.platform.QueryRow(ctx, `SELECT last_result FROM instance_collection_task_state
+				WHERE instance_id = $1 AND task_id = 'pg.probe'`, instanceID).Scan(&probeResult)
+			if err == nil && probeResult.Valid {
+				switch api.CollectionTaskResult(probeResult.String) {
+				case api.FAILED, api.TIMEDOUT:
+					entry.Unavailability = nullable.NewNullableWithValue(api.DBUNREACHABLE)
+					result.Metrics = append(result.Metrics, entry)
+					continue
+				}
+			}
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return nil, err
+			}
+			if !capabilityStatesLoaded {
+				capabilityStates, _, err = handler.currentCapabilitySnapshot(ctx, instanceID)
+				if err != nil {
+					return nil, err
+				}
+				capabilityStatesLoaded = true
+			}
+			if reason, blocked := metric.MetricCapabilityBlockReason(metricID, capabilityStates); blocked {
+				entry.Unavailability = nullable.NewNullableWithValue(api.Unavailability(reason))
+				result.Metrics = append(result.Metrics, entry)
+				continue
+			}
+			counterReset, err = handler.metricCounterReset(ctx, instanceID, metricID)
+			if err != nil {
+				return nil, err
+			}
+			collectionState, err = handler.readMetricCollectionState(
+				ctx, instanceID, metricID, controlPlaneFacts.CollectorLastSuccessAt, now, request.Params.To,
+			)
+			if err != nil {
 				return nil, err
 			}
 		}
 
 		series, err := queries.SeriesForMetric(ctx, metric.SeriesForMetricParams{
-			InstanceID: pgtype.UUID{Bytes: request.Id, Valid: true}, MetricID: string(metricID),
+			InstanceID: instanceID, MetricID: metricID.String(),
 		})
 		if err != nil {
 			return nil, err
@@ -241,7 +1017,13 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			entry.Series = append(entry.Series, item)
 		}
 		if len(entry.Series) == 0 {
-			if len(series) == 0 {
+			if counterReset {
+				entry.Unavailability = nullable.NewNullableWithValue(api.COUNTERRESET)
+			} else if collectionState.failed {
+				entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONFAILED)
+			} else if collectionState.stale {
+				entry.Unavailability = nullable.NewNullableWithValue(api.STALE)
+			} else if len(series) == 0 {
 				entry.Unavailability = nullable.NewNullableWithValue(api.NOSAMPLESYET)
 			} else {
 				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
@@ -252,6 +1034,87 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 	return api.GetMetricSeries200JSONResponse(result), nil
 }
 
+func agentMetricUnavailability(facts metric.ControlPlaneFacts, agentStatus string) (api.Unavailability, bool) {
+	switch {
+	case !facts.AgentExpected:
+		return api.NOTAPPLICABLEROLE, true
+	case !facts.AgentMetricsEnabled:
+		return api.FEATUREDISABLED, true
+	case agentStatus == metric.AgentStatusOffline:
+		return api.AGENTOFFLINE, true
+	case agentStatus == metric.AgentStatusPermissionDenied:
+		return api.PERMISSIONDENIED, true
+	case agentStatus == metric.AgentStatusError:
+		return api.COLLECTIONFAILED, true
+	default:
+		return "", false
+	}
+}
+
+type metricCollectionState struct {
+	failed bool
+	stale  bool
+}
+
+func (handler *Handler) readMetricCollectionState(
+	ctx context.Context,
+	instanceID pgtype.UUID,
+	metricID metric.MetricID,
+	completenessWatermark time.Time,
+	now time.Time,
+	requestedTo time.Time,
+) (metricCollectionState, error) {
+	task, exists := metric.TaskForMetric(metricID)
+	if !exists {
+		return metricCollectionState{}, nil
+	}
+	var result, code pgtype.Text
+	var intervalSeconds int32
+	err := handler.platform.QueryRow(ctx, `SELECT state.last_result,
+		state.last_error_code,
+		COALESCE(config.interval_seconds, $3)::integer
+		FROM instance_collection_task_state state
+		LEFT JOIN collection_task_config config
+			ON config.instance_id = state.instance_id AND config.task_id = state.task_id
+		WHERE state.instance_id = $1 AND state.task_id = $2`,
+		instanceID, task.ID, int32(task.Interval/time.Second),
+	).Scan(&result, &code, &intervalSeconds)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return metricCollectionState{}, nil
+	}
+	if err != nil {
+		return metricCollectionState{}, err
+	}
+	state := metricCollectionState{}
+	if result.Valid && (!code.Valid || code.String != string(metric.ResetCounter)) {
+		switch api.CollectionTaskResult(result.String) {
+		case api.FAILED, api.TIMEDOUT, api.SKIPPEDBACKPRESSURE, api.BACKOFF:
+			state.failed = true
+		}
+	}
+	freshness := time.Duration(intervalSeconds) * time.Second * 5 / 2
+	state.stale = !completenessWatermark.IsZero() && now.Sub(completenessWatermark) > freshness &&
+		!requestedTo.Before(now.Add(-freshness))
+	return state, nil
+}
+
+func (handler *Handler) metricCounterReset(ctx context.Context, instanceID pgtype.UUID, metricID metric.MetricID) (bool, error) {
+	task, exists := metric.TaskForMetric(metricID)
+	if !exists {
+		return false, nil
+	}
+	var code pgtype.Text
+	err := handler.platform.QueryRow(ctx, `SELECT last_error_code FROM instance_collection_task_state
+		WHERE instance_id = $1 AND task_id = $2`, instanceID, task.ID).Scan(&code)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return code.Valid && code.String == string(metric.ResetCounter), nil
+}
+
 func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.ReportAgentMetricsRequestObject) (api.ReportAgentMetricsResponseObject, error) {
 	if request.Body == nil {
 		return badAgentRequest("report body is required"), nil
@@ -260,53 +1123,144 @@ func (handler *Handler) ReportAgentMetrics(ctx context.Context, request api.Repo
 	if !ok || authenticated != request.Body.InstanceId {
 		return unauthorizedAgent(), nil
 	}
+	if !agentVersionSupported(request.Body.AgentVersion, handler.serverVersion) {
+		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentVersionErrorCode, agentVersionErrorMessage)
+	}
 	now := handler.clock.Now().UTC()
-	if delta := request.Body.Timestamp.Sub(now); delta > 30*time.Second || delta < -30*time.Second {
-		return badAgentRequest("timestamp must be within 30 seconds of server time"), nil
+	if agentReportHasClockSkew(*request.Body, now) {
+		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentClockSkewErrorCode, agentClockSkewMessage)
+	}
+	if handler.health != nil && handler.health.RejectSampleWrites() {
+		return handler.rejectAgentReport(ctx, authenticated, request.Body.AgentVersion, agentDiskEmergencyErrorCode, agentDiskEmergencyMessage)
 	}
 
-	write := func() error {
-		return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
-			queries := metric.New(tx)
-			for _, sample := range request.Body.Metrics {
+	if err := handler.storeAgentReport(ctx, authenticated, *request.Body, now); err != nil {
+		if !metric.IsMissingPartition(err) {
+			return nil, err
+		}
+		if err := metric.EnsurePartitionRange(ctx, handler.platform, now.Add(-agentBackfillWindow), now, handler.partitionSpan); err != nil {
+			return nil, err
+		}
+		if err := handler.storeAgentReport(ctx, authenticated, *request.Body, now); err != nil {
+			return nil, err
+		}
+	}
+	return api.ReportAgentMetrics200JSONResponse{
+		ServerTime:    now,
+		ServerVersion: handler.serverVersion,
+	}, nil
+}
+
+func agentReportHasClockSkew(report api.AgentReport, now time.Time) bool {
+	earliestCurrentSample := now.Add(-agentClockSkew)
+	latestSample := now.Add(agentClockSkew)
+	if report.Timestamp.Before(earliestCurrentSample) || report.Timestamp.After(latestSample) {
+		return true
+	}
+	if report.Backfill == nil {
+		return false
+	}
+	for _, sample := range *report.Backfill {
+		if sample.Timestamp.After(latestSample) {
+			return true
+		}
+	}
+	return false
+}
+
+func (handler *Handler) storeAgentReport(ctx context.Context, instanceID uuid.UUID, report api.AgentReport, receivedAt time.Time) error {
+	samples := []api.AgentSample{{Timestamp: report.Timestamp, Metrics: report.Metrics}}
+	if report.Backfill != nil {
+		samples = append(samples, (*report.Backfill)...)
+	}
+	oldestSample := receivedAt.Add(-agentBackfillWindow)
+	databaseInstanceID := pgtype.UUID{Bytes: instanceID, Valid: true}
+
+	return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "UPDATE instance SET agent_version = $2 WHERE id = $1", instanceID, report.AgentVersion); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_report_at)
+				VALUES ($1, 'AGENT', $2) ON CONFLICT (instance_id, source)
+				DO UPDATE SET last_report_at = EXCLUDED.last_report_at, last_error_code = NULL, last_error_message = NULL`, instanceID, receivedAt); err != nil {
+			return err
+		}
+		var paused bool
+		if err := tx.QueryRow(ctx, `SELECT collection_paused FROM instance_collection_config
+				WHERE instance_id = $1 FOR SHARE`, instanceID).Scan(&paused); err != nil {
+			return err
+		}
+		if paused {
+			return nil
+		}
+		queries := metric.New(tx)
+		for _, batch := range samples {
+			if batch.Timestamp.Before(oldestSample) {
+				continue
+			}
+			for _, reportedMetric := range batch.Metrics {
 				seriesID, err := queries.UpsertSeries(ctx, metric.UpsertSeriesParams{
-					InstanceID: pgtype.UUID{Bytes: authenticated, Valid: true}, MetricID: string(sample.Metric),
+					InstanceID: databaseInstanceID, MetricID: string(reportedMetric.Metric),
 					Labels: json.RawMessage(`{}`), LabelsKey: "{}",
-					LastSeen: pgtype.Timestamptz{Time: request.Body.Timestamp, Valid: true},
+					LastSeen: pgtype.Timestamptz{Time: batch.Timestamp, Valid: true},
 				})
 				if err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, request.Body.Timestamp, sample.Value); err != nil {
+				if _, err := tx.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, $3)", seriesID, batch.Timestamp, reportedMetric.Value); err != nil {
 					return err
 				}
 			}
-			_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_report_at)
-				VALUES ($1, 'AGENT', $2) ON CONFLICT (instance_id, source)
-				DO UPDATE SET last_report_at = EXCLUDED.last_report_at, last_error_code = NULL, last_error_message = NULL`, authenticated, request.Body.Timestamp)
+		}
+		return nil
+	})
+}
+
+func (handler *Handler) rejectAgentReport(ctx context.Context, instanceID uuid.UUID, version, code, message string) (api.ReportAgentMetricsResponseObject, error) {
+	if err := handler.recordAgentError(ctx, instanceID, version, code, message); err != nil {
+		return nil, err
+	}
+	return badAgentRequest(message), nil
+}
+
+func (handler *Handler) recordAgentError(ctx context.Context, instanceID uuid.UUID, version, code, message string) error {
+	return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "UPDATE instance SET agent_version = $2 WHERE id = $1", instanceID, version); err != nil {
 			return err
-		})
-	}
-	if err := write(); err != nil {
-		if !metric.IsMissingPartition(err) {
-			return nil, err
 		}
-		if err := metric.EnsurePartitions(ctx, handler.platform, now); err != nil {
-			return nil, err
-		}
-		if err := write(); err != nil {
-			return nil, err
-		}
-	}
-	return api.ReportAgentMetrics204Response{}, nil
+		_, err := tx.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_error_code, last_error_message)
+			VALUES ($1, 'AGENT', $2, $3) ON CONFLICT (instance_id, source)
+			DO UPDATE SET last_error_code = EXCLUDED.last_error_code, last_error_message = EXCLUDED.last_error_message`, instanceID, code, message)
+		return err
+	})
+}
+
+func agentVersionSupported(agentVersion, serverVersion string) bool {
+	agentMajor, agentOK := majorVersion(agentVersion)
+	serverMajor, serverOK := majorVersion(serverVersion)
+	return agentOK && serverOK && agentMajor >= serverMajor-1
+}
+
+func majorVersion(version string) (int, bool) {
+	version = strings.TrimPrefix(version, "v")
+	majorText, _, _ := strings.Cut(version, ".")
+	major, err := strconv.Atoi(majorText)
+	return major, err == nil && major >= 0
 }
 
 func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
 	return func(ctx context.Context, writer http.ResponseWriter, request *http.Request, value interface{}) (interface{}, error) {
-		if operationID == "CreateSession" {
-			return next(ctx, writer, request, value)
+		if operationID == "CreateSession" || operationID == "DeleteSession" {
+			mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+			if err != nil || mediaType != "application/json" {
+				writer.WriteHeader(http.StatusUnsupportedMediaType)
+				return nil, nil
+			}
 		}
-		if operationID == "ReportAgentMetrics" {
+		switch operationID {
+		case "CreateSession":
+			return next(ctx, writer, request, value)
+		case "ReportAgentMetrics":
 			report := value.(api.ReportAgentMetricsRequestObject)
 			if report.Body == nil {
 				return badAgentRequest("report body is required"), nil
@@ -318,15 +1272,29 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 				return unauthorizedAgent(), nil
 			}
 			return next(context.WithValue(ctx, authenticatedAgentKey{}, report.Body.InstanceId), writer, request, value)
+		case "DownloadAgentBinary":
+			token := bearerToken(request.Header.Get("Authorization"))
+			if token == "" {
+				return unauthorizedAgentDownload(), nil
+			}
+			hash := sha256.Sum256([]byte(token))
+			instanceID, err := New(handler.platform).GetInstanceIDByAgentTokenHash(ctx, hash[:])
+			if err != nil {
+				return unauthorizedAgentDownload(), nil
+			}
+			return next(context.WithValue(ctx, authenticatedAgentKey{}, uuid.UUID(instanceID.Bytes)), writer, request, value)
 		}
-		cookie, err := request.Cookie(sessionCookie)
+		cookie, err := request.Cookie(sessionCookieName)
 		if err != nil {
 			writer.WriteHeader(http.StatusUnauthorized)
 			return nil, nil
 		}
 		hash := sha256.Sum256([]byte(cookie.Value))
-		role, err := New(handler.platform).GetSessionRole(ctx, GetSessionRoleParams{
-			TokenHash: hash[:], ExpiresAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+		now := handler.clock.Now().UTC()
+		user, err := New(handler.platform).AuthenticateSession(ctx, AuthenticateSessionParams{
+			TokenHash:  hash[:],
+			NowTime:    pgtype.Timestamptz{Time: now, Valid: true},
+			IdleCutoff: pgtype.Timestamptz{Time: now.Add(-handler.sessionConfig.IdleTTL), Valid: true},
 		})
 		if err != nil {
 			writer.WriteHeader(http.StatusUnauthorized)
@@ -337,18 +1305,71 @@ func (handler *Handler) authenticate(next api.StrictHandlerFunc, operationID str
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		if roleRank(role) < roleRank(required) {
+		if roleRank(user.Role) < roleRank(required) {
 			writer.WriteHeader(http.StatusForbidden)
 			return nil, nil
 		}
-		return next(ctx, writer, request, value)
+		authenticatedContext := context.WithValue(ctx, authenticatedUserKey{}, uuid.UUID(user.ID.Bytes))
+		authenticatedContext = context.WithValue(authenticatedContext, authenticatedSessionHashKey{}, hash[:])
+		response, err := next(authenticatedContext, writer, request, value)
+		var credentialFault *instance.CredentialFault
+		if errors.As(err, &credentialFault) {
+			handler.health.Update(handler.clock.Now().UTC(), platformhealth.CredentialSource(platformhealth.CredentialFacts{
+				Available:   true,
+				FailureCode: string(credentialFault.Code),
+			}))
+		}
+		return response, err
 	}
 }
 
 var RequiredRoles = map[string]string{
-	"CreateSession": "READONLY", "ReportAgentMetrics": "AGENT",
+	"CreateSession": "READONLY", "DeleteSession": "READONLY", "ReportAgentMetrics": "AGENT", "DownloadAgentBinary": "AGENT",
+	"ListPlatformEvents":   "READONLY",
+	"GetAgentRegistration": "READONLY", "RegisterAgent": "PLATFORM_ADMIN",
+	"RotateAgentToken": "PLATFORM_ADMIN", "RevokeAgentToken": "PLATFORM_ADMIN", "DisableAgent": "PLATFORM_ADMIN",
+	"GetPlatformHealth":           "PLATFORM_ADMIN",
+	"GetDiskDiagnostics":          "PLATFORM_ADMIN",
+	"GetSchedulerDiagnostics":     "PLATFORM_ADMIN",
+	"GetPartitionDiagnostics":     "PLATFORM_ADMIN",
+	"GetCertificateDiagnostics":   "PLATFORM_ADMIN",
+	"GetKeyringDiagnostics":       "PLATFORM_ADMIN",
+	"GetPlatformDiagnostics":      "PLATFORM_ADMIN",
+	"ListAlertRules":              "READONLY",
+	"GetAlertRule":                "READONLY",
+	"CreateAlertRule":             "ALERT_ADMIN",
+	"DeleteAlertRule":             "ALERT_ADMIN",
+	"UpdateAlertRule":             "ALERT_ADMIN",
+	"UpdateAlertRuleEnabled":      "ALERT_ADMIN",
+	"CopyAlertRule":               "ALERT_ADMIN",
+	"ListAlertRuleTemplates":      "READONLY",
+	"CreateAlertRuleFromTemplate": "ALERT_ADMIN",
+	"GetAlertDisposition":         "READONLY", "UpdateAlertDisposition": "ALERT_ADMIN",
+	"GetAlertDetail": "READONLY", "ListAlertEvents": "READONLY", "GetAlertTriggerSnapshot": "READONLY",
+	"ListCurrentAlerts": "READONLY", "ListAlertHistory": "READONLY",
+	"ListAlertNotifications": "READONLY",
+	"GetSMTPChannel":         "READONLY", "UpdateSMTPChannel": "ALERT_ADMIN", "TestSMTPChannel": "ALERT_ADMIN",
+	"ListWebhookTargets": "READONLY", "CreateWebhookTarget": "ALERT_ADMIN",
+	"UpdateWebhookTarget": "ALERT_ADMIN", "DeleteWebhookTarget": "ALERT_ADMIN", "TestWebhookTarget": "ALERT_ADMIN",
+	"GetChannelFailures":       "READONLY",
+	"ListNotificationContacts": "READONLY", "CreateNotificationContact": "ALERT_ADMIN",
+	"UpdateNotificationContact": "ALERT_ADMIN", "DeleteNotificationContact": "ALERT_ADMIN",
+	"ListNotificationContactGroups": "READONLY", "CreateNotificationContactGroup": "ALERT_ADMIN",
+	"UpdateNotificationContactGroup": "ALERT_ADMIN", "DeleteNotificationContactGroup": "ALERT_ADMIN",
+	"GetNotificationPolicySettings": "READONLY",
+	"ListNotificationPolicies": "READONLY", "CreateNotificationPolicy": "ALERT_ADMIN",
+	"UpdateNotificationPolicy": "ALERT_ADMIN", "DeleteNotificationPolicy": "ALERT_ADMIN",
+	"ListMaintenanceWindows": "READONLY", "CreateMaintenanceWindow": "ALERT_ADMIN",
+	"UpdateMaintenanceWindow": "ALERT_ADMIN", "EndMaintenanceWindow": "ALERT_ADMIN", "DeleteMaintenanceWindow": "ALERT_ADMIN",
+	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
-	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
+	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
+	"ListLongQuerySamples": "READONLY", "GetQueryStatisticsSnapshot": "READONLY", "GetSessionSnapshot": "READONLY",
+	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",
+	"CreateInstance": "PLATFORM_ADMIN", "UpdateInstance": "ALERT_ADMIN", "UpdateInstanceCredential": "PLATFORM_ADMIN", "DeleteInstance": "PLATFORM_ADMIN",
+	"GetCurrentUser": "READONLY", "ChangeOwnPassword": "READONLY", "ListUsers": "READONLY",
+	"CreateUser": "PLATFORM_ADMIN", "ResetUserPassword": "PLATFORM_ADMIN",
+	"UpdateUserRole": "PLATFORM_ADMIN", "UpdateUserStatus": "PLATFORM_ADMIN",
 }
 
 func roleRank(role string) int {
@@ -370,23 +1391,53 @@ func SeedAdmin(ctx context.Context, platform *db.Pool, username, password string
 	})
 }
 
-func toAPIInstance(id pgtype.UUID, name, host string, port int32, database, username string, status api.AlertStatus) api.Instance {
-	return api.Instance{Id: id.Bytes, Name: name, Host: host, Port: int(port), Database: database, Username: username, AlertStatus: status}
-}
-
-func alertStatus(ctx context.Context, platform *db.Pool, id pgtype.UUID) (api.AlertStatus, error) {
-	status, err := New(platform).GetInstanceAlertStatus(ctx, id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return api.OK, nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return api.AlertStatus(status), nil
-}
-
 func metricUnit(metricID string) string {
 	return metric.UnitFor(metric.MetricID(metricID))
+}
+
+func timePointer(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
+	}
+	result := value.Time.UTC()
+	return &result
+}
+
+func databaseUUID(value uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: value, Valid: true}
+}
+
+func (handler *Handler) agentRegistration(
+	expected bool,
+	issuedAt, revokedAt, firstRegisteredAt pgtype.Timestamptz,
+	agentVersion pgtype.Text,
+) api.AgentRegistration {
+	state := api.NEVERREGISTERED
+	if firstRegisteredAt.Valid && !expected {
+		state = api.DISABLED
+	} else if expected && revokedAt.Valid {
+		state = api.REVOKED
+	} else if expected {
+		state = api.EXPECTEDONLINE
+	}
+	result := api.AgentRegistration{
+		AgentExpected:     expected,
+		State:             state,
+		IssuedAt:          timePointer(issuedAt),
+		RevokedAt:         timePointer(revokedAt),
+		FirstRegisteredAt: timePointer(firstRegisteredAt),
+		Installation: api.AgentInstallation{
+			CaFingerprintSha256: handler.caFingerprint,
+			InstallerPath:       "/api/agent/install/install.sh",
+			AuthenticationPath:  "/etc/dbs-monitor-agent/token",
+			FileMode:            api.N0600,
+			RestartCommand:      "systemctl restart dbs-monitor-agent.service",
+		},
+	}
+	if agentVersion.Valid {
+		result.AgentVersion = &agentVersion.String
+	}
+	return result
 }
 
 func newToken() (string, []byte, error) {
@@ -395,6 +1446,16 @@ func newToken() (string, []byte, error) {
 		return "", nil, err
 	}
 	token := hex.EncodeToString(value)
+	hash := sha256.Sum256([]byte(token))
+	return token, hash[:], nil
+}
+
+func newAgentToken() (string, []byte, error) {
+	value := make([]byte, 32)
+	if _, err := rand.Read(value); err != nil {
+		return "", nil, err
+	}
+	token := base64.RawURLEncoding.EncodeToString(value)
 	hash := sha256.Sum256([]byte(token))
 	return token, hash[:], nil
 }
@@ -413,6 +1474,10 @@ func unauthorizedLogin() api.CreateSession401JSONResponse {
 
 func unauthorizedAgent() api.ReportAgentMetrics401JSONResponse {
 	return api.ReportAgentMetrics401JSONResponse(errorBody(api.UNAUTHENTICATED, "invalid agent token"))
+}
+
+func unauthorizedAgentDownload() api.DownloadAgentBinary401JSONResponse {
+	return api.DownloadAgentBinary401JSONResponse(errorBody(api.UNAUTHENTICATED, "invalid agent token"))
 }
 
 func badAgentRequest(message string) api.ReportAgentMetrics400JSONResponse {

@@ -1,0 +1,124 @@
+/api/v1/alerts/current:
+  get:
+    tags: [alerts]
+    operationId: listCurrentAlerts
+    x-required-role: READONLY
+    parameters:
+      - name: instance_id
+        in: query
+        schema: { type: string, format: uuid }
+      - name: include_paused
+        in: query
+        schema: { type: boolean, default: false }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      - name: offset
+        in: query
+        schema: { type: integer, minimum: 0, default: 0 }
+    responses:
+      '200':
+        description: Current alert instances, excluding paused frozen alerts by default
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alerts.yaml#/AlertObservationPage }
+      '400':
+        description: Invalid pagination
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+
+/api/v1/alerts/history:
+  get:
+    tags: [alerts]
+    operationId: listAlertHistory
+    x-required-role: READONLY
+    parameters:
+      - name: instance_id
+        in: query
+        schema: { type: string, format: uuid }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      - name: offset
+        in: query
+        schema: { type: integer, minimum: 0, default: 0 }
+    responses:
+      '200':
+        description: Recovered alert instance history
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alerts.yaml#/AlertObservationPage }
+      '400':
+        description: Invalid pagination
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+
+/api/v1/alert-instances/{id}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [alerts]
+    operationId: getAlertDetail
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Alert observation detail and rule version history
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alerts.yaml#/AlertDetail }
+      '404':
+        description: Alert instance not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+
+/api/v1/alert-instances/{id}/events:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [alerts]
+    operationId: listAlertEvents
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Complete alert event history with maintenance attribution
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/alerts.yaml#/AlertEvent }
+      '404':
+        description: Alert instance not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+
+/api/v1/alert-instances/{id}/trigger-snapshot:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [alerts]
+    operationId: getAlertTriggerSnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Trigger-time session snapshot result
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/alerts.yaml#/AlertTriggerSnapshot }
+      '404':
+        description: Alert instance not found
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

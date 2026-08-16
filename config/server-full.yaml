@@ -1,0 +1,58 @@
+# DBS Monitor server deployment configuration.
+# Install as /etc/dbs-monitor/config.yaml, owned by the server user, mode 0600.
+# Durations use Go duration syntax (for example: 30s, 15m, 2h).
+
+# Metric partition width. Default: 24h.
+partition_span: 24h
+
+# Interval between partition maintenance passes. Default: 1h.
+partition_maintenance_interval: 1h
+
+# Retention for recovered alert history and its dependent records. Default: 2160h (90 days).
+alert_history_retention: 2160h
+
+# Lowest repeat_interval accepted by notification policy validation. Default: 15m.
+repeat_interval_minimum: 15m
+
+# Maximum delay between notification delivery retries. Attempt count remains fixed at 3. Default: 5s.
+notification_retry_backoff_cap: 5s
+
+# Maximum sessions retained in a trigger snapshot before truncation. Default: 100.
+snapshot_truncation_limit: 100
+
+# Optional platform database capacity budget in bytes. When omitted, capacity health is UNKNOWN
+# and sample writes remain enabled. Size this from the deployment capacity calculation.
+# platform_database_capacity_budget_bytes: 52720723558
+
+# Server-local filesystem to monitor. This is independent of the external platform database.
+local_disk_path: /var/lib/dbs-monitor
+
+# Managed local artifacts and bounded retention. Reclamation is recorded as platform events.
+diagnostic_bundle_directory: /var/lib/dbs-monitor/diagnostics
+diagnostic_bundle_retention_limit: 5
+notification_snapshot_retention_limit: 1
+
+# Age at which collector.last_success_time is considered stale. Default: 10m.
+collection_freshness_threshold: 10m
+
+# Maximum wait for the platform migration advisory lock. Default: 1m.
+migration_lock_wait_timeout: 1m
+
+# Server-side user session limits. Defaults: absolute 12h, idle 2h.
+session_absolute_ttl: 12h
+session_idle_ttl: 2h
+
+# Directory containing the two architecture-specific Agent binaries. Default shown.
+agent_binary_dir: /opt/dbs-monitor/bin
+
+# The platform database is external PostgreSQL 17. search_path and sslmode are mandatory.
+# The password remains plaintext in this 0600 file because the keyring cannot protect the
+# credential needed to open the database that contains the encrypted application secrets.
+platform_database_url: postgres://dbs_monitor:change-me@platform-db:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full
+
+# Directory containing current and versioned master-key files. Default shown.
+# DBS_MONITOR_MASTER_KEY_PATH may override this path; key material is never read from the environment.
+master_key_path: /etc/dbs-monitor/credentials
+
+# Intentionally not configurable: NO_DATA requires 2 periods and notification delivery
+# uses exactly 3 attempts. Those values are product semantics, not deployment knobs.

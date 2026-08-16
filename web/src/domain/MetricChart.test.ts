@@ -14,4 +14,8 @@ describe('chartData', () => {
   it('does not invent absent time buckets', () => {
     expect(chartData([[1, 3], [3, 5]])).toEqual([[1000, 3], [3000, 5]])
   })
+
+  it('preserves a real zero as a chart point', () => {
+    expect(chartData([[1, 0]])).toEqual([[1000, 0]])
+  })
 })

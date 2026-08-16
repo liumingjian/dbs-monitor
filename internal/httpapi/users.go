@@ -1,0 +1,334 @@
+package httpapi
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"golang.org/x/crypto/bcrypt"
+
+	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/platformevent"
+)
+
+var (
+	errLastPlatformAdmin  = errors.New("at least one enabled platform administrator is required")
+	errSelfDisable        = errors.New("you cannot disable your own account")
+	errSelfDowngrade      = errors.New("you cannot downgrade your own role")
+	errSelfPasswordReset  = errors.New("use change password to update your own password")
+	errUserNotFound       = errors.New("user not found")
+	errInvalidOwnPassword = errors.New("old password is incorrect")
+)
+
+func (handler *Handler) GetCurrentUser(ctx context.Context, _ api.GetCurrentUserRequestObject) (api.GetCurrentUserResponseObject, error) {
+	currentUserID := databaseUserID(authenticatedUserID(ctx))
+	row, err := New(handler.platform).GetCurrentUser(ctx, currentUserID)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetCurrentUser200JSONResponse(toAPIUser(row.ID, row.Username, row.Role, row.Enabled, row.CreatedAt)), nil
+}
+
+func (handler *Handler) ListUsers(ctx context.Context, _ api.ListUsersRequestObject) (api.ListUsersResponseObject, error) {
+	rows, err := New(handler.platform).ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	response := make(api.ListUsers200JSONResponse, 0, len(rows))
+	for _, row := range rows {
+		response = append(response, toAPIUser(row.ID, row.Username, row.Role, row.Enabled, row.CreatedAt))
+	}
+	return response, nil
+}
+
+func (handler *Handler) CreateUser(ctx context.Context, request api.CreateUserRequestObject) (api.CreateUserResponseObject, error) {
+	if request.Body == nil || strings.TrimSpace(request.Body.Username) == "" || !validRole(request.Body.Role) {
+		return api.CreateUser400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid username and role are required")), nil
+	}
+	password, passwordHash, err := generatedPassword()
+	if err != nil {
+		return nil, err
+	}
+	actorID := authenticatedUserID(ctx)
+	newUserID := uuid.New()
+	occurredAt := handler.clock.Now().UTC()
+	var createdUser CreateUserRow
+	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		row, err := New(tx).CreateUser(ctx, CreateUserParams{
+			ID:           databaseUserID(newUserID),
+			Username:     request.Body.Username,
+			PasswordHash: passwordHash,
+			Role:         string(request.Body.Role),
+			CreatedBy:    databaseUserID(actorID),
+		})
+		if err != nil {
+			return err
+		}
+		createdUser = row
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserCreated,
+			OccurredAt: occurredAt,
+			ActorID:    &actorID,
+			SubjectID:  &newUserID,
+		})
+	})
+	if err != nil {
+		var databaseError *pgconn.PgError
+		if errors.As(err, &databaseError) && databaseError.Code == "23505" {
+			return api.CreateUser409JSONResponse(errorBody(api.CONFLICT, "username already exists")), nil
+		}
+		return nil, err
+	}
+	return api.CreateUser201JSONResponse{
+		User:            toAPIUser(createdUser.ID, createdUser.Username, createdUser.Role, createdUser.Enabled, createdUser.CreatedAt),
+		InitialPassword: password,
+	}, nil
+}
+
+func (handler *Handler) UpdateUserStatus(ctx context.Context, request api.UpdateUserStatusRequestObject) (api.UpdateUserStatusResponseObject, error) {
+	if request.Body == nil {
+		return nil, errors.New("user status body is required")
+	}
+	err := handler.setUserEnabled(ctx, authenticatedUserID(ctx), request.Id, request.Body.Enabled)
+	if errors.Is(err, errSelfDisable) || errors.Is(err, errLastPlatformAdmin) {
+		actorID := authenticatedUserID(ctx)
+		if recordErr := platformevent.Record(ctx, handler.platform, platformevent.Event{
+			Kind:       platformevent.UserStatusChangeRejected,
+			OccurredAt: handler.clock.Now().UTC(),
+			ActorID:    &actorID,
+			SubjectID:  &request.Id,
+		}); recordErr != nil {
+			return nil, recordErr
+		}
+		return api.UpdateUserStatus400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
+	}
+	if errors.Is(err, errUserNotFound) {
+		return api.UpdateUserStatus404JSONResponse(errorBody(api.NOTFOUND, err.Error())), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	row, err := New(handler.platform).GetCurrentUser(ctx, databaseUserID(request.Id))
+	if err != nil {
+		return nil, err
+	}
+	return api.UpdateUserStatus200JSONResponse(toAPIUser(row.ID, row.Username, row.Role, row.Enabled, row.CreatedAt)), nil
+}
+
+func (handler *Handler) UpdateUserRole(ctx context.Context, request api.UpdateUserRoleRequestObject) (api.UpdateUserRoleResponseObject, error) {
+	if request.Body == nil || !validRole(request.Body.Role) {
+		return api.UpdateUserRole400JSONResponse(errorBody(api.VALIDATIONFAILED, "valid role is required")), nil
+	}
+	err := handler.setUserRole(ctx, authenticatedUserID(ctx), request.Id, string(request.Body.Role))
+	if errors.Is(err, errSelfDowngrade) || errors.Is(err, errLastPlatformAdmin) {
+		return api.UpdateUserRole400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
+	}
+	if errors.Is(err, errUserNotFound) {
+		return api.UpdateUserRole404JSONResponse(errorBody(api.NOTFOUND, err.Error())), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	row, err := New(handler.platform).GetCurrentUser(ctx, databaseUserID(request.Id))
+	if err != nil {
+		return nil, err
+	}
+	return api.UpdateUserRole200JSONResponse(toAPIUser(row.ID, row.Username, row.Role, row.Enabled, row.CreatedAt)), nil
+}
+
+func (handler *Handler) ResetUserPassword(ctx context.Context, request api.ResetUserPasswordRequestObject) (api.ResetUserPasswordResponseObject, error) {
+	if authenticatedUserID(ctx) == request.Id {
+		return api.ResetUserPassword400JSONResponse(errorBody(api.VALIDATIONFAILED, errSelfPasswordReset.Error())), nil
+	}
+	password, passwordHash, err := generatedPassword()
+	if err != nil {
+		return nil, err
+	}
+	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := New(tx)
+		targetID := databaseUserID(request.Id)
+		updated, err := queries.SetUserPassword(ctx, SetUserPasswordParams{ID: targetID, PasswordHash: passwordHash})
+		if err != nil {
+			return err
+		}
+		if updated == 0 {
+			return errUserNotFound
+		}
+		if err := queries.DeleteUserSessions(ctx, targetID); err != nil {
+			return err
+		}
+		actorID := authenticatedUserID(ctx)
+		subjectID := request.Id
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserPasswordReset,
+			OccurredAt: handler.clock.Now().UTC(),
+			ActorID:    &actorID,
+			SubjectID:  &subjectID,
+		})
+	})
+	if errors.Is(err, errUserNotFound) {
+		return api.ResetUserPassword404JSONResponse(errorBody(api.NOTFOUND, err.Error())), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.ResetUserPassword200JSONResponse{Password: password}, nil
+}
+
+func (handler *Handler) ChangeOwnPassword(ctx context.Context, request api.ChangeOwnPasswordRequestObject) (api.ChangeOwnPasswordResponseObject, error) {
+	if request.Body == nil || utf8.RuneCountInString(request.Body.NewPassword) < 12 {
+		return api.ChangeOwnPassword400JSONResponse(errorBody(api.VALIDATIONFAILED, "new password must be at least 12 characters")), nil
+	}
+	currentUserID := databaseUserID(authenticatedUserID(ctx))
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.Body.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := New(tx)
+		oldHash, err := queries.GetUserPassword(ctx, currentUserID)
+		if err != nil || bcrypt.CompareHashAndPassword(oldHash, []byte(request.Body.OldPassword)) != nil {
+			return errInvalidOwnPassword
+		}
+		if _, err := queries.SetUserPassword(ctx, SetUserPasswordParams{ID: currentUserID, PasswordHash: passwordHash}); err != nil {
+			return err
+		}
+		return queries.DeleteOtherUserSessions(ctx, DeleteOtherUserSessionsParams{
+			UserID:    currentUserID,
+			TokenHash: authenticatedSessionHash(ctx),
+		})
+	})
+	if errors.Is(err, errInvalidOwnPassword) {
+		return api.ChangeOwnPassword400JSONResponse(errorBody(api.VALIDATIONFAILED, "old password is incorrect")), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return api.ChangeOwnPassword204Response{}, nil
+}
+
+func (handler *Handler) setUserEnabled(ctx context.Context, actorID, targetID uuid.UUID, newEnabled bool) error {
+	return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := New(tx)
+		enabledAdminIDs, err := queries.LockEnabledPlatformAdmins(ctx)
+		if err != nil {
+			return err
+		}
+		target, err := queries.GetUserForUpdate(ctx, databaseUserID(targetID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errUserNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if !newEnabled && actorID == targetID {
+			return errSelfDisable
+		}
+		disablesPlatformAdmin := !newEnabled && target.Enabled && target.Role == string(api.PLATFORMADMIN)
+		if disablesPlatformAdmin && len(enabledAdminIDs) <= 1 {
+			return errLastPlatformAdmin
+		}
+		now := handler.clock.Now().UTC()
+		if _, err := queries.SetUserEnabled(ctx, SetUserEnabledParams{
+			ID:               target.ID,
+			Enabled:          newEnabled,
+			EnabledUpdatedBy: databaseUserID(actorID),
+			EnabledUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		}); err != nil {
+			return err
+		}
+		if !newEnabled {
+			if err := queries.DeleteUserSessions(ctx, target.ID); err != nil {
+				return err
+			}
+		}
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserStatusChanged,
+			OccurredAt: now,
+			ActorID:    &actorID,
+			SubjectID:  &targetID,
+		})
+	})
+}
+
+func (handler *Handler) setUserRole(ctx context.Context, actorID, targetID uuid.UUID, newRole string) error {
+	return handler.platform.InTx(ctx, func(tx pgx.Tx) error {
+		queries := New(tx)
+		enabledAdminIDs, err := queries.LockEnabledPlatformAdmins(ctx)
+		if err != nil {
+			return err
+		}
+		target, err := queries.GetUserForUpdate(ctx, databaseUserID(targetID))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errUserNotFound
+		}
+		if err != nil {
+			return err
+		}
+		downgradesPlatformAdmin := target.Role == string(api.PLATFORMADMIN) && newRole != string(api.PLATFORMADMIN)
+		if actorID == targetID && downgradesPlatformAdmin {
+			return errSelfDowngrade
+		}
+		if target.Enabled && downgradesPlatformAdmin && len(enabledAdminIDs) <= 1 {
+			return errLastPlatformAdmin
+		}
+		now := handler.clock.Now().UTC()
+		if _, err := queries.SetUserRole(ctx, SetUserRoleParams{
+			ID:            target.ID,
+			Role:          newRole,
+			RoleUpdatedBy: databaseUserID(actorID),
+			RoleUpdatedAt: pgtype.Timestamptz{Time: now, Valid: true},
+		}); err != nil {
+			return err
+		}
+		return platformevent.Record(ctx, tx, platformevent.Event{
+			Kind:       platformevent.UserRoleChanged,
+			OccurredAt: now,
+			ActorID:    &actorID,
+			SubjectID:  &targetID,
+		})
+	})
+}
+
+func generatedPassword() (string, []byte, error) {
+	randomBytes := make([]byte, 18)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", nil, err
+	}
+	password := hex.EncodeToString(randomBytes)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return password, passwordHash, err
+}
+
+func validRole(role api.Role) bool {
+	return role == api.READONLY || role == api.ALERTADMIN || role == api.PLATFORMADMIN
+}
+
+func authenticatedUserID(ctx context.Context) uuid.UUID {
+	return ctx.Value(authenticatedUserKey{}).(uuid.UUID)
+}
+
+func authenticatedSessionHash(ctx context.Context) []byte {
+	return ctx.Value(authenticatedSessionHashKey{}).([]byte)
+}
+
+func databaseUserID(id uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: id, Valid: true}
+}
+
+func toAPIUser(id pgtype.UUID, username, role string, enabled bool, createdAt pgtype.Timestamptz) api.User {
+	return api.User{
+		Id:        id.Bytes,
+		Username:  username,
+		Role:      api.Role(role),
+		Enabled:   enabled,
+		CreatedAt: createdAt.Time,
+	}
+}

@@ -1,0 +1,94 @@
+/api/v1/instances/{id}/agent/registration:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [agent]
+    operationId: getAgentRegistration
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Persisted Agent registration lifecycle
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/agent.yaml#/AgentRegistration }
+  post:
+    tags: [agent]
+    operationId: registerAgent
+    x-required-role: PLATFORM_ADMIN
+    responses:
+      '200':
+        description: Agent registered and token issued once
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/agent.yaml#/AgentTokenIssued }
+      '409':
+        description: Agent is already registered or cannot be re-enabled
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/{id}/agent/token/rotation:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  post:
+    tags: [agent]
+    operationId: rotateAgentToken
+    x-required-role: PLATFORM_ADMIN
+    responses:
+      '200':
+        description: Agent token rotated and returned once
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/agent.yaml#/AgentTokenIssued }
+      '409':
+        description: Agent has no active token to rotate
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/{id}/agent/token/revocation:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  post:
+    tags: [agent]
+    operationId: revokeAgentToken
+    x-required-role: PLATFORM_ADMIN
+    responses:
+      '200':
+        description: Agent token revoked while the Agent remains expected online
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/agent.yaml#/AgentRegistration }
+      '409':
+        description: Agent has no active token to revoke
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/{id}/agent/disable:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  post:
+    tags: [agent]
+    operationId: disableAgent
+    x-required-role: PLATFORM_ADMIN
+    responses:
+      '200':
+        description: Agent disabled and its token invalidated
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/agent.yaml#/AgentRegistration }
+      '409':
+        description: Agent is not currently expected online
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

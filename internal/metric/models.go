@@ -8,23 +8,169 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AlertEvent struct {
+	ID                  int64
+	AlertInstanceID     pgtype.UUID
+	RuleID              pgtype.UUID
+	RuleVersion         int32
+	Kind                string
+	FromState           string
+	ToState             string
+	CurrentValue        pgtype.Float8
+	Unavailability      pgtype.Text
+	RuleSnapshot        []byte
+	EvaluatedAt         pgtype.Timestamptz
+	ActorID             pgtype.UUID
+	ActedAt             pgtype.Timestamptz
+	FromDisposition     pgtype.Text
+	ToDisposition       pgtype.Text
+	DispositionNote     pgtype.Text
+	IgnoreReasonCode    pgtype.Text
+	IgnoreReasonDetail  pgtype.Text
+	TriggerSnapshotID   pgtype.UUID
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
+}
+
 type AlertInstance struct {
-	InstanceID        pgtype.UUID
-	MetricID          string
-	Status            string
-	BreachCount       int32
-	RecoveryCount     int32
-	NoDataCount       int32
-	StateBeforeNoData pgtype.Text
-	Unavailability    pgtype.Text
-	UpdatedAt         pgtype.Timestamptz
+	InstanceID          pgtype.UUID
+	MetricID            string
+	Status              string
+	BreachCount         int32
+	RecoveryCount       int32
+	NoDataCount         int32
+	StateBeforeNoData   pgtype.Text
+	Unavailability      pgtype.Text
+	UpdatedAt           pgtype.Timestamptz
+	ID                  pgtype.UUID
+	RuleID              pgtype.UUID
+	RuleVersion         int32
+	Severity            string
+	CurrentValue        pgtype.Float8
+	RuleSnapshot        []byte
+	MetricDimensionKey  string
+	FirstTriggeredAt    pgtype.Timestamptz
+	FirstRuleVersion    pgtype.Int4
+	FirstRuleSnapshot   []byte
+	RecoveredAt         pgtype.Timestamptz
+	Disposition         string
+	DispositionBy       pgtype.UUID
+	DispositionAt       pgtype.Timestamptz
+	DispositionNote     pgtype.Text
+	IgnoreReasonCode    pgtype.Text
+	IgnoreReasonDetail  pgtype.Text
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
+}
+
+type AlertRule struct {
+	ID                        pgtype.UUID
+	Name                      string
+	MetricID                  string
+	Aggregation               string
+	Operator                  string
+	Threshold                 float64
+	RecoveryOperator          string
+	RecoveryThreshold         float64
+	WindowSeconds             int32
+	ConsecutiveCount          int32
+	RecoveryConsecutiveCount  int32
+	Severity                  string
+	NoDataPolicy              string
+	Enabled                   bool
+	Version                   int32
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	Scope                     string
+	EvaluationIntervalSeconds int32
+	EnabledUpdatedBy          pgtype.UUID
+	EnabledUpdatedAt          pgtype.Timestamptz
+	BuiltinIdentifier         pgtype.Text
+	NotificationPolicyID      pgtype.UUID
+	SourceTemplateID          pgtype.Text
+	SourceTemplateVersion     pgtype.Int4
+	CreatedBy                 pgtype.UUID
+	UpdatedBy                 pgtype.UUID
+	DeletedBy                 pgtype.UUID
+	DeletedAt                 pgtype.Timestamptz
+}
+
+type AlertRuleEvaluationState struct {
+	RuleID             pgtype.UUID
+	InstanceID         pgtype.UUID
+	MetricDimensionKey string
+	LastEvaluatedAt    pgtype.Timestamptz
+}
+
+type AlertRuleScopeInstance struct {
+	RuleID     pgtype.UUID
+	InstanceID pgtype.UUID
+}
+
+type AlertRuleTemplate struct {
+	Identifier                string
+	Version                   int32
+	Name                      string
+	MetricID                  string
+	Aggregation               string
+	Operator                  string
+	Threshold                 float64
+	RecoveryOperator          string
+	RecoveryThreshold         float64
+	WindowSeconds             int32
+	ConsecutiveCount          int32
+	RecoveryConsecutiveCount  int32
+	Severity                  string
+	NoDataPolicy              string
+	EvaluationIntervalSeconds int32
+}
+
+type AlertRuleVersion struct {
+	RuleID    pgtype.UUID
+	Version   int32
+	Snapshot  []byte
+	CreatedAt pgtype.Timestamptz
+	CreatedBy pgtype.UUID
+}
+
+type AlertTriggerSnapshot struct {
+	ID                 pgtype.UUID
+	AlertInstanceID    pgtype.UUID
+	CapturedAt         pgtype.Timestamptz
+	Result             string
+	OriginalMatchCount int32
+	Truncated          bool
+	FailureReason      pgtype.Text
+}
+
+type AlertTriggerSnapshotSession struct {
+	SnapshotID            pgtype.UUID
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
 }
 
 type AppUser struct {
-	ID           pgtype.UUID
-	Username     string
-	PasswordHash []byte
-	Role         string
+	ID               pgtype.UUID
+	Username         string
+	PasswordHash     []byte
+	Role             string
+	Enabled          bool
+	CreatedAt        pgtype.Timestamptz
+	CreatedBy        pgtype.UUID
+	EnabledUpdatedBy pgtype.UUID
+	EnabledUpdatedAt pgtype.Timestamptz
+	RoleUpdatedBy    pgtype.UUID
+	RoleUpdatedAt    pgtype.Timestamptz
 }
 
 type CollectionTaskConfig struct {
@@ -32,18 +178,35 @@ type CollectionTaskConfig struct {
 	TaskID          string
 	IntervalSeconds int32
 	UpdatedAt       pgtype.Timestamptz
+	UpdatedBy       pgtype.UUID
 }
 
 type Instance struct {
-	ID             pgtype.UUID
-	Name           string
-	Host           string
-	Port           int32
-	DatabaseName   string
-	Username       string
-	Password       string
-	AgentTokenHash []byte
-	CreatedAt      pgtype.Timestamptz
+	ID                     pgtype.UUID
+	Name                   string
+	Host                   string
+	Port                   int32
+	DatabaseName           string
+	Username               string
+	AgentTokenHash         []byte
+	CreatedAt              pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+	PasswordCiphertext     []byte
+	PasswordKeyVersion     int32
+	CredentialVersion      int64
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	CreatedBy              pgtype.UUID
+	CredentialUpdatedBy    pgtype.UUID
+	CredentialUpdatedAt    pgtype.Timestamptz
+}
+
+type InstanceCapabilitySnapshot struct {
+	InstanceID pgtype.UUID
+	ObservedAt pgtype.Timestamptz
+	States     []byte
 }
 
 type InstanceCollectState struct {
@@ -56,9 +219,107 @@ type InstanceCollectState struct {
 }
 
 type InstanceCollectionConfig struct {
+	InstanceID               pgtype.UUID
+	AgentMetricsEnabled      bool
+	UpdatedAt                pgtype.Timestamptz
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+}
+
+type InstanceCollectionConnectionState struct {
 	InstanceID          pgtype.UUID
-	AgentMetricsEnabled bool
-	UpdatedAt           pgtype.Timestamptz
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
+}
+
+type InstanceCollectionTaskState struct {
+	InstanceID          pgtype.UUID
+	TaskID              string
+	LastDueAt           pgtype.Timestamptz
+	LastStartedAt       pgtype.Timestamptz
+	LastFinishedAt      pgtype.Timestamptz
+	LastSuccessAt       pgtype.Timestamptz
+	LastResult          pgtype.Text
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
+}
+
+type InstanceIdentity struct {
+	ID        pgtype.UUID
+	Name      string
+	RemovedAt pgtype.Timestamptz
+}
+
+type InstanceSessionSnapshot struct {
+	InstanceID    pgtype.UUID
+	SampledAt     pgtype.Timestamptz
+	OriginalCount int32
+	Truncated     bool
+}
+
+type InstanceSessionSnapshotEntry struct {
+	InstanceID            pgtype.UUID
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+type LongQuerySample struct {
+	InstanceID            pgtype.UUID
+	SampledAt             pgtype.Timestamptz
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       int64
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+type LongQuerySampleSnapshot struct {
+	InstanceID    pgtype.UUID
+	SampledAt     pgtype.Timestamptz
+	OriginalCount int32
+	Truncated     bool
+}
+
+type MaintenanceWindow struct {
+	ID        pgtype.UUID
+	StartsAt  pgtype.Timestamptz
+	EndsAt    pgtype.Timestamptz
+	Reason    string
+	CreatedBy pgtype.UUID
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	UpdatedBy pgtype.UUID
+	EndedBy   pgtype.UUID
+	DeletedBy pgtype.UUID
+}
+
+type MaintenanceWindowInstance struct {
+	MaintenanceWindowID pgtype.UUID
+	InstanceID          pgtype.UUID
 }
 
 type MetricSample struct {
@@ -77,8 +338,148 @@ type MetricSeries struct {
 	LastSeen   pgtype.Timestamptz
 }
 
+type NotificationAttempt struct {
+	ID             int64
+	NotificationID pgtype.UUID
+	AttemptedAt    pgtype.Timestamptz
+	Result         string
+	FailureReason  pgtype.Text
+	RetryCount     int32
+}
+
+type NotificationContact struct {
+	ID         pgtype.UUID
+	Name       string
+	Email      string
+	ExternalID pgtype.Text
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+type NotificationContactGroup struct {
+	ID        pgtype.UUID
+	Name      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
+type NotificationContactGroupMember struct {
+	GroupID   pgtype.UUID
+	ContactID pgtype.UUID
+}
+
+type NotificationDelivery struct {
+	ID              pgtype.UUID
+	AlertInstanceID pgtype.UUID
+	EventType       string
+	Channel         string
+	Target          string
+	TemplateID      pgtype.Text
+	Payload         []byte
+	Status          string
+	AttemptCount    int32
+	NextAttemptAt   pgtype.Timestamptz
+	LockedUntil     pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	CompletedAt     pgtype.Timestamptz
+	ChannelTargetID pgtype.UUID
+}
+
+type NotificationPolicy struct {
+	ID               pgtype.UUID
+	Identifier       string
+	Name             string
+	IsDefault        bool
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	SeverityFilter   []string
+	NotifyOnFire     bool
+	NotifyOnRecovery bool
+	RepeatInterval   int32
+	TemplateID       pgtype.Text
+}
+
+type NotificationPolicyChannel struct {
+	ID              int64
+	PolicyID        pgtype.UUID
+	Channel         string
+	ChannelTargetID pgtype.UUID
+}
+
+type NotificationPolicyContact struct {
+	PolicyID  pgtype.UUID
+	ContactID pgtype.UUID
+}
+
+type NotificationPolicyContactGroup struct {
+	PolicyID pgtype.UUID
+	GroupID  pgtype.UUID
+}
+
+type PerformanceEvent struct {
+	ID              pgtype.UUID
+	AlertInstanceID pgtype.UUID
+	EventType       string
+	DerivedAt       pgtype.Timestamptz
+}
+
+type PlatformEvent struct {
+	ID           int64
+	Kind         string
+	OccurredAt   pgtype.Timestamptz
+	ActorID      pgtype.UUID
+	ActorSubject pgtype.Text
+	SubjectID    pgtype.UUID
+}
+
+type QueryStatisticsSnapshot struct {
+	InstanceID pgtype.UUID
+	SampledAt  pgtype.Timestamptz
+}
+
+type QueryStatisticsSnapshotEntry struct {
+	InstanceID      pgtype.UUID
+	SampledAt       pgtype.Timestamptz
+	Queryid         int64
+	DatabaseOid     pgtype.Uint32
+	UserOid         pgtype.Uint32
+	Calls           int64
+	TotalExecTimeMs float64
+}
+
+type SmtpChannel struct {
+	Singleton      bool
+	Enabled        bool
+	Host           string
+	Port           int32
+	FromAddress    string
+	Recipient      string
+	AuthType       string
+	Username       pgtype.Text
+	AuthCiphertext []byte
+	AuthKeyVersion pgtype.Int4
+	TlsMode        string
+	UpdatedAt      pgtype.Timestamptz
+	UpdatedBy      pgtype.UUID
+}
+
 type UserSession struct {
-	TokenHash []byte
-	UserID    pgtype.UUID
-	ExpiresAt pgtype.Timestamptz
+	TokenHash  []byte
+	UserID     pgtype.UUID
+	ExpiresAt  pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	LastSeenAt pgtype.Timestamptz
+}
+
+type WebhookTarget struct {
+	ID                        pgtype.UUID
+	Name                      string
+	Enabled                   bool
+	Url                       string
+	SigningValueCiphertext    []byte
+	SignatureHeaderCiphertext []byte
+	SigningKeyVersion         int32
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+	UpdatedBy                 pgtype.UUID
 }

@@ -7,8 +7,16 @@ servers:
 tags:
   - name: instances
   - name: metrics
+  - name: alert-rules
+  - name: alerts
+  - name: performance-events
   - name: auth
   - name: agent
+  - name: collection
+  - name: users
+  - name: platform-events
+  - name: diagnostics
+  - name: notification-settings
 paths:
   /api/v1/login:
     post:
@@ -44,6 +52,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/logout:
+    post:
+      tags:
+        - auth
+      operationId: deleteSession
+      x-required-role: READONLY
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '204':
+          description: Logged out
+          headers:
+            Set-Cookie:
+              required: true
+              schema:
+                type: string
+        '401':
+          description: Authentication required
   /api/v1/instances:
     get:
       tags:
@@ -69,7 +100,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InstanceInput'
+              $ref: '#/components/schemas/InstanceCreateInput'
       responses:
         '201':
           description: Created
@@ -77,6 +108,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InstanceCreated'
+        '400':
+          description: Connection test or version gate failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/instances/{id}:
     parameters:
       - name: id
@@ -101,13 +138,13 @@ paths:
       tags:
         - instances
       operationId: updateInstance
-      x-required-role: PLATFORM_ADMIN
+      x-required-role: ALERT_ADMIN
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InstanceInput'
+              $ref: '#/components/schemas/InstanceMetadataInput'
       responses:
         '200':
           description: Updated
@@ -115,6 +152,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Instance'
+        '400':
+          description: Connection test failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
     delete:
       tags:
         - instances
@@ -123,6 +166,38 @@ paths:
       responses:
         '204':
           description: Deleted
+  /api/v1/instances/{id}/credentials:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - instances
+      operationId: updateInstanceCredential
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InstanceCredentialInput'
+      responses:
+        '200':
+          description: Credential updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceCredentialUpdated'
+        '400':
+          description: Connection test failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/v1/instances/{id}/metrics/series:
     get:
       tags:
@@ -213,6 +288,1432 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/collection/tasks:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - collection
+      operationId: listCollectionTaskStates
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Collection task states and configured intervals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollectionTaskState'
+  /api/v1/instances/{id}/collection/capabilities:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - collection
+      operationId: listCapabilitySnapshot
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current projected capability snapshot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CapabilitySnapshotEntry'
+  /api/v1/instances/{id}/collection/pause:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - collection
+      operationId: getCollectionPause
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current collection pause status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionPauseStatus'
+    put:
+      tags:
+        - collection
+      operationId: updateCollectionPause
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionPauseInput'
+      responses:
+        '200':
+          description: Updated collection pause status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionPauseStatus'
+  /api/v1/instances/{id}/collection/tasks/{task_id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - pg.probe
+            - pg.stat_database
+            - pg.stat_activity
+            - pg.replication
+            - pg.replication_slot
+            - pg.prepared_xacts
+            - pg.role
+            - pg.stat_statements
+    put:
+      tags:
+        - collection
+      operationId: updateCollectionTaskInterval
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionTaskIntervalInput'
+      responses:
+        '200':
+          description: Updated collection task state and configured interval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionTaskState'
+        '400':
+          description: Invalid task or interval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/long-query-samples:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum:
+            - sampled_at
+            - '-sampled_at'
+            - query_started_at
+            - '-query_started_at'
+          default: '-sampled_at'
+    get:
+      tags:
+        - collection
+      operationId: listLongQuerySamples
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Long-query samples captured from pg_stat_activity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LongQuerySamplePage'
+        '400':
+          description: Invalid time range or pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/query-stats:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - collection
+      operationId: getQueryStatisticsSnapshot
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Latest query statistics snapshot or an explicit unavailability reason
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryStatisticsSnapshot'
+  /api/v1/instances/{id}/sessions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - collection
+      operationId: getSessionSnapshot
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Latest successful pg_stat_activity session snapshot with a server-enforced hard cap
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionSnapshot'
+  /api/v1/alert-rules:
+    get:
+      tags:
+        - alert-rules
+      operationId: listAlertRules
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Alert rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertRule'
+    post:
+      tags:
+        - alert-rules
+      operationId: createAlertRule
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-rules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alert-rules
+      operationId: getAlertRule
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - alert-rules
+      operationId: updateAlertRule
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleInput'
+      responses:
+        '200':
+          description: Updated alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - alert-rules
+      operationId: deleteAlertRule
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Built-in alert rules cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-rules/{id}/enabled:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - alert-rules
+      operationId: updateAlertRuleEnabled
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleEnabledInput'
+      responses:
+        '200':
+          description: Updated alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid enablement request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-rules/{id}/copies:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - alert-rules
+      operationId: copyAlertRule
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleCopyInput'
+      responses:
+        '201':
+          description: Copied alert rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid copied rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-rule-templates:
+    get:
+      tags:
+        - alert-rules
+      operationId: listAlertRuleTemplates
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Read-only built-in alert rule templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertRuleTemplate'
+  /api/v1/alert-rule-templates/{id}/alert-rules:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+    post:
+      tags:
+        - alert-rules
+      operationId: createAlertRuleFromTemplate
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRuleTemplateInstantiationInput'
+      responses:
+        '201':
+          description: Created from template defaults
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertRule'
+        '400':
+          description: Invalid template overrides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert rule template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}/disposition:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: getAlertDisposition
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current disposition and complete disposition history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDispositionDetail'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+        - alerts
+      operationId: updateAlertDisposition
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertDispositionInput'
+      responses:
+        '200':
+          description: Updated disposition and complete disposition history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDispositionDetail'
+        '400':
+          description: Invalid disposition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Recovered alert instances cannot be disposed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alerts/current:
+    get:
+      tags:
+        - alerts
+      operationId: listCurrentAlerts
+      x-required-role: READONLY
+      parameters:
+        - name: instance_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: include_paused
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Current alert instances, excluding paused frozen alerts by default
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertObservationPage'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alerts/history:
+    get:
+      tags:
+        - alerts
+      operationId: listAlertHistory
+      x-required-role: READONLY
+      parameters:
+        - name: instance_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Recovered alert instance history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertObservationPage'
+        '400':
+          description: Invalid pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: getAlertDetail
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Alert observation detail and rule version history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertDetail'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}/events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: listAlertEvents
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Complete alert event history with maintenance attribution
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AlertEvent'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}/trigger-snapshot:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: getAlertTriggerSnapshot
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Trigger-time session snapshot result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertTriggerSnapshot'
+        '404':
+          description: Alert instance not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/alert-instances/{id}/notifications:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - alerts
+      operationId: listAlertNotifications
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Notification delivery and attempt records for one alert instance.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationAttempt'
+  /api/v1/notification-channels/smtp:
+    get:
+      tags:
+        - notification-settings
+      operationId: getSMTPChannel
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Singleton SMTP channel; an unconfigured channel is a value.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMTPChannel'
+    put:
+      tags:
+        - notification-settings
+      operationId: updateSMTPChannel
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SMTPChannelInput'
+      responses:
+        '200':
+          description: Updated SMTP channel without authentication material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SMTPChannel'
+        '400':
+          description: Invalid SMTP configuration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-channels/smtp/test:
+    post:
+      tags:
+        - notification-settings
+      operationId: testSMTPChannel
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SMTPTestInput'
+      responses:
+        '202':
+          description: Test delivery was durably queued through the normal delivery path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationQueued'
+        '400':
+          description: SMTP is not configured or the target is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-channels/webhooks:
+    get:
+      tags:
+        - notification-settings
+      operationId: listWebhookTargets
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Webhook targets without signing material.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookTarget'
+    post:
+      tags:
+        - notification-settings
+      operationId: createWebhookTarget
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookTargetInput'
+      responses:
+        '201':
+          description: Created Webhook target without signing material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTarget'
+        '400':
+          description: Invalid Webhook target.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-channels/webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateWebhookTarget
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookTargetInput'
+      responses:
+        '200':
+          description: Updated Webhook target without signing material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookTarget'
+        '400':
+          description: Invalid Webhook target.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Webhook target not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteWebhookTarget
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Webhook target deleted.
+        '404':
+          description: Webhook target not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-channels/webhooks/{id}/test:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - notification-settings
+      operationId: testWebhookTarget
+      x-required-role: ALERT_ADMIN
+      responses:
+        '202':
+          description: Test request was durably queued through the normal delivery path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationQueued'
+        '400':
+          description: Webhook target is disabled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Webhook target not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-channels/failures:
+    get:
+      tags:
+        - notification-settings
+      operationId: getChannelFailures
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Uncleared terminal channel failures and up to 20 recent records per target.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelFailureOverview'
+  /api/v1/notification-contacts:
+    get:
+      tags:
+        - notification-settings
+      operationId: listNotificationContacts
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Notification contacts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationContact'
+    post:
+      tags:
+        - notification-settings
+      operationId: createNotificationContact
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactInput'
+      responses:
+        '201':
+          description: Contact created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContact'
+        '400':
+          description: Invalid contact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-contacts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateNotificationContact
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactInput'
+      responses:
+        '200':
+          description: Contact updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContact'
+        '400':
+          description: Invalid contact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contact not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteNotificationContact
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Contact deleted.
+        '404':
+          description: Contact not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-contact-groups:
+    get:
+      tags:
+        - notification-settings
+      operationId: listNotificationContactGroups
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: One-level contact groups.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationContactGroup'
+    post:
+      tags:
+        - notification-settings
+      operationId: createNotificationContactGroup
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactGroupInput'
+      responses:
+        '201':
+          description: Contact group created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContactGroup'
+        '400':
+          description: Invalid contact group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-contact-groups/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateNotificationContactGroup
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationContactGroupInput'
+      responses:
+        '200':
+          description: Contact group updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationContactGroup'
+        '400':
+          description: Invalid contact group.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Contact group not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteNotificationContactGroup
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Contact group deleted.
+        '404':
+          description: Contact group not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-policy-settings:
+    get:
+      tags:
+        - notification-settings
+      operationId: getNotificationPolicySettings
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Deployment-time notification policy validation settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPolicySettings'
+  /api/v1/notification-policies:
+    get:
+      tags:
+        - notification-settings
+      operationId: listNotificationPolicies
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Notification policies, including the single default.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationPolicy'
+    post:
+      tags:
+        - notification-settings
+      operationId: createNotificationPolicy
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPolicyInput'
+      responses:
+        '201':
+          description: Notification policy created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPolicy'
+        '400':
+          description: Invalid notification policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notification-policies/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateNotificationPolicy
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPolicyInput'
+      responses:
+        '200':
+          description: Notification policy updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPolicy'
+        '400':
+          description: Invalid notification policy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Notification policy not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteNotificationPolicy
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Notification policy deleted.
+        '404':
+          description: Notification policy not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The default policy cannot be deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/maintenance-windows:
+    get:
+      tags:
+        - notification-settings
+      operationId: listMaintenanceWindows
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Non-deleted maintenance windows with status projected at server time.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceWindow'
+    post:
+      tags:
+        - notification-settings
+      operationId: createMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceWindowInput'
+      responses:
+        '201':
+          description: Maintenance window created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+        '400':
+          description: Invalid maintenance window.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/maintenance-windows/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - notification-settings
+      operationId: updateMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceWindowInput'
+      responses:
+        '200':
+          description: Maintenance window updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+        '400':
+          description: Invalid or already ended maintenance window.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Maintenance window not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+        - notification-settings
+      operationId: deleteMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      responses:
+        '204':
+          description: Maintenance window deleted while preserving historical references.
+        '404':
+          description: Maintenance window not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/maintenance-windows/{id}/end:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - notification-settings
+      operationId: endMaintenanceWindow
+      x-required-role: ALERT_ADMIN
+      responses:
+        '200':
+          description: Active maintenance window ended at server time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+        '400':
+          description: Maintenance window is not active.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Maintenance window not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/performance-events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: recovered
+        in: query
+        schema:
+          type: boolean
+      - name: disposition
+        in: query
+        schema:
+          $ref: '#/components/schemas/AlertDisposition'
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum:
+            - derived_at
+            - '-derived_at'
+            - updated_at
+            - '-updated_at'
+          default: '-derived_at'
+    get:
+      tags:
+        - performance-events
+      operationId: listPerformanceEvents
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Performance events derived from alert instances
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceEventPage'
+        '400':
+          description: Invalid time range, pagination, or sort
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/performance-events/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - performance-events
+      operationId: getPerformanceEvent
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Performance event detail projected from its alert instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformanceEvent'
+        '404':
+          description: Performance event not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /api/agent/v1/report:
     post:
       tags:
@@ -228,10 +1729,14 @@ paths:
             schema:
               $ref: '#/components/schemas/AgentReport'
       responses:
-        '204':
+        '200':
           description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentReportAccepted'
         '400':
-          description: Invalid timestamp
+          description: Report rejected because of clock skew or Agent version
           content:
             application/json:
               schema:
@@ -242,6 +1747,459 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/agent/download:
+    get:
+      tags:
+        - agent
+      operationId: downloadAgentBinary
+      x-required-role: AGENT
+      security:
+        - agentToken: []
+      parameters:
+        - name: arch
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - linux/amd64
+              - linux/arm64
+      responses:
+        '200':
+          description: Agent binary for the requested architecture
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Unsupported architecture
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Agent binary distribution is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/agent/registration:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags:
+        - agent
+      operationId: getAgentRegistration
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Persisted Agent registration lifecycle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRegistration'
+    post:
+      tags:
+        - agent
+      operationId: registerAgent
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Agent registered and token issued once
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentTokenIssued'
+        '409':
+          description: Agent is already registered or cannot be re-enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/agent/token/rotation:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - agent
+      operationId: rotateAgentToken
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Agent token rotated and returned once
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentTokenIssued'
+        '409':
+          description: Agent has no active token to rotate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/agent/token/revocation:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - agent
+      operationId: revokeAgentToken
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Agent token revoked while the Agent remains expected online
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRegistration'
+        '409':
+          description: Agent has no active token to revoke
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/{id}/agent/disable:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - agent
+      operationId: disableAgent
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Agent disabled and its token invalidated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentRegistration'
+        '409':
+          description: Agent is not currently expected online
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/me:
+    get:
+      tags:
+        - users
+      operationId: getCurrentUser
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /api/v1/users:
+    get:
+      tags:
+        - users
+      operationId: listUsers
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      tags:
+        - users
+      operationId: createUser
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateInput'
+      responses:
+        '201':
+          description: User created; the generated password is returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreated'
+        '400':
+          description: Invalid username or role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Username already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/users/{id}/status:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - users
+      operationId: updateUserStatus
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserStatusInput'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Guard rejected the change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/users/{id}/role:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags:
+        - users
+      operationId: updateUserRole
+      x-required-role: PLATFORM_ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRoleInput'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Guard rejected the change
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/users/{id}/password:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags:
+        - users
+      operationId: resetUserPassword
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Password reset; the generated password is returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordIssued'
+        '400':
+          description: Self-reset is not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/password:
+    put:
+      tags:
+        - users
+      operationId: changeOwnPassword
+      x-required-role: READONLY
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeInput'
+      responses:
+        '204':
+          description: Password changed
+        '400':
+          description: Invalid old password or new password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/platform-events:
+    get:
+      tags:
+        - platform-events
+      operationId: listPlatformEvents
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Most recent attributable platform events
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 100
+                items:
+                  $ref: '#/components/schemas/PlatformEvent'
+  /api/v1/diagnostics/health:
+    get:
+      tags:
+        - diagnostics
+      operationId: getPlatformHealth
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory platform health snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSnapshot'
+  /api/v1/diagnostics/disk:
+    get:
+      tags:
+        - diagnostics
+      operationId: getDiskDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory disk watermark facts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/scheduler:
+    get:
+      tags:
+        - diagnostics
+      operationId: getSchedulerDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Most recent in-memory 60-second scheduler summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/partitions:
+    get:
+      tags:
+        - diagnostics
+      operationId: getPartitionDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory partition maintenance headroom
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/certificate:
+    get:
+      tags:
+        - diagnostics
+      operationId: getCertificateDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory platform certificate validity facts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/keyring:
+    get:
+      tags:
+        - diagnostics
+      operationId: getKeyringDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory credential keyring status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+  /api/v1/diagnostics/platform:
+    get:
+      tags:
+        - diagnostics
+      operationId: getPlatformDiagnostics
+      x-required-role: PLATFORM_ADMIN
+      responses:
+        '200':
+          description: Current in-memory platform version and process start time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
 components:
   securitySchemes:
     agentToken:
@@ -272,6 +2230,34 @@ components:
         - FIRING
         - NO_DATA
         - RECOVERED
+    HealthStatus:
+      type: string
+      enum:
+        - CRITICAL
+        - WARNING
+        - UNKNOWN
+        - HEALTHY
+        - PAUSED
+      x-enum-varnames:
+        - HealthCritical
+        - HealthWarning
+        - HealthUnknown
+        - HealthHealthy
+        - HealthPaused
+    InstanceAgentStatus:
+      type: string
+      enum:
+        - offline
+        - online
+        - not_installed
+        - permission_denied
+        - error
+      x-enum-varnames:
+        - InstanceAgentOffline
+        - InstanceAgentOnline
+        - InstanceAgentNotInstalled
+        - InstanceAgentPermissionDenied
+        - InstanceAgentError
     CapabilityStatus:
       type: string
       enum:
@@ -279,7 +2265,1095 @@ components:
         - MISSING
         - NOT_APPLICABLE
         - UNKNOWN
-    InstanceInput:
+    AlertAggregation:
+      type: string
+      enum:
+        - latest
+        - avg
+        - max
+        - min
+        - sum
+        - count
+    AlertOperator:
+      type: string
+      enum:
+        - '>'
+        - '>='
+        - <
+        - <=
+        - '='
+        - '!='
+      x-enum-varnames:
+        - GreaterThan
+        - GreaterThanEqual
+        - LessThan
+        - LessThanEqual
+        - Equal
+        - NotEqual
+    AlertSeverity:
+      type: string
+      enum:
+        - critical
+        - warning
+        - info
+    NoDataPolicy:
+      type: string
+      enum:
+        - ignore
+        - mark_no_data
+    AlertRuleScope:
+      type: string
+      enum:
+        - ALL
+        - INSTANCES
+    PlatformHealthStatus:
+      type: string
+      enum:
+        - OK
+        - DEGRADED
+        - FAILED
+        - UNKNOWN
+      x-enum-varnames:
+        - PlatformHealthOK
+        - PlatformHealthDegraded
+        - PlatformHealthFailed
+        - PlatformHealthUnknown
+    PlatformHealthSource:
+      type: string
+      enum:
+        - SERVER_PROCESS
+        - PLATFORM_DATABASE
+        - COLLECTION_SCHEDULER
+        - PARTITION_MAINTENANCE
+        - TLS_CERTIFICATE
+        - AGENT_INGRESS
+        - DISK
+        - CREDENTIAL_KEYRING
+        - TLS
+        - PLATFORM_DATABASE_CAPACITY
+      x-enum-varnames:
+        - HealthSourceServerProcess
+        - HealthSourcePlatformDatabase
+        - HealthSourceCollectionScheduler
+        - HealthSourcePartitionMaintenance
+        - HealthSourceTLSCertificate
+        - HealthSourceAgentIngress
+        - HealthSourceDisk
+        - HealthSourceCredentialKeyring
+        - HealthSourceTLS
+        - HealthSourcePlatformDatabaseCapacity
+    AlertDisposition:
+      type: string
+      enum:
+        - NONE
+        - ACKED
+        - IGNORED
+    IgnoreReasonCode:
+      type: string
+      enum:
+        - KNOWN_ISSUE
+        - FALSE_POSITIVE
+        - DUPLICATE
+        - IMPACT_ACCEPTABLE
+        - OTHER
+    AlertRuleInput:
+      type: object
+      required:
+        - name
+        - metric_id
+        - aggregation
+        - operator
+        - threshold
+        - recovery_operator
+        - recovery_threshold
+        - window_seconds
+        - consecutive_count
+        - severity
+        - no_data_policy
+        - scope
+        - instance_ids
+        - evaluation_interval_seconds
+        - enabled
+      properties:
+        name:
+          type: string
+          minLength: 1
+        metric_id:
+          type: string
+          minLength: 1
+        aggregation:
+          $ref: '#/components/schemas/AlertAggregation'
+        operator:
+          $ref: '#/components/schemas/AlertOperator'
+        threshold:
+          type: number
+          format: double
+        recovery_operator:
+          $ref: '#/components/schemas/AlertOperator'
+        recovery_threshold:
+          type: number
+          format: double
+          x-go-type: '*float64'
+        window_seconds:
+          type: integer
+          minimum: 1
+        consecutive_count:
+          type: integer
+          minimum: 1
+        recovery_consecutive_count:
+          type: integer
+          minimum: 1
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        no_data_policy:
+          $ref: '#/components/schemas/NoDataPolicy'
+        scope:
+          $ref: '#/components/schemas/AlertRuleScope'
+        instance_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        evaluation_interval_seconds:
+          type: integer
+          minimum: 5
+        enabled:
+          type: boolean
+        notification_policy_id:
+          type: string
+          format: uuid
+    AlertRule:
+      type: object
+      required:
+        - id
+        - name
+        - metric_id
+        - aggregation
+        - operator
+        - threshold
+        - recovery_operator
+        - recovery_threshold
+        - window_seconds
+        - consecutive_count
+        - recovery_consecutive_count
+        - severity
+        - no_data_policy
+        - scope
+        - instance_ids
+        - evaluation_interval_seconds
+        - enabled
+        - is_builtin
+        - effective_notification_policy_name
+        - current_alert_count
+        - version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        metric_id:
+          type: string
+        aggregation:
+          $ref: '#/components/schemas/AlertAggregation'
+        operator:
+          $ref: '#/components/schemas/AlertOperator'
+        threshold:
+          type: number
+          format: double
+        recovery_operator:
+          $ref: '#/components/schemas/AlertOperator'
+        recovery_threshold:
+          type: number
+          format: double
+        window_seconds:
+          type: integer
+        consecutive_count:
+          type: integer
+        recovery_consecutive_count:
+          type: integer
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        no_data_policy:
+          $ref: '#/components/schemas/NoDataPolicy'
+        scope:
+          $ref: '#/components/schemas/AlertRuleScope'
+        instance_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        evaluation_interval_seconds:
+          type: integer
+        enabled:
+          type: boolean
+        is_builtin:
+          type: boolean
+        builtin_identifier:
+          type: string
+        notification_policy_id:
+          type: string
+          format: uuid
+        effective_notification_policy_name:
+          type: string
+        last_triggered_at:
+          type: string
+          format: date-time
+        current_alert_count:
+          type: integer
+          minimum: 0
+        source_template_id:
+          type: string
+        source_template_version:
+          type: integer
+        created_by:
+          type: string
+          format: uuid
+        updated_by:
+          type: string
+          format: uuid
+        enabled_updated_by:
+          type: string
+          format: uuid
+        enabled_updated_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AlertRuleEnabledInput:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+    AlertRuleTemplate:
+      type: object
+      required:
+        - id
+        - version
+        - name
+        - metric_id
+        - aggregation
+        - operator
+        - threshold
+        - recovery_operator
+        - recovery_threshold
+        - window_seconds
+        - consecutive_count
+        - recovery_consecutive_count
+        - severity
+        - no_data_policy
+        - evaluation_interval_seconds
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+        name:
+          type: string
+        metric_id:
+          type: string
+        aggregation:
+          $ref: '#/components/schemas/AlertAggregation'
+        operator:
+          $ref: '#/components/schemas/AlertOperator'
+        threshold:
+          type: number
+          format: double
+        recovery_operator:
+          $ref: '#/components/schemas/AlertOperator'
+        recovery_threshold:
+          type: number
+          format: double
+        window_seconds:
+          type: integer
+        consecutive_count:
+          type: integer
+        recovery_consecutive_count:
+          type: integer
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        no_data_policy:
+          $ref: '#/components/schemas/NoDataPolicy'
+        evaluation_interval_seconds:
+          type: integer
+    AlertRuleTemplateInstantiationInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        threshold:
+          type: number
+          format: double
+        recovery_threshold:
+          type: number
+          format: double
+        consecutive_count:
+          type: integer
+          minimum: 1
+        recovery_consecutive_count:
+          type: integer
+          minimum: 1
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        scope:
+          $ref: '#/components/schemas/AlertRuleScope'
+        instance_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        notification_policy_id:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+    AlertRuleCopyInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+    AlertDispositionInput:
+      type: object
+      required:
+        - disposition
+      properties:
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+    AlertDispositionDetail:
+      type: object
+      required:
+        - alert_instance_id
+        - disposition
+        - stops_repeat_notifications
+        - excluded_from_health_rollup
+        - history
+      properties:
+        alert_instance_id:
+          type: string
+          format: uuid
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        disposition_by:
+          type: string
+          format: uuid
+        disposition_at:
+          type: string
+          format: date-time
+        note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+        stops_repeat_notifications:
+          type: boolean
+        excluded_from_health_rollup:
+          type: boolean
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertDispositionEvent'
+    AlertDispositionEvent:
+      type: object
+      required:
+        - kind
+        - from_disposition
+        - to_disposition
+        - actor_id
+        - rule_version
+        - rule_snapshot
+        - evaluated_at
+        - acted_at
+      properties:
+        kind:
+          type: string
+          enum:
+            - ACKED
+            - IGNORED
+        from_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        to_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        actor_id:
+          type: string
+          format: uuid
+        note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+        rule_version:
+          type: integer
+        current_value:
+          type: number
+          format: double
+        rule_snapshot:
+          type: object
+          additionalProperties: true
+        evaluated_at:
+          type: string
+          format: date-time
+        acted_at:
+          type: string
+          format: date-time
+    AlertTriggerSnapshotResult:
+      type: string
+      enum:
+        - SUCCESS
+        - FAILED
+        - NOT_APPLICABLE
+      x-enum-varnames:
+        - TriggerSnapshotSuccess
+        - TriggerSnapshotFailed
+        - TriggerSnapshotNotApplicable
+    AlertTriggerSnapshotSession:
+      type: object
+      required:
+        - pid
+        - blocking_pids
+      properties:
+        pid:
+          type: integer
+          format: int32
+        username:
+          type: string
+        database_name:
+          type: string
+        client_address:
+          type: string
+        state:
+          type: string
+        query_started_at:
+          type: string
+          format: date-time
+        transaction_started_at:
+          type: string
+          format: date-time
+        query_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        transaction_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        wait_event_type:
+          type: string
+        wait_event:
+          type: string
+        blocking_pids:
+          type: array
+          items:
+            type: integer
+            format: int32
+    AlertTriggerSnapshot:
+      type: object
+      required:
+        - result
+        - metric_id
+        - original_match_count
+        - truncated
+        - sessions
+      properties:
+        result:
+          $ref: '#/components/schemas/AlertTriggerSnapshotResult'
+        metric_id:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+        original_match_count:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+        failure_reason:
+          type: string
+        sessions:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/AlertTriggerSnapshotSession'
+    AlertObservation:
+      type: object
+      required:
+        - id
+        - instance_id
+        - instance_name
+        - rule_id
+        - rule_name
+        - rule_version
+        - rule_snapshot
+        - metric_id
+        - status
+        - severity
+        - disposition
+        - paused
+        - in_maintenance
+        - updated_at
+        - duration_ms
+      properties:
+        id:
+          type: string
+          format: uuid
+        instance_id:
+          type: string
+          format: uuid
+        instance_name:
+          type: string
+        rule_id:
+          type: string
+          format: uuid
+        rule_name:
+          type: string
+        rule_version:
+          type: integer
+          minimum: 1
+        rule_snapshot:
+          type: object
+          additionalProperties: true
+        metric_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/AlertStatus'
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        paused:
+          type: boolean
+        paused_at:
+          type: string
+          format: date-time
+        in_maintenance:
+          type: boolean
+        maintenance_window_id:
+          type: string
+          format: uuid
+        current_value:
+          type: number
+          format: double
+        threshold:
+          type: number
+          format: double
+        first_triggered_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        recovered_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        unavailability:
+          $ref: '#/components/schemas/Unavailability'
+    AlertObservationPage:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AlertObservation'
+    AlertDetail:
+      allOf:
+        - $ref: '#/components/schemas/AlertObservation'
+        - type: object
+          required:
+            - rule_version_history
+            - notification_results
+          properties:
+            rule_version_history:
+              type: array
+              items:
+                $ref: '#/components/schemas/AlertRuleVersionRecord'
+            notification_results:
+              type: array
+              description: Empty until notification delivery records are produced.
+              items:
+                type: object
+                additionalProperties: true
+    SMTPAuthType:
+      type: string
+      enum:
+        - NONE
+        - PLAIN
+        - LOGIN
+      x-enum-varnames:
+        - SMTPAuthNone
+        - SMTPAuthPlain
+        - SMTPAuthLogin
+    SMTPTransportSecurity:
+      type: string
+      enum:
+        - STARTTLS
+        - IMPLICIT
+      x-enum-varnames:
+        - SMTPStartTLS
+        - SMTPImplicitTLS
+    SMTPChannelInput:
+      type: object
+      required:
+        - enabled
+        - host
+        - port
+        - from_address
+        - recipient
+        - auth_type
+        - tls_mode
+      properties:
+        enabled:
+          type: boolean
+        host:
+          type: string
+          minLength: 1
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        from_address:
+          type: string
+          format: email
+        recipient:
+          type: string
+          format: email
+        auth_type:
+          $ref: '#/components/schemas/SMTPAuthType'
+        username:
+          type: string
+        password:
+          type: string
+          description: Omit to retain the existing encrypted value.
+        tls_mode:
+          $ref: '#/components/schemas/SMTPTransportSecurity'
+    SMTPChannel:
+      type: object
+      required:
+        - configured
+        - auth_configured
+      properties:
+        configured:
+          type: boolean
+        enabled:
+          type: boolean
+        host:
+          type: string
+        port:
+          type: integer
+        from_address:
+          type: string
+          format: email
+        recipient:
+          type: string
+          format: email
+        auth_type:
+          $ref: '#/components/schemas/SMTPAuthType'
+        username:
+          type: string
+        auth_configured:
+          type: boolean
+        tls_mode:
+          $ref: '#/components/schemas/SMTPTransportSecurity'
+        updated_at:
+          type: string
+          format: date-time
+    SMTPTestInput:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          type: string
+          format: email
+    NotificationQueued:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+    NotificationAttempt:
+      type: object
+      required:
+        - id
+        - event_type
+        - channel
+        - target
+        - status
+        - attempt_count
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum:
+            - FIRING
+            - RECOVERY
+            - REPEAT
+            - TEST
+          x-enum-varnames:
+            - NotificationFiring
+            - NotificationRecovery
+            - NotificationRepeat
+            - NotificationTest
+        channel:
+          type: string
+          enum:
+            - SMTP
+            - WEBHOOK
+          x-enum-varnames:
+            - NotificationSMTP
+            - NotificationWebhook
+        target:
+          type: string
+        template_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - PENDING
+            - SENT
+            - FAILED
+          x-enum-varnames:
+            - NotificationPending
+            - NotificationSent
+            - NotificationFailed
+        attempt_count:
+          type: integer
+          minimum: 0
+          maximum: 3
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        attempted_at:
+          type: string
+          format: date-time
+        result:
+          type: string
+          enum:
+            - SENT
+            - FAILED
+          x-enum-varnames:
+            - NotificationAttemptSent
+            - NotificationAttemptFailed
+        failure_reason:
+          type: string
+        retry_count:
+          type: integer
+          minimum: 0
+          maximum: 2
+    WebhookTargetInput:
+      type: object
+      required:
+        - name
+        - enabled
+        - url
+      properties:
+        name:
+          type: string
+          minLength: 1
+        enabled:
+          type: boolean
+        url:
+          type: string
+          format: uri
+        signing_value:
+          type: string
+          description: Required when creating; omit on update to retain the encrypted value.
+        signature_header:
+          type: string
+          description: Required when creating; omit on update to retain the encrypted value.
+    WebhookTarget:
+      type: object
+      required:
+        - id
+        - name
+        - enabled
+        - url
+        - signing_configured
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        enabled:
+          type: boolean
+        url:
+          type: string
+          format: uri
+        signing_configured:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ChannelFailureRecord:
+      type: object
+      required:
+        - failed_at
+        - target
+        - reason
+        - retry_count
+      properties:
+        failed_at:
+          type: string
+          format: date-time
+        target:
+          type: string
+        reason:
+          type: string
+        retry_count:
+          type: integer
+          minimum: 0
+          maximum: 2
+    ChannelFailureSummary:
+      type: object
+      required:
+        - channel
+        - target
+        - recent_failure_count
+        - last_failure_reason
+        - last_failed_at
+        - recent_failures
+      properties:
+        channel:
+          type: string
+          enum:
+            - SMTP
+            - WEBHOOK
+          x-enum-varnames:
+            - FailureSMTP
+            - FailureWebhook
+        target_id:
+          type: string
+          format: uuid
+        target:
+          type: string
+        recent_failure_count:
+          type: integer
+          minimum: 1
+        last_failure_reason:
+          type: string
+        last_failed_at:
+          type: string
+          format: date-time
+        recent_failures:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/ChannelFailureRecord'
+    ChannelFailureOverview:
+      type: object
+      required:
+        - has_failures
+        - channels
+      properties:
+        has_failures:
+          type: boolean
+        channels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelFailureSummary'
+    MaintenanceWindowStatus:
+      type: string
+      enum:
+        - ACTIVE
+        - SCHEDULED
+        - ENDED
+      x-enum-varnames:
+        - MaintenanceActive
+        - MaintenanceScheduled
+        - MaintenanceEnded
+    MaintenanceWindowInput:
+      type: object
+      required:
+        - instance_ids
+        - starts_at
+        - ends_at
+        - reason
+      properties:
+        instance_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          minLength: 1
+    MaintenanceWindow:
+      allOf:
+        - $ref: '#/components/schemas/MaintenanceWindowInput'
+        - type: object
+          required:
+            - id
+            - created_by
+            - status
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_by:
+              type: string
+              format: uuid
+            status:
+              $ref: '#/components/schemas/MaintenanceWindowStatus'
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    PerformanceEventType:
+      type: string
+      enum:
+        - LOCK_BLOCKING
+        - LONG_TRANSACTION
+        - IDLE_IN_TRANSACTION
+        - ACTIVE_SESSIONS_HIGH
+        - REPLICATION_LAG
+        - TEMP_FILES_SURGE
+      x-enum-varnames:
+        - EventLockBlocking
+        - EventLongTransaction
+        - EventIdleInTransaction
+        - EventActiveSessionsHigh
+        - EventReplicationLag
+        - EventTempFilesSurge
+    PerformanceEvent:
+      type: object
+      required:
+        - id
+        - instance_id
+        - alert_instance_id
+        - event_type
+        - alert_status
+        - severity
+        - disposition
+        - in_maintenance
+        - derived_at
+        - updated_at
+        - duration_ms
+        - metric_id
+        - threshold
+        - trigger_value
+        - cause_summary
+        - suggested_action
+        - trigger_snapshot_result
+      properties:
+        id:
+          type: string
+          format: uuid
+        instance_id:
+          type: string
+          format: uuid
+        alert_instance_id:
+          type: string
+          format: uuid
+        event_type:
+          $ref: '#/components/schemas/PerformanceEventType'
+        alert_status:
+          $ref: '#/components/schemas/AlertStatus'
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        in_maintenance:
+          type: boolean
+        maintenance_window_id:
+          type: string
+          format: uuid
+        derived_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        recovered_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        metric_id:
+          type: string
+        threshold:
+          type: number
+          format: double
+        trigger_value:
+          type: number
+          format: double
+        cause_summary:
+          type: string
+        suggested_action:
+          type: string
+        trigger_snapshot_result:
+          $ref: '#/components/schemas/AlertTriggerSnapshotResult'
+    PerformanceEventPage:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PerformanceEvent'
+    InstanceCreateInput:
       type: object
       required:
         - name
@@ -308,6 +3382,46 @@ components:
         password:
           type: string
           minLength: 1
+    InstanceMetadataInput:
+      type: object
+      required:
+        - name
+        - host
+        - port
+        - database
+      properties:
+        name:
+          type: string
+          minLength: 1
+        host:
+          type: string
+          minLength: 1
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        database:
+          type: string
+          minLength: 1
+    InstanceCredentialInput:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+    InstanceCredentialUpdated:
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          type: string
     Instance:
       type: object
       required:
@@ -318,6 +3432,10 @@ components:
         - database
         - username
         - alert_status
+        - health
+        - agent_status
+        - collection_pause
+        - agent_metrics_enabled
       properties:
         id:
           type: string
@@ -332,19 +3450,332 @@ components:
           type: string
         username:
           type: string
+        agent_version:
+          type: string
+          description: Version reported by the Agent, when one has reported.
+        agent_metrics_enabled:
+          type: boolean
+          description: Current collection setting for Agent-provided metrics.
         alert_status:
           $ref: '#/components/schemas/AlertStatus'
+        health:
+          $ref: '#/components/schemas/InstanceHealth'
+        agent_status:
+          $ref: '#/components/schemas/InstanceAgentStatus'
+        last_collected_at:
+          type: string
+          format: date-time
+        data_freshness_seconds:
+          type: integer
+          minimum: 0
+        collection_pause:
+          $ref: '#/components/schemas/CollectionPauseStatus'
+    InstanceHealth:
+      type: object
+      required:
+        - status
+        - counts
+        - flags
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthStatus'
+        attribution:
+          $ref: '#/components/schemas/HealthAttribution'
+        counts:
+          $ref: '#/components/schemas/HealthAlertCounts'
+        flags:
+          $ref: '#/components/schemas/HealthFlags'
+    HealthAttribution:
+      type: object
+      required:
+        - rule_name
+      properties:
+        rule_name:
+          type: string
+        current_value:
+          type: number
+          format: double
+    HealthAlertCounts:
+      type: object
+      required:
+        - critical
+        - warning
+        - info
+      properties:
+        critical:
+          type: integer
+          minimum: 0
+        warning:
+          type: integer
+          minimum: 0
+        info:
+          type: integer
+          minimum: 0
+    HealthFlags:
+      type: object
+      required:
+        - no_data
+        - in_maintenance
+        - recently_recovered
+        - ignored
+        - configuration_missing
+      properties:
+        no_data:
+          type: boolean
+        in_maintenance:
+          type: boolean
+        recently_recovered:
+          type: boolean
+        ignored:
+          type: integer
+          minimum: 0
+        configuration_missing:
+          type: integer
+          minimum: 0
     InstanceCreated:
       type: object
       required:
         - instance
-        - agent_token
       properties:
         instance:
           $ref: '#/components/schemas/Instance'
-        agent_token:
+    CollectionTaskState:
+      type: object
+      required:
+        - task_id
+        - kind
+        - interval_seconds
+        - consecutive_failures
+        - metric_ids
+        - required_capabilities
+      properties:
+        task_id:
           type: string
-          description: Returned once when the instance is created.
+          enum:
+            - pg.probe
+            - pg.stat_database
+            - pg.stat_activity
+            - pg.replication
+            - pg.replication_slot
+            - pg.prepared_xacts
+            - pg.role
+            - pg.stat_statements
+        kind:
+          type: string
+          enum:
+            - probe
+            - sql
+            - agent-derived
+        interval_seconds:
+          type: integer
+          minimum: 5
+        last_due_at:
+          type: string
+          format: date-time
+        last_started_at:
+          type: string
+          format: date-time
+        last_finished_at:
+          type: string
+          format: date-time
+        last_success_at:
+          type: string
+          format: date-time
+        last_result:
+          $ref: '#/components/schemas/CollectionTaskResult'
+        consecutive_failures:
+          type: integer
+          minimum: 0
+        next_eligible_at:
+          type: string
+          format: date-time
+        last_error_code:
+          type: string
+        last_error_message:
+          type: string
+        metric_ids:
+          type: array
+          description: Metrics produced by this task, derived from the collection task dictionary.
+          items:
+            type: string
+        required_capabilities:
+          type: array
+          description: Capabilities required by this task, derived from the collection task dictionary.
+          items:
+            type: string
+    CollectionTaskIntervalInput:
+      type: object
+      required:
+        - interval_seconds
+      properties:
+        interval_seconds:
+          type: integer
+          minimum: 5
+    CapabilitySnapshotEntry:
+      type: object
+      required:
+        - capability_id
+        - class
+        - status
+        - affected_metric_count
+      properties:
+        capability_id:
+          type: string
+          enum:
+            - role.pg_monitor
+            - ext.pg_stat_statements
+            - topo.has_replication
+            - topo.has_slot
+        class:
+          type: string
+          enum:
+            - fixable
+            - structural
+        status:
+          $ref: '#/components/schemas/CapabilityStatus'
+        observed_at:
+          type: string
+          format: date-time
+        fix_hint:
+          type: string
+        na_reason:
+          type: string
+        affected_metric_count:
+          type: integer
+          minimum: 0
+    LongQuerySample:
+      type: object
+      required:
+        - sampled_at
+        - pid
+        - query_started_at
+        - query_duration_ms
+        - blocking_pids
+        - snapshot_original_count
+        - snapshot_truncated
+      properties:
+        sampled_at:
+          type: string
+          format: date-time
+        pid:
+          type: integer
+          format: int32
+        username:
+          type: string
+        database_name:
+          type: string
+        client_address:
+          type: string
+        state:
+          type: string
+        query_started_at:
+          type: string
+          format: date-time
+        transaction_started_at:
+          type: string
+          format: date-time
+        query_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        transaction_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        wait_event_type:
+          type: string
+        wait_event:
+          type: string
+        blocking_pids:
+          type: array
+          items:
+            type: integer
+            format: int32
+        snapshot_original_count:
+          type: integer
+          minimum: 0
+        snapshot_truncated:
+          type: boolean
+    LongQuerySamplePage:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LongQuerySample'
+    QueryStatisticsEntry:
+      type: object
+      required:
+        - queryid
+        - database_oid
+        - user_oid
+        - calls
+        - total_exec_time_ms
+      properties:
+        queryid:
+          type: string
+          description: Native PostgreSQL query identifier represented as a string to preserve int64 precision.
+        database_oid:
+          type: integer
+          format: int64
+          minimum: 0
+        user_oid:
+          type: integer
+          format: int64
+          minimum: 0
+        calls:
+          type: integer
+          format: int64
+          minimum: 0
+        total_exec_time_ms:
+          type: number
+          format: double
+          minimum: 0
+    QueryStatisticsSnapshot:
+      type: object
+      required:
+        - items
+      properties:
+        sampled_at:
+          type: string
+          format: date-time
+        unavailability:
+          $ref: '#/components/schemas/Unavailability'
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/QueryStatisticsEntry'
+    CollectionPauseInput:
+      type: object
+      required:
+        - paused
+      properties:
+        paused:
+          type: boolean
+        reason:
+          type: string
+    CollectionPauseStatus:
+      type: object
+      required:
+        - paused
+      properties:
+        paused:
+          type: boolean
+        updated_by:
+          type: string
+          format: uuid
+        updated_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
     MetricSeriesResponse:
       type: object
       required:
@@ -405,35 +3836,292 @@ components:
       type: object
       required:
         - instance_id
+        - agent_version
         - timestamp
         - metrics
       properties:
         instance_id:
           type: string
           format: uuid
+        agent_version:
+          type: string
+          minLength: 1
         timestamp:
           type: string
           format: date-time
         metrics:
           type: array
           items:
-            type: object
-            required:
-              - metric
-              - value
-            properties:
-              metric:
-                type: string
-                enum:
-                  - host.cpu.usage_percent
-                  - host.memory.usage_percent
-                  - host.disk.usage_percent
-                  - host.disk.free_bytes
-                  - host.disk.iops
-                  - host.disk.throughput_bytes_per_sec
-                  - host.network.bytes_per_sec
-              value:
-                type: number
+            $ref: '#/components/schemas/AgentMetric'
+        backfill:
+          type: array
+          description: Unacknowledged samples from the Agent's five-minute in-memory window.
+          items:
+            $ref: '#/components/schemas/AgentSample'
+    AgentReportAccepted:
+      type: object
+      required:
+        - server_version
+        - server_time
+      properties:
+        server_version:
+          type: string
+          minLength: 1
+          description: Version of the server that accepted the report.
+        server_time:
+          type: string
+          format: date-time
+          description: Server time used by the Agent startup clock check.
+    AgentRegistration:
+      type: object
+      required:
+        - state
+        - agent_expected
+        - installation
+      properties:
+        state:
+          $ref: '#/components/schemas/AgentRegistrationState'
+        agent_expected:
+          type: boolean
+        issued_at:
+          type: string
+          format: date-time
+        revoked_at:
+          type: string
+          format: date-time
+        first_registered_at:
+          type: string
+          format: date-time
+        agent_version:
+          type: string
+        last_reported_at:
+          type: string
+          format: date-time
+          description: Latest accepted Agent heartbeat from the collection control plane.
+        installation:
+          $ref: '#/components/schemas/AgentInstallation'
+    AgentTokenIssued:
+      type: object
+      required:
+        - agent_token
+        - registration
+      properties:
+        agent_token:
+          type: string
+          writeOnly: true
+          description: One-time 32-byte base64url Agent token. It cannot be read again.
+        registration:
+          $ref: '#/components/schemas/AgentRegistration'
+    Role:
+      type: string
+      enum:
+        - READONLY
+        - ALERT_ADMIN
+        - PLATFORM_ADMIN
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - role
+        - enabled
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    UserCreateInput:
+      type: object
+      required:
+        - username
+        - role
+      properties:
+        username:
+          type: string
+          minLength: 1
+        role:
+          $ref: '#/components/schemas/Role'
+    UserCreated:
+      type: object
+      required:
+        - user
+        - initial_password
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        initial_password:
+          type: string
+          description: Generated password returned only in this response.
+    UserStatusInput:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+    UserRoleInput:
+      type: object
+      required:
+        - role
+      properties:
+        role:
+          $ref: '#/components/schemas/Role'
+    PasswordIssued:
+      type: object
+      required:
+        - password
+      properties:
+        password:
+          type: string
+          description: Generated password returned only in this response.
+    PasswordChangeInput:
+      type: object
+      required:
+        - old_password
+        - new_password
+      properties:
+        old_password:
+          type: string
+        new_password:
+          type: string
+          minLength: 12
+    PlatformHealthSourceSnapshot:
+      type: object
+      required:
+        - source
+        - status
+        - code
+      properties:
+        source:
+          $ref: '#/components/schemas/PlatformHealthSource'
+        status:
+          $ref: '#/components/schemas/PlatformHealthStatus'
+        code:
+          type: string
+        version:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        validity_days_remaining:
+          type: integer
+          minimum: 0
+        probe_capacity:
+          type: integer
+          minimum: 0
+        probe_active:
+          type: integer
+          minimum: 0
+        query_capacity:
+          type: integer
+          minimum: 0
+        query_active:
+          type: integer
+          minimum: 0
+        pending:
+          type: integer
+          minimum: 0
+        skipped_backpressure:
+          type: integer
+          format: int64
+          minimum: 0
+        backoff:
+          type: integer
+          format: int64
+          minimum: 0
+        consecutive_failures:
+          type: integer
+          minimum: 0
+        prebuild_days_remaining:
+          type: integer
+          minimum: 0
+        disk_level:
+          type: string
+        disk_usage_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_warning_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_critical_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_emergency_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        disk_hysteresis_points:
+          type: number
+          format: double
+          minimum: 0
+        capacity_level:
+          type: string
+        capacity_used_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        capacity_budget_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        capacity_usage_percent:
+          type: number
+          format: double
+          minimum: 0
+        capacity_warning_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        capacity_critical_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        capacity_emergency_percent:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        capacity_hysteresis_points:
+          type: number
+          format: double
+          minimum: 0
+    PlatformHealthSnapshot:
+      type: object
+      required:
+        - status
+        - sources
+        - assembled_at
+      properties:
+        status:
+          $ref: '#/components/schemas/PlatformHealthStatus'
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlatformHealthSourceSnapshot'
+        assembled_at:
+          type: string
+          format: date-time
     Error:
       type: object
       required:
@@ -454,6 +4142,25 @@ components:
                 - NOT_FOUND
                 - CONFLICT
                 - INTERNAL
+                - NETWORK_UNREACHABLE
+                - AUTH_FAILED
+                - VERSION_UNSUPPORTED
+                - BUILTIN_RULE_DELETE_FORBIDDEN
+                - BUILTIN_RULE_DISABLE_FORBIDDEN
+                - BUILTIN_RULE_SEVERITY_TOO_LOW
+              x-enum-varnames:
+                - VALIDATIONFAILED
+                - UNAUTHENTICATED
+                - FORBIDDEN
+                - NOTFOUND
+                - CONFLICT
+                - INTERNAL
+                - NETWORKUNREACHABLE
+                - AUTHFAILED
+                - ONBOARDINGVERSIONUNSUPPORTED
+                - BUILTINRULEDELETEFORBIDDEN
+                - BUILTINRULEDISABLEFORBIDDEN
+                - BUILTINRULESEVERITYTOOLOW
             message:
               type: string
             field_errors:
@@ -468,3 +4175,441 @@ components:
                     type: string
                   message:
                     type: string
+    CollectionTaskResult:
+      type: string
+      enum:
+        - SUCCESS
+        - FAILED
+        - TIMED_OUT
+        - SKIPPED_BACKPRESSURE
+        - BACKOFF
+    SessionSnapshotEntry:
+      type: object
+      required:
+        - pid
+        - blocking_pids
+      properties:
+        pid:
+          type: integer
+          format: int32
+        username:
+          type: string
+        database_name:
+          type: string
+        client_address:
+          type: string
+        state:
+          type: string
+        query_started_at:
+          type: string
+          format: date-time
+        transaction_started_at:
+          type: string
+          format: date-time
+        query_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        transaction_duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        wait_event_type:
+          type: string
+        wait_event:
+          type: string
+        blocking_pids:
+          type: array
+          items:
+            type: integer
+            format: int32
+    SessionSnapshot:
+      type: object
+      required:
+        - truncated
+        - items
+      properties:
+        sampled_at:
+          type: string
+          format: date-time
+        original_count:
+          type: integer
+          minimum: 0
+        truncated:
+          type: boolean
+        unavailability:
+          $ref: '#/components/schemas/Unavailability'
+        items:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/SessionSnapshotEntry'
+    AlertRuleVersionRecord:
+      type: object
+      required:
+        - version
+        - snapshot
+        - evaluated_at
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        snapshot:
+          type: object
+          additionalProperties: true
+        evaluated_at:
+          type: string
+          format: date-time
+    AlertEventKind:
+      type: string
+      enum:
+        - PENDING_STARTED
+        - FIRED
+        - UPDATED
+        - RECOVERED
+        - NO_DATA_ENTERED
+        - NO_DATA_EXITED
+        - FROZEN
+        - UNFROZEN
+        - ACKED
+        - IGNORED
+        - INSTANCE_REMOVED
+        - NOTIFICATION_SENT
+        - NOTIFICATION_FAILED
+        - MAINTENANCE_SUPPRESSED
+      x-enum-varnames:
+        - AlertEventPendingStarted
+        - AlertEventFired
+        - AlertEventUpdated
+        - AlertEventRecovered
+        - AlertEventNoDataEntered
+        - AlertEventNoDataExited
+        - AlertEventFrozen
+        - AlertEventUnfrozen
+        - AlertEventAcked
+        - AlertEventIgnored
+        - AlertEventInstanceRemoved
+        - AlertEventNotificationSent
+        - AlertEventNotificationFailed
+        - AlertEventMaintenanceSuppressed
+    AlertEvent:
+      type: object
+      required:
+        - id
+        - kind
+        - from_state
+        - to_state
+        - rule_version
+        - rule_snapshot
+        - evaluated_at
+        - in_maintenance
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          $ref: '#/components/schemas/AlertEventKind'
+        from_state:
+          $ref: '#/components/schemas/AlertStatus'
+        to_state:
+          $ref: '#/components/schemas/AlertStatus'
+        rule_version:
+          type: integer
+          minimum: 1
+        current_value:
+          type: number
+          format: double
+        unavailability:
+          $ref: '#/components/schemas/Unavailability'
+        rule_snapshot:
+          type: object
+          additionalProperties: true
+        evaluated_at:
+          type: string
+          format: date-time
+        actor_id:
+          type: string
+          format: uuid
+        acted_at:
+          type: string
+          format: date-time
+        from_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        to_disposition:
+          $ref: '#/components/schemas/AlertDisposition'
+        disposition_note:
+          type: string
+        ignore_reason_code:
+          $ref: '#/components/schemas/IgnoreReasonCode'
+        ignore_reason_detail:
+          type: string
+        trigger_snapshot_id:
+          type: string
+          format: uuid
+        in_maintenance:
+          type: boolean
+        maintenance_window_id:
+          type: string
+          format: uuid
+    NotificationContactInput:
+      type: object
+      required:
+        - name
+        - email
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        external_id:
+          type: string
+          minLength: 1
+    NotificationContact:
+      allOf:
+        - $ref: '#/components/schemas/NotificationContactInput'
+        - type: object
+          required:
+            - id
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    NotificationContactGroupInput:
+      type: object
+      required:
+        - name
+        - contact_ids
+      properties:
+        name:
+          type: string
+          minLength: 1
+        contact_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    NotificationContactGroup:
+      allOf:
+        - $ref: '#/components/schemas/NotificationContactGroupInput'
+        - type: object
+          required:
+            - id
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    NotificationPolicySettings:
+      type: object
+      required:
+        - repeat_interval_minimum
+      properties:
+        repeat_interval_minimum:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          description: Lowest repeat interval accepted by this deployment, in seconds.
+    NotificationPolicyChannel:
+      type: object
+      required:
+        - channel
+      properties:
+        channel:
+          type: string
+          enum:
+            - SMTP
+            - WEBHOOK
+          x-enum-varnames:
+            - PolicySMTP
+            - PolicyWebhook
+        target_id:
+          type: string
+          format: uuid
+    NotificationPolicyInput:
+      type: object
+      required:
+        - name
+        - contact_ids
+        - contact_group_ids
+        - channels
+        - severity_filter
+        - notify_on_fire
+        - notify_on_recovery
+        - repeat_interval
+      properties:
+        name:
+          type: string
+          minLength: 1
+        contact_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        contact_group_ids:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        channels:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/NotificationPolicyChannel'
+        severity_filter:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/AlertSeverity'
+        notify_on_fire:
+          type: boolean
+          default: true
+        notify_on_recovery:
+          type: boolean
+          default: true
+        repeat_interval:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          default: 3600
+          description: Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
+        template_id:
+          type: string
+    NotificationPolicy:
+      allOf:
+        - $ref: '#/components/schemas/NotificationPolicyInput'
+        - type: object
+          required:
+            - id
+            - is_default
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            is_default:
+              type: boolean
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+    AgentMetric:
+      type: object
+      required:
+        - metric
+        - value
+      properties:
+        metric:
+          type: string
+          enum:
+            - host.cpu.usage_percent
+            - host.memory.usage_percent
+            - host.disk.usage_percent
+            - host.disk.free_bytes
+            - host.disk.iops
+            - host.disk.throughput_bytes_per_sec
+            - host.network.bytes_per_sec
+        value:
+          type: number
+          format: double
+    AgentSample:
+      type: object
+      required:
+        - timestamp
+        - metrics
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentMetric'
+    AgentRegistrationState:
+      type: string
+      enum:
+        - NEVER_REGISTERED
+        - EXPECTED_ONLINE
+        - REVOKED
+        - DISABLED
+    AgentInstallation:
+      type: object
+      required:
+        - ca_fingerprint_sha256
+        - installer_path
+        - authentication_path
+        - file_mode
+        - restart_command
+      properties:
+        ca_fingerprint_sha256:
+          type: string
+          description: Lowercase SHA-256 fingerprint of the platform CA certificate in DER form.
+        installer_path:
+          type: string
+        authentication_path:
+          type: string
+        file_mode:
+          type: string
+          enum:
+            - '0600'
+        restart_command:
+          type: string
+    PlatformEventKind:
+      type: string
+      enum:
+        - LOGIN_SUCCEEDED
+        - LOGIN_FAILED
+        - USER_CREATED
+        - USER_STATUS_CHANGED
+        - USER_STATUS_CHANGE_REJECTED
+        - USER_ROLE_CHANGED
+        - USER_PASSWORD_RESET
+        - INSTANCE_CREDENTIAL_UPDATED
+        - INSTANCE_REMOVED
+        - MASTER_KEY_ROTATED
+        - DIAGNOSTIC_BUNDLE_RECLAIMED
+        - NOTIFICATION_SNAPSHOT_RECLAIMED
+    PlatformEvent:
+      type: object
+      required:
+        - id
+        - kind
+        - occurred_at
+        - actor
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          $ref: '#/components/schemas/PlatformEventKind'
+        occurred_at:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        subject_id:
+          type: string
+          format: uuid

@@ -11,30 +11,64 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countCredentialKeyReferences = `-- name: CountCredentialKeyReferences :one
+SELECT (SELECT count(*) FROM instance WHERE password_key_version = $1)
+     + (SELECT count(*) FROM smtp_channel WHERE auth_key_version = $1)
+     + (SELECT count(*) FROM webhook_target WHERE signing_key_version = $1)
+`
+
+func (q *Queries) CountCredentialKeyReferences(ctx context.Context, keyVersion int32) (int32, error) {
+	row := q.db.QueryRow(ctx, countCredentialKeyReferences, keyVersion)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countCredentialsNotUsingKeyVersion = `-- name: CountCredentialsNotUsingKeyVersion :one
+SELECT (SELECT count(*) FROM instance WHERE password_key_version <> $1)
+     + (SELECT count(*) FROM smtp_channel
+        WHERE auth_key_version IS NOT NULL AND auth_key_version <> $1)
+     + (SELECT count(*) FROM webhook_target
+        WHERE signing_key_version <> $1)
+`
+
+func (q *Queries) CountCredentialsNotUsingKeyVersion(ctx context.Context, keyVersion int32) (int32, error) {
+	row := q.db.QueryRow(ctx, countCredentialsNotUsingKeyVersion, keyVersion)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createInstance = `-- name: CreateInstance :one
-WITH created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password, agent_token_hash)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    RETURNING id, name, host, port, database_name, username, created_at
+WITH created_identity AS (
+    INSERT INTO instance_identity (id, name)
+    VALUES ($1, $2)
+    RETURNING id
+), created AS (
+    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, created_by)
+    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8, $9
+    FROM created_identity
+    RETURNING id, name, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
     SELECT id FROM created
     RETURNING instance_id
 )
-SELECT created.id, created.name, created.host, created.port, created.database_name, created.username, created.created_at
+SELECT created.id, created.name, created.host, created.port, created.database_name, created.username, created.agent_version, created.created_at
 FROM created
 JOIN configured ON configured.instance_id = created.id
 `
 
 type CreateInstanceParams struct {
-	ID             pgtype.UUID
-	Name           string
-	Host           string
-	Port           int32
-	DatabaseName   string
-	Username       string
-	Password       string
-	AgentTokenHash []byte
+	ID                 pgtype.UUID
+	Name               string
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+	CreatedBy          pgtype.UUID
 }
 
 type CreateInstanceRow struct {
@@ -44,6 +78,7 @@ type CreateInstanceRow struct {
 	Port         int32
 	DatabaseName string
 	Username     string
+	AgentVersion pgtype.Text
 	CreatedAt    pgtype.Timestamptz
 }
 
@@ -55,8 +90,9 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		arg.Port,
 		arg.DatabaseName,
 		arg.Username,
-		arg.Password,
-		arg.AgentTokenHash,
+		arg.PasswordCiphertext,
+		arg.PasswordKeyVersion,
+		arg.CreatedBy,
 	)
 	var i CreateInstanceRow
 	err := row.Scan(
@@ -66,18 +102,97 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 		&i.Port,
 		&i.DatabaseName,
 		&i.Username,
+		&i.AgentVersion,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const deleteInstance = `-- name: DeleteInstance :exec
-DELETE FROM instance WHERE id = $1
+WITH deleted_instance AS (
+    DELETE FROM instance
+    WHERE instance.id = $1
+    RETURNING instance.id, instance.name
+)
+UPDATE instance_identity identity
+SET name = deleted_instance.name,
+    removed_at = $2
+FROM deleted_instance
+WHERE identity.id = deleted_instance.id
 `
 
-func (q *Queries) DeleteInstance(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteInstance, id)
+type DeleteInstanceParams struct {
+	ID        pgtype.UUID
+	RemovedAt pgtype.Timestamptz
+}
+
+func (q *Queries) DeleteInstance(ctx context.Context, arg DeleteInstanceParams) error {
+	_, err := q.db.Exec(ctx, deleteInstance, arg.ID, arg.RemovedAt)
 	return err
+}
+
+const disableAgent = `-- name: DisableAgent :one
+UPDATE instance
+SET agent_expected = false,
+    agent_token_hash = NULL
+WHERE id = $1
+  AND agent_expected
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type DisableAgentRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) DisableAgent(ctx context.Context, id pgtype.UUID) (DisableAgentRow, error) {
+	row := q.db.QueryRow(ctx, disableAgent, id)
+	var i DisableAgentRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
+}
+
+const getAgentRegistration = `-- name: GetAgentRegistration :one
+SELECT agent_expected, agent_token_issued_at, agent_token_revoked_at,
+       agent_first_registered_at, agent_version,
+       (SELECT state.last_report_at
+        FROM instance_collect_state state
+        WHERE state.instance_id = instance.id AND state.source = 'AGENT') AS last_reported_at
+FROM instance
+WHERE id = $1
+`
+
+type GetAgentRegistrationRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+	LastReportedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetAgentRegistration(ctx context.Context, id pgtype.UUID) (GetAgentRegistrationRow, error) {
+	row := q.db.QueryRow(ctx, getAgentRegistration, id)
+	var i GetAgentRegistrationRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+		&i.LastReportedAt,
+	)
+	return i, err
 }
 
 const getCollectState = `-- name: GetCollectState :one
@@ -99,14 +214,52 @@ func (q *Queries) GetCollectState(ctx context.Context, instanceID pgtype.UUID) (
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT id, name, host, port, database_name, username, password, agent_token_hash, created_at
+SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+       instance.username, instance.agent_version, instance.created_at,
+       instance.agent_expected,
+       config.agent_metrics_enabled,
+       config.collection_paused, config.collection_pause_updated_by,
+       config.collection_pause_updated_at, config.collection_pause_reason,
+       server_state.last_success_at AS collector_last_success_at,
+       agent_state.last_report_at AS agent_last_report_at,
+       agent_state.last_error_code AS agent_last_error_code,
+       capability.observed_at AS capability_observed_at,
+       capability.states AS capability_states
 FROM instance
-WHERE id = $1
+JOIN instance_collection_config config ON config.instance_id = instance.id
+LEFT JOIN instance_collect_state server_state
+    ON server_state.instance_id = instance.id AND server_state.source = 'SERVER_DIRECT'
+LEFT JOIN instance_collect_state agent_state
+    ON agent_state.instance_id = instance.id AND agent_state.source = 'AGENT'
+LEFT JOIN instance_capability_snapshot capability ON capability.instance_id = instance.id
+WHERE instance.id = $1
 `
 
-func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (Instance, error) {
+type GetInstanceRow struct {
+	ID                       pgtype.UUID
+	Name                     string
+	Host                     string
+	Port                     int32
+	DatabaseName             string
+	Username                 string
+	AgentVersion             pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	AgentExpected            bool
+	AgentMetricsEnabled      bool
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+	CollectorLastSuccessAt   pgtype.Timestamptz
+	AgentLastReportAt        pgtype.Timestamptz
+	AgentLastErrorCode       pgtype.Text
+	CapabilityObservedAt     pgtype.Timestamptz
+	CapabilityStates         []byte
+}
+
+func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceRow, error) {
 	row := q.db.QueryRow(ctx, getInstance, id)
-	var i Instance
+	var i GetInstanceRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -114,26 +267,70 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (Instance, er
 		&i.Port,
 		&i.DatabaseName,
 		&i.Username,
-		&i.Password,
-		&i.AgentTokenHash,
+		&i.AgentVersion,
 		&i.CreatedAt,
+		&i.AgentExpected,
+		&i.AgentMetricsEnabled,
+		&i.CollectionPaused,
+		&i.CollectionPauseUpdatedBy,
+		&i.CollectionPauseUpdatedAt,
+		&i.CollectionPauseReason,
+		&i.CollectorLastSuccessAt,
+		&i.AgentLastReportAt,
+		&i.AgentLastErrorCode,
+		&i.CapabilityObservedAt,
+		&i.CapabilityStates,
+	)
+	return i, err
+}
+
+const getInstanceForUpdate = `-- name: GetInstanceForUpdate :one
+SELECT host, port, database_name, username, password_ciphertext, password_key_version
+FROM instance
+WHERE id = $1
+FOR UPDATE
+`
+
+type GetInstanceForUpdateRow struct {
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+}
+
+func (q *Queries) GetInstanceForUpdate(ctx context.Context, id pgtype.UUID) (GetInstanceForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getInstanceForUpdate, id)
+	var i GetInstanceForUpdateRow
+	err := row.Scan(
+		&i.Host,
+		&i.Port,
+		&i.DatabaseName,
+		&i.Username,
+		&i.PasswordCiphertext,
+		&i.PasswordKeyVersion,
 	)
 	return i, err
 }
 
 const listCollectionTargets = `-- name: ListCollectionTargets :many
-SELECT id, host, port, database_name, username, password
+SELECT id, host, port, database_name, username, password_ciphertext, password_key_version, credential_version
 FROM instance
+JOIN instance_collection_config config ON config.instance_id = instance.id
+WHERE NOT config.collection_paused
 ORDER BY id
 `
 
 type ListCollectionTargetsRow struct {
-	ID           pgtype.UUID
-	Host         string
-	Port         int32
-	DatabaseName string
-	Username     string
-	Password     string
+	ID                 pgtype.UUID
+	Host               string
+	Port               int32
+	DatabaseName       string
+	Username           string
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+	CredentialVersion  int64
 }
 
 func (q *Queries) ListCollectionTargets(ctx context.Context) ([]ListCollectionTargetsRow, error) {
@@ -151,7 +348,9 @@ func (q *Queries) ListCollectionTargets(ctx context.Context) ([]ListCollectionTa
 			&i.Port,
 			&i.DatabaseName,
 			&i.Username,
-			&i.Password,
+			&i.PasswordCiphertext,
+			&i.PasswordKeyVersion,
+			&i.CredentialVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -163,20 +362,81 @@ func (q *Queries) ListCollectionTargets(ctx context.Context) ([]ListCollectionTa
 	return items, nil
 }
 
-const listInstances = `-- name: ListInstances :many
-SELECT id, name, host, port, database_name, username, created_at
+const listCredentialsForKeyRotation = `-- name: ListCredentialsForKeyRotation :many
+SELECT id, password_ciphertext, password_key_version
 FROM instance
+ORDER BY id
+FOR UPDATE
+`
+
+type ListCredentialsForKeyRotationRow struct {
+	ID                 pgtype.UUID
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+}
+
+func (q *Queries) ListCredentialsForKeyRotation(ctx context.Context) ([]ListCredentialsForKeyRotationRow, error) {
+	rows, err := q.db.Query(ctx, listCredentialsForKeyRotation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCredentialsForKeyRotationRow
+	for rows.Next() {
+		var i ListCredentialsForKeyRotationRow
+		if err := rows.Scan(&i.ID, &i.PasswordCiphertext, &i.PasswordKeyVersion); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstances = `-- name: ListInstances :many
+SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+       instance.username, instance.agent_version, instance.created_at,
+       instance.agent_expected,
+       config.agent_metrics_enabled,
+       config.collection_paused, config.collection_pause_updated_by,
+       config.collection_pause_updated_at, config.collection_pause_reason,
+       server_state.last_success_at AS collector_last_success_at,
+       agent_state.last_report_at AS agent_last_report_at,
+       agent_state.last_error_code AS agent_last_error_code,
+       capability.observed_at AS capability_observed_at,
+       capability.states AS capability_states
+FROM instance
+JOIN instance_collection_config config ON config.instance_id = instance.id
+LEFT JOIN instance_collect_state server_state
+    ON server_state.instance_id = instance.id AND server_state.source = 'SERVER_DIRECT'
+LEFT JOIN instance_collect_state agent_state
+    ON agent_state.instance_id = instance.id AND agent_state.source = 'AGENT'
+LEFT JOIN instance_capability_snapshot capability ON capability.instance_id = instance.id
 ORDER BY name, id
 `
 
 type ListInstancesRow struct {
-	ID           pgtype.UUID
-	Name         string
-	Host         string
-	Port         int32
-	DatabaseName string
-	Username     string
-	CreatedAt    pgtype.Timestamptz
+	ID                       pgtype.UUID
+	Name                     string
+	Host                     string
+	Port                     int32
+	DatabaseName             string
+	Username                 string
+	AgentVersion             pgtype.Text
+	CreatedAt                pgtype.Timestamptz
+	AgentExpected            bool
+	AgentMetricsEnabled      bool
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+	CollectorLastSuccessAt   pgtype.Timestamptz
+	AgentLastReportAt        pgtype.Timestamptz
+	AgentLastErrorCode       pgtype.Text
+	CapabilityObservedAt     pgtype.Timestamptz
+	CapabilityStates         []byte
 }
 
 func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error) {
@@ -195,7 +455,19 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 			&i.Port,
 			&i.DatabaseName,
 			&i.Username,
+			&i.AgentVersion,
 			&i.CreatedAt,
+			&i.AgentExpected,
+			&i.AgentMetricsEnabled,
+			&i.CollectionPaused,
+			&i.CollectionPauseUpdatedBy,
+			&i.CollectionPauseUpdatedAt,
+			&i.CollectionPauseReason,
+			&i.CollectorLastSuccessAt,
+			&i.AgentLastReportAt,
+			&i.AgentLastErrorCode,
+			&i.CapabilityObservedAt,
+			&i.CapabilityStates,
 		); err != nil {
 			return nil, err
 		}
@@ -205,6 +477,138 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockInstanceForRemoval = `-- name: LockInstanceForRemoval :one
+SELECT id
+FROM instance
+WHERE id = $1
+FOR UPDATE
+`
+
+func (q *Queries) LockInstanceForRemoval(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockInstanceForRemoval, id)
+	err := row.Scan(&id)
+	return id, err
+}
+
+const registerAgent = `-- name: RegisterAgent :one
+UPDATE instance
+SET agent_expected = true,
+    agent_token_hash = $2,
+    agent_token_issued_at = $3,
+    agent_token_revoked_at = NULL,
+    agent_first_registered_at = COALESCE(agent_first_registered_at, $3)
+WHERE id = $1
+  AND NOT agent_expected
+  AND agent_token_hash IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type RegisterAgentParams struct {
+	ID                 pgtype.UUID
+	AgentTokenHash     []byte
+	AgentTokenIssuedAt pgtype.Timestamptz
+}
+
+type RegisterAgentRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) RegisterAgent(ctx context.Context, arg RegisterAgentParams) (RegisterAgentRow, error) {
+	row := q.db.QueryRow(ctx, registerAgent, arg.ID, arg.AgentTokenHash, arg.AgentTokenIssuedAt)
+	var i RegisterAgentRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
+}
+
+const revokeAgentToken = `-- name: RevokeAgentToken :one
+UPDATE instance
+SET agent_token_hash = NULL,
+    agent_token_revoked_at = $2
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type RevokeAgentTokenParams struct {
+	ID                  pgtype.UUID
+	AgentTokenRevokedAt pgtype.Timestamptz
+}
+
+type RevokeAgentTokenRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) RevokeAgentToken(ctx context.Context, arg RevokeAgentTokenParams) (RevokeAgentTokenRow, error) {
+	row := q.db.QueryRow(ctx, revokeAgentToken, arg.ID, arg.AgentTokenRevokedAt)
+	var i RevokeAgentTokenRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
+}
+
+const rotateAgentToken = `-- name: RotateAgentToken :one
+UPDATE instance
+SET agent_token_hash = $2,
+    agent_token_issued_at = $3,
+    agent_token_revoked_at = NULL
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
+RETURNING agent_expected, agent_token_issued_at, agent_token_revoked_at,
+          agent_first_registered_at, agent_version
+`
+
+type RotateAgentTokenParams struct {
+	ID                 pgtype.UUID
+	AgentTokenHash     []byte
+	AgentTokenIssuedAt pgtype.Timestamptz
+}
+
+type RotateAgentTokenRow struct {
+	AgentExpected          bool
+	AgentTokenIssuedAt     pgtype.Timestamptz
+	AgentTokenRevokedAt    pgtype.Timestamptz
+	AgentFirstRegisteredAt pgtype.Timestamptz
+	AgentVersion           pgtype.Text
+}
+
+func (q *Queries) RotateAgentToken(ctx context.Context, arg RotateAgentTokenParams) (RotateAgentTokenRow, error) {
+	row := q.db.QueryRow(ctx, rotateAgentToken, arg.ID, arg.AgentTokenHash, arg.AgentTokenIssuedAt)
+	var i RotateAgentTokenRow
+	err := row.Scan(
+		&i.AgentExpected,
+		&i.AgentTokenIssuedAt,
+		&i.AgentTokenRevokedAt,
+		&i.AgentFirstRegisteredAt,
+		&i.AgentVersion,
+	)
+	return i, err
 }
 
 const setCollectFailure = `-- name: SetCollectFailure :exec
@@ -245,44 +649,108 @@ func (q *Queries) SetCollectSuccess(ctx context.Context, arg SetCollectSuccessPa
 	return err
 }
 
-const updateInstance = `-- name: UpdateInstance :one
+const updateCredentialKeyVersion = `-- name: UpdateCredentialKeyVersion :exec
 UPDATE instance
-SET name = $2, host = $3, port = $4, database_name = $5, username = $6, password = $7
+SET password_ciphertext = $2,
+    password_key_version = $3
 WHERE id = $1
-RETURNING id, name, host, port, database_name, username, created_at
 `
 
-type UpdateInstanceParams struct {
+type UpdateCredentialKeyVersionParams struct {
+	ID                 pgtype.UUID
+	PasswordCiphertext []byte
+	PasswordKeyVersion int32
+}
+
+func (q *Queries) UpdateCredentialKeyVersion(ctx context.Context, arg UpdateCredentialKeyVersionParams) error {
+	_, err := q.db.Exec(ctx, updateCredentialKeyVersion, arg.ID, arg.PasswordCiphertext, arg.PasswordKeyVersion)
+	return err
+}
+
+const updateInstanceCredential = `-- name: UpdateInstanceCredential :one
+UPDATE instance
+SET username = $2,
+    password_ciphertext = $3,
+    password_key_version = $4,
+    credential_updated_by = $5,
+    credential_updated_at = $6,
+    credential_version = credential_version + 1
+WHERE id = $1
+RETURNING username
+`
+
+type UpdateInstanceCredentialParams struct {
+	ID                  pgtype.UUID
+	Username            string
+	PasswordCiphertext  []byte
+	PasswordKeyVersion  int32
+	CredentialUpdatedBy pgtype.UUID
+	CredentialUpdatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateInstanceCredential(ctx context.Context, arg UpdateInstanceCredentialParams) (string, error) {
+	row := q.db.QueryRow(ctx, updateInstanceCredential,
+		arg.ID,
+		arg.Username,
+		arg.PasswordCiphertext,
+		arg.PasswordKeyVersion,
+		arg.CredentialUpdatedBy,
+		arg.CredentialUpdatedAt,
+	)
+	var username string
+	err := row.Scan(&username)
+	return username, err
+}
+
+const updateInstanceMetadata = `-- name: UpdateInstanceMetadata :one
+WITH updated_identity AS (
+    UPDATE instance_identity
+    SET name = $2
+    WHERE instance_identity.id = $1
+    RETURNING instance_identity.id
+)
+UPDATE instance
+SET name = $2,
+    host = $3,
+    port = $4,
+    database_name = $5,
+    credential_version = credential_version + CASE
+        WHEN host <> $3 OR port <> $4 OR database_name <> $5 THEN 1
+        ELSE 0
+    END
+FROM updated_identity
+WHERE instance.id = updated_identity.id
+RETURNING instance.id, instance.name, instance.host, instance.port, instance.database_name,
+          instance.username, instance.agent_version
+`
+
+type UpdateInstanceMetadataParams struct {
+	ID           pgtype.UUID
+	Name         string
+	Host         string
+	Port         int32
+	DatabaseName string
+}
+
+type UpdateInstanceMetadataRow struct {
 	ID           pgtype.UUID
 	Name         string
 	Host         string
 	Port         int32
 	DatabaseName string
 	Username     string
-	Password     string
+	AgentVersion pgtype.Text
 }
 
-type UpdateInstanceRow struct {
-	ID           pgtype.UUID
-	Name         string
-	Host         string
-	Port         int32
-	DatabaseName string
-	Username     string
-	CreatedAt    pgtype.Timestamptz
-}
-
-func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) (UpdateInstanceRow, error) {
-	row := q.db.QueryRow(ctx, updateInstance,
+func (q *Queries) UpdateInstanceMetadata(ctx context.Context, arg UpdateInstanceMetadataParams) (UpdateInstanceMetadataRow, error) {
+	row := q.db.QueryRow(ctx, updateInstanceMetadata,
 		arg.ID,
 		arg.Name,
 		arg.Host,
 		arg.Port,
 		arg.DatabaseName,
-		arg.Username,
-		arg.Password,
 	)
-	var i UpdateInstanceRow
+	var i UpdateInstanceMetadataRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -290,7 +758,7 @@ func (q *Queries) UpdateInstance(ctx context.Context, arg UpdateInstanceParams) 
 		&i.Port,
 		&i.DatabaseName,
 		&i.Username,
-		&i.CreatedAt,
+		&i.AgentVersion,
 	)
 	return i, err
 }

@@ -5,6 +5,7 @@ export type MetricID = operations['getMetricSeries']['parameters']['query']['met
 export type MetricOption = {
   id: MetricID
   label: string
+  enhancedCandidate: boolean
 }
 
 export const defaultMetric: MetricID = 'pg.connection.total'
@@ -44,10 +45,55 @@ const metricIDs = [
   'pg.replication_slot.retained_wal_bytes',
 ] as const satisfies readonly MetricID[]
 
-export const metricOptions = metricIDs.map((id) => ({ id, label: metricLabel(id) })) satisfies readonly MetricOption[]
+export const metricOptions = metricIDs.map((id) => ({
+  id,
+  label: metricLabel(id),
+  enhancedCandidate: isEnhancedCandidate(id),
+})) satisfies readonly MetricOption[]
 
 export function metricOption(id: MetricID): MetricOption {
-  return { id, label: metricLabel(id) }
+  return { id, label: metricLabel(id), enhancedCandidate: isEnhancedCandidate(id) }
+}
+
+function isEnhancedCandidate(id: MetricID): boolean {
+  switch (id) {
+    case 'collector.last_success_time':
+    case 'agent.status':
+    case 'host.disk.free_bytes':
+    case 'pg.prepared_xacts.count':
+    case 'pg.replication.role':
+      return false
+    case 'pg.availability.reachable':
+    case 'pg.probe.latency_ms':
+    case 'host.cpu.usage_percent':
+    case 'host.memory.usage_percent':
+    case 'host.disk.usage_percent':
+    case 'host.disk.iops':
+    case 'host.disk.throughput_bytes_per_sec':
+    case 'host.network.bytes_per_sec':
+    case 'pg.connection.total':
+    case 'pg.connection.active':
+    case 'pg.connection.idle_in_transaction':
+    case 'pg.tps':
+    case 'pg.xact.commit_per_sec':
+    case 'pg.xact.rollback_per_sec':
+    case 'pg.tuples.read_per_sec':
+    case 'pg.tuples.write_per_sec':
+    case 'pg.temp.files_per_sec':
+    case 'pg.temp.bytes_per_sec':
+    case 'pg.transaction.long_count':
+    case 'pg.transaction.max_duration_sec':
+    case 'pg.lock.waiting_count':
+    case 'pg.session.blocked_count':
+    case 'pg.query.long_running_count':
+    case 'pg.replication.connection_state':
+    case 'pg.replication.replay_lag_ms':
+    case 'pg.replication.wal_lag_bytes':
+    case 'pg.replication_slot.retained_wal_bytes':
+      return true
+    default:
+      return assertNever(id)
+  }
 }
 
 function metricLabel(id: MetricID): string {

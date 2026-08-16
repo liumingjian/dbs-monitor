@@ -12,7 +12,7 @@ import (
 )
 
 const adminExists = `-- name: AdminExists :one
-SELECT EXISTS (SELECT 1 FROM app_user WHERE role = 'PLATFORM_ADMIN')
+SELECT EXISTS (SELECT 1 FROM app_user WHERE enabled AND role = 'PLATFORM_ADMIN')
 `
 
 func (q *Queries) AdminExists(ctx context.Context) (bool, error) {
@@ -20,6 +20,119 @@ func (q *Queries) AdminExists(ctx context.Context) (bool, error) {
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const authenticateSession = `-- name: AuthenticateSession :one
+UPDATE user_session AS session
+SET last_seen_at = $1
+FROM app_user AS u
+WHERE session.user_id = u.id
+  AND session.token_hash = $2
+  AND session.expires_at > $1
+  AND session.last_seen_at > $3
+  AND u.enabled
+RETURNING u.id, u.role
+`
+
+type AuthenticateSessionParams struct {
+	NowTime    pgtype.Timestamptz
+	TokenHash  []byte
+	IdleCutoff pgtype.Timestamptz
+}
+
+type AuthenticateSessionRow struct {
+	ID   pgtype.UUID
+	Role string
+}
+
+func (q *Queries) AuthenticateSession(ctx context.Context, arg AuthenticateSessionParams) (AuthenticateSessionRow, error) {
+	row := q.db.QueryRow(ctx, authenticateSession, arg.NowTime, arg.TokenHash, arg.IdleCutoff)
+	var i AuthenticateSessionRow
+	err := row.Scan(&i.ID, &i.Role)
+	return i, err
+}
+
+const countAlertObservations = `-- name: CountAlertObservations :one
+SELECT count(*)
+FROM alert_instance alert
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE ($1::boolean = (alert.status = 'RECOVERED'))
+  AND (NOT $2::boolean OR alert.instance_id = $3)
+  AND ($4::boolean OR NOT coalesce(config.collection_paused, false))
+`
+
+type CountAlertObservationsParams struct {
+	Recovered     bool
+	HasInstance   bool
+	InstanceID    pgtype.UUID
+	IncludePaused bool
+}
+
+func (q *Queries) CountAlertObservations(ctx context.Context, arg CountAlertObservationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAlertObservations,
+		arg.Recovered,
+		arg.HasInstance,
+		arg.InstanceID,
+		arg.IncludePaused,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countLongQuerySamples = `-- name: CountLongQuerySamples :one
+SELECT count(*)
+FROM long_query_sample
+WHERE instance_id = $1
+  AND sampled_at >= $2
+  AND sampled_at <= $3
+`
+
+type CountLongQuerySamplesParams struct {
+	InstanceID pgtype.UUID
+	FromTime   pgtype.Timestamptz
+	ToTime     pgtype.Timestamptz
+}
+
+func (q *Queries) CountLongQuerySamples(ctx context.Context, arg CountLongQuerySamplesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLongQuerySamples, arg.InstanceID, arg.FromTime, arg.ToTime)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPerformanceEvents = `-- name: CountPerformanceEvents :one
+SELECT count(*)
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+WHERE alert.instance_id = $1
+  AND event.derived_at >= $2
+  AND event.derived_at <= $3
+  AND ($4::boolean IS NULL
+       OR (alert.recovered_at IS NOT NULL) = $4::boolean)
+  AND ($5::text IS NULL
+       OR alert.disposition = $5::text)
+`
+
+type CountPerformanceEventsParams struct {
+	InstanceID  pgtype.UUID
+	FromTime    pgtype.Timestamptz
+	ToTime      pgtype.Timestamptz
+	Recovered   pgtype.Bool
+	Disposition pgtype.Text
+}
+
+func (q *Queries) CountPerformanceEvents(ctx context.Context, arg CountPerformanceEventsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPerformanceEvents,
+		arg.InstanceID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.Recovered,
+		arg.Disposition,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const createAdmin = `-- name: CreateAdmin :exec
@@ -39,24 +152,142 @@ func (q *Queries) CreateAdmin(ctx context.Context, arg CreateAdminParams) error 
 	return err
 }
 
+const createCollectionPauseEvents = `-- name: CreateCollectionPauseEvents :exec
+INSERT INTO alert_event (
+    alert_instance_id, rule_id, rule_version, kind,
+    from_state, to_state, current_value, unavailability,
+    rule_snapshot, evaluated_at, actor_id
+)
+SELECT alert.id, alert.rule_id, alert.rule_version, $2,
+       alert.status, alert.status, alert.current_value, alert.unavailability,
+       alert.rule_snapshot, $3, $4
+FROM alert_instance alert
+WHERE alert.instance_id = $1
+  AND alert.status <> 'RECOVERED'
+`
+
+type CreateCollectionPauseEventsParams struct {
+	InstanceID  pgtype.UUID
+	Kind        string
+	EvaluatedAt pgtype.Timestamptz
+	ActorID     pgtype.UUID
+}
+
+func (q *Queries) CreateCollectionPauseEvents(ctx context.Context, arg CreateCollectionPauseEventsParams) error {
+	_, err := q.db.Exec(ctx, createCollectionPauseEvents,
+		arg.InstanceID,
+		arg.Kind,
+		arg.EvaluatedAt,
+		arg.ActorID,
+	)
+	return err
+}
+
 const createSession = `-- name: CreateSession :exec
-INSERT INTO user_session (token_hash, user_id, expires_at)
-VALUES ($1, $2, $3)
+INSERT INTO user_session (token_hash, user_id, expires_at, created_at, last_seen_at)
+VALUES ($1, $2, $3, $4, $4)
 `
 
 type CreateSessionParams struct {
 	TokenHash []byte
 	UserID    pgtype.UUID
 	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
-	_, err := q.db.Exec(ctx, createSession, arg.TokenHash, arg.UserID, arg.ExpiresAt)
+	_, err := q.db.Exec(ctx, createSession,
+		arg.TokenHash,
+		arg.UserID,
+		arg.ExpiresAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
+const createUser = `-- name: CreateUser :one
+INSERT INTO app_user (id, username, password_hash, role, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, username, role, enabled, created_at
+`
+
+type CreateUserParams struct {
+	ID           pgtype.UUID
+	Username     string
+	PasswordHash []byte
+	Role         string
+	CreatedBy    pgtype.UUID
+}
+
+type CreateUserRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
+	row := q.db.QueryRow(ctx, createUser,
+		arg.ID,
+		arg.Username,
+		arg.PasswordHash,
+		arg.Role,
+		arg.CreatedBy,
+	)
+	var i CreateUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteOtherUserSessions = `-- name: DeleteOtherUserSessions :exec
+DELETE FROM user_session
+WHERE user_id = $1
+  AND token_hash <> $2
+`
+
+type DeleteOtherUserSessionsParams struct {
+	UserID    pgtype.UUID
+	TokenHash []byte
+}
+
+func (q *Queries) DeleteOtherUserSessions(ctx context.Context, arg DeleteOtherUserSessionsParams) error {
+	_, err := q.db.Exec(ctx, deleteOtherUserSessions, arg.UserID, arg.TokenHash)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM user_session
+WHERE token_hash = $1
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.Exec(ctx, deleteSession, tokenHash)
+	return err
+}
+
+const deleteUserSessions = `-- name: DeleteUserSessions :exec
+DELETE FROM user_session WHERE user_id = $1
+`
+
+func (q *Queries) DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSessions, userID)
 	return err
 }
 
 const getAgentTokenHash = `-- name: GetAgentTokenHash :one
-SELECT agent_token_hash FROM instance WHERE id = $1
+SELECT agent_token_hash
+FROM instance
+WHERE id = $1
+  AND agent_expected
+  AND agent_token_hash IS NOT NULL
+  AND agent_token_revoked_at IS NULL
 `
 
 func (q *Queries) GetAgentTokenHash(ctx context.Context, id pgtype.UUID) ([]byte, error) {
@@ -66,38 +297,309 @@ func (q *Queries) GetAgentTokenHash(ctx context.Context, id pgtype.UUID) ([]byte
 	return agent_token_hash, err
 }
 
-const getInstanceAlertStatus = `-- name: GetInstanceAlertStatus :one
-SELECT status FROM alert_instance WHERE instance_id = $1
+const getAlertInstanceMetricID = `-- name: GetAlertInstanceMetricID :one
+SELECT metric_id
+FROM alert_instance
+WHERE id = $1
 `
 
-func (q *Queries) GetInstanceAlertStatus(ctx context.Context, instanceID pgtype.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getInstanceAlertStatus, instanceID)
-	var status string
-	err := row.Scan(&status)
-	return status, err
+func (q *Queries) GetAlertInstanceMetricID(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getAlertInstanceMetricID, id)
+	var metric_id string
+	err := row.Scan(&metric_id)
+	return metric_id, err
 }
 
-const getSessionRole = `-- name: GetSessionRole :one
-SELECT u.role
-FROM user_session session
-JOIN app_user u ON u.id = session.user_id
-WHERE session.token_hash = $1 AND session.expires_at > $2
+const getAlertObservation = `-- name: GetAlertObservation :one
+SELECT alert.id, alert.instance_id, identity.name AS instance_name,
+       alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
+       alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
+       alert.severity, alert.disposition,
+       alert.in_maintenance, alert.maintenance_window_id,
+       coalesce(config.collection_paused, false) AS paused,
+       config.collection_pause_updated_at AS paused_at,
+       coalesce((SELECT event.current_value FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.kind = 'FIRED'
+                 ORDER BY event.evaluated_at, event.id LIMIT 1), alert.current_value) AS current_value,
+       coalesce((alert.first_rule_snapshot->>'threshold')::double precision,
+                (alert.rule_snapshot->>'threshold')::double precision)::double precision AS threshold,
+       alert.first_triggered_at, alert.updated_at, alert.recovered_at,
+       coalesce(alert.unavailability, (SELECT event.unavailability FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.unavailability IS NOT NULL
+                 ORDER BY event.evaluated_at DESC, event.id DESC LIMIT 1)) AS unavailability
+FROM alert_instance alert
+JOIN instance_identity identity ON identity.id = alert.instance_id
+JOIN alert_rule rule ON rule.id = alert.rule_id
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE alert.id = $1
 `
 
-type GetSessionRoleParams struct {
-	TokenHash []byte
-	ExpiresAt pgtype.Timestamptz
+type GetAlertObservationRow struct {
+	ID                  pgtype.UUID
+	InstanceID          pgtype.UUID
+	InstanceName        string
+	RuleID              pgtype.UUID
+	RuleName            string
+	RuleVersion         int32
+	RuleSnapshot        []byte
+	MetricID            string
+	Status              string
+	Severity            string
+	Disposition         string
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
+	Paused              bool
+	PausedAt            pgtype.Timestamptz
+	CurrentValue        pgtype.Float8
+	Threshold           float64
+	FirstTriggeredAt    pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	RecoveredAt         pgtype.Timestamptz
+	Unavailability      pgtype.Text
 }
 
-func (q *Queries) GetSessionRole(ctx context.Context, arg GetSessionRoleParams) (string, error) {
-	row := q.db.QueryRow(ctx, getSessionRole, arg.TokenHash, arg.ExpiresAt)
-	var role string
-	err := row.Scan(&role)
-	return role, err
+func (q *Queries) GetAlertObservation(ctx context.Context, id pgtype.UUID) (GetAlertObservationRow, error) {
+	row := q.db.QueryRow(ctx, getAlertObservation, id)
+	var i GetAlertObservationRow
+	err := row.Scan(
+		&i.ID,
+		&i.InstanceID,
+		&i.InstanceName,
+		&i.RuleID,
+		&i.RuleName,
+		&i.RuleVersion,
+		&i.RuleSnapshot,
+		&i.MetricID,
+		&i.Status,
+		&i.Severity,
+		&i.Disposition,
+		&i.InMaintenance,
+		&i.MaintenanceWindowID,
+		&i.Paused,
+		&i.PausedAt,
+		&i.CurrentValue,
+		&i.Threshold,
+		&i.FirstTriggeredAt,
+		&i.UpdatedAt,
+		&i.RecoveredAt,
+		&i.Unavailability,
+	)
+	return i, err
+}
+
+const getAlertTriggerSnapshot = `-- name: GetAlertTriggerSnapshot :one
+SELECT id, captured_at, result, original_match_count, truncated, failure_reason
+FROM alert_trigger_snapshot
+WHERE alert_instance_id = $1
+`
+
+type GetAlertTriggerSnapshotRow struct {
+	ID                 pgtype.UUID
+	CapturedAt         pgtype.Timestamptz
+	Result             string
+	OriginalMatchCount int32
+	Truncated          bool
+	FailureReason      pgtype.Text
+}
+
+func (q *Queries) GetAlertTriggerSnapshot(ctx context.Context, alertInstanceID pgtype.UUID) (GetAlertTriggerSnapshotRow, error) {
+	row := q.db.QueryRow(ctx, getAlertTriggerSnapshot, alertInstanceID)
+	var i GetAlertTriggerSnapshotRow
+	err := row.Scan(
+		&i.ID,
+		&i.CapturedAt,
+		&i.Result,
+		&i.OriginalMatchCount,
+		&i.Truncated,
+		&i.FailureReason,
+	)
+	return i, err
+}
+
+const getCollectionPause = `-- name: GetCollectionPause :one
+SELECT collection_paused, collection_pause_updated_by,
+       collection_pause_updated_at, collection_pause_reason
+FROM instance_collection_config
+WHERE instance_id = $1
+`
+
+type GetCollectionPauseRow struct {
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+}
+
+func (q *Queries) GetCollectionPause(ctx context.Context, instanceID pgtype.UUID) (GetCollectionPauseRow, error) {
+	row := q.db.QueryRow(ctx, getCollectionPause, instanceID)
+	var i GetCollectionPauseRow
+	err := row.Scan(
+		&i.CollectionPaused,
+		&i.CollectionPauseUpdatedBy,
+		&i.CollectionPauseUpdatedAt,
+		&i.CollectionPauseReason,
+	)
+	return i, err
+}
+
+const getCurrentUser = `-- name: GetCurrentUser :one
+SELECT id, username, role, enabled, created_at
+FROM app_user
+WHERE id = $1
+`
+
+type GetCurrentUserRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetCurrentUser(ctx context.Context, id pgtype.UUID) (GetCurrentUserRow, error) {
+	row := q.db.QueryRow(ctx, getCurrentUser, id)
+	var i GetCurrentUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getInstanceIDByAgentTokenHash = `-- name: GetInstanceIDByAgentTokenHash :one
+SELECT id
+FROM instance
+WHERE agent_token_hash = $1
+  AND agent_expected
+  AND agent_token_revoked_at IS NULL
+`
+
+func (q *Queries) GetInstanceIDByAgentTokenHash(ctx context.Context, agentTokenHash []byte) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getInstanceIDByAgentTokenHash, agentTokenHash)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getLatestQueryStatisticsSnapshot = `-- name: GetLatestQueryStatisticsSnapshot :one
+SELECT sampled_at
+FROM query_statistics_snapshot
+WHERE instance_id = $1
+  AND sampled_at >= $2
+ORDER BY sampled_at DESC
+LIMIT 1
+`
+
+type GetLatestQueryStatisticsSnapshotParams struct {
+	InstanceID pgtype.UUID
+	LowerBound pgtype.Timestamptz
+}
+
+func (q *Queries) GetLatestQueryStatisticsSnapshot(ctx context.Context, arg GetLatestQueryStatisticsSnapshotParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLatestQueryStatisticsSnapshot, arg.InstanceID, arg.LowerBound)
+	var sampled_at pgtype.Timestamptz
+	err := row.Scan(&sampled_at)
+	return sampled_at, err
+}
+
+const getPerformanceEvent = `-- name: GetPerformanceEvent :one
+SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
+       alert.instance_id, alert.status AS alert_status, alert.severity,
+       alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
+       fired.current_value AS trigger_value, fired.in_maintenance,
+       fired.maintenance_window_id,
+       (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
+       snapshot.result AS trigger_snapshot_result
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+JOIN LATERAL (
+    SELECT current_value, rule_snapshot, in_maintenance, maintenance_window_id
+    FROM alert_event
+    WHERE alert_instance_id = alert.id AND kind = 'FIRED'
+    ORDER BY evaluated_at, id
+    LIMIT 1
+) fired ON true
+LEFT JOIN alert_trigger_snapshot snapshot ON snapshot.alert_instance_id = alert.id
+WHERE event.id = $1
+`
+
+type GetPerformanceEventRow struct {
+	ID                    pgtype.UUID
+	AlertInstanceID       pgtype.UUID
+	EventType             string
+	DerivedAt             pgtype.Timestamptz
+	InstanceID            pgtype.UUID
+	AlertStatus           string
+	Severity              string
+	Disposition           string
+	UpdatedAt             pgtype.Timestamptz
+	RecoveredAt           pgtype.Timestamptz
+	MetricID              string
+	TriggerValue          pgtype.Float8
+	InMaintenance         bool
+	MaintenanceWindowID   pgtype.UUID
+	Threshold             float64
+	TriggerSnapshotResult pgtype.Text
+}
+
+func (q *Queries) GetPerformanceEvent(ctx context.Context, id pgtype.UUID) (GetPerformanceEventRow, error) {
+	row := q.db.QueryRow(ctx, getPerformanceEvent, id)
+	var i GetPerformanceEventRow
+	err := row.Scan(
+		&i.ID,
+		&i.AlertInstanceID,
+		&i.EventType,
+		&i.DerivedAt,
+		&i.InstanceID,
+		&i.AlertStatus,
+		&i.Severity,
+		&i.Disposition,
+		&i.UpdatedAt,
+		&i.RecoveredAt,
+		&i.MetricID,
+		&i.TriggerValue,
+		&i.InMaintenance,
+		&i.MaintenanceWindowID,
+		&i.Threshold,
+		&i.TriggerSnapshotResult,
+	)
+	return i, err
+}
+
+const getRecentSessionSnapshot = `-- name: GetRecentSessionSnapshot :one
+SELECT sampled_at, original_count, truncated
+FROM instance_session_snapshot
+WHERE instance_id = $1
+  AND sampled_at >= $2
+LIMIT 1
+`
+
+type GetRecentSessionSnapshotParams struct {
+	InstanceID pgtype.UUID
+	LowerBound pgtype.Timestamptz
+}
+
+type GetRecentSessionSnapshotRow struct {
+	SampledAt     pgtype.Timestamptz
+	OriginalCount int32
+	Truncated     bool
+}
+
+func (q *Queries) GetRecentSessionSnapshot(ctx context.Context, arg GetRecentSessionSnapshotParams) (GetRecentSessionSnapshotRow, error) {
+	row := q.db.QueryRow(ctx, getRecentSessionSnapshot, arg.InstanceID, arg.LowerBound)
+	var i GetRecentSessionSnapshotRow
+	err := row.Scan(&i.SampledAt, &i.OriginalCount, &i.Truncated)
+	return i, err
 }
 
 const getUserForLogin = `-- name: GetUserForLogin :one
-SELECT id, password_hash, role FROM app_user WHERE username = $1
+SELECT id, password_hash, role
+FROM app_user
+WHERE username = $1 AND enabled
+FOR SHARE
 `
 
 type GetUserForLoginRow struct {
@@ -110,5 +612,988 @@ func (q *Queries) GetUserForLogin(ctx context.Context, username string) (GetUser
 	row := q.db.QueryRow(ctx, getUserForLogin, username)
 	var i GetUserForLoginRow
 	err := row.Scan(&i.ID, &i.PasswordHash, &i.Role)
+	return i, err
+}
+
+const getUserForUpdate = `-- name: GetUserForUpdate :one
+SELECT id, username, role, enabled, created_at
+FROM app_user
+WHERE id = $1
+FOR UPDATE
+`
+
+type GetUserForUpdateRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetUserForUpdate(ctx context.Context, id pgtype.UUID) (GetUserForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getUserForUpdate, id)
+	var i GetUserForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserPassword = `-- name: GetUserPassword :one
+SELECT password_hash
+FROM app_user
+WHERE id = $1 AND enabled
+FOR UPDATE
+`
+
+func (q *Queries) GetUserPassword(ctx context.Context, id pgtype.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getUserPassword, id)
+	var password_hash []byte
+	err := row.Scan(&password_hash)
+	return password_hash, err
+}
+
+const hasQueryStatisticsSnapshot = `-- name: HasQueryStatisticsSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM query_statistics_snapshot WHERE instance_id = $1
+)
+`
+
+func (q *Queries) HasQueryStatisticsSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasQueryStatisticsSnapshot, instanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasSessionSnapshot = `-- name: HasSessionSnapshot :one
+SELECT EXISTS (
+    SELECT 1 FROM instance_session_snapshot WHERE instance_id = $1
+)
+`
+
+func (q *Queries) HasSessionSnapshot(ctx context.Context, instanceID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSessionSnapshot, instanceID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listAlertEvents = `-- name: ListAlertEvents :many
+SELECT id, alert_instance_id, rule_id, rule_version, kind, from_state, to_state, current_value, unavailability, rule_snapshot, evaluated_at, actor_id, acted_at, from_disposition, to_disposition, disposition_note, ignore_reason_code, ignore_reason_detail, trigger_snapshot_id, in_maintenance, maintenance_window_id
+FROM alert_event
+WHERE alert_instance_id = $1
+ORDER BY evaluated_at, id
+`
+
+func (q *Queries) ListAlertEvents(ctx context.Context, alertInstanceID pgtype.UUID) ([]AlertEvent, error) {
+	rows, err := q.db.Query(ctx, listAlertEvents, alertInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AlertEvent
+	for rows.Next() {
+		var i AlertEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.AlertInstanceID,
+			&i.RuleID,
+			&i.RuleVersion,
+			&i.Kind,
+			&i.FromState,
+			&i.ToState,
+			&i.CurrentValue,
+			&i.Unavailability,
+			&i.RuleSnapshot,
+			&i.EvaluatedAt,
+			&i.ActorID,
+			&i.ActedAt,
+			&i.FromDisposition,
+			&i.ToDisposition,
+			&i.DispositionNote,
+			&i.IgnoreReasonCode,
+			&i.IgnoreReasonDetail,
+			&i.TriggerSnapshotID,
+			&i.InMaintenance,
+			&i.MaintenanceWindowID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlertNotificationResults = `-- name: ListAlertNotificationResults :many
+SELECT kind, evaluated_at
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind IN ('NOTIFICATION_SENT', 'NOTIFICATION_FAILED')
+ORDER BY evaluated_at, id
+`
+
+type ListAlertNotificationResultsRow struct {
+	Kind        string
+	EvaluatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListAlertNotificationResults(ctx context.Context, alertInstanceID pgtype.UUID) ([]ListAlertNotificationResultsRow, error) {
+	rows, err := q.db.Query(ctx, listAlertNotificationResults, alertInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertNotificationResultsRow
+	for rows.Next() {
+		var i ListAlertNotificationResultsRow
+		if err := rows.Scan(&i.Kind, &i.EvaluatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlertObservations = `-- name: ListAlertObservations :many
+SELECT alert.id, alert.instance_id, identity.name AS instance_name,
+       alert.rule_id, coalesce(alert.rule_snapshot->>'name', rule.name) AS rule_name,
+       alert.rule_version, alert.rule_snapshot, alert.metric_id, alert.status,
+       alert.severity, alert.disposition,
+       alert.in_maintenance, alert.maintenance_window_id,
+       coalesce(config.collection_paused, false) AS paused,
+       config.collection_pause_updated_at AS paused_at,
+       coalesce((SELECT event.current_value FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.kind = 'FIRED'
+                 ORDER BY event.evaluated_at, event.id LIMIT 1), alert.current_value) AS current_value,
+       coalesce((alert.first_rule_snapshot->>'threshold')::double precision,
+                (alert.rule_snapshot->>'threshold')::double precision)::double precision AS threshold,
+       alert.first_triggered_at, alert.updated_at, alert.recovered_at,
+       coalesce(alert.unavailability, (SELECT event.unavailability FROM alert_event event
+                 WHERE event.alert_instance_id = alert.id AND event.unavailability IS NOT NULL
+                 ORDER BY event.evaluated_at DESC, event.id DESC LIMIT 1)) AS unavailability
+FROM alert_instance alert
+JOIN instance_identity identity ON identity.id = alert.instance_id
+JOIN alert_rule rule ON rule.id = alert.rule_id
+LEFT JOIN instance_collection_config config ON config.instance_id = alert.instance_id
+WHERE ($1::boolean = (alert.status = 'RECOVERED'))
+  AND (NOT $2::boolean OR alert.instance_id = $3)
+  AND ($4::boolean OR NOT coalesce(config.collection_paused, false))
+ORDER BY coalesce(alert.first_triggered_at, alert.updated_at) DESC, alert.id
+LIMIT $6 OFFSET $5
+`
+
+type ListAlertObservationsParams struct {
+	Recovered     bool
+	HasInstance   bool
+	InstanceID    pgtype.UUID
+	IncludePaused bool
+	PageOffset    int32
+	PageLimit     int32
+}
+
+type ListAlertObservationsRow struct {
+	ID                  pgtype.UUID
+	InstanceID          pgtype.UUID
+	InstanceName        string
+	RuleID              pgtype.UUID
+	RuleName            string
+	RuleVersion         int32
+	RuleSnapshot        []byte
+	MetricID            string
+	Status              string
+	Severity            string
+	Disposition         string
+	InMaintenance       bool
+	MaintenanceWindowID pgtype.UUID
+	Paused              bool
+	PausedAt            pgtype.Timestamptz
+	CurrentValue        pgtype.Float8
+	Threshold           float64
+	FirstTriggeredAt    pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	RecoveredAt         pgtype.Timestamptz
+	Unavailability      pgtype.Text
+}
+
+func (q *Queries) ListAlertObservations(ctx context.Context, arg ListAlertObservationsParams) ([]ListAlertObservationsRow, error) {
+	rows, err := q.db.Query(ctx, listAlertObservations,
+		arg.Recovered,
+		arg.HasInstance,
+		arg.InstanceID,
+		arg.IncludePaused,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertObservationsRow
+	for rows.Next() {
+		var i ListAlertObservationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.RuleID,
+			&i.RuleName,
+			&i.RuleVersion,
+			&i.RuleSnapshot,
+			&i.MetricID,
+			&i.Status,
+			&i.Severity,
+			&i.Disposition,
+			&i.InMaintenance,
+			&i.MaintenanceWindowID,
+			&i.Paused,
+			&i.PausedAt,
+			&i.CurrentValue,
+			&i.Threshold,
+			&i.FirstTriggeredAt,
+			&i.UpdatedAt,
+			&i.RecoveredAt,
+			&i.Unavailability,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlertRuleVersionHistory = `-- name: ListAlertRuleVersionHistory :many
+SELECT DISTINCT ON (rule_version) rule_version, rule_snapshot, evaluated_at
+FROM alert_event
+WHERE alert_instance_id = $1
+  AND kind NOT IN ('ACKED', 'IGNORED')
+ORDER BY rule_version, evaluated_at
+`
+
+type ListAlertRuleVersionHistoryRow struct {
+	RuleVersion  int32
+	RuleSnapshot []byte
+	EvaluatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) ListAlertRuleVersionHistory(ctx context.Context, alertInstanceID pgtype.UUID) ([]ListAlertRuleVersionHistoryRow, error) {
+	rows, err := q.db.Query(ctx, listAlertRuleVersionHistory, alertInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertRuleVersionHistoryRow
+	for rows.Next() {
+		var i ListAlertRuleVersionHistoryRow
+		if err := rows.Scan(&i.RuleVersion, &i.RuleSnapshot, &i.EvaluatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlertTriggerSnapshotSessions = `-- name: ListAlertTriggerSnapshotSessions :many
+SELECT pid, username, database_name, client_address, state,
+       query_started_at, transaction_started_at,
+       query_duration_ms, transaction_duration_ms,
+       wait_event_type, wait_event, blocking_pids
+FROM alert_trigger_snapshot_session
+WHERE snapshot_id = $1
+ORDER BY pid
+`
+
+type ListAlertTriggerSnapshotSessionsRow struct {
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+func (q *Queries) ListAlertTriggerSnapshotSessions(ctx context.Context, snapshotID pgtype.UUID) ([]ListAlertTriggerSnapshotSessionsRow, error) {
+	rows, err := q.db.Query(ctx, listAlertTriggerSnapshotSessions, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlertTriggerSnapshotSessionsRow
+	for rows.Next() {
+		var i ListAlertTriggerSnapshotSessionsRow
+		if err := rows.Scan(
+			&i.Pid,
+			&i.Username,
+			&i.DatabaseName,
+			&i.ClientAddress,
+			&i.State,
+			&i.QueryStartedAt,
+			&i.TransactionStartedAt,
+			&i.QueryDurationMs,
+			&i.TransactionDurationMs,
+			&i.WaitEventType,
+			&i.WaitEvent,
+			&i.BlockingPids,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLongQuerySamples = `-- name: ListLongQuerySamples :many
+SELECT sample.sampled_at, sample.pid, sample.username, sample.database_name,
+       sample.client_address, sample.state, sample.query_started_at,
+       sample.transaction_started_at, sample.query_duration_ms,
+       sample.transaction_duration_ms, sample.wait_event_type, sample.wait_event,
+       sample.blocking_pids, snapshot.original_count, snapshot.truncated
+FROM long_query_sample sample
+JOIN long_query_sample_snapshot snapshot
+  ON snapshot.instance_id = sample.instance_id AND snapshot.sampled_at = sample.sampled_at
+WHERE sample.instance_id = $1
+  AND sample.sampled_at >= $2
+  AND sample.sampled_at <= $3
+ORDER BY
+  CASE WHEN $4::text = 'sampled_at' THEN sample.sampled_at END ASC,
+  CASE WHEN $4::text = '-sampled_at' THEN sample.sampled_at END DESC,
+  CASE WHEN $4::text = 'query_started_at' THEN sample.query_started_at END ASC,
+  CASE WHEN $4::text = '-query_started_at' THEN sample.query_started_at END DESC,
+  sample.sampled_at DESC, sample.pid
+LIMIT $6 OFFSET $5
+`
+
+type ListLongQuerySamplesParams struct {
+	InstanceID pgtype.UUID
+	FromTime   pgtype.Timestamptz
+	ToTime     pgtype.Timestamptz
+	SortOrder  string
+	PageOffset int32
+	PageLimit  int32
+}
+
+type ListLongQuerySamplesRow struct {
+	SampledAt             pgtype.Timestamptz
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       int64
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+	OriginalCount         int32
+	Truncated             bool
+}
+
+func (q *Queries) ListLongQuerySamples(ctx context.Context, arg ListLongQuerySamplesParams) ([]ListLongQuerySamplesRow, error) {
+	rows, err := q.db.Query(ctx, listLongQuerySamples,
+		arg.InstanceID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.SortOrder,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLongQuerySamplesRow
+	for rows.Next() {
+		var i ListLongQuerySamplesRow
+		if err := rows.Scan(
+			&i.SampledAt,
+			&i.Pid,
+			&i.Username,
+			&i.DatabaseName,
+			&i.ClientAddress,
+			&i.State,
+			&i.QueryStartedAt,
+			&i.TransactionStartedAt,
+			&i.QueryDurationMs,
+			&i.TransactionDurationMs,
+			&i.WaitEventType,
+			&i.WaitEvent,
+			&i.BlockingPids,
+			&i.OriginalCount,
+			&i.Truncated,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPerformanceEvents = `-- name: ListPerformanceEvents :many
+SELECT event.id, event.alert_instance_id, event.event_type, event.derived_at,
+       alert.instance_id, alert.status AS alert_status, alert.severity,
+       alert.disposition, alert.updated_at, alert.recovered_at, alert.metric_id,
+       fired.current_value AS trigger_value, fired.in_maintenance,
+       fired.maintenance_window_id,
+       (fired.rule_snapshot ->> 'threshold')::double precision AS threshold,
+       snapshot.result AS trigger_snapshot_result
+FROM performance_event event
+JOIN alert_instance alert ON alert.id = event.alert_instance_id
+JOIN LATERAL (
+    SELECT current_value, rule_snapshot, in_maintenance, maintenance_window_id
+    FROM alert_event
+    WHERE alert_instance_id = alert.id AND kind = 'FIRED'
+    ORDER BY evaluated_at, id
+    LIMIT 1
+) fired ON true
+LEFT JOIN alert_trigger_snapshot snapshot ON snapshot.alert_instance_id = alert.id
+WHERE alert.instance_id = $1
+  AND event.derived_at >= $2
+  AND event.derived_at <= $3
+  AND ($4::boolean IS NULL
+       OR (alert.recovered_at IS NOT NULL) = $4::boolean)
+  AND ($5::text IS NULL
+       OR alert.disposition = $5::text)
+ORDER BY
+  CASE WHEN $6::text = 'derived_at' THEN event.derived_at END ASC,
+  CASE WHEN $6::text = '-derived_at' THEN event.derived_at END DESC,
+  CASE WHEN $6::text = 'updated_at' THEN alert.updated_at END ASC,
+  CASE WHEN $6::text = '-updated_at' THEN alert.updated_at END DESC,
+  event.derived_at DESC, event.id
+LIMIT $8 OFFSET $7
+`
+
+type ListPerformanceEventsParams struct {
+	InstanceID  pgtype.UUID
+	FromTime    pgtype.Timestamptz
+	ToTime      pgtype.Timestamptz
+	Recovered   pgtype.Bool
+	Disposition pgtype.Text
+	SortOrder   string
+	PageOffset  int32
+	PageLimit   int32
+}
+
+type ListPerformanceEventsRow struct {
+	ID                    pgtype.UUID
+	AlertInstanceID       pgtype.UUID
+	EventType             string
+	DerivedAt             pgtype.Timestamptz
+	InstanceID            pgtype.UUID
+	AlertStatus           string
+	Severity              string
+	Disposition           string
+	UpdatedAt             pgtype.Timestamptz
+	RecoveredAt           pgtype.Timestamptz
+	MetricID              string
+	TriggerValue          pgtype.Float8
+	InMaintenance         bool
+	MaintenanceWindowID   pgtype.UUID
+	Threshold             float64
+	TriggerSnapshotResult pgtype.Text
+}
+
+func (q *Queries) ListPerformanceEvents(ctx context.Context, arg ListPerformanceEventsParams) ([]ListPerformanceEventsRow, error) {
+	rows, err := q.db.Query(ctx, listPerformanceEvents,
+		arg.InstanceID,
+		arg.FromTime,
+		arg.ToTime,
+		arg.Recovered,
+		arg.Disposition,
+		arg.SortOrder,
+		arg.PageOffset,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPerformanceEventsRow
+	for rows.Next() {
+		var i ListPerformanceEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AlertInstanceID,
+			&i.EventType,
+			&i.DerivedAt,
+			&i.InstanceID,
+			&i.AlertStatus,
+			&i.Severity,
+			&i.Disposition,
+			&i.UpdatedAt,
+			&i.RecoveredAt,
+			&i.MetricID,
+			&i.TriggerValue,
+			&i.InMaintenance,
+			&i.MaintenanceWindowID,
+			&i.Threshold,
+			&i.TriggerSnapshotResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPersistedCollectionTaskStates = `-- name: ListPersistedCollectionTaskStates :many
+SELECT task.task_id, task.last_due_at, task.last_started_at, task.last_finished_at, task.last_success_at,
+       task.last_result, task.consecutive_failures,
+       CASE
+           WHEN task.next_eligible_at IS NULL THEN connection.next_eligible_at
+           WHEN connection.next_eligible_at IS NULL THEN task.next_eligible_at
+           ELSE GREATEST(task.next_eligible_at, connection.next_eligible_at)
+       END::timestamptz AS next_eligible_at,
+       task.last_error_code, task.last_error_message
+FROM instance_collection_task_state task
+LEFT JOIN instance_collection_connection_state connection ON connection.instance_id = task.instance_id
+WHERE task.instance_id = $1
+ORDER BY task.task_id
+`
+
+type ListPersistedCollectionTaskStatesRow struct {
+	TaskID              string
+	LastDueAt           pgtype.Timestamptz
+	LastStartedAt       pgtype.Timestamptz
+	LastFinishedAt      pgtype.Timestamptz
+	LastSuccessAt       pgtype.Timestamptz
+	LastResult          pgtype.Text
+	ConsecutiveFailures int32
+	NextEligibleAt      pgtype.Timestamptz
+	LastErrorCode       pgtype.Text
+	LastErrorMessage    pgtype.Text
+}
+
+func (q *Queries) ListPersistedCollectionTaskStates(ctx context.Context, instanceID pgtype.UUID) ([]ListPersistedCollectionTaskStatesRow, error) {
+	rows, err := q.db.Query(ctx, listPersistedCollectionTaskStates, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPersistedCollectionTaskStatesRow
+	for rows.Next() {
+		var i ListPersistedCollectionTaskStatesRow
+		if err := rows.Scan(
+			&i.TaskID,
+			&i.LastDueAt,
+			&i.LastStartedAt,
+			&i.LastFinishedAt,
+			&i.LastSuccessAt,
+			&i.LastResult,
+			&i.ConsecutiveFailures,
+			&i.NextEligibleAt,
+			&i.LastErrorCode,
+			&i.LastErrorMessage,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformEvents = `-- name: ListPlatformEvents :many
+SELECT event.id, event.kind, event.occurred_at,
+       coalesce(actor.username, event.actor_subject)::text AS actor,
+       event.subject_id
+FROM platform_event event
+LEFT JOIN app_user actor ON actor.id = event.actor_id
+ORDER BY event.occurred_at DESC, event.id DESC
+LIMIT 100
+`
+
+type ListPlatformEventsRow struct {
+	ID         int64
+	Kind       string
+	OccurredAt pgtype.Timestamptz
+	Actor      string
+	SubjectID  pgtype.UUID
+}
+
+func (q *Queries) ListPlatformEvents(ctx context.Context) ([]ListPlatformEventsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformEventsRow
+	for rows.Next() {
+		var i ListPlatformEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.OccurredAt,
+			&i.Actor,
+			&i.SubjectID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQueryStatisticsSnapshotEntries = `-- name: ListQueryStatisticsSnapshotEntries :many
+SELECT queryid, database_oid, user_oid, calls, total_exec_time_ms
+FROM query_statistics_snapshot_entry
+WHERE instance_id = $1
+  AND sampled_at = $2
+ORDER BY total_exec_time_ms DESC, queryid, database_oid, user_oid
+`
+
+type ListQueryStatisticsSnapshotEntriesParams struct {
+	InstanceID pgtype.UUID
+	SampledAt  pgtype.Timestamptz
+}
+
+type ListQueryStatisticsSnapshotEntriesRow struct {
+	Queryid         int64
+	DatabaseOid     pgtype.Uint32
+	UserOid         pgtype.Uint32
+	Calls           int64
+	TotalExecTimeMs float64
+}
+
+func (q *Queries) ListQueryStatisticsSnapshotEntries(ctx context.Context, arg ListQueryStatisticsSnapshotEntriesParams) ([]ListQueryStatisticsSnapshotEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listQueryStatisticsSnapshotEntries, arg.InstanceID, arg.SampledAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListQueryStatisticsSnapshotEntriesRow
+	for rows.Next() {
+		var i ListQueryStatisticsSnapshotEntriesRow
+		if err := rows.Scan(
+			&i.Queryid,
+			&i.DatabaseOid,
+			&i.UserOid,
+			&i.Calls,
+			&i.TotalExecTimeMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionSnapshotEntries = `-- name: ListSessionSnapshotEntries :many
+SELECT pid, username, database_name, client_address, state,
+       query_started_at, transaction_started_at, query_duration_ms,
+       transaction_duration_ms, wait_event_type, wait_event, blocking_pids
+FROM instance_session_snapshot_entry
+WHERE instance_id = $1
+ORDER BY pid
+LIMIT $2
+`
+
+type ListSessionSnapshotEntriesParams struct {
+	InstanceID pgtype.UUID
+	RowLimit   int32
+}
+
+type ListSessionSnapshotEntriesRow struct {
+	Pid                   int32
+	Username              pgtype.Text
+	DatabaseName          pgtype.Text
+	ClientAddress         pgtype.Text
+	State                 pgtype.Text
+	QueryStartedAt        pgtype.Timestamptz
+	TransactionStartedAt  pgtype.Timestamptz
+	QueryDurationMs       pgtype.Int8
+	TransactionDurationMs pgtype.Int8
+	WaitEventType         pgtype.Text
+	WaitEvent             pgtype.Text
+	BlockingPids          []int32
+}
+
+func (q *Queries) ListSessionSnapshotEntries(ctx context.Context, arg ListSessionSnapshotEntriesParams) ([]ListSessionSnapshotEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listSessionSnapshotEntries, arg.InstanceID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionSnapshotEntriesRow
+	for rows.Next() {
+		var i ListSessionSnapshotEntriesRow
+		if err := rows.Scan(
+			&i.Pid,
+			&i.Username,
+			&i.DatabaseName,
+			&i.ClientAddress,
+			&i.State,
+			&i.QueryStartedAt,
+			&i.TransactionStartedAt,
+			&i.QueryDurationMs,
+			&i.TransactionDurationMs,
+			&i.WaitEventType,
+			&i.WaitEvent,
+			&i.BlockingPids,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, username, role, enabled, created_at
+FROM app_user
+ORDER BY username
+`
+
+type ListUsersRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersRow
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Role,
+			&i.Enabled,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockEnabledPlatformAdmins = `-- name: LockEnabledPlatformAdmins :many
+SELECT id
+FROM app_user
+WHERE enabled AND role = 'PLATFORM_ADMIN'
+ORDER BY id
+FOR UPDATE
+`
+
+func (q *Queries) LockEnabledPlatformAdmins(ctx context.Context) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, lockEnabledPlatformAdmins)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setCollectionPause = `-- name: SetCollectionPause :one
+UPDATE instance_collection_config
+SET collection_paused = $2,
+    collection_pause_updated_by = $3,
+    collection_pause_updated_at = $4,
+    collection_pause_reason = $5,
+    updated_at = $4
+WHERE instance_id = $1
+  AND collection_paused <> $2
+RETURNING collection_paused, collection_pause_updated_by,
+          collection_pause_updated_at, collection_pause_reason
+`
+
+type SetCollectionPauseParams struct {
+	InstanceID               pgtype.UUID
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+}
+
+type SetCollectionPauseRow struct {
+	CollectionPaused         bool
+	CollectionPauseUpdatedBy pgtype.UUID
+	CollectionPauseUpdatedAt pgtype.Timestamptz
+	CollectionPauseReason    pgtype.Text
+}
+
+func (q *Queries) SetCollectionPause(ctx context.Context, arg SetCollectionPauseParams) (SetCollectionPauseRow, error) {
+	row := q.db.QueryRow(ctx, setCollectionPause,
+		arg.InstanceID,
+		arg.CollectionPaused,
+		arg.CollectionPauseUpdatedBy,
+		arg.CollectionPauseUpdatedAt,
+		arg.CollectionPauseReason,
+	)
+	var i SetCollectionPauseRow
+	err := row.Scan(
+		&i.CollectionPaused,
+		&i.CollectionPauseUpdatedBy,
+		&i.CollectionPauseUpdatedAt,
+		&i.CollectionPauseReason,
+	)
+	return i, err
+}
+
+const setUserEnabled = `-- name: SetUserEnabled :one
+UPDATE app_user
+SET enabled = $2,
+    enabled_updated_by = $3,
+    enabled_updated_at = $4
+WHERE id = $1
+RETURNING id, username, role, enabled, created_at
+`
+
+type SetUserEnabledParams struct {
+	ID               pgtype.UUID
+	Enabled          bool
+	EnabledUpdatedBy pgtype.UUID
+	EnabledUpdatedAt pgtype.Timestamptz
+}
+
+type SetUserEnabledRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) SetUserEnabled(ctx context.Context, arg SetUserEnabledParams) (SetUserEnabledRow, error) {
+	row := q.db.QueryRow(ctx, setUserEnabled,
+		arg.ID,
+		arg.Enabled,
+		arg.EnabledUpdatedBy,
+		arg.EnabledUpdatedAt,
+	)
+	var i SetUserEnabledRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const setUserPassword = `-- name: SetUserPassword :execrows
+UPDATE app_user
+SET password_hash = $2
+WHERE id = $1
+`
+
+type SetUserPasswordParams struct {
+	ID           pgtype.UUID
+	PasswordHash []byte
+}
+
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setUserPassword, arg.ID, arg.PasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setUserRole = `-- name: SetUserRole :one
+UPDATE app_user
+SET role = $2,
+    role_updated_by = $3,
+    role_updated_at = $4
+WHERE id = $1
+RETURNING id, username, role, enabled, created_at
+`
+
+type SetUserRoleParams struct {
+	ID            pgtype.UUID
+	Role          string
+	RoleUpdatedBy pgtype.UUID
+	RoleUpdatedAt pgtype.Timestamptz
+}
+
+type SetUserRoleRow struct {
+	ID        pgtype.UUID
+	Username  string
+	Role      string
+	Enabled   bool
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) (SetUserRoleRow, error) {
+	row := q.db.QueryRow(ctx, setUserRole,
+		arg.ID,
+		arg.Role,
+		arg.RoleUpdatedBy,
+		arg.RoleUpdatedAt,
+	)
+	var i SetUserRoleRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Role,
+		&i.Enabled,
+		&i.CreatedAt,
+	)
 	return i, err
 }

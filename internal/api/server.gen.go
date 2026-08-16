@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -22,15 +23,92 @@ const (
 	AgentTokenScopes = "agentToken.Scopes"
 )
 
-// Defines values for AgentReportMetricsMetric.
+// Defines values for AgentInstallationFileMode.
 const (
-	AgentReportMetricsMetricHostCpuUsagePercent           AgentReportMetricsMetric = "host.cpu.usage_percent"
-	AgentReportMetricsMetricHostDiskFreeBytes             AgentReportMetricsMetric = "host.disk.free_bytes"
-	AgentReportMetricsMetricHostDiskIops                  AgentReportMetricsMetric = "host.disk.iops"
-	AgentReportMetricsMetricHostDiskThroughputBytesPerSec AgentReportMetricsMetric = "host.disk.throughput_bytes_per_sec"
-	AgentReportMetricsMetricHostDiskUsagePercent          AgentReportMetricsMetric = "host.disk.usage_percent"
-	AgentReportMetricsMetricHostMemoryUsagePercent        AgentReportMetricsMetric = "host.memory.usage_percent"
-	AgentReportMetricsMetricHostNetworkBytesPerSec        AgentReportMetricsMetric = "host.network.bytes_per_sec"
+	N0600 AgentInstallationFileMode = "0600"
+)
+
+// Defines values for AgentMetricMetric.
+const (
+	AgentMetricMetricHostCpuUsagePercent           AgentMetricMetric = "host.cpu.usage_percent"
+	AgentMetricMetricHostDiskFreeBytes             AgentMetricMetric = "host.disk.free_bytes"
+	AgentMetricMetricHostDiskIops                  AgentMetricMetric = "host.disk.iops"
+	AgentMetricMetricHostDiskThroughputBytesPerSec AgentMetricMetric = "host.disk.throughput_bytes_per_sec"
+	AgentMetricMetricHostDiskUsagePercent          AgentMetricMetric = "host.disk.usage_percent"
+	AgentMetricMetricHostMemoryUsagePercent        AgentMetricMetric = "host.memory.usage_percent"
+	AgentMetricMetricHostNetworkBytesPerSec        AgentMetricMetric = "host.network.bytes_per_sec"
+)
+
+// Defines values for AgentRegistrationState.
+const (
+	DISABLED        AgentRegistrationState = "DISABLED"
+	EXPECTEDONLINE  AgentRegistrationState = "EXPECTED_ONLINE"
+	NEVERREGISTERED AgentRegistrationState = "NEVER_REGISTERED"
+	REVOKED         AgentRegistrationState = "REVOKED"
+)
+
+// Defines values for AlertAggregation.
+const (
+	Avg    AlertAggregation = "avg"
+	Count  AlertAggregation = "count"
+	Latest AlertAggregation = "latest"
+	Max    AlertAggregation = "max"
+	Min    AlertAggregation = "min"
+	Sum    AlertAggregation = "sum"
+)
+
+// Defines values for AlertDisposition.
+const (
+	AlertDispositionACKED   AlertDisposition = "ACKED"
+	AlertDispositionIGNORED AlertDisposition = "IGNORED"
+	AlertDispositionNONE    AlertDisposition = "NONE"
+)
+
+// Defines values for AlertDispositionEventKind.
+const (
+	AlertDispositionEventKindACKED   AlertDispositionEventKind = "ACKED"
+	AlertDispositionEventKindIGNORED AlertDispositionEventKind = "IGNORED"
+)
+
+// Defines values for AlertEventKind.
+const (
+	AlertEventAcked                 AlertEventKind = "ACKED"
+	AlertEventFired                 AlertEventKind = "FIRED"
+	AlertEventFrozen                AlertEventKind = "FROZEN"
+	AlertEventIgnored               AlertEventKind = "IGNORED"
+	AlertEventInstanceRemoved       AlertEventKind = "INSTANCE_REMOVED"
+	AlertEventMaintenanceSuppressed AlertEventKind = "MAINTENANCE_SUPPRESSED"
+	AlertEventNoDataEntered         AlertEventKind = "NO_DATA_ENTERED"
+	AlertEventNoDataExited          AlertEventKind = "NO_DATA_EXITED"
+	AlertEventNotificationFailed    AlertEventKind = "NOTIFICATION_FAILED"
+	AlertEventNotificationSent      AlertEventKind = "NOTIFICATION_SENT"
+	AlertEventPendingStarted        AlertEventKind = "PENDING_STARTED"
+	AlertEventRecovered             AlertEventKind = "RECOVERED"
+	AlertEventUnfrozen              AlertEventKind = "UNFROZEN"
+	AlertEventUpdated               AlertEventKind = "UPDATED"
+)
+
+// Defines values for AlertOperator.
+const (
+	Equal            AlertOperator = "="
+	GreaterThan      AlertOperator = ">"
+	GreaterThanEqual AlertOperator = ">="
+	LessThan         AlertOperator = "<"
+	LessThanEqual    AlertOperator = "<="
+	NotEqual         AlertOperator = "!="
+)
+
+// Defines values for AlertRuleScope.
+const (
+	ALL       AlertRuleScope = "ALL"
+	INSTANCES AlertRuleScope = "INSTANCES"
+)
+
+// Defines values for AlertSeverity.
+const (
+	Critical AlertSeverity = "critical"
+	Info     AlertSeverity = "info"
+	Warning  AlertSeverity = "warning"
 )
 
 // Defines values for AlertStatus.
@@ -42,6 +120,27 @@ const (
 	RECOVERED AlertStatus = "RECOVERED"
 )
 
+// Defines values for AlertTriggerSnapshotResult.
+const (
+	TriggerSnapshotFailed        AlertTriggerSnapshotResult = "FAILED"
+	TriggerSnapshotNotApplicable AlertTriggerSnapshotResult = "NOT_APPLICABLE"
+	TriggerSnapshotSuccess       AlertTriggerSnapshotResult = "SUCCESS"
+)
+
+// Defines values for CapabilitySnapshotEntryCapabilityId.
+const (
+	ExtPgStatStatements CapabilitySnapshotEntryCapabilityId = "ext.pg_stat_statements"
+	RolePgMonitor       CapabilitySnapshotEntryCapabilityId = "role.pg_monitor"
+	TopoHasReplication  CapabilitySnapshotEntryCapabilityId = "topo.has_replication"
+	TopoHasSlot         CapabilitySnapshotEntryCapabilityId = "topo.has_slot"
+)
+
+// Defines values for CapabilitySnapshotEntryClass.
+const (
+	Fixable    CapabilitySnapshotEntryClass = "fixable"
+	Structural CapabilitySnapshotEntryClass = "structural"
+)
+
 // Defines values for CapabilityStatus.
 const (
 	MISSING       CapabilityStatus = "MISSING"
@@ -50,14 +149,195 @@ const (
 	UNKNOWN       CapabilityStatus = "UNKNOWN"
 )
 
+// Defines values for ChannelFailureSummaryChannel.
+const (
+	FailureSMTP    ChannelFailureSummaryChannel = "SMTP"
+	FailureWebhook ChannelFailureSummaryChannel = "WEBHOOK"
+)
+
+// Defines values for CollectionTaskResult.
+const (
+	BACKOFF             CollectionTaskResult = "BACKOFF"
+	FAILED              CollectionTaskResult = "FAILED"
+	SKIPPEDBACKPRESSURE CollectionTaskResult = "SKIPPED_BACKPRESSURE"
+	SUCCESS             CollectionTaskResult = "SUCCESS"
+	TIMEDOUT            CollectionTaskResult = "TIMED_OUT"
+)
+
+// Defines values for CollectionTaskStateKind.
+const (
+	AgentDerived CollectionTaskStateKind = "agent-derived"
+	Probe        CollectionTaskStateKind = "probe"
+	Sql          CollectionTaskStateKind = "sql"
+)
+
+// Defines values for CollectionTaskStateTaskId.
+const (
+	PgPreparedXacts   CollectionTaskStateTaskId = "pg.prepared_xacts"
+	PgProbe           CollectionTaskStateTaskId = "pg.probe"
+	PgReplication     CollectionTaskStateTaskId = "pg.replication"
+	PgReplicationSlot CollectionTaskStateTaskId = "pg.replication_slot"
+	PgRole            CollectionTaskStateTaskId = "pg.role"
+	PgStatActivity    CollectionTaskStateTaskId = "pg.stat_activity"
+	PgStatDatabase    CollectionTaskStateTaskId = "pg.stat_database"
+	PgStatStatements  CollectionTaskStateTaskId = "pg.stat_statements"
+)
+
 // Defines values for ErrorErrorCode.
 const (
-	CONFLICT         ErrorErrorCode = "CONFLICT"
-	FORBIDDEN        ErrorErrorCode = "FORBIDDEN"
-	INTERNAL         ErrorErrorCode = "INTERNAL"
-	NOTFOUND         ErrorErrorCode = "NOT_FOUND"
-	UNAUTHENTICATED  ErrorErrorCode = "UNAUTHENTICATED"
-	VALIDATIONFAILED ErrorErrorCode = "VALIDATION_FAILED"
+	AUTHFAILED                   ErrorErrorCode = "AUTH_FAILED"
+	BUILTINRULEDELETEFORBIDDEN   ErrorErrorCode = "BUILTIN_RULE_DELETE_FORBIDDEN"
+	BUILTINRULEDISABLEFORBIDDEN  ErrorErrorCode = "BUILTIN_RULE_DISABLE_FORBIDDEN"
+	BUILTINRULESEVERITYTOOLOW    ErrorErrorCode = "BUILTIN_RULE_SEVERITY_TOO_LOW"
+	CONFLICT                     ErrorErrorCode = "CONFLICT"
+	FORBIDDEN                    ErrorErrorCode = "FORBIDDEN"
+	INTERNAL                     ErrorErrorCode = "INTERNAL"
+	NETWORKUNREACHABLE           ErrorErrorCode = "NETWORK_UNREACHABLE"
+	NOTFOUND                     ErrorErrorCode = "NOT_FOUND"
+	ONBOARDINGVERSIONUNSUPPORTED ErrorErrorCode = "VERSION_UNSUPPORTED"
+	UNAUTHENTICATED              ErrorErrorCode = "UNAUTHENTICATED"
+	VALIDATIONFAILED             ErrorErrorCode = "VALIDATION_FAILED"
+)
+
+// Defines values for HealthStatus.
+const (
+	HealthCritical HealthStatus = "CRITICAL"
+	HealthHealthy  HealthStatus = "HEALTHY"
+	HealthPaused   HealthStatus = "PAUSED"
+	HealthUnknown  HealthStatus = "UNKNOWN"
+	HealthWarning  HealthStatus = "WARNING"
+)
+
+// Defines values for IgnoreReasonCode.
+const (
+	DUPLICATE        IgnoreReasonCode = "DUPLICATE"
+	FALSEPOSITIVE    IgnoreReasonCode = "FALSE_POSITIVE"
+	IMPACTACCEPTABLE IgnoreReasonCode = "IMPACT_ACCEPTABLE"
+	KNOWNISSUE       IgnoreReasonCode = "KNOWN_ISSUE"
+	OTHER            IgnoreReasonCode = "OTHER"
+)
+
+// Defines values for InstanceAgentStatus.
+const (
+	InstanceAgentError            InstanceAgentStatus = "error"
+	InstanceAgentNotInstalled     InstanceAgentStatus = "not_installed"
+	InstanceAgentOffline          InstanceAgentStatus = "offline"
+	InstanceAgentOnline           InstanceAgentStatus = "online"
+	InstanceAgentPermissionDenied InstanceAgentStatus = "permission_denied"
+)
+
+// Defines values for MaintenanceWindowStatus.
+const (
+	MaintenanceActive    MaintenanceWindowStatus = "ACTIVE"
+	MaintenanceEnded     MaintenanceWindowStatus = "ENDED"
+	MaintenanceScheduled MaintenanceWindowStatus = "SCHEDULED"
+)
+
+// Defines values for NoDataPolicy.
+const (
+	Ignore     NoDataPolicy = "ignore"
+	MarkNoData NoDataPolicy = "mark_no_data"
+)
+
+// Defines values for NotificationAttemptChannel.
+const (
+	NotificationSMTP    NotificationAttemptChannel = "SMTP"
+	NotificationWebhook NotificationAttemptChannel = "WEBHOOK"
+)
+
+// Defines values for NotificationAttemptEventType.
+const (
+	NotificationFiring   NotificationAttemptEventType = "FIRING"
+	NotificationRecovery NotificationAttemptEventType = "RECOVERY"
+	NotificationRepeat   NotificationAttemptEventType = "REPEAT"
+	NotificationTest     NotificationAttemptEventType = "TEST"
+)
+
+// Defines values for NotificationAttemptResult.
+const (
+	NotificationAttemptFailed NotificationAttemptResult = "FAILED"
+	NotificationAttemptSent   NotificationAttemptResult = "SENT"
+)
+
+// Defines values for NotificationAttemptStatus.
+const (
+	NotificationFailed  NotificationAttemptStatus = "FAILED"
+	NotificationPending NotificationAttemptStatus = "PENDING"
+	NotificationSent    NotificationAttemptStatus = "SENT"
+)
+
+// Defines values for NotificationPolicyChannelChannel.
+const (
+	PolicySMTP    NotificationPolicyChannelChannel = "SMTP"
+	PolicyWebhook NotificationPolicyChannelChannel = "WEBHOOK"
+)
+
+// Defines values for PerformanceEventType.
+const (
+	EventActiveSessionsHigh PerformanceEventType = "ACTIVE_SESSIONS_HIGH"
+	EventIdleInTransaction  PerformanceEventType = "IDLE_IN_TRANSACTION"
+	EventLockBlocking       PerformanceEventType = "LOCK_BLOCKING"
+	EventLongTransaction    PerformanceEventType = "LONG_TRANSACTION"
+	EventReplicationLag     PerformanceEventType = "REPLICATION_LAG"
+	EventTempFilesSurge     PerformanceEventType = "TEMP_FILES_SURGE"
+)
+
+// Defines values for PlatformEventKind.
+const (
+	DIAGNOSTICBUNDLERECLAIMED     PlatformEventKind = "DIAGNOSTIC_BUNDLE_RECLAIMED"
+	INSTANCECREDENTIALUPDATED     PlatformEventKind = "INSTANCE_CREDENTIAL_UPDATED"
+	INSTANCEREMOVED               PlatformEventKind = "INSTANCE_REMOVED"
+	LOGINFAILED                   PlatformEventKind = "LOGIN_FAILED"
+	LOGINSUCCEEDED                PlatformEventKind = "LOGIN_SUCCEEDED"
+	MASTERKEYROTATED              PlatformEventKind = "MASTER_KEY_ROTATED"
+	NOTIFICATIONSNAPSHOTRECLAIMED PlatformEventKind = "NOTIFICATION_SNAPSHOT_RECLAIMED"
+	USERCREATED                   PlatformEventKind = "USER_CREATED"
+	USERPASSWORDRESET             PlatformEventKind = "USER_PASSWORD_RESET"
+	USERROLECHANGED               PlatformEventKind = "USER_ROLE_CHANGED"
+	USERSTATUSCHANGED             PlatformEventKind = "USER_STATUS_CHANGED"
+	USERSTATUSCHANGEREJECTED      PlatformEventKind = "USER_STATUS_CHANGE_REJECTED"
+)
+
+// Defines values for PlatformHealthSource.
+const (
+	HealthSourceAgentIngress             PlatformHealthSource = "AGENT_INGRESS"
+	HealthSourceCollectionScheduler      PlatformHealthSource = "COLLECTION_SCHEDULER"
+	HealthSourceCredentialKeyring        PlatformHealthSource = "CREDENTIAL_KEYRING"
+	HealthSourceDisk                     PlatformHealthSource = "DISK"
+	HealthSourcePartitionMaintenance     PlatformHealthSource = "PARTITION_MAINTENANCE"
+	HealthSourcePlatformDatabase         PlatformHealthSource = "PLATFORM_DATABASE"
+	HealthSourcePlatformDatabaseCapacity PlatformHealthSource = "PLATFORM_DATABASE_CAPACITY"
+	HealthSourceServerProcess            PlatformHealthSource = "SERVER_PROCESS"
+	HealthSourceTLS                      PlatformHealthSource = "TLS"
+	HealthSourceTLSCertificate           PlatformHealthSource = "TLS_CERTIFICATE"
+)
+
+// Defines values for PlatformHealthStatus.
+const (
+	PlatformHealthDegraded PlatformHealthStatus = "DEGRADED"
+	PlatformHealthFailed   PlatformHealthStatus = "FAILED"
+	PlatformHealthOK       PlatformHealthStatus = "OK"
+	PlatformHealthUnknown  PlatformHealthStatus = "UNKNOWN"
+)
+
+// Defines values for Role.
+const (
+	ALERTADMIN    Role = "ALERT_ADMIN"
+	PLATFORMADMIN Role = "PLATFORM_ADMIN"
+	READONLY      Role = "READONLY"
+)
+
+// Defines values for SMTPAuthType.
+const (
+	SMTPAuthLogin SMTPAuthType = "LOGIN"
+	SMTPAuthNone  SMTPAuthType = "NONE"
+	SMTPAuthPlain SMTPAuthType = "PLAIN"
+)
+
+// Defines values for SMTPTransportSecurity.
+const (
+	SMTPImplicitTLS SMTPTransportSecurity = "IMPLICIT"
+	SMTPStartTLS    SMTPTransportSecurity = "STARTTLS"
 )
 
 // Defines values for Unavailability.
@@ -75,6 +355,12 @@ const (
 	PERMISSIONDENIED   Unavailability = "PERMISSION_DENIED"
 	STALE              Unavailability = "STALE"
 	VERSIONUNSUPPORTED Unavailability = "VERSION_UNSUPPORTED"
+)
+
+// Defines values for DownloadAgentBinaryParamsArch.
+const (
+	Linuxamd64 DownloadAgentBinaryParamsArch = "linux/amd64"
+	Linuxarm64 DownloadAgentBinaryParamsArch = "linux/arm64"
 )
 
 // Defines values for GetMetricSeriesParamsMetric.
@@ -122,24 +408,460 @@ const (
 	Raw  GetMetricSeriesParamsStep = "raw"
 )
 
-// AgentReport defines model for AgentReport.
-type AgentReport struct {
-	InstanceId openapi_types.UUID `json:"instance_id"`
-	Metrics    []struct {
-		Metric AgentReportMetricsMetric `json:"metric"`
-		Value  float32                  `json:"value"`
-	} `json:"metrics"`
-	Timestamp time.Time `json:"timestamp"`
+// AgentInstallation defines model for AgentInstallation.
+type AgentInstallation struct {
+	AuthenticationPath string `json:"authentication_path"`
+
+	// CaFingerprintSha256 Lowercase SHA-256 fingerprint of the platform CA certificate in DER form.
+	CaFingerprintSha256 string                    `json:"ca_fingerprint_sha256"`
+	FileMode            AgentInstallationFileMode `json:"file_mode"`
+	InstallerPath       string                    `json:"installer_path"`
+	RestartCommand      string                    `json:"restart_command"`
 }
 
-// AgentReportMetricsMetric defines model for AgentReport.Metrics.Metric.
-type AgentReportMetricsMetric string
+// AgentInstallationFileMode defines model for AgentInstallation.FileMode.
+type AgentInstallationFileMode string
+
+// AgentMetric defines model for AgentMetric.
+type AgentMetric struct {
+	Metric AgentMetricMetric `json:"metric"`
+	Value  float64           `json:"value"`
+}
+
+// AgentMetricMetric defines model for AgentMetric.Metric.
+type AgentMetricMetric string
+
+// AgentRegistration defines model for AgentRegistration.
+type AgentRegistration struct {
+	AgentExpected     bool              `json:"agent_expected"`
+	AgentVersion      *string           `json:"agent_version,omitempty"`
+	FirstRegisteredAt *time.Time        `json:"first_registered_at,omitempty"`
+	Installation      AgentInstallation `json:"installation"`
+	IssuedAt          *time.Time        `json:"issued_at,omitempty"`
+
+	// LastReportedAt Latest accepted Agent heartbeat from the collection control plane.
+	LastReportedAt *time.Time             `json:"last_reported_at,omitempty"`
+	RevokedAt      *time.Time             `json:"revoked_at,omitempty"`
+	State          AgentRegistrationState `json:"state"`
+}
+
+// AgentRegistrationState defines model for AgentRegistrationState.
+type AgentRegistrationState string
+
+// AgentReport defines model for AgentReport.
+type AgentReport struct {
+	AgentVersion string `json:"agent_version"`
+
+	// Backfill Unacknowledged samples from the Agent's five-minute in-memory window.
+	Backfill   *[]AgentSample     `json:"backfill,omitempty"`
+	InstanceId openapi_types.UUID `json:"instance_id"`
+	Metrics    []AgentMetric      `json:"metrics"`
+	Timestamp  time.Time          `json:"timestamp"`
+}
+
+// AgentReportAccepted defines model for AgentReportAccepted.
+type AgentReportAccepted struct {
+	// ServerTime Server time used by the Agent startup clock check.
+	ServerTime time.Time `json:"server_time"`
+
+	// ServerVersion Version of the server that accepted the report.
+	ServerVersion string `json:"server_version"`
+}
+
+// AgentSample defines model for AgentSample.
+type AgentSample struct {
+	Metrics   []AgentMetric `json:"metrics"`
+	Timestamp time.Time     `json:"timestamp"`
+}
+
+// AgentTokenIssued defines model for AgentTokenIssued.
+type AgentTokenIssued struct {
+	// AgentToken One-time 32-byte base64url Agent token. It cannot be read again.
+	AgentToken   *string           `json:"agent_token,omitempty"`
+	Registration AgentRegistration `json:"registration"`
+}
+
+// AlertAggregation defines model for AlertAggregation.
+type AlertAggregation string
+
+// AlertDetail defines model for AlertDetail.
+type AlertDetail struct {
+	CurrentValue        *float64            `json:"current_value,omitempty"`
+	Disposition         AlertDisposition    `json:"disposition"`
+	DurationMs          int64               `json:"duration_ms"`
+	FirstTriggeredAt    *time.Time          `json:"first_triggered_at,omitempty"`
+	Id                  openapi_types.UUID  `json:"id"`
+	InMaintenance       bool                `json:"in_maintenance"`
+	InstanceId          openapi_types.UUID  `json:"instance_id"`
+	InstanceName        string              `json:"instance_name"`
+	MaintenanceWindowId *openapi_types.UUID `json:"maintenance_window_id,omitempty"`
+	MetricId            string              `json:"metric_id"`
+
+	// NotificationResults Empty until notification delivery records are produced.
+	NotificationResults []map[string]interface{} `json:"notification_results"`
+	Paused              bool                     `json:"paused"`
+	PausedAt            *time.Time               `json:"paused_at,omitempty"`
+	RecoveredAt         *time.Time               `json:"recovered_at,omitempty"`
+	RuleId              openapi_types.UUID       `json:"rule_id"`
+	RuleName            string                   `json:"rule_name"`
+	RuleSnapshot        map[string]interface{}   `json:"rule_snapshot"`
+	RuleVersion         int                      `json:"rule_version"`
+	RuleVersionHistory  []AlertRuleVersionRecord `json:"rule_version_history"`
+	Severity            AlertSeverity            `json:"severity"`
+	Status              AlertStatus              `json:"status"`
+	Threshold           *float64                 `json:"threshold,omitempty"`
+	Unavailability      *Unavailability          `json:"unavailability,omitempty"`
+	UpdatedAt           time.Time                `json:"updated_at"`
+}
+
+// AlertDisposition defines model for AlertDisposition.
+type AlertDisposition string
+
+// AlertDispositionDetail defines model for AlertDispositionDetail.
+type AlertDispositionDetail struct {
+	AlertInstanceId          openapi_types.UUID      `json:"alert_instance_id"`
+	Disposition              AlertDisposition        `json:"disposition"`
+	DispositionAt            *time.Time              `json:"disposition_at,omitempty"`
+	DispositionBy            *openapi_types.UUID     `json:"disposition_by,omitempty"`
+	ExcludedFromHealthRollup bool                    `json:"excluded_from_health_rollup"`
+	History                  []AlertDispositionEvent `json:"history"`
+	IgnoreReasonCode         *IgnoreReasonCode       `json:"ignore_reason_code,omitempty"`
+	IgnoreReasonDetail       *string                 `json:"ignore_reason_detail,omitempty"`
+	Note                     *string                 `json:"note,omitempty"`
+	StopsRepeatNotifications bool                    `json:"stops_repeat_notifications"`
+}
+
+// AlertDispositionEvent defines model for AlertDispositionEvent.
+type AlertDispositionEvent struct {
+	ActedAt            time.Time                 `json:"acted_at"`
+	ActorId            openapi_types.UUID        `json:"actor_id"`
+	CurrentValue       *float64                  `json:"current_value,omitempty"`
+	EvaluatedAt        time.Time                 `json:"evaluated_at"`
+	FromDisposition    AlertDisposition          `json:"from_disposition"`
+	IgnoreReasonCode   *IgnoreReasonCode         `json:"ignore_reason_code,omitempty"`
+	IgnoreReasonDetail *string                   `json:"ignore_reason_detail,omitempty"`
+	Kind               AlertDispositionEventKind `json:"kind"`
+	Note               *string                   `json:"note,omitempty"`
+	RuleSnapshot       map[string]interface{}    `json:"rule_snapshot"`
+	RuleVersion        int                       `json:"rule_version"`
+	ToDisposition      AlertDisposition          `json:"to_disposition"`
+}
+
+// AlertDispositionEventKind defines model for AlertDispositionEvent.Kind.
+type AlertDispositionEventKind string
+
+// AlertDispositionInput defines model for AlertDispositionInput.
+type AlertDispositionInput struct {
+	Disposition        AlertDisposition  `json:"disposition"`
+	IgnoreReasonCode   *IgnoreReasonCode `json:"ignore_reason_code,omitempty"`
+	IgnoreReasonDetail *string           `json:"ignore_reason_detail,omitempty"`
+	Note               *string           `json:"note,omitempty"`
+}
+
+// AlertEvent defines model for AlertEvent.
+type AlertEvent struct {
+	ActedAt             *time.Time             `json:"acted_at,omitempty"`
+	ActorId             *openapi_types.UUID    `json:"actor_id,omitempty"`
+	CurrentValue        *float64               `json:"current_value,omitempty"`
+	DispositionNote     *string                `json:"disposition_note,omitempty"`
+	EvaluatedAt         time.Time              `json:"evaluated_at"`
+	FromDisposition     *AlertDisposition      `json:"from_disposition,omitempty"`
+	FromState           AlertStatus            `json:"from_state"`
+	Id                  int64                  `json:"id"`
+	IgnoreReasonCode    *IgnoreReasonCode      `json:"ignore_reason_code,omitempty"`
+	IgnoreReasonDetail  *string                `json:"ignore_reason_detail,omitempty"`
+	InMaintenance       bool                   `json:"in_maintenance"`
+	Kind                AlertEventKind         `json:"kind"`
+	MaintenanceWindowId *openapi_types.UUID    `json:"maintenance_window_id,omitempty"`
+	RuleSnapshot        map[string]interface{} `json:"rule_snapshot"`
+	RuleVersion         int                    `json:"rule_version"`
+	ToDisposition       *AlertDisposition      `json:"to_disposition,omitempty"`
+	ToState             AlertStatus            `json:"to_state"`
+	TriggerSnapshotId   *openapi_types.UUID    `json:"trigger_snapshot_id,omitempty"`
+	Unavailability      *Unavailability        `json:"unavailability,omitempty"`
+}
+
+// AlertEventKind defines model for AlertEventKind.
+type AlertEventKind string
+
+// AlertObservation defines model for AlertObservation.
+type AlertObservation struct {
+	CurrentValue        *float64               `json:"current_value,omitempty"`
+	Disposition         AlertDisposition       `json:"disposition"`
+	DurationMs          int64                  `json:"duration_ms"`
+	FirstTriggeredAt    *time.Time             `json:"first_triggered_at,omitempty"`
+	Id                  openapi_types.UUID     `json:"id"`
+	InMaintenance       bool                   `json:"in_maintenance"`
+	InstanceId          openapi_types.UUID     `json:"instance_id"`
+	InstanceName        string                 `json:"instance_name"`
+	MaintenanceWindowId *openapi_types.UUID    `json:"maintenance_window_id,omitempty"`
+	MetricId            string                 `json:"metric_id"`
+	Paused              bool                   `json:"paused"`
+	PausedAt            *time.Time             `json:"paused_at,omitempty"`
+	RecoveredAt         *time.Time             `json:"recovered_at,omitempty"`
+	RuleId              openapi_types.UUID     `json:"rule_id"`
+	RuleName            string                 `json:"rule_name"`
+	RuleSnapshot        map[string]interface{} `json:"rule_snapshot"`
+	RuleVersion         int                    `json:"rule_version"`
+	Severity            AlertSeverity          `json:"severity"`
+	Status              AlertStatus            `json:"status"`
+	Threshold           *float64               `json:"threshold,omitempty"`
+	Unavailability      *Unavailability        `json:"unavailability,omitempty"`
+	UpdatedAt           time.Time              `json:"updated_at"`
+}
+
+// AlertObservationPage defines model for AlertObservationPage.
+type AlertObservationPage struct {
+	Items []AlertObservation `json:"items"`
+	Total int                `json:"total"`
+}
+
+// AlertOperator defines model for AlertOperator.
+type AlertOperator string
+
+// AlertRule defines model for AlertRule.
+type AlertRule struct {
+	Aggregation                     AlertAggregation     `json:"aggregation"`
+	BuiltinIdentifier               *string              `json:"builtin_identifier,omitempty"`
+	ConsecutiveCount                int                  `json:"consecutive_count"`
+	CreatedAt                       time.Time            `json:"created_at"`
+	CreatedBy                       *openapi_types.UUID  `json:"created_by,omitempty"`
+	CurrentAlertCount               int                  `json:"current_alert_count"`
+	EffectiveNotificationPolicyName string               `json:"effective_notification_policy_name"`
+	Enabled                         bool                 `json:"enabled"`
+	EnabledUpdatedAt                *time.Time           `json:"enabled_updated_at,omitempty"`
+	EnabledUpdatedBy                *openapi_types.UUID  `json:"enabled_updated_by,omitempty"`
+	EvaluationIntervalSeconds       int                  `json:"evaluation_interval_seconds"`
+	Id                              openapi_types.UUID   `json:"id"`
+	InstanceIds                     []openapi_types.UUID `json:"instance_ids"`
+	IsBuiltin                       bool                 `json:"is_builtin"`
+	LastTriggeredAt                 *time.Time           `json:"last_triggered_at,omitempty"`
+	MetricId                        string               `json:"metric_id"`
+	Name                            string               `json:"name"`
+	NoDataPolicy                    NoDataPolicy         `json:"no_data_policy"`
+	NotificationPolicyId            *openapi_types.UUID  `json:"notification_policy_id,omitempty"`
+	Operator                        AlertOperator        `json:"operator"`
+	RecoveryConsecutiveCount        int                  `json:"recovery_consecutive_count"`
+	RecoveryOperator                AlertOperator        `json:"recovery_operator"`
+	RecoveryThreshold               float64              `json:"recovery_threshold"`
+	Scope                           AlertRuleScope       `json:"scope"`
+	Severity                        AlertSeverity        `json:"severity"`
+	SourceTemplateId                *string              `json:"source_template_id,omitempty"`
+	SourceTemplateVersion           *int                 `json:"source_template_version,omitempty"`
+	Threshold                       float64              `json:"threshold"`
+	UpdatedAt                       time.Time            `json:"updated_at"`
+	UpdatedBy                       *openapi_types.UUID  `json:"updated_by,omitempty"`
+	Version                         int                  `json:"version"`
+	WindowSeconds                   int                  `json:"window_seconds"`
+}
+
+// AlertRuleCopyInput defines model for AlertRuleCopyInput.
+type AlertRuleCopyInput struct {
+	Name *string `json:"name,omitempty"`
+}
+
+// AlertRuleEnabledInput defines model for AlertRuleEnabledInput.
+type AlertRuleEnabledInput struct {
+	Enabled bool `json:"enabled"`
+}
+
+// AlertRuleInput defines model for AlertRuleInput.
+type AlertRuleInput struct {
+	Aggregation               AlertAggregation     `json:"aggregation"`
+	ConsecutiveCount          int                  `json:"consecutive_count"`
+	Enabled                   bool                 `json:"enabled"`
+	EvaluationIntervalSeconds int                  `json:"evaluation_interval_seconds"`
+	InstanceIds               []openapi_types.UUID `json:"instance_ids"`
+	MetricId                  string               `json:"metric_id"`
+	Name                      string               `json:"name"`
+	NoDataPolicy              NoDataPolicy         `json:"no_data_policy"`
+	NotificationPolicyId      *openapi_types.UUID  `json:"notification_policy_id,omitempty"`
+	Operator                  AlertOperator        `json:"operator"`
+	RecoveryConsecutiveCount  *int                 `json:"recovery_consecutive_count,omitempty"`
+	RecoveryOperator          AlertOperator        `json:"recovery_operator"`
+	RecoveryThreshold         *float64             `json:"recovery_threshold"`
+	Scope                     AlertRuleScope       `json:"scope"`
+	Severity                  AlertSeverity        `json:"severity"`
+	Threshold                 float64              `json:"threshold"`
+	WindowSeconds             int                  `json:"window_seconds"`
+}
+
+// AlertRuleScope defines model for AlertRuleScope.
+type AlertRuleScope string
+
+// AlertRuleTemplate defines model for AlertRuleTemplate.
+type AlertRuleTemplate struct {
+	Aggregation               AlertAggregation `json:"aggregation"`
+	ConsecutiveCount          int              `json:"consecutive_count"`
+	EvaluationIntervalSeconds int              `json:"evaluation_interval_seconds"`
+	Id                        string           `json:"id"`
+	MetricId                  string           `json:"metric_id"`
+	Name                      string           `json:"name"`
+	NoDataPolicy              NoDataPolicy     `json:"no_data_policy"`
+	Operator                  AlertOperator    `json:"operator"`
+	RecoveryConsecutiveCount  int              `json:"recovery_consecutive_count"`
+	RecoveryOperator          AlertOperator    `json:"recovery_operator"`
+	RecoveryThreshold         float64          `json:"recovery_threshold"`
+	Severity                  AlertSeverity    `json:"severity"`
+	Threshold                 float64          `json:"threshold"`
+	Version                   int              `json:"version"`
+	WindowSeconds             int              `json:"window_seconds"`
+}
+
+// AlertRuleTemplateInstantiationInput defines model for AlertRuleTemplateInstantiationInput.
+type AlertRuleTemplateInstantiationInput struct {
+	ConsecutiveCount         *int                  `json:"consecutive_count,omitempty"`
+	Enabled                  *bool                 `json:"enabled,omitempty"`
+	InstanceIds              *[]openapi_types.UUID `json:"instance_ids,omitempty"`
+	Name                     *string               `json:"name,omitempty"`
+	NotificationPolicyId     *openapi_types.UUID   `json:"notification_policy_id,omitempty"`
+	RecoveryConsecutiveCount *int                  `json:"recovery_consecutive_count,omitempty"`
+	RecoveryThreshold        *float64              `json:"recovery_threshold,omitempty"`
+	Scope                    *AlertRuleScope       `json:"scope,omitempty"`
+	Severity                 *AlertSeverity        `json:"severity,omitempty"`
+	Threshold                *float64              `json:"threshold,omitempty"`
+}
+
+// AlertRuleVersionRecord defines model for AlertRuleVersionRecord.
+type AlertRuleVersionRecord struct {
+	EvaluatedAt time.Time              `json:"evaluated_at"`
+	Snapshot    map[string]interface{} `json:"snapshot"`
+	Version     int                    `json:"version"`
+}
+
+// AlertSeverity defines model for AlertSeverity.
+type AlertSeverity string
 
 // AlertStatus defines model for AlertStatus.
 type AlertStatus string
 
+// AlertTriggerSnapshot defines model for AlertTriggerSnapshot.
+type AlertTriggerSnapshot struct {
+	CapturedAt         *time.Time                    `json:"captured_at,omitempty"`
+	FailureReason      *string                       `json:"failure_reason,omitempty"`
+	MetricId           string                        `json:"metric_id"`
+	OriginalMatchCount int                           `json:"original_match_count"`
+	Result             AlertTriggerSnapshotResult    `json:"result"`
+	Sessions           []AlertTriggerSnapshotSession `json:"sessions"`
+	Truncated          bool                          `json:"truncated"`
+}
+
+// AlertTriggerSnapshotResult defines model for AlertTriggerSnapshotResult.
+type AlertTriggerSnapshotResult string
+
+// AlertTriggerSnapshotSession defines model for AlertTriggerSnapshotSession.
+type AlertTriggerSnapshotSession struct {
+	BlockingPids          []int32    `json:"blocking_pids"`
+	ClientAddress         *string    `json:"client_address,omitempty"`
+	DatabaseName          *string    `json:"database_name,omitempty"`
+	Pid                   int32      `json:"pid"`
+	QueryDurationMs       *int64     `json:"query_duration_ms,omitempty"`
+	QueryStartedAt        *time.Time `json:"query_started_at,omitempty"`
+	State                 *string    `json:"state,omitempty"`
+	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
+	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	WaitEvent             *string    `json:"wait_event,omitempty"`
+	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
+
+// CapabilitySnapshotEntry defines model for CapabilitySnapshotEntry.
+type CapabilitySnapshotEntry struct {
+	AffectedMetricCount int                                 `json:"affected_metric_count"`
+	CapabilityId        CapabilitySnapshotEntryCapabilityId `json:"capability_id"`
+	Class               CapabilitySnapshotEntryClass        `json:"class"`
+	FixHint             *string                             `json:"fix_hint,omitempty"`
+	NaReason            *string                             `json:"na_reason,omitempty"`
+	ObservedAt          *time.Time                          `json:"observed_at,omitempty"`
+	Status              CapabilityStatus                    `json:"status"`
+}
+
+// CapabilitySnapshotEntryCapabilityId defines model for CapabilitySnapshotEntry.CapabilityId.
+type CapabilitySnapshotEntryCapabilityId string
+
+// CapabilitySnapshotEntryClass defines model for CapabilitySnapshotEntry.Class.
+type CapabilitySnapshotEntryClass string
+
 // CapabilityStatus defines model for CapabilityStatus.
 type CapabilityStatus string
+
+// ChannelFailureOverview defines model for ChannelFailureOverview.
+type ChannelFailureOverview struct {
+	Channels    []ChannelFailureSummary `json:"channels"`
+	HasFailures bool                    `json:"has_failures"`
+}
+
+// ChannelFailureRecord defines model for ChannelFailureRecord.
+type ChannelFailureRecord struct {
+	FailedAt   time.Time `json:"failed_at"`
+	Reason     string    `json:"reason"`
+	RetryCount int       `json:"retry_count"`
+	Target     string    `json:"target"`
+}
+
+// ChannelFailureSummary defines model for ChannelFailureSummary.
+type ChannelFailureSummary struct {
+	Channel            ChannelFailureSummaryChannel `json:"channel"`
+	LastFailedAt       time.Time                    `json:"last_failed_at"`
+	LastFailureReason  string                       `json:"last_failure_reason"`
+	RecentFailureCount int                          `json:"recent_failure_count"`
+	RecentFailures     []ChannelFailureRecord       `json:"recent_failures"`
+	Target             string                       `json:"target"`
+	TargetId           *openapi_types.UUID          `json:"target_id,omitempty"`
+}
+
+// ChannelFailureSummaryChannel defines model for ChannelFailureSummary.Channel.
+type ChannelFailureSummaryChannel string
+
+// CollectionPauseInput defines model for CollectionPauseInput.
+type CollectionPauseInput struct {
+	Paused bool    `json:"paused"`
+	Reason *string `json:"reason,omitempty"`
+}
+
+// CollectionPauseStatus defines model for CollectionPauseStatus.
+type CollectionPauseStatus struct {
+	Paused    bool                `json:"paused"`
+	Reason    *string             `json:"reason,omitempty"`
+	UpdatedAt *time.Time          `json:"updated_at,omitempty"`
+	UpdatedBy *openapi_types.UUID `json:"updated_by,omitempty"`
+}
+
+// CollectionTaskIntervalInput defines model for CollectionTaskIntervalInput.
+type CollectionTaskIntervalInput struct {
+	IntervalSeconds int `json:"interval_seconds"`
+}
+
+// CollectionTaskResult defines model for CollectionTaskResult.
+type CollectionTaskResult string
+
+// CollectionTaskState defines model for CollectionTaskState.
+type CollectionTaskState struct {
+	ConsecutiveFailures int                     `json:"consecutive_failures"`
+	IntervalSeconds     int                     `json:"interval_seconds"`
+	Kind                CollectionTaskStateKind `json:"kind"`
+	LastDueAt           *time.Time              `json:"last_due_at,omitempty"`
+	LastErrorCode       *string                 `json:"last_error_code,omitempty"`
+	LastErrorMessage    *string                 `json:"last_error_message,omitempty"`
+	LastFinishedAt      *time.Time              `json:"last_finished_at,omitempty"`
+	LastResult          *CollectionTaskResult   `json:"last_result,omitempty"`
+	LastStartedAt       *time.Time              `json:"last_started_at,omitempty"`
+	LastSuccessAt       *time.Time              `json:"last_success_at,omitempty"`
+
+	// MetricIds Metrics produced by this task, derived from the collection task dictionary.
+	MetricIds      []string   `json:"metric_ids"`
+	NextEligibleAt *time.Time `json:"next_eligible_at,omitempty"`
+
+	// RequiredCapabilities Capabilities required by this task, derived from the collection task dictionary.
+	RequiredCapabilities []string                  `json:"required_capabilities"`
+	TaskId               CollectionTaskStateTaskId `json:"task_id"`
+}
+
+// CollectionTaskStateKind defines model for CollectionTaskState.Kind.
+type CollectionTaskStateKind string
+
+// CollectionTaskStateTaskId defines model for CollectionTaskState.TaskId.
+type CollectionTaskStateTaskId string
 
 // Error defines model for Error.
 type Error struct {
@@ -156,26 +878,60 @@ type Error struct {
 // ErrorErrorCode defines model for Error.Error.Code.
 type ErrorErrorCode string
 
+// HealthAlertCounts defines model for HealthAlertCounts.
+type HealthAlertCounts struct {
+	Critical int `json:"critical"`
+	Info     int `json:"info"`
+	Warning  int `json:"warning"`
+}
+
+// HealthAttribution defines model for HealthAttribution.
+type HealthAttribution struct {
+	CurrentValue *float64 `json:"current_value,omitempty"`
+	RuleName     string   `json:"rule_name"`
+}
+
+// HealthFlags defines model for HealthFlags.
+type HealthFlags struct {
+	ConfigurationMissing int  `json:"configuration_missing"`
+	Ignored              int  `json:"ignored"`
+	InMaintenance        bool `json:"in_maintenance"`
+	NoData               bool `json:"no_data"`
+	RecentlyRecovered    bool `json:"recently_recovered"`
+}
+
+// HealthStatus defines model for HealthStatus.
+type HealthStatus string
+
+// IgnoreReasonCode defines model for IgnoreReasonCode.
+type IgnoreReasonCode string
+
 // Instance defines model for Instance.
 type Instance struct {
-	AlertStatus AlertStatus        `json:"alert_status"`
-	Database    string             `json:"database"`
-	Host        string             `json:"host"`
-	Id          openapi_types.UUID `json:"id"`
-	Name        string             `json:"name"`
-	Port        int                `json:"port"`
-	Username    string             `json:"username"`
+	// AgentMetricsEnabled Current collection setting for Agent-provided metrics.
+	AgentMetricsEnabled bool                `json:"agent_metrics_enabled"`
+	AgentStatus         InstanceAgentStatus `json:"agent_status"`
+
+	// AgentVersion Version reported by the Agent, when one has reported.
+	AgentVersion         *string               `json:"agent_version,omitempty"`
+	AlertStatus          AlertStatus           `json:"alert_status"`
+	CollectionPause      CollectionPauseStatus `json:"collection_pause"`
+	DataFreshnessSeconds *int                  `json:"data_freshness_seconds,omitempty"`
+	Database             string                `json:"database"`
+	Health               InstanceHealth        `json:"health"`
+	Host                 string                `json:"host"`
+	Id                   openapi_types.UUID    `json:"id"`
+	LastCollectedAt      *time.Time            `json:"last_collected_at,omitempty"`
+	Name                 string                `json:"name"`
+	Port                 int                   `json:"port"`
+	Username             string                `json:"username"`
 }
 
-// InstanceCreated defines model for InstanceCreated.
-type InstanceCreated struct {
-	// AgentToken Returned once when the instance is created.
-	AgentToken string   `json:"agent_token"`
-	Instance   Instance `json:"instance"`
-}
+// InstanceAgentStatus defines model for InstanceAgentStatus.
+type InstanceAgentStatus string
 
-// InstanceInput defines model for InstanceInput.
-type InstanceInput struct {
+// InstanceCreateInput defines model for InstanceCreateInput.
+type InstanceCreateInput struct {
 	Database string `json:"database"`
 	Host     string `json:"host"`
 	Name     string `json:"name"`
@@ -183,6 +939,87 @@ type InstanceInput struct {
 	Port     int    `json:"port"`
 	Username string `json:"username"`
 }
+
+// InstanceCreated defines model for InstanceCreated.
+type InstanceCreated struct {
+	Instance Instance `json:"instance"`
+}
+
+// InstanceCredentialInput defines model for InstanceCredentialInput.
+type InstanceCredentialInput struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// InstanceCredentialUpdated defines model for InstanceCredentialUpdated.
+type InstanceCredentialUpdated struct {
+	Username string `json:"username"`
+}
+
+// InstanceHealth defines model for InstanceHealth.
+type InstanceHealth struct {
+	Attribution *HealthAttribution `json:"attribution,omitempty"`
+	Counts      HealthAlertCounts  `json:"counts"`
+	Flags       HealthFlags        `json:"flags"`
+	Status      HealthStatus       `json:"status"`
+}
+
+// InstanceMetadataInput defines model for InstanceMetadataInput.
+type InstanceMetadataInput struct {
+	Database string `json:"database"`
+	Host     string `json:"host"`
+	Name     string `json:"name"`
+	Port     int    `json:"port"`
+}
+
+// LongQuerySample defines model for LongQuerySample.
+type LongQuerySample struct {
+	BlockingPids          []int32    `json:"blocking_pids"`
+	ClientAddress         *string    `json:"client_address,omitempty"`
+	DatabaseName          *string    `json:"database_name,omitempty"`
+	Pid                   int32      `json:"pid"`
+	QueryDurationMs       int64      `json:"query_duration_ms"`
+	QueryStartedAt        time.Time  `json:"query_started_at"`
+	SampledAt             time.Time  `json:"sampled_at"`
+	SnapshotOriginalCount int        `json:"snapshot_original_count"`
+	SnapshotTruncated     bool       `json:"snapshot_truncated"`
+	State                 *string    `json:"state,omitempty"`
+	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
+	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	WaitEvent             *string    `json:"wait_event,omitempty"`
+	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
+
+// LongQuerySamplePage defines model for LongQuerySamplePage.
+type LongQuerySamplePage struct {
+	Items []LongQuerySample `json:"items"`
+	Total int               `json:"total"`
+}
+
+// MaintenanceWindow defines model for MaintenanceWindow.
+type MaintenanceWindow struct {
+	CreatedAt   time.Time               `json:"created_at"`
+	CreatedBy   openapi_types.UUID      `json:"created_by"`
+	EndsAt      time.Time               `json:"ends_at"`
+	Id          openapi_types.UUID      `json:"id"`
+	InstanceIds []openapi_types.UUID    `json:"instance_ids"`
+	Reason      string                  `json:"reason"`
+	StartsAt    time.Time               `json:"starts_at"`
+	Status      MaintenanceWindowStatus `json:"status"`
+	UpdatedAt   time.Time               `json:"updated_at"`
+}
+
+// MaintenanceWindowInput defines model for MaintenanceWindowInput.
+type MaintenanceWindowInput struct {
+	EndsAt      time.Time            `json:"ends_at"`
+	InstanceIds []openapi_types.UUID `json:"instance_ids"`
+	Reason      string               `json:"reason"`
+	StartsAt    time.Time            `json:"starts_at"`
+}
+
+// MaintenanceWindowStatus defines model for MaintenanceWindowStatus.
+type MaintenanceWindowStatus string
 
 // MetricSeriesResponse defines model for MetricSeriesResponse.
 type MetricSeriesResponse struct {
@@ -200,8 +1037,404 @@ type MetricSeriesResponse struct {
 	To   time.Time `json:"to"`
 }
 
+// NoDataPolicy defines model for NoDataPolicy.
+type NoDataPolicy string
+
+// NotificationAttempt defines model for NotificationAttempt.
+type NotificationAttempt struct {
+	AttemptCount  int                          `json:"attempt_count"`
+	AttemptedAt   *time.Time                   `json:"attempted_at,omitempty"`
+	Channel       NotificationAttemptChannel   `json:"channel"`
+	CompletedAt   *time.Time                   `json:"completed_at,omitempty"`
+	CreatedAt     time.Time                    `json:"created_at"`
+	EventType     NotificationAttemptEventType `json:"event_type"`
+	FailureReason *string                      `json:"failure_reason,omitempty"`
+	Id            openapi_types.UUID           `json:"id"`
+	Result        *NotificationAttemptResult   `json:"result,omitempty"`
+	RetryCount    *int                         `json:"retry_count,omitempty"`
+	Status        NotificationAttemptStatus    `json:"status"`
+	Target        string                       `json:"target"`
+	TemplateId    *string                      `json:"template_id,omitempty"`
+}
+
+// NotificationAttemptChannel defines model for NotificationAttempt.Channel.
+type NotificationAttemptChannel string
+
+// NotificationAttemptEventType defines model for NotificationAttempt.EventType.
+type NotificationAttemptEventType string
+
+// NotificationAttemptResult defines model for NotificationAttempt.Result.
+type NotificationAttemptResult string
+
+// NotificationAttemptStatus defines model for NotificationAttempt.Status.
+type NotificationAttemptStatus string
+
+// NotificationContact defines model for NotificationContact.
+type NotificationContact struct {
+	CreatedAt  time.Time           `json:"created_at"`
+	Email      openapi_types.Email `json:"email"`
+	ExternalId *string             `json:"external_id,omitempty"`
+	Id         openapi_types.UUID  `json:"id"`
+	Name       string              `json:"name"`
+	UpdatedAt  time.Time           `json:"updated_at"`
+}
+
+// NotificationContactGroup defines model for NotificationContactGroup.
+type NotificationContactGroup struct {
+	ContactIds []openapi_types.UUID `json:"contact_ids"`
+	CreatedAt  time.Time            `json:"created_at"`
+	Id         openapi_types.UUID   `json:"id"`
+	Name       string               `json:"name"`
+	UpdatedAt  time.Time            `json:"updated_at"`
+}
+
+// NotificationContactGroupInput defines model for NotificationContactGroupInput.
+type NotificationContactGroupInput struct {
+	ContactIds []openapi_types.UUID `json:"contact_ids"`
+	Name       string               `json:"name"`
+}
+
+// NotificationContactInput defines model for NotificationContactInput.
+type NotificationContactInput struct {
+	Email      openapi_types.Email `json:"email"`
+	ExternalId *string             `json:"external_id,omitempty"`
+	Name       string              `json:"name"`
+}
+
+// NotificationPolicy defines model for NotificationPolicy.
+type NotificationPolicy struct {
+	Channels         []NotificationPolicyChannel `json:"channels"`
+	ContactGroupIds  []openapi_types.UUID        `json:"contact_group_ids"`
+	ContactIds       []openapi_types.UUID        `json:"contact_ids"`
+	CreatedAt        time.Time                   `json:"created_at"`
+	Id               openapi_types.UUID          `json:"id"`
+	IsDefault        bool                        `json:"is_default"`
+	Name             string                      `json:"name"`
+	NotifyOnFire     bool                        `json:"notify_on_fire"`
+	NotifyOnRecovery bool                        `json:"notify_on_recovery"`
+
+	// RepeatInterval Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
+	RepeatInterval int             `json:"repeat_interval"`
+	SeverityFilter []AlertSeverity `json:"severity_filter"`
+	TemplateId     *string         `json:"template_id,omitempty"`
+	UpdatedAt      time.Time       `json:"updated_at"`
+}
+
+// NotificationPolicyChannel defines model for NotificationPolicyChannel.
+type NotificationPolicyChannel struct {
+	Channel  NotificationPolicyChannelChannel `json:"channel"`
+	TargetId *openapi_types.UUID              `json:"target_id,omitempty"`
+}
+
+// NotificationPolicyChannelChannel defines model for NotificationPolicyChannel.Channel.
+type NotificationPolicyChannelChannel string
+
+// NotificationPolicyInput defines model for NotificationPolicyInput.
+type NotificationPolicyInput struct {
+	Channels         []NotificationPolicyChannel `json:"channels"`
+	ContactGroupIds  []openapi_types.UUID        `json:"contact_group_ids"`
+	ContactIds       []openapi_types.UUID        `json:"contact_ids"`
+	Name             string                      `json:"name"`
+	NotifyOnFire     bool                        `json:"notify_on_fire"`
+	NotifyOnRecovery bool                        `json:"notify_on_recovery"`
+
+	// RepeatInterval Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
+	RepeatInterval int             `json:"repeat_interval"`
+	SeverityFilter []AlertSeverity `json:"severity_filter"`
+	TemplateId     *string         `json:"template_id,omitempty"`
+}
+
+// NotificationPolicySettings defines model for NotificationPolicySettings.
+type NotificationPolicySettings struct {
+	// RepeatIntervalMinimum Lowest repeat interval accepted by this deployment, in seconds.
+	RepeatIntervalMinimum int `json:"repeat_interval_minimum"`
+}
+
+// NotificationQueued defines model for NotificationQueued.
+type NotificationQueued struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+// PasswordChangeInput defines model for PasswordChangeInput.
+type PasswordChangeInput struct {
+	NewPassword string `json:"new_password"`
+	OldPassword string `json:"old_password"`
+}
+
+// PasswordIssued defines model for PasswordIssued.
+type PasswordIssued struct {
+	// Password Generated password returned only in this response.
+	Password string `json:"password"`
+}
+
+// PerformanceEvent defines model for PerformanceEvent.
+type PerformanceEvent struct {
+	AlertInstanceId       openapi_types.UUID         `json:"alert_instance_id"`
+	AlertStatus           AlertStatus                `json:"alert_status"`
+	CauseSummary          string                     `json:"cause_summary"`
+	DerivedAt             time.Time                  `json:"derived_at"`
+	Disposition           AlertDisposition           `json:"disposition"`
+	DurationMs            int64                      `json:"duration_ms"`
+	EventType             PerformanceEventType       `json:"event_type"`
+	Id                    openapi_types.UUID         `json:"id"`
+	InMaintenance         bool                       `json:"in_maintenance"`
+	InstanceId            openapi_types.UUID         `json:"instance_id"`
+	MaintenanceWindowId   *openapi_types.UUID        `json:"maintenance_window_id,omitempty"`
+	MetricId              string                     `json:"metric_id"`
+	RecoveredAt           *time.Time                 `json:"recovered_at,omitempty"`
+	Severity              AlertSeverity              `json:"severity"`
+	SuggestedAction       string                     `json:"suggested_action"`
+	Threshold             float64                    `json:"threshold"`
+	TriggerSnapshotResult AlertTriggerSnapshotResult `json:"trigger_snapshot_result"`
+	TriggerValue          float64                    `json:"trigger_value"`
+	UpdatedAt             time.Time                  `json:"updated_at"`
+}
+
+// PerformanceEventPage defines model for PerformanceEventPage.
+type PerformanceEventPage struct {
+	Items []PerformanceEvent `json:"items"`
+	Total int                `json:"total"`
+}
+
+// PerformanceEventType defines model for PerformanceEventType.
+type PerformanceEventType string
+
+// PlatformEvent defines model for PlatformEvent.
+type PlatformEvent struct {
+	Actor      string              `json:"actor"`
+	Id         int64               `json:"id"`
+	Kind       PlatformEventKind   `json:"kind"`
+	OccurredAt time.Time           `json:"occurred_at"`
+	SubjectId  *openapi_types.UUID `json:"subject_id,omitempty"`
+}
+
+// PlatformEventKind defines model for PlatformEventKind.
+type PlatformEventKind string
+
+// PlatformHealthSnapshot defines model for PlatformHealthSnapshot.
+type PlatformHealthSnapshot struct {
+	AssembledAt time.Time                      `json:"assembled_at"`
+	Sources     []PlatformHealthSourceSnapshot `json:"sources"`
+	Status      PlatformHealthStatus           `json:"status"`
+}
+
+// PlatformHealthSource defines model for PlatformHealthSource.
+type PlatformHealthSource string
+
+// PlatformHealthSourceSnapshot defines model for PlatformHealthSourceSnapshot.
+type PlatformHealthSourceSnapshot struct {
+	Backoff                  *int64               `json:"backoff,omitempty"`
+	CapacityBudgetBytes      *int64               `json:"capacity_budget_bytes,omitempty"`
+	CapacityCriticalPercent  *float64             `json:"capacity_critical_percent,omitempty"`
+	CapacityEmergencyPercent *float64             `json:"capacity_emergency_percent,omitempty"`
+	CapacityHysteresisPoints *float64             `json:"capacity_hysteresis_points,omitempty"`
+	CapacityLevel            *string              `json:"capacity_level,omitempty"`
+	CapacityUsagePercent     *float64             `json:"capacity_usage_percent,omitempty"`
+	CapacityUsedBytes        *int64               `json:"capacity_used_bytes,omitempty"`
+	CapacityWarningPercent   *float64             `json:"capacity_warning_percent,omitempty"`
+	Code                     string               `json:"code"`
+	ConsecutiveFailures      *int                 `json:"consecutive_failures,omitempty"`
+	DiskCriticalPercent      *float64             `json:"disk_critical_percent,omitempty"`
+	DiskEmergencyPercent     *float64             `json:"disk_emergency_percent,omitempty"`
+	DiskHysteresisPoints     *float64             `json:"disk_hysteresis_points,omitempty"`
+	DiskLevel                *string              `json:"disk_level,omitempty"`
+	DiskUsagePercent         *float64             `json:"disk_usage_percent,omitempty"`
+	DiskWarningPercent       *float64             `json:"disk_warning_percent,omitempty"`
+	ExpiresAt                *time.Time           `json:"expires_at,omitempty"`
+	Pending                  *int                 `json:"pending,omitempty"`
+	PrebuildDaysRemaining    *int                 `json:"prebuild_days_remaining,omitempty"`
+	ProbeActive              *int                 `json:"probe_active,omitempty"`
+	ProbeCapacity            *int                 `json:"probe_capacity,omitempty"`
+	QueryActive              *int                 `json:"query_active,omitempty"`
+	QueryCapacity            *int                 `json:"query_capacity,omitempty"`
+	SkippedBackpressure      *int64               `json:"skipped_backpressure,omitempty"`
+	Source                   PlatformHealthSource `json:"source"`
+	StartedAt                *time.Time           `json:"started_at,omitempty"`
+	Status                   PlatformHealthStatus `json:"status"`
+	ValidityDaysRemaining    *int                 `json:"validity_days_remaining,omitempty"`
+	Version                  *string              `json:"version,omitempty"`
+}
+
+// PlatformHealthStatus defines model for PlatformHealthStatus.
+type PlatformHealthStatus string
+
+// QueryStatisticsEntry defines model for QueryStatisticsEntry.
+type QueryStatisticsEntry struct {
+	Calls       int64 `json:"calls"`
+	DatabaseOid int64 `json:"database_oid"`
+
+	// Queryid Native PostgreSQL query identifier represented as a string to preserve int64 precision.
+	Queryid         string  `json:"queryid"`
+	TotalExecTimeMs float64 `json:"total_exec_time_ms"`
+	UserOid         int64   `json:"user_oid"`
+}
+
+// QueryStatisticsSnapshot defines model for QueryStatisticsSnapshot.
+type QueryStatisticsSnapshot struct {
+	Items          []QueryStatisticsEntry `json:"items"`
+	SampledAt      *time.Time             `json:"sampled_at,omitempty"`
+	Unavailability *Unavailability        `json:"unavailability,omitempty"`
+}
+
+// Role defines model for Role.
+type Role string
+
+// SMTPAuthType defines model for SMTPAuthType.
+type SMTPAuthType string
+
+// SMTPChannel defines model for SMTPChannel.
+type SMTPChannel struct {
+	AuthConfigured bool                   `json:"auth_configured"`
+	AuthType       *SMTPAuthType          `json:"auth_type,omitempty"`
+	Configured     bool                   `json:"configured"`
+	Enabled        *bool                  `json:"enabled,omitempty"`
+	FromAddress    *openapi_types.Email   `json:"from_address,omitempty"`
+	Host           *string                `json:"host,omitempty"`
+	Port           *int                   `json:"port,omitempty"`
+	Recipient      *openapi_types.Email   `json:"recipient,omitempty"`
+	TlsMode        *SMTPTransportSecurity `json:"tls_mode,omitempty"`
+	UpdatedAt      *time.Time             `json:"updated_at,omitempty"`
+	Username       *string                `json:"username,omitempty"`
+}
+
+// SMTPChannelInput defines model for SMTPChannelInput.
+type SMTPChannelInput struct {
+	AuthType    SMTPAuthType        `json:"auth_type"`
+	Enabled     bool                `json:"enabled"`
+	FromAddress openapi_types.Email `json:"from_address"`
+	Host        string              `json:"host"`
+
+	// Password Omit to retain the existing encrypted value.
+	Password  *string               `json:"password,omitempty"`
+	Port      int                   `json:"port"`
+	Recipient openapi_types.Email   `json:"recipient"`
+	TlsMode   SMTPTransportSecurity `json:"tls_mode"`
+	Username  *string               `json:"username,omitempty"`
+}
+
+// SMTPTestInput defines model for SMTPTestInput.
+type SMTPTestInput struct {
+	Target openapi_types.Email `json:"target"`
+}
+
+// SMTPTransportSecurity defines model for SMTPTransportSecurity.
+type SMTPTransportSecurity string
+
+// SessionSnapshot defines model for SessionSnapshot.
+type SessionSnapshot struct {
+	Items          []SessionSnapshotEntry `json:"items"`
+	OriginalCount  *int                   `json:"original_count,omitempty"`
+	SampledAt      *time.Time             `json:"sampled_at,omitempty"`
+	Truncated      bool                   `json:"truncated"`
+	Unavailability *Unavailability        `json:"unavailability,omitempty"`
+}
+
+// SessionSnapshotEntry defines model for SessionSnapshotEntry.
+type SessionSnapshotEntry struct {
+	BlockingPids          []int32    `json:"blocking_pids"`
+	ClientAddress         *string    `json:"client_address,omitempty"`
+	DatabaseName          *string    `json:"database_name,omitempty"`
+	Pid                   int32      `json:"pid"`
+	QueryDurationMs       *int64     `json:"query_duration_ms,omitempty"`
+	QueryStartedAt        *time.Time `json:"query_started_at,omitempty"`
+	State                 *string    `json:"state,omitempty"`
+	TransactionDurationMs *int64     `json:"transaction_duration_ms,omitempty"`
+	TransactionStartedAt  *time.Time `json:"transaction_started_at,omitempty"`
+	Username              *string    `json:"username,omitempty"`
+	WaitEvent             *string    `json:"wait_event,omitempty"`
+	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
+
 // Unavailability defines model for Unavailability.
 type Unavailability string
+
+// User defines model for User.
+type User struct {
+	CreatedAt time.Time          `json:"created_at"`
+	Enabled   bool               `json:"enabled"`
+	Id        openapi_types.UUID `json:"id"`
+	Role      Role               `json:"role"`
+	Username  string             `json:"username"`
+}
+
+// UserCreateInput defines model for UserCreateInput.
+type UserCreateInput struct {
+	Role     Role   `json:"role"`
+	Username string `json:"username"`
+}
+
+// UserCreated defines model for UserCreated.
+type UserCreated struct {
+	// InitialPassword Generated password returned only in this response.
+	InitialPassword string `json:"initial_password"`
+	User            User   `json:"user"`
+}
+
+// UserRoleInput defines model for UserRoleInput.
+type UserRoleInput struct {
+	Role Role `json:"role"`
+}
+
+// UserStatusInput defines model for UserStatusInput.
+type UserStatusInput struct {
+	Enabled bool `json:"enabled"`
+}
+
+// WebhookTarget defines model for WebhookTarget.
+type WebhookTarget struct {
+	CreatedAt         time.Time          `json:"created_at"`
+	Enabled           bool               `json:"enabled"`
+	Id                openapi_types.UUID `json:"id"`
+	Name              string             `json:"name"`
+	SigningConfigured bool               `json:"signing_configured"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	Url               string             `json:"url"`
+}
+
+// WebhookTargetInput defines model for WebhookTargetInput.
+type WebhookTargetInput struct {
+	Enabled bool   `json:"enabled"`
+	Name    string `json:"name"`
+
+	// SignatureHeader Required when creating; omit on update to retain the encrypted value.
+	SignatureHeader *string `json:"signature_header,omitempty"`
+
+	// SigningValue Required when creating; omit on update to retain the encrypted value.
+	SigningValue *string `json:"signing_value,omitempty"`
+	Url          string  `json:"url"`
+}
+
+// DownloadAgentBinaryParams defines parameters for DownloadAgentBinary.
+type DownloadAgentBinaryParams struct {
+	Arch DownloadAgentBinaryParamsArch `form:"arch" json:"arch"`
+}
+
+// DownloadAgentBinaryParamsArch defines parameters for DownloadAgentBinary.
+type DownloadAgentBinaryParamsArch string
+
+// ListCurrentAlertsParams defines parameters for ListCurrentAlerts.
+type ListCurrentAlertsParams struct {
+	InstanceId    *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
+	IncludePaused *bool               `form:"include_paused,omitempty" json:"include_paused,omitempty"`
+	Limit         *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset        *int                `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListAlertHistoryParams defines parameters for ListAlertHistory.
+type ListAlertHistoryParams struct {
+	InstanceId *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
+	Limit      *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListLongQuerySamplesParams defines parameters for ListLongQuerySamples.
+type ListLongQuerySamplesParams struct {
+	From   time.Time `form:"from" json:"from"`
+	To     time.Time `form:"to" json:"to"`
+	Limit  *int      `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int      `form:"offset,omitempty" json:"offset,omitempty"`
+	Sort   *string   `form:"sort,omitempty" json:"sort,omitempty"`
+}
 
 // GetMetricSeriesParams defines parameters for GetMetricSeries.
 type GetMetricSeriesParams struct {
@@ -217,29 +1450,196 @@ type GetMetricSeriesParamsMetric string
 // GetMetricSeriesParamsStep defines parameters for GetMetricSeries.
 type GetMetricSeriesParamsStep string
 
+// ListPerformanceEventsParams defines parameters for ListPerformanceEvents.
+type ListPerformanceEventsParams struct {
+	From        time.Time         `form:"from" json:"from"`
+	To          time.Time         `form:"to" json:"to"`
+	Recovered   *bool             `form:"recovered,omitempty" json:"recovered,omitempty"`
+	Disposition *AlertDisposition `form:"disposition,omitempty" json:"disposition,omitempty"`
+	Limit       *int              `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset      *int              `form:"offset,omitempty" json:"offset,omitempty"`
+	Sort        *string           `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
 // CreateSessionJSONBody defines parameters for CreateSession.
 type CreateSessionJSONBody struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
 }
 
+// DeleteSessionJSONBody defines parameters for DeleteSession.
+type DeleteSessionJSONBody = map[string]interface{}
+
 // ReportAgentMetricsJSONRequestBody defines body for ReportAgentMetrics for application/json ContentType.
 type ReportAgentMetricsJSONRequestBody = AgentReport
 
+// UpdateAlertDispositionJSONRequestBody defines body for UpdateAlertDisposition for application/json ContentType.
+type UpdateAlertDispositionJSONRequestBody = AlertDispositionInput
+
+// CreateAlertRuleFromTemplateJSONRequestBody defines body for CreateAlertRuleFromTemplate for application/json ContentType.
+type CreateAlertRuleFromTemplateJSONRequestBody = AlertRuleTemplateInstantiationInput
+
+// CreateAlertRuleJSONRequestBody defines body for CreateAlertRule for application/json ContentType.
+type CreateAlertRuleJSONRequestBody = AlertRuleInput
+
+// UpdateAlertRuleJSONRequestBody defines body for UpdateAlertRule for application/json ContentType.
+type UpdateAlertRuleJSONRequestBody = AlertRuleInput
+
+// CopyAlertRuleJSONRequestBody defines body for CopyAlertRule for application/json ContentType.
+type CopyAlertRuleJSONRequestBody = AlertRuleCopyInput
+
+// UpdateAlertRuleEnabledJSONRequestBody defines body for UpdateAlertRuleEnabled for application/json ContentType.
+type UpdateAlertRuleEnabledJSONRequestBody = AlertRuleEnabledInput
+
 // CreateInstanceJSONRequestBody defines body for CreateInstance for application/json ContentType.
-type CreateInstanceJSONRequestBody = InstanceInput
+type CreateInstanceJSONRequestBody = InstanceCreateInput
 
 // UpdateInstanceJSONRequestBody defines body for UpdateInstance for application/json ContentType.
-type UpdateInstanceJSONRequestBody = InstanceInput
+type UpdateInstanceJSONRequestBody = InstanceMetadataInput
+
+// UpdateCollectionPauseJSONRequestBody defines body for UpdateCollectionPause for application/json ContentType.
+type UpdateCollectionPauseJSONRequestBody = CollectionPauseInput
+
+// UpdateCollectionTaskIntervalJSONRequestBody defines body for UpdateCollectionTaskInterval for application/json ContentType.
+type UpdateCollectionTaskIntervalJSONRequestBody = CollectionTaskIntervalInput
+
+// UpdateInstanceCredentialJSONRequestBody defines body for UpdateInstanceCredential for application/json ContentType.
+type UpdateInstanceCredentialJSONRequestBody = InstanceCredentialInput
 
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody CreateSessionJSONBody
+
+// DeleteSessionJSONRequestBody defines body for DeleteSession for application/json ContentType.
+type DeleteSessionJSONRequestBody = DeleteSessionJSONBody
+
+// CreateMaintenanceWindowJSONRequestBody defines body for CreateMaintenanceWindow for application/json ContentType.
+type CreateMaintenanceWindowJSONRequestBody = MaintenanceWindowInput
+
+// UpdateMaintenanceWindowJSONRequestBody defines body for UpdateMaintenanceWindow for application/json ContentType.
+type UpdateMaintenanceWindowJSONRequestBody = MaintenanceWindowInput
+
+// UpdateSMTPChannelJSONRequestBody defines body for UpdateSMTPChannel for application/json ContentType.
+type UpdateSMTPChannelJSONRequestBody = SMTPChannelInput
+
+// TestSMTPChannelJSONRequestBody defines body for TestSMTPChannel for application/json ContentType.
+type TestSMTPChannelJSONRequestBody = SMTPTestInput
+
+// CreateWebhookTargetJSONRequestBody defines body for CreateWebhookTarget for application/json ContentType.
+type CreateWebhookTargetJSONRequestBody = WebhookTargetInput
+
+// UpdateWebhookTargetJSONRequestBody defines body for UpdateWebhookTarget for application/json ContentType.
+type UpdateWebhookTargetJSONRequestBody = WebhookTargetInput
+
+// CreateNotificationContactGroupJSONRequestBody defines body for CreateNotificationContactGroup for application/json ContentType.
+type CreateNotificationContactGroupJSONRequestBody = NotificationContactGroupInput
+
+// UpdateNotificationContactGroupJSONRequestBody defines body for UpdateNotificationContactGroup for application/json ContentType.
+type UpdateNotificationContactGroupJSONRequestBody = NotificationContactGroupInput
+
+// CreateNotificationContactJSONRequestBody defines body for CreateNotificationContact for application/json ContentType.
+type CreateNotificationContactJSONRequestBody = NotificationContactInput
+
+// UpdateNotificationContactJSONRequestBody defines body for UpdateNotificationContact for application/json ContentType.
+type UpdateNotificationContactJSONRequestBody = NotificationContactInput
+
+// CreateNotificationPolicyJSONRequestBody defines body for CreateNotificationPolicy for application/json ContentType.
+type CreateNotificationPolicyJSONRequestBody = NotificationPolicyInput
+
+// UpdateNotificationPolicyJSONRequestBody defines body for UpdateNotificationPolicy for application/json ContentType.
+type UpdateNotificationPolicyJSONRequestBody = NotificationPolicyInput
+
+// ChangeOwnPasswordJSONRequestBody defines body for ChangeOwnPassword for application/json ContentType.
+type ChangeOwnPasswordJSONRequestBody = PasswordChangeInput
+
+// CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
+type CreateUserJSONRequestBody = UserCreateInput
+
+// UpdateUserRoleJSONRequestBody defines body for UpdateUserRole for application/json ContentType.
+type UpdateUserRoleJSONRequestBody = UserRoleInput
+
+// UpdateUserStatusJSONRequestBody defines body for UpdateUserStatus for application/json ContentType.
+type UpdateUserStatusJSONRequestBody = UserStatusInput
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/agent/download)
+	DownloadAgentBinary(w http.ResponseWriter, r *http.Request, params DownloadAgentBinaryParams)
+
+	// (GET /api/v1/alert-instances/{id})
+	GetAlertDetail(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-instances/{id}/disposition)
+	GetAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/alert-instances/{id}/disposition)
+	UpdateAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-instances/{id}/events)
+	ListAlertEvents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-instances/{id}/notifications)
+	ListAlertNotifications(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
+	GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-rule-templates)
+	ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/alert-rule-templates/{id}/alert-rules)
+	CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request, id string)
+
+	// (GET /api/v1/alert-rules)
+	ListAlertRules(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/alert-rules)
+	CreateAlertRule(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/alert-rules/{id})
+	DeleteAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alert-rules/{id})
+	GetAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/alert-rules/{id})
+	UpdateAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/alert-rules/{id}/copies)
+	CopyAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/alert-rules/{id}/enabled)
+	UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/alerts/current)
+	ListCurrentAlerts(w http.ResponseWriter, r *http.Request, params ListCurrentAlertsParams)
+
+	// (GET /api/v1/alerts/history)
+	ListAlertHistory(w http.ResponseWriter, r *http.Request, params ListAlertHistoryParams)
+
+	// (GET /api/v1/diagnostics/certificate)
+	GetCertificateDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/disk)
+	GetDiskDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/health)
+	GetPlatformHealth(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/keyring)
+	GetKeyringDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/partitions)
+	GetPartitionDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/platform)
+	GetPlatformDiagnostics(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/diagnostics/scheduler)
+	GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/instances)
 	ListInstances(w http.ResponseWriter, r *http.Request)
@@ -256,11 +1656,167 @@ type ServerInterface interface {
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
+	// (POST /api/v1/instances/{id}/agent/disable)
+	DisableAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/agent/registration)
+	GetAgentRegistration(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/instances/{id}/agent/registration)
+	RegisterAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/instances/{id}/agent/token/revocation)
+	RevokeAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/instances/{id}/agent/token/rotation)
+	RotateAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/collection/capabilities)
+	ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/collection/pause)
+	GetCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/instances/{id}/collection/pause)
+	UpdateCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/collection/tasks)
+	ListCollectionTaskStates(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/instances/{id}/collection/tasks/{task_id})
+	UpdateCollectionTaskInterval(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, taskId string)
+
+	// (PUT /api/v1/instances/{id}/credentials)
+	UpdateInstanceCredential(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/long-query-samples)
+	ListLongQuerySamples(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListLongQuerySamplesParams)
+
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params GetMetricSeriesParams)
 
+	// (GET /api/v1/instances/{id}/performance-events)
+	ListPerformanceEvents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListPerformanceEventsParams)
+
+	// (GET /api/v1/instances/{id}/query-stats)
+	GetQueryStatisticsSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/instances/{id}/sessions)
+	GetSessionSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
 	// (POST /api/v1/login)
 	CreateSession(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/logout)
+	DeleteSession(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/maintenance-windows)
+	ListMaintenanceWindows(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/maintenance-windows)
+	CreateMaintenanceWindow(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/maintenance-windows/{id})
+	DeleteMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/maintenance-windows/{id})
+	UpdateMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/maintenance-windows/{id}/end)
+	EndMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/me)
+	GetCurrentUser(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/notification-channels/failures)
+	GetChannelFailures(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/notification-channels/smtp)
+	GetSMTPChannel(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/v1/notification-channels/smtp)
+	UpdateSMTPChannel(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-channels/smtp/test)
+	TestSMTPChannel(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/notification-channels/webhooks)
+	ListWebhookTargets(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-channels/webhooks)
+	CreateWebhookTarget(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-channels/webhooks/{id})
+	DeleteWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-channels/webhooks/{id})
+	UpdateWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (POST /api/v1/notification-channels/webhooks/{id}/test)
+	TestWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-contact-groups)
+	ListNotificationContactGroups(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-contact-groups)
+	CreateNotificationContactGroup(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-contact-groups/{id})
+	DeleteNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-contact-groups/{id})
+	UpdateNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-contacts)
+	ListNotificationContacts(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-contacts)
+	CreateNotificationContact(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-contacts/{id})
+	DeleteNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-contacts/{id})
+	UpdateNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-policies)
+	ListNotificationPolicies(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/notification-policies)
+	CreateNotificationPolicy(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /api/v1/notification-policies/{id})
+	DeleteNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/notification-policies/{id})
+	UpdateNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/notification-policy-settings)
+	GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request)
+
+	// (PUT /api/v1/password)
+	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/performance-events/{id})
+	GetPerformanceEvent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (GET /api/v1/platform-events)
+	ListPlatformEvents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/users)
+	ListUsers(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/users)
+	CreateUser(w http.ResponseWriter, r *http.Request)
+
+	// (POST /api/v1/users/{id}/password)
+	ResetUserPassword(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/users/{id}/role)
+	UpdateUserRole(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+
+	// (PUT /api/v1/users/{id}/status)
+	UpdateUserStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -283,6 +1839,580 @@ func (siw *ServerInterfaceWrapper) ReportAgentMetrics(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReportAgentMetrics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadAgentBinary operation middleware
+func (siw *ServerInterfaceWrapper) DownloadAgentBinary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, AgentTokenScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DownloadAgentBinaryParams
+
+	// ------------- Required query parameter "arch" -------------
+
+	if paramValue := r.URL.Query().Get("arch"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "arch"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "arch", r.URL.Query(), &params.Arch)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "arch", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadAgentBinary(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertDetail operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertDetail(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertDetail(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertDisposition operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertDisposition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertDisposition(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAlertDisposition operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAlertDisposition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAlertDisposition(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertEvents(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertNotifications operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertNotifications(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertNotifications(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertTriggerSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertTriggerSnapshot(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertRuleTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertRuleTemplates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAlertRuleFromTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAlertRuleFromTemplate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertRules operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertRules(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertRules(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) CreateAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAlertRule(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) DeleteAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteAlertRule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertRule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAlertRule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CopyAlertRule operation middleware
+func (siw *ServerInterfaceWrapper) CopyAlertRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CopyAlertRule(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAlertRuleEnabled operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAlertRuleEnabled(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCurrentAlerts operation middleware
+func (siw *ServerInterfaceWrapper) ListCurrentAlerts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCurrentAlertsParams
+
+	// ------------- Optional query parameter "instance_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "instance_id", r.URL.Query(), &params.InstanceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "include_paused" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "include_paused", r.URL.Query(), &params.IncludePaused)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_paused", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCurrentAlerts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertHistory operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertHistory(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertHistoryParams
+
+	// ------------- Optional query parameter "instance_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "instance_id", r.URL.Query(), &params.InstanceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertHistory(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCertificateDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetCertificateDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCertificateDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDiskDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetDiskDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDiskDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlatformHealth operation middleware
+func (siw *ServerInterfaceWrapper) GetPlatformHealth(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlatformHealth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetKeyringDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetKeyringDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetKeyringDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPartitionDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetPartitionDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPartitionDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPlatformDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetPlatformDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPlatformDiagnostics(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSchedulerDiagnostics operation middleware
+func (siw *ServerInterfaceWrapper) GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSchedulerDiagnostics(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -395,6 +2525,372 @@ func (siw *ServerInterfaceWrapper) UpdateInstance(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// DisableAgent operation middleware
+func (siw *ServerInterfaceWrapper) DisableAgent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisableAgent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAgentRegistration operation middleware
+func (siw *ServerInterfaceWrapper) GetAgentRegistration(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAgentRegistration(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RegisterAgent operation middleware
+func (siw *ServerInterfaceWrapper) RegisterAgent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterAgent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeAgentToken operation middleware
+func (siw *ServerInterfaceWrapper) RevokeAgentToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeAgentToken(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RotateAgentToken operation middleware
+func (siw *ServerInterfaceWrapper) RotateAgentToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RotateAgentToken(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCapabilitySnapshot operation middleware
+func (siw *ServerInterfaceWrapper) ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCapabilitySnapshot(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCollectionPause operation middleware
+func (siw *ServerInterfaceWrapper) GetCollectionPause(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCollectionPause(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCollectionPause operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCollectionPause(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCollectionPause(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCollectionTaskStates operation middleware
+func (siw *ServerInterfaceWrapper) ListCollectionTaskStates(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCollectionTaskStates(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateCollectionTaskInterval operation middleware
+func (siw *ServerInterfaceWrapper) UpdateCollectionTaskInterval(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "task_id" -------------
+	var taskId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "task_id", r.PathValue("task_id"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "task_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateCollectionTaskInterval(w, r, id, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateInstanceCredential operation middleware
+func (siw *ServerInterfaceWrapper) UpdateInstanceCredential(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateInstanceCredential(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListLongQuerySamples operation middleware
+func (siw *ServerInterfaceWrapper) ListLongQuerySamples(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListLongQuerySamplesParams
+
+	// ------------- Required query parameter "from" -------------
+
+	if paramValue := r.URL.Query().Get("from"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "from", r.URL.Query(), &params.From)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	if paramValue := r.URL.Query().Get("to"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "to", r.URL.Query(), &params.To)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListLongQuerySamples(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMetricSeries operation middleware
 func (siw *ServerInterfaceWrapper) GetMetricSeries(w http.ResponseWriter, r *http.Request) {
 
@@ -476,11 +2972,853 @@ func (siw *ServerInterfaceWrapper) GetMetricSeries(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListPerformanceEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListPerformanceEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPerformanceEventsParams
+
+	// ------------- Required query parameter "from" -------------
+
+	if paramValue := r.URL.Query().Get("from"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "from", r.URL.Query(), &params.From)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	if paramValue := r.URL.Query().Get("to"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "to", r.URL.Query(), &params.To)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "recovered" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "recovered", r.URL.Query(), &params.Recovered)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "recovered", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "disposition" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "disposition", r.URL.Query(), &params.Disposition)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "disposition", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPerformanceEvents(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetQueryStatisticsSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetQueryStatisticsSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetQueryStatisticsSnapshot(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSessionSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetSessionSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSessionSnapshot(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateSession operation middleware
 func (siw *ServerInterfaceWrapper) CreateSession(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteSession operation middleware
+func (siw *ServerInterfaceWrapper) DeleteSession(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListMaintenanceWindows operation middleware
+func (siw *ServerInterfaceWrapper) ListMaintenanceWindows(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListMaintenanceWindows(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) CreateMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateMaintenanceWindow(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) DeleteMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteMaintenanceWindow(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) UpdateMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateMaintenanceWindow(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EndMaintenanceWindow operation middleware
+func (siw *ServerInterfaceWrapper) EndMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EndMaintenanceWindow(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCurrentUser operation middleware
+func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCurrentUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetChannelFailures operation middleware
+func (siw *ServerInterfaceWrapper) GetChannelFailures(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetChannelFailures(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSMTPChannel operation middleware
+func (siw *ServerInterfaceWrapper) GetSMTPChannel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSMTPChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSMTPChannel operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSMTPChannel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSMTPChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestSMTPChannel operation middleware
+func (siw *ServerInterfaceWrapper) TestSMTPChannel(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestSMTPChannel(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWebhookTargets operation middleware
+func (siw *ServerInterfaceWrapper) ListWebhookTargets(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWebhookTargets(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) CreateWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWebhookTarget(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWebhookTarget(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) UpdateWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateWebhookTarget(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestWebhookTarget operation middleware
+func (siw *ServerInterfaceWrapper) TestWebhookTarget(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestWebhookTarget(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNotificationContactGroups operation middleware
+func (siw *ServerInterfaceWrapper) ListNotificationContactGroups(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotificationContactGroups(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNotificationContactGroup operation middleware
+func (siw *ServerInterfaceWrapper) CreateNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNotificationContactGroup(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotificationContactGroup operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotificationContactGroup(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationContactGroup operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationContactGroup(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNotificationContacts operation middleware
+func (siw *ServerInterfaceWrapper) ListNotificationContacts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotificationContacts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNotificationContact operation middleware
+func (siw *ServerInterfaceWrapper) CreateNotificationContact(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNotificationContact(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotificationContact operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotificationContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotificationContact(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationContact operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationContact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationContact(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListNotificationPolicies operation middleware
+func (siw *ServerInterfaceWrapper) ListNotificationPolicies(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListNotificationPolicies(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateNotificationPolicy operation middleware
+func (siw *ServerInterfaceWrapper) CreateNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateNotificationPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteNotificationPolicy operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteNotificationPolicy(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateNotificationPolicy operation middleware
+func (siw *ServerInterfaceWrapper) UpdateNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateNotificationPolicy(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetNotificationPolicySettings operation middleware
+func (siw *ServerInterfaceWrapper) GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetNotificationPolicySettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ChangeOwnPassword operation middleware
+func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ChangeOwnPassword(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPerformanceEvent operation middleware
+func (siw *ServerInterfaceWrapper) GetPerformanceEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPerformanceEvent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPlatformEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListPlatformEvents(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPlatformEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListUsers operation middleware
+func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUsers(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateUser operation middleware
+func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResetUserPassword operation middleware
+func (siw *ServerInterfaceWrapper) ResetUserPassword(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResetUserPassword(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateUserRole operation middleware
+func (siw *ServerInterfaceWrapper) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateUserRole(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateUserStatus operation middleware
+func (siw *ServerInterfaceWrapper) UpdateUserStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateUserStatus(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -611,13 +3949,90 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("POST "+options.BaseURL+"/api/agent/v1/report", wrapper.ReportAgentMetrics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/agent/download", wrapper.DownloadAgentBinary)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}", wrapper.GetAlertDetail)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.GetAlertDisposition)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-instances/{id}/disposition", wrapper.UpdateAlertDisposition)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/events", wrapper.ListAlertEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/notifications", wrapper.ListAlertNotifications)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-instances/{id}/trigger-snapshot", wrapper.GetAlertTriggerSnapshot)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rule-templates", wrapper.ListAlertRuleTemplates)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rule-templates/{id}/alert-rules", wrapper.CreateAlertRuleFromTemplate)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules", wrapper.ListAlertRules)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules", wrapper.CreateAlertRule)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.DeleteAlertRule)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.GetAlertRule)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}", wrapper.UpdateAlertRule)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/alert-rules/{id}/copies", wrapper.CopyAlertRule)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/alert-rules/{id}/enabled", wrapper.UpdateAlertRuleEnabled)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alerts/current", wrapper.ListCurrentAlerts)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/alerts/history", wrapper.ListAlertHistory)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/certificate", wrapper.GetCertificateDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/disk", wrapper.GetDiskDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/health", wrapper.GetPlatformHealth)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/keyring", wrapper.GetKeyringDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/partitions", wrapper.GetPartitionDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/platform", wrapper.GetPlatformDiagnostics)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/scheduler", wrapper.GetSchedulerDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances", wrapper.ListInstances)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances", wrapper.CreateInstance)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}", wrapper.GetInstance)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}", wrapper.UpdateInstance)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/disable", wrapper.DisableAgent)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/agent/registration", wrapper.GetAgentRegistration)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/registration", wrapper.RegisterAgent)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/token/revocation", wrapper.RevokeAgentToken)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances/{id}/agent/token/rotation", wrapper.RotateAgentToken)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/capabilities", wrapper.ListCapabilitySnapshot)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/pause", wrapper.GetCollectionPause)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/pause", wrapper.UpdateCollectionPause)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks", wrapper.ListCollectionTaskStates)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/collection/tasks/{task_id}", wrapper.UpdateCollectionTaskInterval)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}/credentials", wrapper.UpdateInstanceCredential)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/long-query-samples", wrapper.ListLongQuerySamples)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/metrics/series", wrapper.GetMetricSeries)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/performance-events", wrapper.ListPerformanceEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/query-stats", wrapper.GetQueryStatisticsSnapshot)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}/sessions", wrapper.GetSessionSnapshot)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/login", wrapper.CreateSession)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/logout", wrapper.DeleteSession)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/maintenance-windows", wrapper.ListMaintenanceWindows)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/maintenance-windows", wrapper.CreateMaintenanceWindow)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/maintenance-windows/{id}", wrapper.DeleteMaintenanceWindow)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/maintenance-windows/{id}", wrapper.UpdateMaintenanceWindow)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/maintenance-windows/{id}/end", wrapper.EndMaintenanceWindow)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/failures", wrapper.GetChannelFailures)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.GetSMTPChannel)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.UpdateSMTPChannel)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/smtp/test", wrapper.TestSMTPChannel)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/webhooks", wrapper.ListWebhookTargets)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/webhooks", wrapper.CreateWebhookTarget)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}", wrapper.DeleteWebhookTarget)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}", wrapper.UpdateWebhookTarget)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-channels/webhooks/{id}/test", wrapper.TestWebhookTarget)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-contact-groups", wrapper.ListNotificationContactGroups)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-contact-groups", wrapper.CreateNotificationContactGroup)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-contact-groups/{id}", wrapper.DeleteNotificationContactGroup)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-contact-groups/{id}", wrapper.UpdateNotificationContactGroup)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-contacts", wrapper.ListNotificationContacts)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-contacts", wrapper.CreateNotificationContact)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-contacts/{id}", wrapper.DeleteNotificationContact)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-contacts/{id}", wrapper.UpdateNotificationContact)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-policies", wrapper.ListNotificationPolicies)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/notification-policies", wrapper.CreateNotificationPolicy)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.DeleteNotificationPolicy)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.UpdateNotificationPolicy)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-policy-settings", wrapper.GetNotificationPolicySettings)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/platform-events", wrapper.ListPlatformEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users", wrapper.CreateUser)
+	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users/{id}/password", wrapper.ResetUserPassword)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/users/{id}/role", wrapper.UpdateUserRole)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/users/{id}/status", wrapper.UpdateUserStatus)
 
 	return m
 }
@@ -630,12 +4045,13 @@ type ReportAgentMetricsResponseObject interface {
 	VisitReportAgentMetricsResponse(w http.ResponseWriter) error
 }
 
-type ReportAgentMetrics204Response struct {
-}
+type ReportAgentMetrics200JSONResponse AgentReportAccepted
 
-func (response ReportAgentMetrics204Response) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
-	w.WriteHeader(204)
-	return nil
+func (response ReportAgentMetrics200JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type ReportAgentMetrics400JSONResponse Error
@@ -652,6 +4068,652 @@ type ReportAgentMetrics401JSONResponse Error
 func (response ReportAgentMetrics401JSONResponse) VisitReportAgentMetricsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DownloadAgentBinaryRequestObject struct {
+	Params DownloadAgentBinaryParams
+}
+
+type DownloadAgentBinaryResponseObject interface {
+	VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error
+}
+
+type DownloadAgentBinary200ApplicationoctetStreamResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response DownloadAgentBinary200ApplicationoctetStreamResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type DownloadAgentBinary400JSONResponse Error
+
+func (response DownloadAgentBinary400JSONResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DownloadAgentBinary401JSONResponse Error
+
+func (response DownloadAgentBinary401JSONResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DownloadAgentBinary503JSONResponse Error
+
+func (response DownloadAgentBinary503JSONResponse) VisitDownloadAgentBinaryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(503)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDetailRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertDetailResponseObject interface {
+	VisitGetAlertDetailResponse(w http.ResponseWriter) error
+}
+
+type GetAlertDetail200JSONResponse AlertDetail
+
+func (response GetAlertDetail200JSONResponse) VisitGetAlertDetailResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDetail404JSONResponse Error
+
+func (response GetAlertDetail404JSONResponse) VisitGetAlertDetailResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDispositionRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertDispositionResponseObject interface {
+	VisitGetAlertDispositionResponse(w http.ResponseWriter) error
+}
+
+type GetAlertDisposition200JSONResponse AlertDispositionDetail
+
+func (response GetAlertDisposition200JSONResponse) VisitGetAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertDisposition404JSONResponse Error
+
+func (response GetAlertDisposition404JSONResponse) VisitGetAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDispositionRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateAlertDispositionJSONRequestBody
+}
+
+type UpdateAlertDispositionResponseObject interface {
+	VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error
+}
+
+type UpdateAlertDisposition200JSONResponse AlertDispositionDetail
+
+func (response UpdateAlertDisposition200JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDisposition400JSONResponse Error
+
+func (response UpdateAlertDisposition400JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDisposition404JSONResponse Error
+
+func (response UpdateAlertDisposition404JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertDisposition409JSONResponse Error
+
+func (response UpdateAlertDisposition409JSONResponse) VisitUpdateAlertDispositionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertEventsRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListAlertEventsResponseObject interface {
+	VisitListAlertEventsResponse(w http.ResponseWriter) error
+}
+
+type ListAlertEvents200JSONResponse []AlertEvent
+
+func (response ListAlertEvents200JSONResponse) VisitListAlertEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertEvents404JSONResponse Error
+
+func (response ListAlertEvents404JSONResponse) VisitListAlertEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertNotificationsRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListAlertNotificationsResponseObject interface {
+	VisitListAlertNotificationsResponse(w http.ResponseWriter) error
+}
+
+type ListAlertNotifications200JSONResponse []NotificationAttempt
+
+func (response ListAlertNotifications200JSONResponse) VisitListAlertNotificationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertTriggerSnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertTriggerSnapshotResponseObject interface {
+	VisitGetAlertTriggerSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetAlertTriggerSnapshot200JSONResponse AlertTriggerSnapshot
+
+func (response GetAlertTriggerSnapshot200JSONResponse) VisitGetAlertTriggerSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertTriggerSnapshot404JSONResponse Error
+
+func (response GetAlertTriggerSnapshot404JSONResponse) VisitGetAlertTriggerSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertRuleTemplatesRequestObject struct {
+}
+
+type ListAlertRuleTemplatesResponseObject interface {
+	VisitListAlertRuleTemplatesResponse(w http.ResponseWriter) error
+}
+
+type ListAlertRuleTemplates200JSONResponse []AlertRuleTemplate
+
+func (response ListAlertRuleTemplates200JSONResponse) VisitListAlertRuleTemplatesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleFromTemplateRequestObject struct {
+	Id   string `json:"id"`
+	Body *CreateAlertRuleFromTemplateJSONRequestBody
+}
+
+type CreateAlertRuleFromTemplateResponseObject interface {
+	VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error
+}
+
+type CreateAlertRuleFromTemplate201JSONResponse AlertRule
+
+func (response CreateAlertRuleFromTemplate201JSONResponse) VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleFromTemplate400JSONResponse Error
+
+func (response CreateAlertRuleFromTemplate400JSONResponse) VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleFromTemplate404JSONResponse Error
+
+func (response CreateAlertRuleFromTemplate404JSONResponse) VisitCreateAlertRuleFromTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertRulesRequestObject struct {
+}
+
+type ListAlertRulesResponseObject interface {
+	VisitListAlertRulesResponse(w http.ResponseWriter) error
+}
+
+type ListAlertRules200JSONResponse []AlertRule
+
+func (response ListAlertRules200JSONResponse) VisitListAlertRulesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRuleRequestObject struct {
+	Body *CreateAlertRuleJSONRequestBody
+}
+
+type CreateAlertRuleResponseObject interface {
+	VisitCreateAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type CreateAlertRule201JSONResponse AlertRule
+
+func (response CreateAlertRule201JSONResponse) VisitCreateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateAlertRule400JSONResponse Error
+
+func (response CreateAlertRule400JSONResponse) VisitCreateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteAlertRuleRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteAlertRuleResponseObject interface {
+	VisitDeleteAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type DeleteAlertRule204Response struct {
+}
+
+func (response DeleteAlertRule204Response) VisitDeleteAlertRuleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteAlertRule404JSONResponse Error
+
+func (response DeleteAlertRule404JSONResponse) VisitDeleteAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteAlertRule409JSONResponse Error
+
+func (response DeleteAlertRule409JSONResponse) VisitDeleteAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertRuleRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAlertRuleResponseObject interface {
+	VisitGetAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type GetAlertRule200JSONResponse AlertRule
+
+func (response GetAlertRule200JSONResponse) VisitGetAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAlertRule404JSONResponse Error
+
+func (response GetAlertRule404JSONResponse) VisitGetAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertRuleRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateAlertRuleJSONRequestBody
+}
+
+type UpdateAlertRuleResponseObject interface {
+	VisitUpdateAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type UpdateAlertRule200JSONResponse AlertRule
+
+func (response UpdateAlertRule200JSONResponse) VisitUpdateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertRule400JSONResponse Error
+
+func (response UpdateAlertRule400JSONResponse) VisitUpdateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertRule404JSONResponse Error
+
+func (response UpdateAlertRule404JSONResponse) VisitUpdateAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CopyAlertRuleRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *CopyAlertRuleJSONRequestBody
+}
+
+type CopyAlertRuleResponseObject interface {
+	VisitCopyAlertRuleResponse(w http.ResponseWriter) error
+}
+
+type CopyAlertRule201JSONResponse AlertRule
+
+func (response CopyAlertRule201JSONResponse) VisitCopyAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CopyAlertRule400JSONResponse Error
+
+func (response CopyAlertRule400JSONResponse) VisitCopyAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CopyAlertRule404JSONResponse Error
+
+func (response CopyAlertRule404JSONResponse) VisitCopyAlertRuleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertRuleEnabledRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateAlertRuleEnabledJSONRequestBody
+}
+
+type UpdateAlertRuleEnabledResponseObject interface {
+	VisitUpdateAlertRuleEnabledResponse(w http.ResponseWriter) error
+}
+
+type UpdateAlertRuleEnabled200JSONResponse AlertRule
+
+func (response UpdateAlertRuleEnabled200JSONResponse) VisitUpdateAlertRuleEnabledResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertRuleEnabled400JSONResponse Error
+
+func (response UpdateAlertRuleEnabled400JSONResponse) VisitUpdateAlertRuleEnabledResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateAlertRuleEnabled404JSONResponse Error
+
+func (response UpdateAlertRuleEnabled404JSONResponse) VisitUpdateAlertRuleEnabledResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCurrentAlertsRequestObject struct {
+	Params ListCurrentAlertsParams
+}
+
+type ListCurrentAlertsResponseObject interface {
+	VisitListCurrentAlertsResponse(w http.ResponseWriter) error
+}
+
+type ListCurrentAlerts200JSONResponse AlertObservationPage
+
+func (response ListCurrentAlerts200JSONResponse) VisitListCurrentAlertsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCurrentAlerts400JSONResponse Error
+
+func (response ListCurrentAlerts400JSONResponse) VisitListCurrentAlertsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertHistoryRequestObject struct {
+	Params ListAlertHistoryParams
+}
+
+type ListAlertHistoryResponseObject interface {
+	VisitListAlertHistoryResponse(w http.ResponseWriter) error
+}
+
+type ListAlertHistory200JSONResponse AlertObservationPage
+
+func (response ListAlertHistory200JSONResponse) VisitListAlertHistoryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListAlertHistory400JSONResponse Error
+
+func (response ListAlertHistory400JSONResponse) VisitListAlertHistoryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCertificateDiagnosticsRequestObject struct {
+}
+
+type GetCertificateDiagnosticsResponseObject interface {
+	VisitGetCertificateDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetCertificateDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetCertificateDiagnostics200JSONResponse) VisitGetCertificateDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetDiskDiagnosticsRequestObject struct {
+}
+
+type GetDiskDiagnosticsResponseObject interface {
+	VisitGetDiskDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetDiskDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetDiskDiagnostics200JSONResponse) VisitGetDiskDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPlatformHealthRequestObject struct {
+}
+
+type GetPlatformHealthResponseObject interface {
+	VisitGetPlatformHealthResponse(w http.ResponseWriter) error
+}
+
+type GetPlatformHealth200JSONResponse PlatformHealthSnapshot
+
+func (response GetPlatformHealth200JSONResponse) VisitGetPlatformHealthResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetKeyringDiagnosticsRequestObject struct {
+}
+
+type GetKeyringDiagnosticsResponseObject interface {
+	VisitGetKeyringDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetKeyringDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetKeyringDiagnostics200JSONResponse) VisitGetKeyringDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPartitionDiagnosticsRequestObject struct {
+}
+
+type GetPartitionDiagnosticsResponseObject interface {
+	VisitGetPartitionDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetPartitionDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetPartitionDiagnostics200JSONResponse) VisitGetPartitionDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPlatformDiagnosticsRequestObject struct {
+}
+
+type GetPlatformDiagnosticsResponseObject interface {
+	VisitGetPlatformDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetPlatformDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetPlatformDiagnostics200JSONResponse) VisitGetPlatformDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSchedulerDiagnosticsRequestObject struct {
+}
+
+type GetSchedulerDiagnosticsResponseObject interface {
+	VisitGetSchedulerDiagnosticsResponse(w http.ResponseWriter) error
+}
+
+type GetSchedulerDiagnostics200JSONResponse PlatformHealthSourceSnapshot
+
+func (response GetSchedulerDiagnostics200JSONResponse) VisitGetSchedulerDiagnosticsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -685,6 +4747,15 @@ type CreateInstance201JSONResponse InstanceCreated
 func (response CreateInstance201JSONResponse) VisitCreateInstanceResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateInstance400JSONResponse Error
+
+func (response CreateInstance400JSONResponse) VisitCreateInstanceResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -740,6 +4811,287 @@ func (response UpdateInstance200JSONResponse) VisitUpdateInstanceResponse(w http
 	return json.NewEncoder(w).Encode(response)
 }
 
+type UpdateInstance400JSONResponse Error
+
+func (response UpdateInstance400JSONResponse) VisitUpdateInstanceResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DisableAgentRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DisableAgentResponseObject interface {
+	VisitDisableAgentResponse(w http.ResponseWriter) error
+}
+
+type DisableAgent200JSONResponse AgentRegistration
+
+func (response DisableAgent200JSONResponse) VisitDisableAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DisableAgent409JSONResponse Error
+
+func (response DisableAgent409JSONResponse) VisitDisableAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAgentRegistrationRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetAgentRegistrationResponseObject interface {
+	VisitGetAgentRegistrationResponse(w http.ResponseWriter) error
+}
+
+type GetAgentRegistration200JSONResponse AgentRegistration
+
+func (response GetAgentRegistration200JSONResponse) VisitGetAgentRegistrationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RegisterAgentRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type RegisterAgentResponseObject interface {
+	VisitRegisterAgentResponse(w http.ResponseWriter) error
+}
+
+type RegisterAgent200JSONResponse AgentTokenIssued
+
+func (response RegisterAgent200JSONResponse) VisitRegisterAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RegisterAgent409JSONResponse Error
+
+func (response RegisterAgent409JSONResponse) VisitRegisterAgentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RevokeAgentTokenRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type RevokeAgentTokenResponseObject interface {
+	VisitRevokeAgentTokenResponse(w http.ResponseWriter) error
+}
+
+type RevokeAgentToken200JSONResponse AgentRegistration
+
+func (response RevokeAgentToken200JSONResponse) VisitRevokeAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RevokeAgentToken409JSONResponse Error
+
+func (response RevokeAgentToken409JSONResponse) VisitRevokeAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RotateAgentTokenRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type RotateAgentTokenResponseObject interface {
+	VisitRotateAgentTokenResponse(w http.ResponseWriter) error
+}
+
+type RotateAgentToken200JSONResponse AgentTokenIssued
+
+func (response RotateAgentToken200JSONResponse) VisitRotateAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RotateAgentToken409JSONResponse Error
+
+func (response RotateAgentToken409JSONResponse) VisitRotateAgentTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCapabilitySnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListCapabilitySnapshotResponseObject interface {
+	VisitListCapabilitySnapshotResponse(w http.ResponseWriter) error
+}
+
+type ListCapabilitySnapshot200JSONResponse []CapabilitySnapshotEntry
+
+func (response ListCapabilitySnapshot200JSONResponse) VisitListCapabilitySnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCollectionPauseRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetCollectionPauseResponseObject interface {
+	VisitGetCollectionPauseResponse(w http.ResponseWriter) error
+}
+
+type GetCollectionPause200JSONResponse CollectionPauseStatus
+
+func (response GetCollectionPause200JSONResponse) VisitGetCollectionPauseResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateCollectionPauseRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateCollectionPauseJSONRequestBody
+}
+
+type UpdateCollectionPauseResponseObject interface {
+	VisitUpdateCollectionPauseResponse(w http.ResponseWriter) error
+}
+
+type UpdateCollectionPause200JSONResponse CollectionPauseStatus
+
+func (response UpdateCollectionPause200JSONResponse) VisitUpdateCollectionPauseResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCollectionTaskStatesRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListCollectionTaskStatesResponseObject interface {
+	VisitListCollectionTaskStatesResponse(w http.ResponseWriter) error
+}
+
+type ListCollectionTaskStates200JSONResponse []CollectionTaskState
+
+func (response ListCollectionTaskStates200JSONResponse) VisitListCollectionTaskStatesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateCollectionTaskIntervalRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	TaskId string             `json:"task_id"`
+	Body   *UpdateCollectionTaskIntervalJSONRequestBody
+}
+
+type UpdateCollectionTaskIntervalResponseObject interface {
+	VisitUpdateCollectionTaskIntervalResponse(w http.ResponseWriter) error
+}
+
+type UpdateCollectionTaskInterval200JSONResponse CollectionTaskState
+
+func (response UpdateCollectionTaskInterval200JSONResponse) VisitUpdateCollectionTaskIntervalResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateCollectionTaskInterval400JSONResponse Error
+
+func (response UpdateCollectionTaskInterval400JSONResponse) VisitUpdateCollectionTaskIntervalResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateInstanceCredentialRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateInstanceCredentialJSONRequestBody
+}
+
+type UpdateInstanceCredentialResponseObject interface {
+	VisitUpdateInstanceCredentialResponse(w http.ResponseWriter) error
+}
+
+type UpdateInstanceCredential200JSONResponse InstanceCredentialUpdated
+
+func (response UpdateInstanceCredential200JSONResponse) VisitUpdateInstanceCredentialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateInstanceCredential400JSONResponse Error
+
+func (response UpdateInstanceCredential400JSONResponse) VisitUpdateInstanceCredentialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListLongQuerySamplesRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params ListLongQuerySamplesParams
+}
+
+type ListLongQuerySamplesResponseObject interface {
+	VisitListLongQuerySamplesResponse(w http.ResponseWriter) error
+}
+
+type ListLongQuerySamples200JSONResponse LongQuerySamplePage
+
+func (response ListLongQuerySamples200JSONResponse) VisitListLongQuerySamplesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListLongQuerySamples400JSONResponse Error
+
+func (response ListLongQuerySamples400JSONResponse) VisitListLongQuerySamplesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetMetricSeriesRequestObject struct {
 	Id     openapi_types.UUID `json:"id"`
 	Params GetMetricSeriesParams
@@ -763,6 +5115,67 @@ type GetMetricSeries400JSONResponse Error
 func (response GetMetricSeries400JSONResponse) VisitGetMetricSeriesResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListPerformanceEventsRequestObject struct {
+	Id     openapi_types.UUID `json:"id"`
+	Params ListPerformanceEventsParams
+}
+
+type ListPerformanceEventsResponseObject interface {
+	VisitListPerformanceEventsResponse(w http.ResponseWriter) error
+}
+
+type ListPerformanceEvents200JSONResponse PerformanceEventPage
+
+func (response ListPerformanceEvents200JSONResponse) VisitListPerformanceEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListPerformanceEvents400JSONResponse Error
+
+func (response ListPerformanceEvents400JSONResponse) VisitListPerformanceEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetQueryStatisticsSnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetQueryStatisticsSnapshotResponseObject interface {
+	VisitGetQueryStatisticsSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetQueryStatisticsSnapshot200JSONResponse QueryStatisticsSnapshot
+
+func (response GetQueryStatisticsSnapshot200JSONResponse) VisitGetQueryStatisticsSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSessionSnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetSessionSnapshotResponseObject interface {
+	VisitGetSessionSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetSessionSnapshot200JSONResponse SessionSnapshot
+
+func (response GetSessionSnapshot200JSONResponse) VisitGetSessionSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -798,11 +5211,1051 @@ func (response CreateSession401JSONResponse) VisitCreateSessionResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
+type DeleteSessionRequestObject struct {
+	Body *DeleteSessionJSONRequestBody
+}
+
+type DeleteSessionResponseObject interface {
+	VisitDeleteSessionResponse(w http.ResponseWriter) error
+}
+
+type DeleteSession204ResponseHeaders struct {
+	SetCookie string
+}
+
+type DeleteSession204Response struct {
+	Headers DeleteSession204ResponseHeaders
+}
+
+func (response DeleteSession204Response) VisitDeleteSessionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Set-Cookie", fmt.Sprint(response.Headers.SetCookie))
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteSession401Response struct {
+}
+
+func (response DeleteSession401Response) VisitDeleteSessionResponse(w http.ResponseWriter) error {
+	w.WriteHeader(401)
+	return nil
+}
+
+type ListMaintenanceWindowsRequestObject struct {
+}
+
+type ListMaintenanceWindowsResponseObject interface {
+	VisitListMaintenanceWindowsResponse(w http.ResponseWriter) error
+}
+
+type ListMaintenanceWindows200JSONResponse []MaintenanceWindow
+
+func (response ListMaintenanceWindows200JSONResponse) VisitListMaintenanceWindowsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateMaintenanceWindowRequestObject struct {
+	Body *CreateMaintenanceWindowJSONRequestBody
+}
+
+type CreateMaintenanceWindowResponseObject interface {
+	VisitCreateMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type CreateMaintenanceWindow201JSONResponse MaintenanceWindow
+
+func (response CreateMaintenanceWindow201JSONResponse) VisitCreateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateMaintenanceWindow400JSONResponse Error
+
+func (response CreateMaintenanceWindow400JSONResponse) VisitCreateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteMaintenanceWindowRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteMaintenanceWindowResponseObject interface {
+	VisitDeleteMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type DeleteMaintenanceWindow204Response struct {
+}
+
+func (response DeleteMaintenanceWindow204Response) VisitDeleteMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteMaintenanceWindow404JSONResponse Error
+
+func (response DeleteMaintenanceWindow404JSONResponse) VisitDeleteMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateMaintenanceWindowRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateMaintenanceWindowJSONRequestBody
+}
+
+type UpdateMaintenanceWindowResponseObject interface {
+	VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type UpdateMaintenanceWindow200JSONResponse MaintenanceWindow
+
+func (response UpdateMaintenanceWindow200JSONResponse) VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateMaintenanceWindow400JSONResponse Error
+
+func (response UpdateMaintenanceWindow400JSONResponse) VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateMaintenanceWindow404JSONResponse Error
+
+func (response UpdateMaintenanceWindow404JSONResponse) VisitUpdateMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type EndMaintenanceWindowRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type EndMaintenanceWindowResponseObject interface {
+	VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error
+}
+
+type EndMaintenanceWindow200JSONResponse MaintenanceWindow
+
+func (response EndMaintenanceWindow200JSONResponse) VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type EndMaintenanceWindow400JSONResponse Error
+
+func (response EndMaintenanceWindow400JSONResponse) VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type EndMaintenanceWindow404JSONResponse Error
+
+func (response EndMaintenanceWindow404JSONResponse) VisitEndMaintenanceWindowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCurrentUserRequestObject struct {
+}
+
+type GetCurrentUserResponseObject interface {
+	VisitGetCurrentUserResponse(w http.ResponseWriter) error
+}
+
+type GetCurrentUser200JSONResponse User
+
+func (response GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetChannelFailuresRequestObject struct {
+}
+
+type GetChannelFailuresResponseObject interface {
+	VisitGetChannelFailuresResponse(w http.ResponseWriter) error
+}
+
+type GetChannelFailures200JSONResponse ChannelFailureOverview
+
+func (response GetChannelFailures200JSONResponse) VisitGetChannelFailuresResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSMTPChannelRequestObject struct {
+}
+
+type GetSMTPChannelResponseObject interface {
+	VisitGetSMTPChannelResponse(w http.ResponseWriter) error
+}
+
+type GetSMTPChannel200JSONResponse SMTPChannel
+
+func (response GetSMTPChannel200JSONResponse) VisitGetSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateSMTPChannelRequestObject struct {
+	Body *UpdateSMTPChannelJSONRequestBody
+}
+
+type UpdateSMTPChannelResponseObject interface {
+	VisitUpdateSMTPChannelResponse(w http.ResponseWriter) error
+}
+
+type UpdateSMTPChannel200JSONResponse SMTPChannel
+
+func (response UpdateSMTPChannel200JSONResponse) VisitUpdateSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateSMTPChannel400JSONResponse Error
+
+func (response UpdateSMTPChannel400JSONResponse) VisitUpdateSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestSMTPChannelRequestObject struct {
+	Body *TestSMTPChannelJSONRequestBody
+}
+
+type TestSMTPChannelResponseObject interface {
+	VisitTestSMTPChannelResponse(w http.ResponseWriter) error
+}
+
+type TestSMTPChannel202JSONResponse NotificationQueued
+
+func (response TestSMTPChannel202JSONResponse) VisitTestSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestSMTPChannel400JSONResponse Error
+
+func (response TestSMTPChannel400JSONResponse) VisitTestSMTPChannelResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListWebhookTargetsRequestObject struct {
+}
+
+type ListWebhookTargetsResponseObject interface {
+	VisitListWebhookTargetsResponse(w http.ResponseWriter) error
+}
+
+type ListWebhookTargets200JSONResponse []WebhookTarget
+
+func (response ListWebhookTargets200JSONResponse) VisitListWebhookTargetsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateWebhookTargetRequestObject struct {
+	Body *CreateWebhookTargetJSONRequestBody
+}
+
+type CreateWebhookTargetResponseObject interface {
+	VisitCreateWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type CreateWebhookTarget201JSONResponse WebhookTarget
+
+func (response CreateWebhookTarget201JSONResponse) VisitCreateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateWebhookTarget400JSONResponse Error
+
+func (response CreateWebhookTarget400JSONResponse) VisitCreateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteWebhookTargetRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteWebhookTargetResponseObject interface {
+	VisitDeleteWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type DeleteWebhookTarget204Response struct {
+}
+
+func (response DeleteWebhookTarget204Response) VisitDeleteWebhookTargetResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWebhookTarget404JSONResponse Error
+
+func (response DeleteWebhookTarget404JSONResponse) VisitDeleteWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateWebhookTargetRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateWebhookTargetJSONRequestBody
+}
+
+type UpdateWebhookTargetResponseObject interface {
+	VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type UpdateWebhookTarget200JSONResponse WebhookTarget
+
+func (response UpdateWebhookTarget200JSONResponse) VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateWebhookTarget400JSONResponse Error
+
+func (response UpdateWebhookTarget400JSONResponse) VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateWebhookTarget404JSONResponse Error
+
+func (response UpdateWebhookTarget404JSONResponse) VisitUpdateWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestWebhookTargetRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type TestWebhookTargetResponseObject interface {
+	VisitTestWebhookTargetResponse(w http.ResponseWriter) error
+}
+
+type TestWebhookTarget202JSONResponse NotificationQueued
+
+func (response TestWebhookTarget202JSONResponse) VisitTestWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestWebhookTarget400JSONResponse Error
+
+func (response TestWebhookTarget400JSONResponse) VisitTestWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TestWebhookTarget404JSONResponse Error
+
+func (response TestWebhookTarget404JSONResponse) VisitTestWebhookTargetResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListNotificationContactGroupsRequestObject struct {
+}
+
+type ListNotificationContactGroupsResponseObject interface {
+	VisitListNotificationContactGroupsResponse(w http.ResponseWriter) error
+}
+
+type ListNotificationContactGroups200JSONResponse []NotificationContactGroup
+
+func (response ListNotificationContactGroups200JSONResponse) VisitListNotificationContactGroupsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContactGroupRequestObject struct {
+	Body *CreateNotificationContactGroupJSONRequestBody
+}
+
+type CreateNotificationContactGroupResponseObject interface {
+	VisitCreateNotificationContactGroupResponse(w http.ResponseWriter) error
+}
+
+type CreateNotificationContactGroup201JSONResponse NotificationContactGroup
+
+func (response CreateNotificationContactGroup201JSONResponse) VisitCreateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContactGroup400JSONResponse Error
+
+func (response CreateNotificationContactGroup400JSONResponse) VisitCreateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationContactGroupRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNotificationContactGroupResponseObject interface {
+	VisitDeleteNotificationContactGroupResponse(w http.ResponseWriter) error
+}
+
+type DeleteNotificationContactGroup204Response struct {
+}
+
+func (response DeleteNotificationContactGroup204Response) VisitDeleteNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNotificationContactGroup404JSONResponse Error
+
+func (response DeleteNotificationContactGroup404JSONResponse) VisitDeleteNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactGroupRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateNotificationContactGroupJSONRequestBody
+}
+
+type UpdateNotificationContactGroupResponseObject interface {
+	VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationContactGroup200JSONResponse NotificationContactGroup
+
+func (response UpdateNotificationContactGroup200JSONResponse) VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactGroup400JSONResponse Error
+
+func (response UpdateNotificationContactGroup400JSONResponse) VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactGroup404JSONResponse Error
+
+func (response UpdateNotificationContactGroup404JSONResponse) VisitUpdateNotificationContactGroupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListNotificationContactsRequestObject struct {
+}
+
+type ListNotificationContactsResponseObject interface {
+	VisitListNotificationContactsResponse(w http.ResponseWriter) error
+}
+
+type ListNotificationContacts200JSONResponse []NotificationContact
+
+func (response ListNotificationContacts200JSONResponse) VisitListNotificationContactsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContactRequestObject struct {
+	Body *CreateNotificationContactJSONRequestBody
+}
+
+type CreateNotificationContactResponseObject interface {
+	VisitCreateNotificationContactResponse(w http.ResponseWriter) error
+}
+
+type CreateNotificationContact201JSONResponse NotificationContact
+
+func (response CreateNotificationContact201JSONResponse) VisitCreateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationContact400JSONResponse Error
+
+func (response CreateNotificationContact400JSONResponse) VisitCreateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationContactRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNotificationContactResponseObject interface {
+	VisitDeleteNotificationContactResponse(w http.ResponseWriter) error
+}
+
+type DeleteNotificationContact204Response struct {
+}
+
+func (response DeleteNotificationContact204Response) VisitDeleteNotificationContactResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNotificationContact404JSONResponse Error
+
+func (response DeleteNotificationContact404JSONResponse) VisitDeleteNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContactRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateNotificationContactJSONRequestBody
+}
+
+type UpdateNotificationContactResponseObject interface {
+	VisitUpdateNotificationContactResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationContact200JSONResponse NotificationContact
+
+func (response UpdateNotificationContact200JSONResponse) VisitUpdateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContact400JSONResponse Error
+
+func (response UpdateNotificationContact400JSONResponse) VisitUpdateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationContact404JSONResponse Error
+
+func (response UpdateNotificationContact404JSONResponse) VisitUpdateNotificationContactResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListNotificationPoliciesRequestObject struct {
+}
+
+type ListNotificationPoliciesResponseObject interface {
+	VisitListNotificationPoliciesResponse(w http.ResponseWriter) error
+}
+
+type ListNotificationPolicies200JSONResponse []NotificationPolicy
+
+func (response ListNotificationPolicies200JSONResponse) VisitListNotificationPoliciesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationPolicyRequestObject struct {
+	Body *CreateNotificationPolicyJSONRequestBody
+}
+
+type CreateNotificationPolicyResponseObject interface {
+	VisitCreateNotificationPolicyResponse(w http.ResponseWriter) error
+}
+
+type CreateNotificationPolicy201JSONResponse NotificationPolicy
+
+func (response CreateNotificationPolicy201JSONResponse) VisitCreateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateNotificationPolicy400JSONResponse Error
+
+func (response CreateNotificationPolicy400JSONResponse) VisitCreateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationPolicyRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type DeleteNotificationPolicyResponseObject interface {
+	VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error
+}
+
+type DeleteNotificationPolicy204Response struct {
+}
+
+func (response DeleteNotificationPolicy204Response) VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteNotificationPolicy404JSONResponse Error
+
+func (response DeleteNotificationPolicy404JSONResponse) VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DeleteNotificationPolicy409JSONResponse Error
+
+func (response DeleteNotificationPolicy409JSONResponse) VisitDeleteNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationPolicyRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateNotificationPolicyJSONRequestBody
+}
+
+type UpdateNotificationPolicyResponseObject interface {
+	VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error
+}
+
+type UpdateNotificationPolicy200JSONResponse NotificationPolicy
+
+func (response UpdateNotificationPolicy200JSONResponse) VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationPolicy400JSONResponse Error
+
+func (response UpdateNotificationPolicy400JSONResponse) VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateNotificationPolicy404JSONResponse Error
+
+func (response UpdateNotificationPolicy404JSONResponse) VisitUpdateNotificationPolicyResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetNotificationPolicySettingsRequestObject struct {
+}
+
+type GetNotificationPolicySettingsResponseObject interface {
+	VisitGetNotificationPolicySettingsResponse(w http.ResponseWriter) error
+}
+
+type GetNotificationPolicySettings200JSONResponse NotificationPolicySettings
+
+func (response GetNotificationPolicySettings200JSONResponse) VisitGetNotificationPolicySettingsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ChangeOwnPasswordRequestObject struct {
+	Body *ChangeOwnPasswordJSONRequestBody
+}
+
+type ChangeOwnPasswordResponseObject interface {
+	VisitChangeOwnPasswordResponse(w http.ResponseWriter) error
+}
+
+type ChangeOwnPassword204Response struct {
+}
+
+func (response ChangeOwnPassword204Response) VisitChangeOwnPasswordResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ChangeOwnPassword400JSONResponse Error
+
+func (response ChangeOwnPassword400JSONResponse) VisitChangeOwnPasswordResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPerformanceEventRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetPerformanceEventResponseObject interface {
+	VisitGetPerformanceEventResponse(w http.ResponseWriter) error
+}
+
+type GetPerformanceEvent200JSONResponse PerformanceEvent
+
+func (response GetPerformanceEvent200JSONResponse) VisitGetPerformanceEventResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPerformanceEvent404JSONResponse Error
+
+func (response GetPerformanceEvent404JSONResponse) VisitGetPerformanceEventResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListPlatformEventsRequestObject struct {
+}
+
+type ListPlatformEventsResponseObject interface {
+	VisitListPlatformEventsResponse(w http.ResponseWriter) error
+}
+
+type ListPlatformEvents200JSONResponse []PlatformEvent
+
+func (response ListPlatformEvents200JSONResponse) VisitListPlatformEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListUsersRequestObject struct {
+}
+
+type ListUsersResponseObject interface {
+	VisitListUsersResponse(w http.ResponseWriter) error
+}
+
+type ListUsers200JSONResponse []User
+
+func (response ListUsers200JSONResponse) VisitListUsersResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateUserRequestObject struct {
+	Body *CreateUserJSONRequestBody
+}
+
+type CreateUserResponseObject interface {
+	VisitCreateUserResponse(w http.ResponseWriter) error
+}
+
+type CreateUser201JSONResponse UserCreated
+
+func (response CreateUser201JSONResponse) VisitCreateUserResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateUser400JSONResponse Error
+
+func (response CreateUser400JSONResponse) VisitCreateUserResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateUser409JSONResponse Error
+
+func (response CreateUser409JSONResponse) VisitCreateUserResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ResetUserPasswordRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ResetUserPasswordResponseObject interface {
+	VisitResetUserPasswordResponse(w http.ResponseWriter) error
+}
+
+type ResetUserPassword200JSONResponse PasswordIssued
+
+func (response ResetUserPassword200JSONResponse) VisitResetUserPasswordResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ResetUserPassword400JSONResponse Error
+
+func (response ResetUserPassword400JSONResponse) VisitResetUserPasswordResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ResetUserPassword404JSONResponse Error
+
+func (response ResetUserPassword404JSONResponse) VisitResetUserPasswordResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateUserRoleRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateUserRoleJSONRequestBody
+}
+
+type UpdateUserRoleResponseObject interface {
+	VisitUpdateUserRoleResponse(w http.ResponseWriter) error
+}
+
+type UpdateUserRole200JSONResponse User
+
+func (response UpdateUserRole200JSONResponse) VisitUpdateUserRoleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateUserRole400JSONResponse Error
+
+func (response UpdateUserRole400JSONResponse) VisitUpdateUserRoleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateUserRole404JSONResponse Error
+
+func (response UpdateUserRole404JSONResponse) VisitUpdateUserRoleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateUserStatusRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *UpdateUserStatusJSONRequestBody
+}
+
+type UpdateUserStatusResponseObject interface {
+	VisitUpdateUserStatusResponse(w http.ResponseWriter) error
+}
+
+type UpdateUserStatus200JSONResponse User
+
+func (response UpdateUserStatus200JSONResponse) VisitUpdateUserStatusResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateUserStatus400JSONResponse Error
+
+func (response UpdateUserStatus400JSONResponse) VisitUpdateUserStatusResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UpdateUserStatus404JSONResponse Error
+
+func (response UpdateUserStatus404JSONResponse) VisitUpdateUserStatusResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
 	// (POST /api/agent/v1/report)
 	ReportAgentMetrics(ctx context.Context, request ReportAgentMetricsRequestObject) (ReportAgentMetricsResponseObject, error)
+
+	// (GET /api/v1/agent/download)
+	DownloadAgentBinary(ctx context.Context, request DownloadAgentBinaryRequestObject) (DownloadAgentBinaryResponseObject, error)
+
+	// (GET /api/v1/alert-instances/{id})
+	GetAlertDetail(ctx context.Context, request GetAlertDetailRequestObject) (GetAlertDetailResponseObject, error)
+
+	// (GET /api/v1/alert-instances/{id}/disposition)
+	GetAlertDisposition(ctx context.Context, request GetAlertDispositionRequestObject) (GetAlertDispositionResponseObject, error)
+
+	// (PUT /api/v1/alert-instances/{id}/disposition)
+	UpdateAlertDisposition(ctx context.Context, request UpdateAlertDispositionRequestObject) (UpdateAlertDispositionResponseObject, error)
+
+	// (GET /api/v1/alert-instances/{id}/events)
+	ListAlertEvents(ctx context.Context, request ListAlertEventsRequestObject) (ListAlertEventsResponseObject, error)
+
+	// (GET /api/v1/alert-instances/{id}/notifications)
+	ListAlertNotifications(ctx context.Context, request ListAlertNotificationsRequestObject) (ListAlertNotificationsResponseObject, error)
+
+	// (GET /api/v1/alert-instances/{id}/trigger-snapshot)
+	GetAlertTriggerSnapshot(ctx context.Context, request GetAlertTriggerSnapshotRequestObject) (GetAlertTriggerSnapshotResponseObject, error)
+
+	// (GET /api/v1/alert-rule-templates)
+	ListAlertRuleTemplates(ctx context.Context, request ListAlertRuleTemplatesRequestObject) (ListAlertRuleTemplatesResponseObject, error)
+
+	// (POST /api/v1/alert-rule-templates/{id}/alert-rules)
+	CreateAlertRuleFromTemplate(ctx context.Context, request CreateAlertRuleFromTemplateRequestObject) (CreateAlertRuleFromTemplateResponseObject, error)
+
+	// (GET /api/v1/alert-rules)
+	ListAlertRules(ctx context.Context, request ListAlertRulesRequestObject) (ListAlertRulesResponseObject, error)
+
+	// (POST /api/v1/alert-rules)
+	CreateAlertRule(ctx context.Context, request CreateAlertRuleRequestObject) (CreateAlertRuleResponseObject, error)
+
+	// (DELETE /api/v1/alert-rules/{id})
+	DeleteAlertRule(ctx context.Context, request DeleteAlertRuleRequestObject) (DeleteAlertRuleResponseObject, error)
+
+	// (GET /api/v1/alert-rules/{id})
+	GetAlertRule(ctx context.Context, request GetAlertRuleRequestObject) (GetAlertRuleResponseObject, error)
+
+	// (PUT /api/v1/alert-rules/{id})
+	UpdateAlertRule(ctx context.Context, request UpdateAlertRuleRequestObject) (UpdateAlertRuleResponseObject, error)
+
+	// (POST /api/v1/alert-rules/{id}/copies)
+	CopyAlertRule(ctx context.Context, request CopyAlertRuleRequestObject) (CopyAlertRuleResponseObject, error)
+
+	// (PUT /api/v1/alert-rules/{id}/enabled)
+	UpdateAlertRuleEnabled(ctx context.Context, request UpdateAlertRuleEnabledRequestObject) (UpdateAlertRuleEnabledResponseObject, error)
+
+	// (GET /api/v1/alerts/current)
+	ListCurrentAlerts(ctx context.Context, request ListCurrentAlertsRequestObject) (ListCurrentAlertsResponseObject, error)
+
+	// (GET /api/v1/alerts/history)
+	ListAlertHistory(ctx context.Context, request ListAlertHistoryRequestObject) (ListAlertHistoryResponseObject, error)
+
+	// (GET /api/v1/diagnostics/certificate)
+	GetCertificateDiagnostics(ctx context.Context, request GetCertificateDiagnosticsRequestObject) (GetCertificateDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/disk)
+	GetDiskDiagnostics(ctx context.Context, request GetDiskDiagnosticsRequestObject) (GetDiskDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/health)
+	GetPlatformHealth(ctx context.Context, request GetPlatformHealthRequestObject) (GetPlatformHealthResponseObject, error)
+
+	// (GET /api/v1/diagnostics/keyring)
+	GetKeyringDiagnostics(ctx context.Context, request GetKeyringDiagnosticsRequestObject) (GetKeyringDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/partitions)
+	GetPartitionDiagnostics(ctx context.Context, request GetPartitionDiagnosticsRequestObject) (GetPartitionDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/platform)
+	GetPlatformDiagnostics(ctx context.Context, request GetPlatformDiagnosticsRequestObject) (GetPlatformDiagnosticsResponseObject, error)
+
+	// (GET /api/v1/diagnostics/scheduler)
+	GetSchedulerDiagnostics(ctx context.Context, request GetSchedulerDiagnosticsRequestObject) (GetSchedulerDiagnosticsResponseObject, error)
 
 	// (GET /api/v1/instances)
 	ListInstances(ctx context.Context, request ListInstancesRequestObject) (ListInstancesResponseObject, error)
@@ -819,11 +6272,167 @@ type StrictServerInterface interface {
 	// (PUT /api/v1/instances/{id})
 	UpdateInstance(ctx context.Context, request UpdateInstanceRequestObject) (UpdateInstanceResponseObject, error)
 
+	// (POST /api/v1/instances/{id}/agent/disable)
+	DisableAgent(ctx context.Context, request DisableAgentRequestObject) (DisableAgentResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/agent/registration)
+	GetAgentRegistration(ctx context.Context, request GetAgentRegistrationRequestObject) (GetAgentRegistrationResponseObject, error)
+
+	// (POST /api/v1/instances/{id}/agent/registration)
+	RegisterAgent(ctx context.Context, request RegisterAgentRequestObject) (RegisterAgentResponseObject, error)
+
+	// (POST /api/v1/instances/{id}/agent/token/revocation)
+	RevokeAgentToken(ctx context.Context, request RevokeAgentTokenRequestObject) (RevokeAgentTokenResponseObject, error)
+
+	// (POST /api/v1/instances/{id}/agent/token/rotation)
+	RotateAgentToken(ctx context.Context, request RotateAgentTokenRequestObject) (RotateAgentTokenResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/collection/capabilities)
+	ListCapabilitySnapshot(ctx context.Context, request ListCapabilitySnapshotRequestObject) (ListCapabilitySnapshotResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/collection/pause)
+	GetCollectionPause(ctx context.Context, request GetCollectionPauseRequestObject) (GetCollectionPauseResponseObject, error)
+
+	// (PUT /api/v1/instances/{id}/collection/pause)
+	UpdateCollectionPause(ctx context.Context, request UpdateCollectionPauseRequestObject) (UpdateCollectionPauseResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/collection/tasks)
+	ListCollectionTaskStates(ctx context.Context, request ListCollectionTaskStatesRequestObject) (ListCollectionTaskStatesResponseObject, error)
+
+	// (PUT /api/v1/instances/{id}/collection/tasks/{task_id})
+	UpdateCollectionTaskInterval(ctx context.Context, request UpdateCollectionTaskIntervalRequestObject) (UpdateCollectionTaskIntervalResponseObject, error)
+
+	// (PUT /api/v1/instances/{id}/credentials)
+	UpdateInstanceCredential(ctx context.Context, request UpdateInstanceCredentialRequestObject) (UpdateInstanceCredentialResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/long-query-samples)
+	ListLongQuerySamples(ctx context.Context, request ListLongQuerySamplesRequestObject) (ListLongQuerySamplesResponseObject, error)
+
 	// (GET /api/v1/instances/{id}/metrics/series)
 	GetMetricSeries(ctx context.Context, request GetMetricSeriesRequestObject) (GetMetricSeriesResponseObject, error)
 
+	// (GET /api/v1/instances/{id}/performance-events)
+	ListPerformanceEvents(ctx context.Context, request ListPerformanceEventsRequestObject) (ListPerformanceEventsResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/query-stats)
+	GetQueryStatisticsSnapshot(ctx context.Context, request GetQueryStatisticsSnapshotRequestObject) (GetQueryStatisticsSnapshotResponseObject, error)
+
+	// (GET /api/v1/instances/{id}/sessions)
+	GetSessionSnapshot(ctx context.Context, request GetSessionSnapshotRequestObject) (GetSessionSnapshotResponseObject, error)
+
 	// (POST /api/v1/login)
 	CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error)
+
+	// (POST /api/v1/logout)
+	DeleteSession(ctx context.Context, request DeleteSessionRequestObject) (DeleteSessionResponseObject, error)
+
+	// (GET /api/v1/maintenance-windows)
+	ListMaintenanceWindows(ctx context.Context, request ListMaintenanceWindowsRequestObject) (ListMaintenanceWindowsResponseObject, error)
+
+	// (POST /api/v1/maintenance-windows)
+	CreateMaintenanceWindow(ctx context.Context, request CreateMaintenanceWindowRequestObject) (CreateMaintenanceWindowResponseObject, error)
+
+	// (DELETE /api/v1/maintenance-windows/{id})
+	DeleteMaintenanceWindow(ctx context.Context, request DeleteMaintenanceWindowRequestObject) (DeleteMaintenanceWindowResponseObject, error)
+
+	// (PUT /api/v1/maintenance-windows/{id})
+	UpdateMaintenanceWindow(ctx context.Context, request UpdateMaintenanceWindowRequestObject) (UpdateMaintenanceWindowResponseObject, error)
+
+	// (POST /api/v1/maintenance-windows/{id}/end)
+	EndMaintenanceWindow(ctx context.Context, request EndMaintenanceWindowRequestObject) (EndMaintenanceWindowResponseObject, error)
+
+	// (GET /api/v1/me)
+	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
+
+	// (GET /api/v1/notification-channels/failures)
+	GetChannelFailures(ctx context.Context, request GetChannelFailuresRequestObject) (GetChannelFailuresResponseObject, error)
+
+	// (GET /api/v1/notification-channels/smtp)
+	GetSMTPChannel(ctx context.Context, request GetSMTPChannelRequestObject) (GetSMTPChannelResponseObject, error)
+
+	// (PUT /api/v1/notification-channels/smtp)
+	UpdateSMTPChannel(ctx context.Context, request UpdateSMTPChannelRequestObject) (UpdateSMTPChannelResponseObject, error)
+
+	// (POST /api/v1/notification-channels/smtp/test)
+	TestSMTPChannel(ctx context.Context, request TestSMTPChannelRequestObject) (TestSMTPChannelResponseObject, error)
+
+	// (GET /api/v1/notification-channels/webhooks)
+	ListWebhookTargets(ctx context.Context, request ListWebhookTargetsRequestObject) (ListWebhookTargetsResponseObject, error)
+
+	// (POST /api/v1/notification-channels/webhooks)
+	CreateWebhookTarget(ctx context.Context, request CreateWebhookTargetRequestObject) (CreateWebhookTargetResponseObject, error)
+
+	// (DELETE /api/v1/notification-channels/webhooks/{id})
+	DeleteWebhookTarget(ctx context.Context, request DeleteWebhookTargetRequestObject) (DeleteWebhookTargetResponseObject, error)
+
+	// (PUT /api/v1/notification-channels/webhooks/{id})
+	UpdateWebhookTarget(ctx context.Context, request UpdateWebhookTargetRequestObject) (UpdateWebhookTargetResponseObject, error)
+
+	// (POST /api/v1/notification-channels/webhooks/{id}/test)
+	TestWebhookTarget(ctx context.Context, request TestWebhookTargetRequestObject) (TestWebhookTargetResponseObject, error)
+
+	// (GET /api/v1/notification-contact-groups)
+	ListNotificationContactGroups(ctx context.Context, request ListNotificationContactGroupsRequestObject) (ListNotificationContactGroupsResponseObject, error)
+
+	// (POST /api/v1/notification-contact-groups)
+	CreateNotificationContactGroup(ctx context.Context, request CreateNotificationContactGroupRequestObject) (CreateNotificationContactGroupResponseObject, error)
+
+	// (DELETE /api/v1/notification-contact-groups/{id})
+	DeleteNotificationContactGroup(ctx context.Context, request DeleteNotificationContactGroupRequestObject) (DeleteNotificationContactGroupResponseObject, error)
+
+	// (PUT /api/v1/notification-contact-groups/{id})
+	UpdateNotificationContactGroup(ctx context.Context, request UpdateNotificationContactGroupRequestObject) (UpdateNotificationContactGroupResponseObject, error)
+
+	// (GET /api/v1/notification-contacts)
+	ListNotificationContacts(ctx context.Context, request ListNotificationContactsRequestObject) (ListNotificationContactsResponseObject, error)
+
+	// (POST /api/v1/notification-contacts)
+	CreateNotificationContact(ctx context.Context, request CreateNotificationContactRequestObject) (CreateNotificationContactResponseObject, error)
+
+	// (DELETE /api/v1/notification-contacts/{id})
+	DeleteNotificationContact(ctx context.Context, request DeleteNotificationContactRequestObject) (DeleteNotificationContactResponseObject, error)
+
+	// (PUT /api/v1/notification-contacts/{id})
+	UpdateNotificationContact(ctx context.Context, request UpdateNotificationContactRequestObject) (UpdateNotificationContactResponseObject, error)
+
+	// (GET /api/v1/notification-policies)
+	ListNotificationPolicies(ctx context.Context, request ListNotificationPoliciesRequestObject) (ListNotificationPoliciesResponseObject, error)
+
+	// (POST /api/v1/notification-policies)
+	CreateNotificationPolicy(ctx context.Context, request CreateNotificationPolicyRequestObject) (CreateNotificationPolicyResponseObject, error)
+
+	// (DELETE /api/v1/notification-policies/{id})
+	DeleteNotificationPolicy(ctx context.Context, request DeleteNotificationPolicyRequestObject) (DeleteNotificationPolicyResponseObject, error)
+
+	// (PUT /api/v1/notification-policies/{id})
+	UpdateNotificationPolicy(ctx context.Context, request UpdateNotificationPolicyRequestObject) (UpdateNotificationPolicyResponseObject, error)
+
+	// (GET /api/v1/notification-policy-settings)
+	GetNotificationPolicySettings(ctx context.Context, request GetNotificationPolicySettingsRequestObject) (GetNotificationPolicySettingsResponseObject, error)
+
+	// (PUT /api/v1/password)
+	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
+
+	// (GET /api/v1/performance-events/{id})
+	GetPerformanceEvent(ctx context.Context, request GetPerformanceEventRequestObject) (GetPerformanceEventResponseObject, error)
+
+	// (GET /api/v1/platform-events)
+	ListPlatformEvents(ctx context.Context, request ListPlatformEventsRequestObject) (ListPlatformEventsResponseObject, error)
+
+	// (GET /api/v1/users)
+	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
+
+	// (POST /api/v1/users)
+	CreateUser(ctx context.Context, request CreateUserRequestObject) (CreateUserResponseObject, error)
+
+	// (POST /api/v1/users/{id}/password)
+	ResetUserPassword(ctx context.Context, request ResetUserPasswordRequestObject) (ResetUserPasswordResponseObject, error)
+
+	// (PUT /api/v1/users/{id}/role)
+	UpdateUserRole(ctx context.Context, request UpdateUserRoleRequestObject) (UpdateUserRoleResponseObject, error)
+
+	// (PUT /api/v1/users/{id}/status)
+	UpdateUserStatus(ctx context.Context, request UpdateUserStatusRequestObject) (UpdateUserStatusResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -879,6 +6488,678 @@ func (sh *strictHandler) ReportAgentMetrics(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReportAgentMetricsResponseObject); ok {
 		if err := validResponse.VisitReportAgentMetricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DownloadAgentBinary operation middleware
+func (sh *strictHandler) DownloadAgentBinary(w http.ResponseWriter, r *http.Request, params DownloadAgentBinaryParams) {
+	var request DownloadAgentBinaryRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DownloadAgentBinary(ctx, request.(DownloadAgentBinaryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DownloadAgentBinary")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DownloadAgentBinaryResponseObject); ok {
+		if err := validResponse.VisitDownloadAgentBinaryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertDetail operation middleware
+func (sh *strictHandler) GetAlertDetail(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertDetailRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertDetail(ctx, request.(GetAlertDetailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertDetail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertDetailResponseObject); ok {
+		if err := validResponse.VisitGetAlertDetailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertDisposition operation middleware
+func (sh *strictHandler) GetAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertDispositionRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertDisposition(ctx, request.(GetAlertDispositionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertDisposition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertDispositionResponseObject); ok {
+		if err := validResponse.VisitGetAlertDispositionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAlertDisposition operation middleware
+func (sh *strictHandler) UpdateAlertDisposition(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateAlertDispositionRequestObject
+
+	request.Id = id
+
+	var body UpdateAlertDispositionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAlertDisposition(ctx, request.(UpdateAlertDispositionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAlertDisposition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAlertDispositionResponseObject); ok {
+		if err := validResponse.VisitUpdateAlertDispositionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertEvents operation middleware
+func (sh *strictHandler) ListAlertEvents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListAlertEventsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertEvents(ctx, request.(ListAlertEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertEventsResponseObject); ok {
+		if err := validResponse.VisitListAlertEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertNotifications operation middleware
+func (sh *strictHandler) ListAlertNotifications(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListAlertNotificationsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertNotifications(ctx, request.(ListAlertNotificationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertNotifications")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertNotificationsResponseObject); ok {
+		if err := validResponse.VisitListAlertNotificationsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertTriggerSnapshot operation middleware
+func (sh *strictHandler) GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertTriggerSnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertTriggerSnapshot(ctx, request.(GetAlertTriggerSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertTriggerSnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertTriggerSnapshotResponseObject); ok {
+		if err := validResponse.VisitGetAlertTriggerSnapshotResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertRuleTemplates operation middleware
+func (sh *strictHandler) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
+	var request ListAlertRuleTemplatesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertRuleTemplates(ctx, request.(ListAlertRuleTemplatesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertRuleTemplates")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertRuleTemplatesResponseObject); ok {
+		if err := validResponse.VisitListAlertRuleTemplatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAlertRuleFromTemplate operation middleware
+func (sh *strictHandler) CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request, id string) {
+	var request CreateAlertRuleFromTemplateRequestObject
+
+	request.Id = id
+
+	var body CreateAlertRuleFromTemplateJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAlertRuleFromTemplate(ctx, request.(CreateAlertRuleFromTemplateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAlertRuleFromTemplate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAlertRuleFromTemplateResponseObject); ok {
+		if err := validResponse.VisitCreateAlertRuleFromTemplateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertRules operation middleware
+func (sh *strictHandler) ListAlertRules(w http.ResponseWriter, r *http.Request) {
+	var request ListAlertRulesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertRules(ctx, request.(ListAlertRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertRulesResponseObject); ok {
+		if err := validResponse.VisitListAlertRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateAlertRule operation middleware
+func (sh *strictHandler) CreateAlertRule(w http.ResponseWriter, r *http.Request) {
+	var request CreateAlertRuleRequestObject
+
+	var body CreateAlertRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateAlertRule(ctx, request.(CreateAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateAlertRuleResponseObject); ok {
+		if err := validResponse.VisitCreateAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteAlertRule operation middleware
+func (sh *strictHandler) DeleteAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteAlertRuleRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteAlertRule(ctx, request.(DeleteAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteAlertRuleResponseObject); ok {
+		if err := validResponse.VisitDeleteAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAlertRule operation middleware
+func (sh *strictHandler) GetAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAlertRuleRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAlertRule(ctx, request.(GetAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAlertRuleResponseObject); ok {
+		if err := validResponse.VisitGetAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAlertRule operation middleware
+func (sh *strictHandler) UpdateAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateAlertRuleRequestObject
+
+	request.Id = id
+
+	var body UpdateAlertRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAlertRule(ctx, request.(UpdateAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAlertRuleResponseObject); ok {
+		if err := validResponse.VisitUpdateAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CopyAlertRule operation middleware
+func (sh *strictHandler) CopyAlertRule(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request CopyAlertRuleRequestObject
+
+	request.Id = id
+
+	var body CopyAlertRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CopyAlertRule(ctx, request.(CopyAlertRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CopyAlertRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CopyAlertRuleResponseObject); ok {
+		if err := validResponse.VisitCopyAlertRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateAlertRuleEnabled operation middleware
+func (sh *strictHandler) UpdateAlertRuleEnabled(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateAlertRuleEnabledRequestObject
+
+	request.Id = id
+
+	var body UpdateAlertRuleEnabledJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateAlertRuleEnabled(ctx, request.(UpdateAlertRuleEnabledRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateAlertRuleEnabled")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateAlertRuleEnabledResponseObject); ok {
+		if err := validResponse.VisitUpdateAlertRuleEnabledResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCurrentAlerts operation middleware
+func (sh *strictHandler) ListCurrentAlerts(w http.ResponseWriter, r *http.Request, params ListCurrentAlertsParams) {
+	var request ListCurrentAlertsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCurrentAlerts(ctx, request.(ListCurrentAlertsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCurrentAlerts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCurrentAlertsResponseObject); ok {
+		if err := validResponse.VisitListCurrentAlertsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAlertHistory operation middleware
+func (sh *strictHandler) ListAlertHistory(w http.ResponseWriter, r *http.Request, params ListAlertHistoryParams) {
+	var request ListAlertHistoryRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAlertHistory(ctx, request.(ListAlertHistoryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAlertHistory")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAlertHistoryResponseObject); ok {
+		if err := validResponse.VisitListAlertHistoryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCertificateDiagnostics operation middleware
+func (sh *strictHandler) GetCertificateDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetCertificateDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCertificateDiagnostics(ctx, request.(GetCertificateDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCertificateDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCertificateDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetCertificateDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDiskDiagnostics operation middleware
+func (sh *strictHandler) GetDiskDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetDiskDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDiskDiagnostics(ctx, request.(GetDiskDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDiskDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDiskDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetDiskDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlatformHealth operation middleware
+func (sh *strictHandler) GetPlatformHealth(w http.ResponseWriter, r *http.Request) {
+	var request GetPlatformHealthRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlatformHealth(ctx, request.(GetPlatformHealthRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlatformHealth")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlatformHealthResponseObject); ok {
+		if err := validResponse.VisitGetPlatformHealthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetKeyringDiagnostics operation middleware
+func (sh *strictHandler) GetKeyringDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetKeyringDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetKeyringDiagnostics(ctx, request.(GetKeyringDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetKeyringDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetKeyringDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetKeyringDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPartitionDiagnostics operation middleware
+func (sh *strictHandler) GetPartitionDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetPartitionDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPartitionDiagnostics(ctx, request.(GetPartitionDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPartitionDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPartitionDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetPartitionDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPlatformDiagnostics operation middleware
+func (sh *strictHandler) GetPlatformDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetPlatformDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPlatformDiagnostics(ctx, request.(GetPlatformDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPlatformDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPlatformDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetPlatformDiagnosticsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSchedulerDiagnostics operation middleware
+func (sh *strictHandler) GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request) {
+	var request GetSchedulerDiagnosticsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSchedulerDiagnostics(ctx, request.(GetSchedulerDiagnosticsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSchedulerDiagnostics")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSchedulerDiagnosticsResponseObject); ok {
+		if err := validResponse.VisitGetSchedulerDiagnosticsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1026,6 +7307,341 @@ func (sh *strictHandler) UpdateInstance(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// DisableAgent operation middleware
+func (sh *strictHandler) DisableAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DisableAgentRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisableAgent(ctx, request.(DisableAgentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisableAgent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisableAgentResponseObject); ok {
+		if err := validResponse.VisitDisableAgentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAgentRegistration operation middleware
+func (sh *strictHandler) GetAgentRegistration(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetAgentRegistrationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAgentRegistration(ctx, request.(GetAgentRegistrationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAgentRegistration")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAgentRegistrationResponseObject); ok {
+		if err := validResponse.VisitGetAgentRegistrationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterAgent operation middleware
+func (sh *strictHandler) RegisterAgent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RegisterAgentRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterAgent(ctx, request.(RegisterAgentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterAgent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterAgentResponseObject); ok {
+		if err := validResponse.VisitRegisterAgentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeAgentToken operation middleware
+func (sh *strictHandler) RevokeAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RevokeAgentTokenRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeAgentToken(ctx, request.(RevokeAgentTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeAgentToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeAgentTokenResponseObject); ok {
+		if err := validResponse.VisitRevokeAgentTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RotateAgentToken operation middleware
+func (sh *strictHandler) RotateAgentToken(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RotateAgentTokenRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RotateAgentToken(ctx, request.(RotateAgentTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RotateAgentToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RotateAgentTokenResponseObject); ok {
+		if err := validResponse.VisitRotateAgentTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCapabilitySnapshot operation middleware
+func (sh *strictHandler) ListCapabilitySnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListCapabilitySnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCapabilitySnapshot(ctx, request.(ListCapabilitySnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCapabilitySnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCapabilitySnapshotResponseObject); ok {
+		if err := validResponse.VisitListCapabilitySnapshotResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCollectionPause operation middleware
+func (sh *strictHandler) GetCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetCollectionPauseRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCollectionPause(ctx, request.(GetCollectionPauseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCollectionPause")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCollectionPauseResponseObject); ok {
+		if err := validResponse.VisitGetCollectionPauseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCollectionPause operation middleware
+func (sh *strictHandler) UpdateCollectionPause(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateCollectionPauseRequestObject
+
+	request.Id = id
+
+	var body UpdateCollectionPauseJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCollectionPause(ctx, request.(UpdateCollectionPauseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCollectionPause")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCollectionPauseResponseObject); ok {
+		if err := validResponse.VisitUpdateCollectionPauseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCollectionTaskStates operation middleware
+func (sh *strictHandler) ListCollectionTaskStates(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListCollectionTaskStatesRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCollectionTaskStates(ctx, request.(ListCollectionTaskStatesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCollectionTaskStates")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCollectionTaskStatesResponseObject); ok {
+		if err := validResponse.VisitListCollectionTaskStatesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateCollectionTaskInterval operation middleware
+func (sh *strictHandler) UpdateCollectionTaskInterval(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, taskId string) {
+	var request UpdateCollectionTaskIntervalRequestObject
+
+	request.Id = id
+	request.TaskId = taskId
+
+	var body UpdateCollectionTaskIntervalJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateCollectionTaskInterval(ctx, request.(UpdateCollectionTaskIntervalRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateCollectionTaskInterval")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateCollectionTaskIntervalResponseObject); ok {
+		if err := validResponse.VisitUpdateCollectionTaskIntervalResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateInstanceCredential operation middleware
+func (sh *strictHandler) UpdateInstanceCredential(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateInstanceCredentialRequestObject
+
+	request.Id = id
+
+	var body UpdateInstanceCredentialJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateInstanceCredential(ctx, request.(UpdateInstanceCredentialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateInstanceCredential")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateInstanceCredentialResponseObject); ok {
+		if err := validResponse.VisitUpdateInstanceCredentialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListLongQuerySamples operation middleware
+func (sh *strictHandler) ListLongQuerySamples(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListLongQuerySamplesParams) {
+	var request ListLongQuerySamplesRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListLongQuerySamples(ctx, request.(ListLongQuerySamplesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListLongQuerySamples")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListLongQuerySamplesResponseObject); ok {
+		if err := validResponse.VisitListLongQuerySamplesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetMetricSeries operation middleware
 func (sh *strictHandler) GetMetricSeries(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params GetMetricSeriesParams) {
 	var request GetMetricSeriesRequestObject
@@ -1046,6 +7662,85 @@ func (sh *strictHandler) GetMetricSeries(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMetricSeriesResponseObject); ok {
 		if err := validResponse.VisitGetMetricSeriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPerformanceEvents operation middleware
+func (sh *strictHandler) ListPerformanceEvents(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, params ListPerformanceEventsParams) {
+	var request ListPerformanceEventsRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPerformanceEvents(ctx, request.(ListPerformanceEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPerformanceEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPerformanceEventsResponseObject); ok {
+		if err := validResponse.VisitListPerformanceEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetQueryStatisticsSnapshot operation middleware
+func (sh *strictHandler) GetQueryStatisticsSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetQueryStatisticsSnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetQueryStatisticsSnapshot(ctx, request.(GetQueryStatisticsSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetQueryStatisticsSnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetQueryStatisticsSnapshotResponseObject); ok {
+		if err := validResponse.VisitGetQueryStatisticsSnapshotResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSessionSnapshot operation middleware
+func (sh *strictHandler) GetSessionSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetSessionSnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSessionSnapshot(ctx, request.(GetSessionSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSessionSnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSessionSnapshotResponseObject); ok {
+		if err := validResponse.VisitGetSessionSnapshotResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1077,6 +7772,1045 @@ func (sh *strictHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateSessionResponseObject); ok {
 		if err := validResponse.VisitCreateSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteSession operation middleware
+func (sh *strictHandler) DeleteSession(w http.ResponseWriter, r *http.Request) {
+	var request DeleteSessionRequestObject
+
+	var body DeleteSessionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteSession(ctx, request.(DeleteSessionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteSession")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteSessionResponseObject); ok {
+		if err := validResponse.VisitDeleteSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListMaintenanceWindows operation middleware
+func (sh *strictHandler) ListMaintenanceWindows(w http.ResponseWriter, r *http.Request) {
+	var request ListMaintenanceWindowsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListMaintenanceWindows(ctx, request.(ListMaintenanceWindowsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListMaintenanceWindows")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListMaintenanceWindowsResponseObject); ok {
+		if err := validResponse.VisitListMaintenanceWindowsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateMaintenanceWindow operation middleware
+func (sh *strictHandler) CreateMaintenanceWindow(w http.ResponseWriter, r *http.Request) {
+	var request CreateMaintenanceWindowRequestObject
+
+	var body CreateMaintenanceWindowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateMaintenanceWindow(ctx, request.(CreateMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitCreateMaintenanceWindowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteMaintenanceWindow operation middleware
+func (sh *strictHandler) DeleteMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteMaintenanceWindowRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteMaintenanceWindow(ctx, request.(DeleteMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitDeleteMaintenanceWindowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateMaintenanceWindow operation middleware
+func (sh *strictHandler) UpdateMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateMaintenanceWindowRequestObject
+
+	request.Id = id
+
+	var body UpdateMaintenanceWindowJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateMaintenanceWindow(ctx, request.(UpdateMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitUpdateMaintenanceWindowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// EndMaintenanceWindow operation middleware
+func (sh *strictHandler) EndMaintenanceWindow(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request EndMaintenanceWindowRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.EndMaintenanceWindow(ctx, request.(EndMaintenanceWindowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "EndMaintenanceWindow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(EndMaintenanceWindowResponseObject); ok {
+		if err := validResponse.VisitEndMaintenanceWindowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCurrentUser operation middleware
+func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
+	var request GetCurrentUserRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCurrentUser(ctx, request.(GetCurrentUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCurrentUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCurrentUserResponseObject); ok {
+		if err := validResponse.VisitGetCurrentUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetChannelFailures operation middleware
+func (sh *strictHandler) GetChannelFailures(w http.ResponseWriter, r *http.Request) {
+	var request GetChannelFailuresRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetChannelFailures(ctx, request.(GetChannelFailuresRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetChannelFailures")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetChannelFailuresResponseObject); ok {
+		if err := validResponse.VisitGetChannelFailuresResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSMTPChannel operation middleware
+func (sh *strictHandler) GetSMTPChannel(w http.ResponseWriter, r *http.Request) {
+	var request GetSMTPChannelRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSMTPChannel(ctx, request.(GetSMTPChannelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSMTPChannel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSMTPChannelResponseObject); ok {
+		if err := validResponse.VisitGetSMTPChannelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSMTPChannel operation middleware
+func (sh *strictHandler) UpdateSMTPChannel(w http.ResponseWriter, r *http.Request) {
+	var request UpdateSMTPChannelRequestObject
+
+	var body UpdateSMTPChannelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSMTPChannel(ctx, request.(UpdateSMTPChannelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSMTPChannel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSMTPChannelResponseObject); ok {
+		if err := validResponse.VisitUpdateSMTPChannelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestSMTPChannel operation middleware
+func (sh *strictHandler) TestSMTPChannel(w http.ResponseWriter, r *http.Request) {
+	var request TestSMTPChannelRequestObject
+
+	var body TestSMTPChannelJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestSMTPChannel(ctx, request.(TestSMTPChannelRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestSMTPChannel")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestSMTPChannelResponseObject); ok {
+		if err := validResponse.VisitTestSMTPChannelResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWebhookTargets operation middleware
+func (sh *strictHandler) ListWebhookTargets(w http.ResponseWriter, r *http.Request) {
+	var request ListWebhookTargetsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWebhookTargets(ctx, request.(ListWebhookTargetsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWebhookTargets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWebhookTargetsResponseObject); ok {
+		if err := validResponse.VisitListWebhookTargetsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWebhookTarget operation middleware
+func (sh *strictHandler) CreateWebhookTarget(w http.ResponseWriter, r *http.Request) {
+	var request CreateWebhookTargetRequestObject
+
+	var body CreateWebhookTargetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWebhookTarget(ctx, request.(CreateWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitCreateWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWebhookTarget operation middleware
+func (sh *strictHandler) DeleteWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteWebhookTargetRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWebhookTarget(ctx, request.(DeleteWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitDeleteWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateWebhookTarget operation middleware
+func (sh *strictHandler) UpdateWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateWebhookTargetRequestObject
+
+	request.Id = id
+
+	var body UpdateWebhookTargetJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateWebhookTarget(ctx, request.(UpdateWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitUpdateWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestWebhookTarget operation middleware
+func (sh *strictHandler) TestWebhookTarget(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request TestWebhookTargetRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestWebhookTarget(ctx, request.(TestWebhookTargetRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestWebhookTarget")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestWebhookTargetResponseObject); ok {
+		if err := validResponse.VisitTestWebhookTargetResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNotificationContactGroups operation middleware
+func (sh *strictHandler) ListNotificationContactGroups(w http.ResponseWriter, r *http.Request) {
+	var request ListNotificationContactGroupsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNotificationContactGroups(ctx, request.(ListNotificationContactGroupsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNotificationContactGroups")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNotificationContactGroupsResponseObject); ok {
+		if err := validResponse.VisitListNotificationContactGroupsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNotificationContactGroup operation middleware
+func (sh *strictHandler) CreateNotificationContactGroup(w http.ResponseWriter, r *http.Request) {
+	var request CreateNotificationContactGroupRequestObject
+
+	var body CreateNotificationContactGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNotificationContactGroup(ctx, request.(CreateNotificationContactGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNotificationContactGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNotificationContactGroupResponseObject); ok {
+		if err := validResponse.VisitCreateNotificationContactGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNotificationContactGroup operation middleware
+func (sh *strictHandler) DeleteNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNotificationContactGroupRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNotificationContactGroup(ctx, request.(DeleteNotificationContactGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNotificationContactGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNotificationContactGroupResponseObject); ok {
+		if err := validResponse.VisitDeleteNotificationContactGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationContactGroup operation middleware
+func (sh *strictHandler) UpdateNotificationContactGroup(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateNotificationContactGroupRequestObject
+
+	request.Id = id
+
+	var body UpdateNotificationContactGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationContactGroup(ctx, request.(UpdateNotificationContactGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationContactGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationContactGroupResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationContactGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNotificationContacts operation middleware
+func (sh *strictHandler) ListNotificationContacts(w http.ResponseWriter, r *http.Request) {
+	var request ListNotificationContactsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNotificationContacts(ctx, request.(ListNotificationContactsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNotificationContacts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNotificationContactsResponseObject); ok {
+		if err := validResponse.VisitListNotificationContactsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNotificationContact operation middleware
+func (sh *strictHandler) CreateNotificationContact(w http.ResponseWriter, r *http.Request) {
+	var request CreateNotificationContactRequestObject
+
+	var body CreateNotificationContactJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNotificationContact(ctx, request.(CreateNotificationContactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNotificationContact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNotificationContactResponseObject); ok {
+		if err := validResponse.VisitCreateNotificationContactResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNotificationContact operation middleware
+func (sh *strictHandler) DeleteNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNotificationContactRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNotificationContact(ctx, request.(DeleteNotificationContactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNotificationContact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNotificationContactResponseObject); ok {
+		if err := validResponse.VisitDeleteNotificationContactResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationContact operation middleware
+func (sh *strictHandler) UpdateNotificationContact(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateNotificationContactRequestObject
+
+	request.Id = id
+
+	var body UpdateNotificationContactJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationContact(ctx, request.(UpdateNotificationContactRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationContact")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationContactResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationContactResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListNotificationPolicies operation middleware
+func (sh *strictHandler) ListNotificationPolicies(w http.ResponseWriter, r *http.Request) {
+	var request ListNotificationPoliciesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListNotificationPolicies(ctx, request.(ListNotificationPoliciesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListNotificationPolicies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListNotificationPoliciesResponseObject); ok {
+		if err := validResponse.VisitListNotificationPoliciesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateNotificationPolicy operation middleware
+func (sh *strictHandler) CreateNotificationPolicy(w http.ResponseWriter, r *http.Request) {
+	var request CreateNotificationPolicyRequestObject
+
+	var body CreateNotificationPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateNotificationPolicy(ctx, request.(CreateNotificationPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateNotificationPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateNotificationPolicyResponseObject); ok {
+		if err := validResponse.VisitCreateNotificationPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteNotificationPolicy operation middleware
+func (sh *strictHandler) DeleteNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request DeleteNotificationPolicyRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteNotificationPolicy(ctx, request.(DeleteNotificationPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteNotificationPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteNotificationPolicyResponseObject); ok {
+		if err := validResponse.VisitDeleteNotificationPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateNotificationPolicy operation middleware
+func (sh *strictHandler) UpdateNotificationPolicy(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateNotificationPolicyRequestObject
+
+	request.Id = id
+
+	var body UpdateNotificationPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateNotificationPolicy(ctx, request.(UpdateNotificationPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateNotificationPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateNotificationPolicyResponseObject); ok {
+		if err := validResponse.VisitUpdateNotificationPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetNotificationPolicySettings operation middleware
+func (sh *strictHandler) GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request) {
+	var request GetNotificationPolicySettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetNotificationPolicySettings(ctx, request.(GetNotificationPolicySettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetNotificationPolicySettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetNotificationPolicySettingsResponseObject); ok {
+		if err := validResponse.VisitGetNotificationPolicySettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ChangeOwnPassword operation middleware
+func (sh *strictHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+	var request ChangeOwnPasswordRequestObject
+
+	var body ChangeOwnPasswordJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ChangeOwnPassword(ctx, request.(ChangeOwnPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ChangeOwnPassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ChangeOwnPasswordResponseObject); ok {
+		if err := validResponse.VisitChangeOwnPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPerformanceEvent operation middleware
+func (sh *strictHandler) GetPerformanceEvent(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetPerformanceEventRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPerformanceEvent(ctx, request.(GetPerformanceEventRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPerformanceEvent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPerformanceEventResponseObject); ok {
+		if err := validResponse.VisitGetPerformanceEventResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPlatformEvents operation middleware
+func (sh *strictHandler) ListPlatformEvents(w http.ResponseWriter, r *http.Request) {
+	var request ListPlatformEventsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPlatformEvents(ctx, request.(ListPlatformEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPlatformEvents")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPlatformEventsResponseObject); ok {
+		if err := validResponse.VisitListPlatformEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListUsers operation middleware
+func (sh *strictHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	var request ListUsersRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListUsers(ctx, request.(ListUsersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListUsers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListUsersResponseObject); ok {
+		if err := validResponse.VisitListUsersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateUser operation middleware
+func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var request CreateUserRequestObject
+
+	var body CreateUserJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateUser(ctx, request.(CreateUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateUserResponseObject); ok {
+		if err := validResponse.VisitCreateUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ResetUserPassword operation middleware
+func (sh *strictHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ResetUserPasswordRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ResetUserPassword(ctx, request.(ResetUserPasswordRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ResetUserPassword")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ResetUserPasswordResponseObject); ok {
+		if err := validResponse.VisitResetUserPasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateUserRole operation middleware
+func (sh *strictHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateUserRoleRequestObject
+
+	request.Id = id
+
+	var body UpdateUserRoleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateUserRole(ctx, request.(UpdateUserRoleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateUserRole")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateUserRoleResponseObject); ok {
+		if err := validResponse.VisitUpdateUserRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateUserStatus operation middleware
+func (sh *strictHandler) UpdateUserStatus(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UpdateUserStatusRequestObject
+
+	request.Id = id
+
+	var body UpdateUserStatusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateUserStatus(ctx, request.(UpdateUserStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateUserStatus")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateUserStatusResponseObject); ok {
+		if err := validResponse.VisitUpdateUserStatusResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

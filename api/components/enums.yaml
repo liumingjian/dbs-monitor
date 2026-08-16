@@ -17,6 +17,90 @@ Unavailability:
 AlertStatus:
   type: string
   enum: [OK, PENDING, FIRING, NO_DATA, RECOVERED]
+HealthStatus:
+  type: string
+  enum: [CRITICAL, WARNING, UNKNOWN, HEALTHY, PAUSED]
+  x-enum-varnames: [HealthCritical, HealthWarning, HealthUnknown, HealthHealthy, HealthPaused]
+InstanceAgentStatus:
+  type: string
+  enum: [offline, online, not_installed, permission_denied, error]
+  x-enum-varnames: [InstanceAgentOffline, InstanceAgentOnline, InstanceAgentNotInstalled, InstanceAgentPermissionDenied, InstanceAgentError]
 CapabilityStatus:
   type: string
   enum: [PRESENT, MISSING, NOT_APPLICABLE, UNKNOWN]
+AlertAggregation:
+  type: string
+  enum: [latest, avg, max, min, sum, count]
+AlertOperator:
+  type: string
+  enum: ['>', '>=', '<', '<=', '=', '!=']
+  x-enum-varnames:
+    - GreaterThan
+    - GreaterThanEqual
+    - LessThan
+    - LessThanEqual
+    - Equal
+    - NotEqual
+AlertSeverity:
+  type: string
+  enum: [critical, warning, info]
+NoDataPolicy:
+  type: string
+  enum: [ignore, mark_no_data]
+AlertRuleScope:
+  type: string
+  enum: [ALL, INSTANCES]
+PlatformHealthStatus:
+  type: string
+  enum: [OK, DEGRADED, FAILED, UNKNOWN]
+  x-enum-varnames:
+    - PlatformHealthOK
+    - PlatformHealthDegraded
+    - PlatformHealthFailed
+    - PlatformHealthUnknown
+PlatformHealthSource:
+  type: string
+  enum:
+    - SERVER_PROCESS
+    - PLATFORM_DATABASE
+    - COLLECTION_SCHEDULER
+    - PARTITION_MAINTENANCE
+    - TLS_CERTIFICATE
+    - AGENT_INGRESS
+    - DISK
+    - CREDENTIAL_KEYRING
+    - TLS
+    - PLATFORM_DATABASE_CAPACITY
+  x-enum-varnames:
+    - HealthSourceServerProcess
+    - HealthSourcePlatformDatabase
+    - HealthSourceCollectionScheduler
+    - HealthSourcePartitionMaintenance
+    - HealthSourceTLSCertificate
+    - HealthSourceAgentIngress
+    - HealthSourceDisk
+    - HealthSourceCredentialKeyring
+    - HealthSourceTLS
+    - HealthSourcePlatformDatabaseCapacity
+AlertDisposition:
+  type: string
+  enum: [NONE, ACKED, IGNORED]
+IgnoreReasonCode:
+  type: string
+  enum: [KNOWN_ISSUE, FALSE_POSITIVE, DUPLICATE, IMPACT_ACCEPTABLE, OTHER]
+PerformanceEventType:
+  type: string
+  enum:
+    - LOCK_BLOCKING
+    - LONG_TRANSACTION
+    - IDLE_IN_TRANSACTION
+    - ACTIVE_SESSIONS_HIGH
+    - REPLICATION_LAG
+    - TEMP_FILES_SURGE
+  x-enum-varnames:
+    - EventLockBlocking
+    - EventLongTransaction
+    - EventIdleInTransaction
+    - EventActiveSessionsHigh
+    - EventReplicationLag
+    - EventTempFilesSurge

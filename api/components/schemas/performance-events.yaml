@@ -1,0 +1,49 @@
+PerformanceEvent:
+  type: object
+  required:
+    - id
+    - instance_id
+    - alert_instance_id
+    - event_type
+    - alert_status
+    - severity
+    - disposition
+    - in_maintenance
+    - derived_at
+    - updated_at
+    - duration_ms
+    - metric_id
+    - threshold
+    - trigger_value
+    - cause_summary
+    - suggested_action
+    - trigger_snapshot_result
+  properties:
+    id: { type: string, format: uuid }
+    instance_id: { type: string, format: uuid }
+    alert_instance_id: { type: string, format: uuid }
+    event_type: { $ref: ../enums.yaml#/PerformanceEventType }
+    alert_status: { $ref: ../enums.yaml#/AlertStatus }
+    severity: { $ref: ../enums.yaml#/AlertSeverity }
+    disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    in_maintenance: { type: boolean }
+    maintenance_window_id: { type: string, format: uuid }
+    derived_at: { type: string, format: date-time }
+    updated_at: { type: string, format: date-time }
+    recovered_at: { type: string, format: date-time }
+    duration_ms: { type: integer, format: int64, minimum: 0 }
+    metric_id: { type: string }
+    threshold: { type: number, format: double }
+    trigger_value: { type: number, format: double }
+    cause_summary: { type: string }
+    suggested_action: { type: string }
+    trigger_snapshot_result: { $ref: alerts.yaml#/AlertTriggerSnapshotResult }
+
+PerformanceEventPage:
+  type: object
+  required: [total, items]
+  properties:
+    total: { type: integer, minimum: 0 }
+    items:
+      type: array
+      items: { $ref: '#/PerformanceEvent' }

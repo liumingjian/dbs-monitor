@@ -1,0 +1,5 @@
+platform_database_url: postgres://dbs_monitor:dbs_monitor@acceptance-platform:5432/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=/acceptance-tls/ca.crt
+master_key_path: /etc/dbs-monitor/credentials
+agent_binary_dir: /workspace/results
+session_absolute_ttl: 12h
+session_idle_ttl: 2h

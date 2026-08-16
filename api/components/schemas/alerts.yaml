@@ -1,0 +1,183 @@
+AlertObservation:
+  type: object
+  required:
+    - id
+    - instance_id
+    - instance_name
+    - rule_id
+    - rule_name
+    - rule_version
+    - rule_snapshot
+    - metric_id
+    - status
+    - severity
+    - disposition
+    - paused
+    - in_maintenance
+    - updated_at
+    - duration_ms
+  properties:
+    id: { type: string, format: uuid }
+    instance_id: { type: string, format: uuid }
+    instance_name: { type: string }
+    rule_id: { type: string, format: uuid }
+    rule_name: { type: string }
+    rule_version: { type: integer, minimum: 1 }
+    rule_snapshot:
+      type: object
+      additionalProperties: true
+    metric_id: { type: string }
+    status: { $ref: ../enums.yaml#/AlertStatus }
+    severity: { $ref: ../enums.yaml#/AlertSeverity }
+    disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    paused: { type: boolean }
+    paused_at: { type: string, format: date-time }
+    in_maintenance:
+      type: boolean
+    maintenance_window_id: { type: string, format: uuid }
+    current_value: { type: number, format: double }
+    threshold: { type: number, format: double }
+    first_triggered_at: { type: string, format: date-time }
+    updated_at: { type: string, format: date-time }
+    recovered_at: { type: string, format: date-time }
+    duration_ms: { type: integer, format: int64, minimum: 0 }
+    unavailability: { $ref: ../enums.yaml#/Unavailability }
+
+AlertObservationPage:
+  type: object
+  required: [total, items]
+  properties:
+    total: { type: integer, minimum: 0 }
+    items:
+      type: array
+      items: { $ref: '#/AlertObservation' }
+
+AlertRuleVersionRecord:
+  type: object
+  required: [version, snapshot, evaluated_at]
+  properties:
+    version: { type: integer, minimum: 1 }
+    snapshot:
+      type: object
+      additionalProperties: true
+    evaluated_at: { type: string, format: date-time }
+
+AlertDetail:
+  allOf:
+    - $ref: '#/AlertObservation'
+    - type: object
+      required: [rule_version_history, notification_results]
+      properties:
+        rule_version_history:
+          type: array
+          items: { $ref: '#/AlertRuleVersionRecord' }
+        notification_results:
+          type: array
+          description: Empty until notification delivery records are produced.
+          items:
+            type: object
+            additionalProperties: true
+
+AlertEventKind:
+  type: string
+  enum:
+    - PENDING_STARTED
+    - FIRED
+    - UPDATED
+    - RECOVERED
+    - NO_DATA_ENTERED
+    - NO_DATA_EXITED
+    - FROZEN
+    - UNFROZEN
+    - ACKED
+    - IGNORED
+    - INSTANCE_REMOVED
+    - NOTIFICATION_SENT
+    - NOTIFICATION_FAILED
+    - MAINTENANCE_SUPPRESSED
+  x-enum-varnames:
+    - AlertEventPendingStarted
+    - AlertEventFired
+    - AlertEventUpdated
+    - AlertEventRecovered
+    - AlertEventNoDataEntered
+    - AlertEventNoDataExited
+    - AlertEventFrozen
+    - AlertEventUnfrozen
+    - AlertEventAcked
+    - AlertEventIgnored
+    - AlertEventInstanceRemoved
+    - AlertEventNotificationSent
+    - AlertEventNotificationFailed
+    - AlertEventMaintenanceSuppressed
+
+AlertEvent:
+  type: object
+  required:
+    - id
+    - kind
+    - from_state
+    - to_state
+    - rule_version
+    - rule_snapshot
+    - evaluated_at
+    - in_maintenance
+  properties:
+    id: { type: integer, format: int64 }
+    kind: { $ref: '#/AlertEventKind' }
+    from_state: { $ref: ../enums.yaml#/AlertStatus }
+    to_state: { $ref: ../enums.yaml#/AlertStatus }
+    rule_version: { type: integer, minimum: 1 }
+    current_value: { type: number, format: double }
+    unavailability: { $ref: ../enums.yaml#/Unavailability }
+    rule_snapshot:
+      type: object
+      additionalProperties: true
+    evaluated_at: { type: string, format: date-time }
+    actor_id: { type: string, format: uuid }
+    acted_at: { type: string, format: date-time }
+    from_disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    to_disposition: { $ref: ../enums.yaml#/AlertDisposition }
+    disposition_note: { type: string }
+    ignore_reason_code: { $ref: ../enums.yaml#/IgnoreReasonCode }
+    ignore_reason_detail: { type: string }
+    trigger_snapshot_id: { type: string, format: uuid }
+    in_maintenance: { type: boolean }
+    maintenance_window_id: { type: string, format: uuid }
+
+AlertTriggerSnapshotResult:
+  type: string
+  enum: [SUCCESS, FAILED, NOT_APPLICABLE]
+  x-enum-varnames: [TriggerSnapshotSuccess, TriggerSnapshotFailed, TriggerSnapshotNotApplicable]
+AlertTriggerSnapshotSession:
+  type: object
+  required: [pid, blocking_pids]
+  properties:
+    pid: { type: integer, format: int32 }
+    username: { type: string }
+    database_name: { type: string }
+    client_address: { type: string }
+    state: { type: string }
+    query_started_at: { type: string, format: date-time }
+    transaction_started_at: { type: string, format: date-time }
+    query_duration_ms: { type: integer, format: int64, minimum: 0 }
+    transaction_duration_ms: { type: integer, format: int64, minimum: 0 }
+    wait_event_type: { type: string }
+    wait_event: { type: string }
+    blocking_pids:
+      type: array
+      items: { type: integer, format: int32 }
+AlertTriggerSnapshot:
+  type: object
+  required: [result, metric_id, original_match_count, truncated, sessions]
+  properties:
+    result: { $ref: '#/AlertTriggerSnapshotResult' }
+    metric_id: { type: string }
+    captured_at: { type: string, format: date-time }
+    original_match_count: { type: integer, minimum: 0 }
+    truncated: { type: boolean }
+    failure_reason: { type: string }
+    sessions:
+      type: array
+      maxItems: 100
+      items: { $ref: '#/AlertTriggerSnapshotSession' }

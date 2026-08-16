@@ -2,6 +2,8 @@ module github.com/liumingjian/dbs-monitor
 
 go 1.23.0
 
+toolchain go1.23.12
+
 require (
 	github.com/getkin/kin-openapi v0.132.0
 	github.com/google/uuid v1.6.0
@@ -11,6 +13,7 @@ require (
 	github.com/pressly/goose/v3 v3.24.3
 	github.com/shirou/gopsutil/v4 v4.25.7
 	golang.org/x/crypto v0.38.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -39,5 +42,4 @@ require (
 	golang.org/x/sync v0.14.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.25.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

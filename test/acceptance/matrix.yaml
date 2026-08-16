@@ -55,8 +55,8 @@ entries:
     pages: ["实例工作台/监控与报警/标准监控"]
     operations: [createInstance, getMetricSeries, listInstanceCollectionTasks]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S1"
     owner_issue: 118
     reason: "条目内容由 #118 定稿；实现归片①实现票，届时置 covered 并填 test_ref"
   - id: AC-01-S2
@@ -73,8 +73,8 @@ entries:
     pages: []
     operations: [getMetricSeries, listInstanceCapabilities]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/issue60_test.go::TestAcceptance_AC_01_S2"
     owner_issue: 118
     reason: "S1 拍板验收判据原文（片①Further Notes），按 21 号 D1 设为加深基线，不许 pending 落地后必须 covered"
   - id: AC-01-F1
@@ -317,10 +317,10 @@ entries:
     pages: []
     operations: [ackAlert, ignoreAlert, listAlertEvents, getAlertInstance]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/alert_disposition_test.go::TestAcceptance_AC_03_S1"
     owner_issue: 119
-    reason: "条目内容由 #119 定稿"
+    reason: "#76 经生成客户端与真实采集/评估管线覆盖处置切换、留痕、恢复及新生命周期"
   - id: AC-03-S2
     slice: "03"
     kind: S2
@@ -462,8 +462,8 @@ entries:
     pages: []
     operations: []
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: TestAcceptance_AC_03_F6
     owner_issue: 119
     reason: "S1 未拍板此判据，按 21 号 D1 的纪律不擅自升为加深基线；但它是片③唯一会删数据的路径，不设即留覆盖真空。B 组唯一一条允许 pending 的普通加深，兑现归片③清理循环实现票。"
   # ── 片04 · 通知与告警设置区
@@ -486,8 +486,8 @@ entries:
     pages: []
     operations: [createContact, createNotificationPolicy, putSmtpConfig, createWebhookTarget, listNotificationsByAlert]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: TestAcceptance_AC_04_S1
     owner_issue: 119
     reason: "条目内容由 #119 定稿；「凭据永不回显」在片④只并入本条 asserts（22 号 D6），INV-3 的端到端面引用本次执行"
   - id: AC-04-S2
@@ -526,8 +526,8 @@ entries:
     pages: ["告警设置/通知渠道", "告警设置/联系人", "告警设置/通知策略", "告警设置/维护窗口"]
     operations: [getSmtpConfig, listWebhookTargets, listContacts, listNotificationPolicies, listMaintenanceWindows, getChannelFailureSummary]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "[AC-04-S3]"
     owner_issue: 119
     reason: "S1 拍板判据「告警设置区四页齐」，纯呈现语义按 20 号 D3 必须上浏览器，加深基线不许 pending"
   - id: AC-04-F1
@@ -577,8 +577,8 @@ entries:
     pages: ["告警设置/通知渠道"]
     operations: [listNotificationsByAlert, getChannelFailureSummary, listAlertEvents]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: TestAcceptance_AC_04_F3
     owner_issue: 119
     reason: "F3「外部依赖不可用」在通知域的语义映射：通知的外部依赖是出口而非被监控库，语义映射的记账见 22 号 D2；S1 判据「失败三次退避留终态」由本条承载"
   - id: AC-04-F4
@@ -1144,8 +1144,8 @@ entries:
     pages: ["实例工作台/接入设置"]
     operations: [deleteInstance]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "TestAcceptance_AC_08_S6"
     owner_issue: 121
     reason: "S1 拍板判据的实例页一半，升加深基线；三层各自都可能单独坏掉，且「移除」字面成立与「历史归因不悬空」是一对相反方向的约束（24 号 D2）"
   - id: AC-08-S7
@@ -1272,10 +1272,10 @@ entries:
     slice: "09"
     kind: S1
     baseline: true
-    title: "平台健康成功路径：七事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
+    title: "平台健康成功路径：十事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
     layer: api
     asserts:
-      - "getPlatformHealth 返回总态 OK，七事实源齐全：服务端进程（版本+启动时间）、自带 PG、采集调度器、分区维护、证书、Agent 接入、磁盘水位"
+      - "getPlatformHealth 返回总态 OK，十事实源齐全：SERVER_PROCESS、PLATFORM_DATABASE（外部前置 PG 17）、COLLECTION_SCHEDULER、PARTITION_MAINTENANCE、TLS_CERTIFICATE、AGENT_INGRESS、DISK（server 本机盘）、CREDENTIAL_KEYRING、TLS、PLATFORM_DATABASE_CAPACITY"
       - "快照含组装时间；事实层保留每源级别与细因"
       - "结构化事件流中存在 60 秒汇总，字段形状符合约定"
       - "秘密扫描全绿：无密码、密文、主密钥、Agent token、Authorization 头、DSN、原始 SQL、请求体"
@@ -1300,8 +1300,8 @@ entries:
     pages: []
     operations: [getPlatformHealth, getDiskWatermark, getSchedulerSummary, getPartitionMaintenance, getCertificateStatus, getKeyringStatus, getPlatformVersion]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "TestAcceptance_AC_09_F1"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-09-F2
@@ -1360,24 +1360,24 @@ entries:
     slice: "09"
     kind: F5
     baseline: true
-    title: "磁盘紧急拒写：拒写生效可证，且旧分区与 30 天保留承诺前后完全一致"
+    title: "平台库容量紧急拒写：拒写生效可证，且旧分区与 30 天保留承诺前后完全一致"
     layer: db
     asserts:
       - "注入前取 DB 只读基线：分区清单、最旧分区、保留配置"
-      - "调低紧急水位阈值至当前使用率之下（部署期配置项，走与生产相同的判定代码路径）"
-      - "新样本写入被拒；该任务在片①任务状态中可见失败，细因 = 磁盘紧急水位"
+      - "调低平台库容量预算至当前占用之下（部署期配置项，走与生产相同的判定代码路径）"
+      - "新样本写入被拒；该任务在片①任务状态中可见失败，细因 = 平台库容量紧急水位"
       - "完整性水位停摆，缺数以可见的采集失败呈现而非样本静默消失"
-      - "快照总态 FAILED，磁盘源 FAILED"
+      - "快照总态 FAILED，PLATFORM_DATABASE_CAPACITY 源 FAILED"
       - "注入后再取对比：分区清单与最旧分区完全一致，保留配置未变（绝不自动删旧分区、绝不缩短保留期）"
       - "控制面小体量写入（处置留痕、配置）不在拒写范围"
       - "级别回落需低于阈值 2 个百分点（滞回），不因边界抖动翻动快照"
     pages: []
-    operations: [getDiskWatermark, getPlatformHealth, listInstanceCollectionTasks]
+    operations: [getPlatformHealth, listInstanceCollectionTasks]
     crosscut: []
-    status: pending
-    test_ref: null
-    owner_issue: 118
-    reason: "S1 拍板验收判据原文「磁盘紧急拒写可证且不删旧数据」；本组唯一需要「注入前取基线、注入后取对比」的条目，设为加深基线"
+    status: covered
+    test_ref: "internal/collect/service_integration_test.go::TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle"
+    owner_issue: 126
+    reason: "32 号 D8 改写触发源但不降低原判据：平台库容量紧急拒写可证且不删旧数据；本组唯一需要「注入前取基线、注入后取对比」的条目，保持加深基线"
   - id: AC-09-F6
     slice: "09"
     kind: F6
@@ -1551,8 +1551,8 @@ entries:
       - "调度器按最新意图续采：重启窗口不补跑、不造占位样本"
       - "未恢复告警实例 ID 与首次触发时间保持，连续触发计数不重置，不谎报 RECOVERED"
       - "Agent token 仍有效、无需重新接入；重启窗口的缺数按 T14 不进 NO_DATA"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_1"
     owner_issue: 113
     reason: "18 号 D7「库是自描述的、无外部隐藏状态」在进程侧的唯一验收面。连接池刻意不进断言集（26 号 D5.1）——纯进程内实现细节，重启后必然重建，外部无可观测语义，不是漏了"
   - id: REC-2
@@ -1568,8 +1568,8 @@ entries:
       - "重启后自动恢复上报，无需重新接入"
       - "重启窗口在图表上按缺桶呈现，绝不补 0（承 04 不补 0）"
       - "该窗口不计入 NO_DATA：agent 侧中断是采集侧事实，不是目标库缺数"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_2"
     owner_issue: 113
     reason: "与 REC-1 分开而不合并（26 号 D5.2）：合成一条会让「谁重启导致的缺数」这个区分永远测不出来，而那正是 T14 要分开的两个域"
   - id: REC-3
@@ -1587,8 +1587,8 @@ entries:
       - "server 配置指向新库重启后：配置 / 规则 / 未恢复告警 / 加密凭据 / 样本全经业务 API 可读"
       - "带同一份 keyring 时密文可解，采集继续出点（keyring 正面，反面见 REC-4）"
       - "DB 层只读对账：分区子表随 dump 一起还原，外键级联完整"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_3"
     owner_issue: 113
     reason: "18 号 §8 D7 三条承诺（库自描述、标准工具可备份、恢复后直接可用）的唯一端到端验收面。靶库必须是真空 PG 而非同实例 createdb（26 号 D7）——共用 initdb 参数 / locale / 扩展 / 角色会掩盖「自描述」最容易翻车的那部分"
   - id: REC-4
@@ -1604,8 +1604,8 @@ entries:
       - "keyring 目录整个缺失时同样不拒绝启动（承 25 号 §5.3，不设快速失败例外）"
       - "两种情形下 keyring 目录内均不出现任何新生成的 master-key-v*：绝不静默生成"
       - "失败语义归平台自身故障，不出现 DB_UNREACHABLE / NO_DATA（承 T14）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_4"
     owner_issue: 113
     reason: "13 号 D7/D8「备份不含 keyring、遗失即不可恢复、无后门」在恢复链上的唯一验收面。与 AC-08-F4 按场景来源划界（26 号 D4.4）：AC-08-F4 管运行中的 keyring 故障（权限错、文件被改，库与密钥同机），本条管恢复链上的密钥—库分离（库来自备份、keyring 来自另一台机器）；AC-08-F4 一字不动"
   - id: REC-5
@@ -1621,8 +1621,8 @@ entries:
       - "goose session locker 生效：一个进程应用迁移，另一个等待而非并发 CREATE TABLE"
       - "DB 只读对账 goose 版本表：终态版本唯一、无重复行、无部分应用的中间态"
       - "锁等待超时参数化到秒级；超时后按迁移执行失败处理（非零退出，见 REC-7）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_5"
     owner_issue: 113
     reason: "迁移并发语义的唯一验收面。一手事实：goose v3.24.3 已提供 WithSessionLocker，而 migrations/migrate.go 当前未启用，是裸并发（26 号 D2.1）；两份迁移均无 NO TRANSACTION，故部分应用只可能发生在多笔之间"
   - id: REC-6
@@ -1639,8 +1639,8 @@ entries:
       - "业务端点一律 503 且响应体指名平台自身故障：绝不返回 13 码中任何一个（26 号 D3.3）"
       - "本条不断「可登录」——登录依赖平台库，25 号 §5.2 那句说的是 keyring 坏而库好的场景"
       - "平台库恢复后：后台自动重连并补跑迁移，业务面自愈，无需人工重启进程"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_6"
     owner_issue: 113
     reason: "18 号 §6 D5 第 1 条「不许把平台挂了渲染成没有数据」的唯一验收面。13 码是目标库的空状态词汇表，用它描述平台故障即两域混淆——那正是全矩阵九条 F4 存在的理由"
   - id: REC-7
@@ -1656,8 +1656,8 @@ entries:
       - "进程非零退出，不监听 HTTP：绝不带着半个 schema 对外提供服务"
       - "日志指名失败的迁移笔次与错误原文"
       - "绝不降级成「起 HTTP + FAILED + 业务 503 继续运行」（26 号 D13 否决记录）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_7"
     owner_issue: 113
     reason: "18 号 §8 D7「绝不带着半个 schema 对外提供服务」的唯一验收面。与 REC-6 按失败性质两分而非按启动阶段（26 号 D3.2）：连不上库不拒启动，连上了但迁移执行失败拒启动"
   - id: REC-8
@@ -1672,11 +1672,11 @@ entries:
       - "分区跨度沿用 21 号 D7 参数化取值（1min）"
       - "启动后预建覆盖面 = 当前 + 7 个跨度（04 D6 机制 1，幂等 CREATE TABLE IF NOT EXISTS）"
       - "过期分区被 DROP 而不是 DELETE：对账 pg_class，子表整体消失而非留下空表（这是唯一能区分两者的观测点）"
-      - "维护循环失败时平台健康出现「分区维护」事实源，且 journal 有结构化 error（04 D6 机制 4 + 14 号 §2）"
-    status: pending
-    test_ref: null
+      - "维护循环失败时平台健康出现「分区维护」事实源；journal 载体验证按 21 号移交真机验收，不在 make acceptance 内重复"
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_8"
     owner_issue: 113
-    reason: "04 §6 D6 机制 1/2/4 的唯一验收面。否定面（分区清单与最旧分区前后一致、绝不自动删旧分区、绝不缩短保留期）已由 AC-09-F5 断死，本条刻意不重复（26 号 D6）"
+    reason: "04 §6 D6 机制 1/2/4 的唯一验收面。否定面（分区清单与最旧分区前后一致、绝不自动删旧分区、绝不缩短保留期）已由 AC-09-F5 断死，本条刻意不重复（26 号 D6）；journal 载体按 21 号移交真机验收"
   - id: REC-9
     slice: crosscut
     kind: rec
@@ -1690,8 +1690,8 @@ entries:
       - "让时间走过预建边界，使真实采集写入撞上无匹配分区"
       - "CopyFrom 失败被识别为「无匹配分区」→ 同步触发一次分区维护 → 重试一次成功"
       - "该次采集最终成功出点，不表现为静默丢样本"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_9"
     owner_issue: 113
     reason: "04 §6 D6 机制 3 自称「凌晨炸的最后一道防线」，且是无人会手工验的那一类，故不降级为可 pending 的普通加深（26 号 D1）。手段定性为参数化而非模拟（26 号 D6.1）：否决 test-only 开关（往生产代码种测试分支）与 DB 层手工 DROP 未来分区（D4 禁止 DB 层写）"
   - id: REC-10
@@ -1707,8 +1707,8 @@ entries:
       - "错误信息指名「已有 server 实例在运行」，与「正在迁移」可区分"
       - "第一个实例不受影响，采集与 HTTP 面全程正常"
       - "三把锁互相独立可证：rotate 锁 / 迁移锁 / 进程锁 ID 不同、行为不同（26 号 D2.3）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_10"
     owner_issue: 113
     reason: "双起 server 的后果（两套采集调度器、两套分区维护循环、两套通知发送）无其他拦截点；是 25 号 D5「轮换时忘了停 server」那把锁的对称扩展。否决三把锁合成一把——会让「正在迁移」与「已经在跑」退化成同一句错误信息"
   - id: REC-11
@@ -1724,8 +1724,8 @@ entries:
       - "指向 schema 内预置了非平台对象的库 → 非零退出，日志指名该项（拦「配置指错库」）"
       - "两种情形下均未创建任何平台表、未写入 goose 版本表——不带着不合格的库对外服务"
       - "无任何配置项或命令行开关可跳过该校验（27 号 D9）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_11"
     owner_issue: 116
     reason: "27 号 D1 钉死 PG17 与 D3.1 硬门清单的唯一验收面。不断这条则硬门与建议无法区分，而钉死 17 的全部理由（sqlc 解析器固定 PG17，make gen 的护栏才为真）当场落空。schema 洁净那条断的是「配置指错到客户业务库」，比版本更能救命。与 REC-6（库不可达）、REC-7（迁移执行失败）判据不同、不重叠"
   - id: REC-12
@@ -1740,8 +1740,8 @@ entries:
       - "平台库 locale 非 C/POSIX 或同实例存在其他非系统 database → server 正常启动"
       - "健康为 DEGRADED（非 FAILED、非 OK），平台事件中含该具体项，绝不静默"
       - "业务端点全部可用，不返回 503、不返回 13 码"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_12"
     owner_issue: 116
     reason: "27 号 D3.2 的唯一验收面，守的是反向失效——告警档悄悄升级成硬门同样是产品事故（客户的库跑得好好的却起不来），而这类回归没有任何其他拦截点。locale 只影响 instance.name 的展示排序，同实例多库是 D2 承诺面与断言面之差额，两者都不构成正确性问题"
   - id: REC-13
@@ -1757,8 +1757,8 @@ entries:
       - "库回来后（换成一个不合格的库）自愈路径上前置校验失败 → 进程不退出"
       - "健康保持 FAILED 并指名具体校验项，平台事件记录该次失败"
       - "退避重试而非忙等；换回合格的库后自愈成功、补跑迁移、健康转 OK"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/recovery_test.go::TestAcceptance_REC_13"
     owner_issue: 116
     reason: "27 号 D3.4 那道缝的唯一验收面：26 号 D5 的后台自愈路径上进程已在对外 503，无处可「拒启动」。不定死这一格，实现只有两种坏收场——自愈路径跳过校验（硬门半途失效）或调 os.Exit（杀掉一个正在服务的进程）。REC-11 断「必须退出」、本条断「必须不退出」，互斥，合并会让断言互相打架，而这恰是实现最容易写错的地方"
   # ── 横切组三 · 生产安全边界（#112，29 号 D8）
@@ -1776,8 +1776,8 @@ entries:
       - "对 Agent 上报端点同样输出（无条件 = 不按客户端类型分叉）"
       - "HSTS 取值恰为 max-age=31536000：不含 preload、不含 includeSubDomains"
       - "CSP 的 script-src 不含 'unsafe-inline' / 'unsafe-eval'"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_1 [SEC-1]"
     owner_issue: 112
     reason: "29 号 D1.3：现状 cmd/monitor-server/main.go 按 /api/ 前缀分叉成两条 handler 链，只在一条上挂中间件是最典型的漏法且症状极隐蔽（页面能开、接口能通、只扫 API 报绿）。与 B13 分工：B13 断取值逐字（防手滑删行照绿），本条断真的发出来了且两条链都发"
   - id: SEC-2
@@ -1793,8 +1793,8 @@ entries:
       - "以 TLS1.3 客户端握手：成功，且能完成一次业务 API 调用"
       - "首次启动自动生成的自签证书直接可用，全程钉扎 CA 指纹、无 -k（承 19 号）"
       - "不对密码套件作任何断言（29 号 D2：不列举即不承诺）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_2 [SEC-2]"
     owner_issue: 112
     reason: "29 号 D2。现状 main.go 的 MinVersion=TLS12 是 Go 默认值不是决策；交付目标 linux/amd64+arm64、客户端只有现代浏览器与我方 agent，无需迁就老客户端。刻意不断套件——断了就等于承诺一份会随 Go 版本过时的清单"
   - id: SEC-3
@@ -1810,8 +1810,8 @@ entries:
       - "健康快照中 tls 子系统 = DEGRADED（第九个子系统，29 号 D3）"
       - "平台事件含一条指名「证书已过期」的记录，绝不静默"
       - "tls 子系统不存在 FAILED 取值：整机健康不因证书过期被最坏归并判死"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_3 [SEC-3]"
     owner_issue: 112
     reason: "29 号 D3。与 25 号 D4 同构——证书过期时服务本身完全健康，拒启动会把计划内的换证逾期直接升级成「监控平台整个看不见」，而看不见的第一个后果就是没人知道证书到期了。手段是真放一张过期证书（客户自备证书路径本就支持），不加 test-only 开关、不新造配置项（承 26 号 D9）。与 AC-09-F7 同注入手段、两个断言点，不合并：本条断平台自身健康事实源如实降级，AC-09-F7 断它不污染目标库告警与 NO_DATA"
   - id: SEC-4
@@ -1826,8 +1826,8 @@ entries:
       - "以 fixtures 中 20 天后到期的证书启动：进程正常、HTTP 面可用"
       - "tls 子系统 = DEGRADED，事件内容指名「剩余有效期不足 30 天」并带剩余天数"
       - "该事件与 SEC-3 的「已过期」事件内容可区分，不是同一句话"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_4 [SEC-4]"
     owner_issue: 112
     reason: "29 号 D3。预警与已过期同为 DEGRADED，若事件内容不可区分则预警等于没有——运维看到 DEGRADED 却不知道还剩几天。与 SEC-3 分开而不合并：合并后「还有 20 天」和「已经过期」会退化成同一条断言，而这两种处境的动作完全不同"
   - id: SEC-5
@@ -1843,8 +1843,8 @@ entries:
       - "session_idle_ttl=30s 时：静默 30s 后的会话被拒，静默期内每 10s 请求一次则不过期"
       - "过期会话的请求返回鉴权失败，不返回 13 码、不返回业务数据"
       - "两个 TTL 均为部署期配置项（29 号 D4.2），非编译期常量"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_5 [SEC-5]"
     owner_issue: 112
     reason: "29 号 D4.2。单轮 ≤10 分钟（21 号 D7）下 12h/2h 不可直接验，参数化不是模拟——调小后跑的是同一段代码，做法同 22 号对 repeat_interval 的处置。不可配就等于「过期」这条腿永远测不到，因此 TTL 可配是外溢实现硬要求而非实现自由"
   - id: SEC-6
@@ -1860,8 +1860,8 @@ entries:
       - "用户被停用后其全部在用会话立即失效（17 号 D2 的硬要求）"
       - "口令自改或被管理员重置后，该用户其它会话全部失效、当前会话可继续"
       - "并发会话不受限制：同一用户两个会话可同时存在并各自工作"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_6 [SEC-6]"
     owner_issue: 112
     reason: "29 号 D4.1/D4.2。这三面正是「服务端会话表而非无状态 JWT」这条决策的唯一验收面——JWT 做不到即时失效除非再加吊销表。并发不限制一并断死：限制并发会在双人值班或一人两处盯屏时把人锁在门外，而这是监控平台"
   - id: SEC-7
@@ -1877,8 +1877,8 @@ entries:
       - "含 HttpOnly、Secure、SameSite=Strict 三项属性"
       - "登录及后续任一响应的 body 全文正则扫描：不含会话令牌值"
       - "会话令牌不出现在 URL、查询参数或任何自定义响应头中"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_7 [SEC-7]"
     owner_issue: 112
     reason: "29 号 D4.2/D4.3。全文正则而非字段白名单，防的是意料之外的字段（同 24 号 D11「凭据永不回显」的第三层做法）。__Host- 前缀强制 Secure + Path=/ + 无 Domain，正好匹配单 host 部署；SameSite=Strict 是「不引入 CSRF token」那条推理的前提之一，它一旦松动本条即刻变红"
   - id: SEC-8
@@ -1894,8 +1894,8 @@ entries:
       - "停用用户留下带 actor 的记录；被守卫拒绝的停用尝试同样留痕"
       - "凭据更新留下带 actor 的记录，且记录中不含凭据明文（承 13 号）"
       - "三项记录均可被全部登录用户只读检索（29 号 D5.1）"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_8 [SEC-8]"
     owner_issue: 112
     reason: "29 号 D5.2。十一项登记表的完整性由 A12 表驱动单测承担——「有没有漏登记一项」是表驱动判定不是执行判定，端到端逐项跑十一次既贵又证明不了第十二项被忘了。这三项取三种最容易漏的形状：登录失败无 actor 主体（易被实现成匿名丢弃）、用户停用有守卫（易在拒绝路径上漏留痕）、凭据更新接触秘密（易连带把秘密写进留痕）"
   - id: SEC-9
@@ -1910,8 +1910,8 @@ entries:
       - "运行中的 server 进程 uid ≠ 0"
       - "凭据目录归该用户所有且为 0600 / 0700（承 25 号 D3）"
       - "该用户对 /etc/dbs-monitor 之外无写权限"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/security_test.go::TestAcceptance_SEC_9 [SEC-9]"
     owner_issue: 112
     reason: "29 号 D6，本票在最小权限上出的唯一一条——平台库权限归 #116（两票同写就是第二份真相），目标库权限已由 00 号 M1 冻结、片①能力四态覆盖。环境要求：compose 中 server 必须以非 root 跑，否则本条恒绿，是一条自欺条目"
   - id: SEC-10
@@ -1926,7 +1926,7 @@ entries:
       - "走一条关键路径（登录 → 实例列表 → 实例工作台图表）"
       - "全程 console 无任何 CSP violation 报告"
       - "AntD 组件样式正常渲染、ECharts 图表正常出图"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "web/e2e/security-boundary.spec.ts::[SEC-10]"
     owner_issue: 112
     reason: "29 号 D8.1，本组唯一浏览器条目。CSP 在真实世界的失败模式是砸自己的页面而不是被绕过——style-src 放行 'unsafe-inline' 这个取舍（29 号 D1.1，AntD 6.5.3 cssinjs 运行时注入 style）到底够不够，只有这一条能证明。img-src 带 data: 同样只在这里被真实使用（ECharts 导出）"

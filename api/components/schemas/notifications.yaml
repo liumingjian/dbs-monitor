@@ -1,0 +1,262 @@
+SMTPAuthType:
+  type: string
+  enum: [NONE, PLAIN, LOGIN]
+  x-enum-varnames: [SMTPAuthNone, SMTPAuthPlain, SMTPAuthLogin]
+SMTPTransportSecurity:
+  type: string
+  enum: [STARTTLS, IMPLICIT]
+  x-enum-varnames: [SMTPStartTLS, SMTPImplicitTLS]
+SMTPChannelInput:
+  type: object
+  required: [enabled, host, port, from_address, recipient, auth_type, tls_mode]
+  properties:
+    enabled: { type: boolean }
+    host: { type: string, minLength: 1 }
+    port: { type: integer, minimum: 1, maximum: 65535 }
+    from_address: { type: string, format: email }
+    recipient: { type: string, format: email }
+    auth_type: { $ref: '#/SMTPAuthType' }
+    username: { type: string }
+    password:
+      type: string
+      description: Omit to retain the existing encrypted value.
+    tls_mode: { $ref: '#/SMTPTransportSecurity' }
+SMTPChannel:
+  type: object
+  required: [configured, auth_configured]
+  properties:
+    configured: { type: boolean }
+    enabled: { type: boolean }
+    host: { type: string }
+    port: { type: integer }
+    from_address: { type: string, format: email }
+    recipient: { type: string, format: email }
+    auth_type: { $ref: '#/SMTPAuthType' }
+    username: { type: string }
+    auth_configured: { type: boolean }
+    tls_mode: { $ref: '#/SMTPTransportSecurity' }
+    updated_at: { type: string, format: date-time }
+SMTPTestInput:
+  type: object
+  required: [target]
+  properties:
+    target: { type: string, format: email }
+NotificationQueued:
+  type: object
+  required: [id]
+  properties:
+    id: { type: string, format: uuid }
+NotificationAttempt:
+  type: object
+  required: [id, event_type, channel, target, status, attempt_count, created_at]
+  properties:
+    id: { type: string, format: uuid }
+    event_type:
+      type: string
+      enum: [FIRING, RECOVERY, REPEAT, TEST]
+      x-enum-varnames: [NotificationFiring, NotificationRecovery, NotificationRepeat, NotificationTest]
+    channel:
+      type: string
+      enum: [SMTP, WEBHOOK]
+      x-enum-varnames: [NotificationSMTP, NotificationWebhook]
+    target: { type: string }
+    template_id: { type: string }
+    status:
+      type: string
+      enum: [PENDING, SENT, FAILED]
+      x-enum-varnames: [NotificationPending, NotificationSent, NotificationFailed]
+    attempt_count: { type: integer, minimum: 0, maximum: 3 }
+    created_at: { type: string, format: date-time }
+    completed_at: { type: string, format: date-time }
+    attempted_at: { type: string, format: date-time }
+    result:
+      type: string
+      enum: [SENT, FAILED]
+      x-enum-varnames: [NotificationAttemptSent, NotificationAttemptFailed]
+    failure_reason: { type: string }
+    retry_count: { type: integer, minimum: 0, maximum: 2 }
+WebhookTargetInput:
+  type: object
+  required: [name, enabled, url]
+  properties:
+    name: { type: string, minLength: 1 }
+    enabled: { type: boolean }
+    url: { type: string, format: uri }
+    signing_value:
+      type: string
+      description: Required when creating; omit on update to retain the encrypted value.
+    signature_header:
+      type: string
+      description: Required when creating; omit on update to retain the encrypted value.
+WebhookTarget:
+  type: object
+  required: [id, name, enabled, url, signing_configured, created_at, updated_at]
+  properties:
+    id: { type: string, format: uuid }
+    name: { type: string }
+    enabled: { type: boolean }
+    url: { type: string, format: uri }
+    signing_configured: { type: boolean }
+    created_at: { type: string, format: date-time }
+    updated_at: { type: string, format: date-time }
+NotificationContactInput:
+  type: object
+  required: [name, email]
+  properties:
+    name: { type: string, minLength: 1 }
+    email: { type: string, format: email }
+    external_id: { type: string, minLength: 1 }
+NotificationContact:
+  allOf:
+    - $ref: '#/NotificationContactInput'
+    - type: object
+      required: [id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+NotificationContactGroupInput:
+  type: object
+  required: [name, contact_ids]
+  properties:
+    name: { type: string, minLength: 1 }
+    contact_ids:
+      type: array
+      uniqueItems: true
+      items: { type: string, format: uuid }
+NotificationContactGroup:
+  allOf:
+    - $ref: '#/NotificationContactGroupInput'
+    - type: object
+      required: [id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+NotificationPolicyChannel:
+  type: object
+  required: [channel]
+  properties:
+    channel:
+      type: string
+      enum: [SMTP, WEBHOOK]
+      x-enum-varnames: [PolicySMTP, PolicyWebhook]
+    target_id: { type: string, format: uuid }
+NotificationPolicySettings:
+  type: object
+  required: [repeat_interval_minimum]
+  properties:
+    repeat_interval_minimum:
+      type: integer
+      minimum: 1
+      maximum: 86400
+      description: Lowest repeat interval accepted by this deployment, in seconds.
+NotificationPolicyInput:
+  type: object
+  required:
+    - name
+    - contact_ids
+    - contact_group_ids
+    - channels
+    - severity_filter
+    - notify_on_fire
+    - notify_on_recovery
+    - repeat_interval
+  properties:
+    name: { type: string, minLength: 1 }
+    contact_ids:
+      type: array
+      uniqueItems: true
+      items: { type: string, format: uuid }
+    contact_group_ids:
+      type: array
+      uniqueItems: true
+      items: { type: string, format: uuid }
+    channels:
+      type: array
+      uniqueItems: true
+      items: { $ref: '#/NotificationPolicyChannel' }
+    severity_filter:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items: { $ref: ../enums.yaml#/AlertSeverity }
+    notify_on_fire: { type: boolean, default: true }
+    notify_on_recovery: { type: boolean, default: true }
+    repeat_interval:
+      type: integer
+      minimum: 1
+      maximum: 86400
+      default: 3600
+      description: Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
+    template_id: { type: string }
+NotificationPolicy:
+  allOf:
+    - $ref: '#/NotificationPolicyInput'
+    - type: object
+      required: [id, is_default, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        is_default: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+ChannelFailureRecord:
+  type: object
+  required: [failed_at, target, reason, retry_count]
+  properties:
+    failed_at: { type: string, format: date-time }
+    target: { type: string }
+    reason: { type: string }
+    retry_count: { type: integer, minimum: 0, maximum: 2 }
+ChannelFailureSummary:
+  type: object
+  required: [channel, target, recent_failure_count, last_failure_reason, last_failed_at, recent_failures]
+  properties:
+    channel:
+      type: string
+      enum: [SMTP, WEBHOOK]
+      x-enum-varnames: [FailureSMTP, FailureWebhook]
+    target_id: { type: string, format: uuid }
+    target: { type: string }
+    recent_failure_count: { type: integer, minimum: 1 }
+    last_failure_reason: { type: string }
+    last_failed_at: { type: string, format: date-time }
+    recent_failures:
+      type: array
+      maxItems: 20
+      items: { $ref: '#/ChannelFailureRecord' }
+ChannelFailureOverview:
+  type: object
+  required: [has_failures, channels]
+  properties:
+    has_failures: { type: boolean }
+    channels:
+      type: array
+      items: { $ref: '#/ChannelFailureSummary' }
+MaintenanceWindowStatus:
+  type: string
+  enum: [ACTIVE, SCHEDULED, ENDED]
+  x-enum-varnames: [MaintenanceActive, MaintenanceScheduled, MaintenanceEnded]
+MaintenanceWindowInput:
+  type: object
+  required: [instance_ids, starts_at, ends_at, reason]
+  properties:
+    instance_ids:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items: { type: string, format: uuid }
+    starts_at: { type: string, format: date-time }
+    ends_at: { type: string, format: date-time }
+    reason: { type: string, minLength: 1 }
+MaintenanceWindow:
+  allOf:
+    - $ref: '#/MaintenanceWindowInput'
+    - type: object
+      required: [id, created_by, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        created_by: { type: string, format: uuid }
+        status: { $ref: '#/MaintenanceWindowStatus' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }

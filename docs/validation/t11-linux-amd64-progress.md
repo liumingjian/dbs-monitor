@@ -46,6 +46,8 @@ The first `make check-full` attempt failed after 4m08.509s because the host `HTT
 
 ## Native amd64 package
 
+以下命令记录当时实际使用的 target 名称；[#102 处置](../design/21-v1-linux-release-disposition.md) 后，对应手动入口已改名为 `legacy-package-binaries-linux-amd64` 与 `legacy-package-linux-amd64`，且不再属于 v1 验收。
+
 The standalone application binaries were built as the non-root `t11builder` user on the native host:
 
 ```text

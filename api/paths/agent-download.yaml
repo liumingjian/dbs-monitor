@@ -1,0 +1,35 @@
+/api/v1/agent/download:
+  get:
+    tags: [agent]
+    operationId: downloadAgentBinary
+    x-required-role: AGENT
+    security:
+      - agentToken: []
+    parameters:
+      - name: arch
+        in: query
+        required: true
+        schema:
+          type: string
+          enum: [linux/amd64, linux/arm64]
+    responses:
+      '200':
+        description: Agent binary for the requested architecture
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      '400':
+        description: Unsupported architecture
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '401':
+        description: Invalid token
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+      '503':
+        description: Agent binary distribution is unavailable
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

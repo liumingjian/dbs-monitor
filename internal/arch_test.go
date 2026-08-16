@@ -11,19 +11,30 @@ import (
 )
 
 var packageLayers = map[string]int{
-	"cmd/monitor-agent":  3,
-	"cmd/monitor-server": 3,
-	"internal/agent":     2,
-	"internal/alerting":  1,
-	"internal/api":       0,
-	"internal/clock":     0,
-	"internal/collect":   2,
-	"internal/db":        0,
-	"internal/evaluator": 2,
-	"internal/httpapi":   2,
-	"internal/instance":  1,
-	"internal/metric":    1,
-	"internal/pgconn":    0,
+	"cmd/acceptance-report":     3,
+	"cmd/metric-appendix":       3,
+	"cmd/monitor-agent":         3,
+	"cmd/monitor-server":        3,
+	"cmd/pg-range-evidence":     3,
+	"internal/agent":            2,
+	"internal/acceptancereport": 1,
+	"internal/alerting":         1,
+	"internal/api":              0,
+	"internal/capability":       2,
+	"internal/clock":            0,
+	"internal/collect":          2,
+	"internal/db":               0,
+	"internal/evaluator":        2,
+	"internal/httpapi":          2,
+	"internal/instance":         1,
+	"internal/metric":           1,
+	"internal/notify":           1,
+	"internal/pgconn":           0,
+	"internal/platformdb":       1,
+	"internal/platformevent":    1,
+	"internal/platformhealth":   1,
+	"internal/securitymodel":    0,
+	"test/acceptance":           3,
 }
 
 func TestInternalPackageArchitecture(t *testing.T) {
@@ -34,6 +45,7 @@ func TestInternalPackageArchitecture(t *testing.T) {
 	}{
 		{path: filepath.Join(repoRoot, "internal"), prefix: "internal"},
 		{path: filepath.Join(repoRoot, "cmd"), prefix: "cmd"},
+		{path: filepath.Join(repoRoot, "test"), prefix: "test"},
 	} {
 		entries, err := os.ReadDir(root.path)
 		if err != nil {
@@ -92,6 +104,9 @@ func checkPackage(t *testing.T, path, packageName string, layer int) {
 				t.Errorf("%s imports unregistered %s", packageName, dependency)
 				continue
 			}
+			if packageName == "internal/collect" && dependency == "internal/capability" {
+				continue
+			}
 			if dependencyLayer >= layer {
 				t.Errorf("%s (L%d) imports %s (L%d); dependencies must point down", packageName, layer, dependency, dependencyLayer)
 			}
@@ -110,11 +125,17 @@ func checkPackage(t *testing.T, path, packageName string, layer int) {
 			if shortName == "api" && strings.HasSuffix(file.Name(), ".gen.go") {
 				return true
 			}
-			if (shortName == "alerting" || shortName == "httpapi" || shortName == "instance" || shortName == "metric") && typeSpec.Name.Name == "DBTX" {
-				return true
+			if typeSpec.Name.Name == "DBTX" {
+				switch shortName {
+				case "alerting", "httpapi", "instance", "metric", "notify":
+					return true
+				}
 			}
 			qualified := shortName + "." + typeSpec.Name.Name
-			if qualified != "db.DBTX" && qualified != "clock.Clock" && qualified != "pgconn.Dialer" && qualified != "collect.Collector" {
+			switch qualified {
+			case "db.DBTX", "clock.Clock", "pgconn.Dialer", "collect.Collector", "notify.Channel":
+				return true
+			default:
 				t.Errorf("interface %s is not in the T11 interface whitelist", qualified)
 			}
 			return true

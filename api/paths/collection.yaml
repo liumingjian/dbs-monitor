@@ -1,0 +1,180 @@
+/api/v1/instances/{id}/collection/tasks:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: listCollectionTaskStates
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Collection task states and configured intervals
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/collection.yaml#/CollectionTaskState }
+/api/v1/instances/{id}/collection/capabilities:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: listCapabilitySnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Current projected capability snapshot
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: ../components/schemas/collection.yaml#/CapabilitySnapshotEntry }
+/api/v1/instances/{id}/collection/pause:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: getCollectionPause
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Current collection pause status
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/CollectionPauseStatus }
+  put:
+    tags: [collection]
+    operationId: updateCollectionPause
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/collection.yaml#/CollectionPauseInput }
+    responses:
+      '200':
+        description: Updated collection pause status
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/CollectionPauseStatus }
+/api/v1/instances/{id}/collection/tasks/{task_id}:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    - name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+          - pg.probe
+          - pg.stat_database
+          - pg.stat_activity
+          - pg.replication
+          - pg.replication_slot
+          - pg.prepared_xacts
+          - pg.role
+          - pg.stat_statements
+  put:
+    tags: [collection]
+    operationId: updateCollectionTaskInterval
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/collection.yaml#/CollectionTaskIntervalInput }
+    responses:
+      '200':
+        description: Updated collection task state and configured interval
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/CollectionTaskState }
+      '400':
+        description: Invalid task or interval
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/{id}/long-query-samples:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    - name: from
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+    - name: to
+      in: query
+      required: true
+      schema: { type: string, format: date-time }
+    - name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    - name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    - name: sort
+      in: query
+      schema:
+        type: string
+        enum: [sampled_at, -sampled_at, query_started_at, -query_started_at]
+        default: -sampled_at
+  get:
+    tags: [collection]
+    operationId: listLongQuerySamples
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Long-query samples captured from pg_stat_activity
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/LongQuerySamplePage }
+      '400':
+        description: Invalid time range or pagination
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/{id}/query-stats:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: getQueryStatisticsSnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Latest query statistics snapshot or an explicit unavailability reason
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/QueryStatisticsSnapshot }
+/api/v1/instances/{id}/sessions:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  get:
+    tags: [collection]
+    operationId: getSessionSnapshot
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: Latest successful pg_stat_activity session snapshot with a server-enforced hard cap
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/collection.yaml#/SessionSnapshot }

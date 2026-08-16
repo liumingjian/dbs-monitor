@@ -12,17 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
-      postgres:
-        image: postgres:17
+      postgres12:
+        image: postgres:12
         env:
-          POSTGRES_DB: dbs_monitor
-          POSTGRES_USER: dbs_monitor
-          POSTGRES_PASSWORD: dbs_monitor
-          POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+          POSTGRES_DB: monitored
+          POSTGRES_USER: monitored
+          POSTGRES_PASSWORD: monitored
         ports:
-          - 55432:5432
+          - 55431:5432
         options: >-
-          --health-cmd "pg_isready -U dbs_monitor -d dbs_monitor"
+          --health-cmd "pg_isready -U monitored -d monitored"
           --health-interval 1s
           --health-timeout 3s
           --health-retries 30
@@ -32,16 +31,20 @@ jobs:
       PGUSER: dbs_monitor
       PGDATABASE: dbs_monitor
       PGPASSWORD: dbs_monitor
-      PGHOST_EXTERNAL: "1"
+      PG12HOST: localhost
+      PG12PORT: 55431
+      PG12USER: monitored
+      PG12DATABASE: monitored
+      PG12PASSWORD: monitored
       DATABASE_URL: postgres://dbs_monitor:dbs_monitor@localhost:55432/dbs_monitor?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.23.x'
+          go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version-file: .tool-versions
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci

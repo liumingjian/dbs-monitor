@@ -3,6 +3,12 @@ sql:
   - engine: postgresql
     schema: migrations
     queries: internal/instance/queries.sql
+    database:
+      uri: ${DATABASE_URL}
+    analyzer:
+      database: false
+    rules:
+      - sqlc/db-prepare
     gen:
       go:
         package: instance
@@ -11,6 +17,12 @@ sql:
   - engine: postgresql
     schema: migrations
     queries: internal/alerting/queries.sql
+    database:
+      uri: ${DATABASE_URL}
+    analyzer:
+      database: false
+    rules:
+      - sqlc/db-prepare
     gen:
       go:
         package: alerting
@@ -19,6 +31,12 @@ sql:
   - engine: postgresql
     schema: migrations
     queries: internal/httpapi/queries.sql
+    database:
+      uri: ${DATABASE_URL}
+    analyzer:
+      database: false
+    rules:
+      - sqlc/db-prepare
     gen:
       go:
         package: httpapi
@@ -27,8 +45,28 @@ sql:
   - engine: postgresql
     schema: migrations
     queries: internal/metric/queries.sql
+    database:
+      uri: ${DATABASE_URL}
+    analyzer:
+      database: false
+    rules:
+      - sqlc/db-prepare
     gen:
       go:
         package: metric
         out: internal/metric
+        sql_package: pgx/v5
+  - engine: postgresql
+    schema: migrations
+    queries: internal/notify/queries.sql
+    database:
+      uri: ${DATABASE_URL}
+    analyzer:
+      database: false
+    rules:
+      - sqlc/db-prepare
+    gen:
+      go:
+        package: notify
+        out: internal/notify
         sql_package: pgx/v5

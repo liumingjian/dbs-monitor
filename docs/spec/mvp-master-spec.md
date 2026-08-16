@@ -1,5 +1,7 @@
 # dbs-monitor MVP 全量规格总纲（Master Spec）
 
+> **交付形态 supersede 指针（2026-08-15）**：本 spec 的九片业务语义仍然有效。但凡涉及交付/部署/发布形态的表述——离线 tar、自带 PG、`upgrade.sh`、双架构/arm64、Release assets、Environment 审批、安装脚本（集中于总述、片⑨叙事与片⑩全章）——已被 v1 投产路线取代，以 `docs/design/18`、`19`、`25`–`32` 号与 #124 为准；「平台自带 PG 不可达」一律读作「平台库（外部前置 PG 17）不可达」，其启动/恢复语义以 26 号为准。片⑩范围以重开后的 #97 票面为准，不以本章为准。本指针只登记取代关系，不改写正文（推翻须新开决策记录的规则不变）。
+
 > **本文档是生成物**：由十份 spec issue（片①–⑩）全文合成，语义以各 issue 为准；任一 issue 变更后需重新合成本文档。
 > **用途**：作为 `/to-tickets` 的统一输入——拆票时以本文档为全局依赖上下文，按片间依赖序出票；每片一节，节内即该片 spec 全文。
 > **管道**：wayfinder 地图 [#1](https://github.com/liumingjian/dbs-monitor/issues/1)（R1 产品规格）/ [#15](https://github.com/liumingjian/dbs-monitor/issues/15)（R2 架构骨架）/ [#36](https://github.com/liumingjian/dbs-monitor/issues/36)（MVP 切分）→ [S1 #37](https://github.com/liumingjian/dbs-monitor/issues/37) 十片定稿 → 十份 spec（本文档）→ `/to-tickets` → `implement-issues`。

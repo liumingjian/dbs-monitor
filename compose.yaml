@@ -1,11 +1,29 @@
+x-monitored: &monitored
+  profiles: [matrix]
+  command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+  environment:
+    POSTGRES_DB: monitored
+    POSTGRES_USER: monitored
+    POSTGRES_PASSWORD: monitored
+  volumes:
+    - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
+    interval: 1s
+    timeout: 3s
+    retries: 30
+
 services:
   postgres:
     image: postgres:17
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
     environment:
       POSTGRES_DB: dbs_monitor
       POSTGRES_USER: dbs_monitor
       POSTGRES_PASSWORD: dbs_monitor
       POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    volumes:
+      - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
     ports:
       - "55432:5432"
     healthcheck:
@@ -15,49 +33,300 @@ services:
       retries: 30
 
   monitored-pg13:
+    <<: *monitored
     image: postgres:13
-    profiles: [matrix]
-    environment: &monitored-env
+    ports: ["55433:5432"]
+  monitored-pg14:
+    <<: *monitored
+    image: postgres:14
+    ports: ["55434:5432"]
+  monitored-pg15:
+    <<: *monitored
+    image: postgres:15
+    ports: ["55435:5432"]
+  monitored-pg16:
+    <<: *monitored
+    image: postgres:16
+    ports: ["55436:5432"]
+  monitored-pg17:
+    <<: *monitored
+    image: postgres:17
+    ports: ["55437:5432"]
+
+  monitored-pg17-replica:
+    <<: *monitored
+    image: postgres:17
+    environment:
+      PGPASSWORD: monitored
+    ports: ["55438:5432"]
+    depends_on:
+      monitored-pg17:
+        condition: service_healthy
+    entrypoint:
+      - bash
+      - -ec
+      - |
+        if [ ! -s "$$PGDATA/PG_VERSION" ]; then
+          until pg_isready -h monitored-pg17 -U monitored -d monitored; do sleep 1; done
+          gosu postgres pg_basebackup -h monitored-pg17 -D "$$PGDATA" -U monitored -Fp -Xs -R
+        fi
+        exec gosu postgres postgres
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'test "$$(psql -U monitored -d monitored -tAc ''SELECT status FROM pg_stat_wal_receiver'')" = streaming',
+        ]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  monitored-pg12:
+    image: postgres:12
+    profiles: [target-pg12]
+    environment:
       POSTGRES_DB: monitored
       POSTGRES_USER: monitored
       POSTGRES_PASSWORD: monitored
-    ports: ["55433:5432"]
-  monitored-pg14:
-    image: postgres:14
-    profiles: [matrix]
-    environment: *monitored-env
-    ports: ["55434:5432"]
-  monitored-pg15:
-    image: postgres:15
-    profiles: [matrix]
-    environment: *monitored-env
-    ports: ["55435:5432"]
-  monitored-pg16:
-    image: postgres:16
-    profiles: [matrix]
-    environment: *monitored-env
-    ports: ["55436:5432"]
-  monitored-pg17:
-    image: postgres:17
-    profiles: [matrix]
-    environment: *monitored-env
-    ports: ["55437:5432"]
+    ports: ["55422:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
 
-  # 备份恢复链（REC-3 / REC-4）的 restore 靶库：必须是真空 PG，不是平台库同实例的
-  # 另一个 database —— 共用 initdb 参数 / locale / 扩展 / 角色会掩盖「库是自描述的」
-  # 最容易翻车的那部分。见 docs/design/26-data-and-recovery-gate.md D7。
-  restore-target:
-    image: postgres:17
-    profiles: [restore]
+  platform-pg16:
+    image: postgres:16
+    profiles: [platform-pg16]
+    entrypoint: ["sh", "/acceptance-postgres-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/server.key
     environment:
       POSTGRES_DB: dbs_monitor
       POSTGRES_USER: dbs_monitor
       POSTGRES_PASSWORD: dbs_monitor
       POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
-    ports:
-      - "55438:5432"
+    volumes:
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+      - ./test/acceptance/postgres-tls-entrypoint.sh:/acceptance-postgres-entrypoint.sh:ro
+      - ./test/acceptance/fixtures/platform-init.sql:/docker-entrypoint-initdb.d/platform-init.sql:ro
+    ports: ["55446:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
       interval: 1s
       timeout: 3s
       retries: 30
+
+  acceptance-platform:
+    image: postgres:17
+    profiles: [acceptance, acceptance-server]
+    entrypoint: ["sh", "/acceptance-postgres-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/server.key
+    environment:
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    volumes:
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+      - ./test/acceptance/postgres-tls-entrypoint.sh:/acceptance-postgres-entrypoint.sh:ro
+      - ./test/acceptance/fixtures/platform-init.sql:/docker-entrypoint-initdb.d/platform-init.sql:ro
+    ports: ["55442:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  acceptance-target:
+    image: postgres:17
+    profiles: [acceptance]
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+    environment:
+      POSTGRES_DB: monitored
+      POSTGRES_USER: monitored
+      POSTGRES_PASSWORD: monitored
+    volumes:
+      - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
+      - ./test/acceptance/fixtures/target-init.sql:/docker-entrypoint-initdb.d/acceptance-target.sql:ro
+    ports: ["55447:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  acceptance-server:
+    image: debian:bookworm-slim
+    profiles: [acceptance-server]
+    user: "65532:65532"
+    read_only: true
+    working_dir: /workspace
+    command: ["/workspace/results/acceptance-server"]
+    environment:
+      DBS_MONITOR_CONFIG_FILE: /etc/dbs-monitor/config.yaml
+      INITIAL_ADMIN_PASSWORD: acceptance-admin-password
+      LISTEN_ADDR: 0.0.0.0:8443
+      PUBLIC_HOST: 127.0.0.1
+      CERT_DIR: /etc/dbs-monitor/tls
+      LOCAL_DISK_PATH: /
+    volumes:
+      - .:/workspace:ro
+      - ./test/acceptance/fixtures/server-compose.yaml:/etc/dbs-monitor/config.yaml:ro
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+    tmpfs:
+      - /etc/dbs-monitor/credentials:uid=65532,gid=65532,mode=0700
+      - /etc/dbs-monitor/tls:uid=65532,gid=65532,mode=0700
+    depends_on:
+      acceptance-platform:
+        condition: service_healthy
+
+  restore-target:
+    image: postgres:17
+    profiles: [restore]
+    entrypoint: ["sh", "/acceptance-postgres-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/server.key
+    environment:
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    volumes:
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+      - ./test/acceptance/postgres-tls-entrypoint.sh:/acceptance-postgres-entrypoint.sh:ro
+    ports: ["55439:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  acceptance-recovery-platform:
+    image: postgres:17
+    profiles: [recovery]
+    entrypoint: ["sh", "/acceptance-postgres-entrypoint.sh"]
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/lib/postgresql/server.crt
+      - -c
+      - ssl_key_file=/var/lib/postgresql/server.key
+    environment:
+      POSTGRES_DB: dbs_monitor
+      POSTGRES_USER: dbs_monitor
+      POSTGRES_PASSWORD: dbs_monitor
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+    volumes:
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+      - ./test/acceptance/postgres-tls-entrypoint.sh:/acceptance-postgres-entrypoint.sh:ro
+      - ./test/acceptance/fixtures/platform-init.sql:/docker-entrypoint-initdb.d/platform-init.sql:ro
+    ports: ["55446:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  smtp-sink:
+    image: axllent/mailpit:v1.30.7
+    profiles: [smtp]
+    environment:
+      MP_SMTP_TLS_CERT: /acceptance-tls/server.crt
+      MP_SMTP_TLS_KEY: /acceptance-tls/server.key
+      MP_SMTP_REQUIRE_STARTTLS: "true"
+    volumes:
+      - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
+    ports:
+      - "51025:1025"
+      - "58025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  webhook-sink:
+    image: node:22-alpine
+    profiles: [webhook]
+    command:
+      - node
+      - -e
+      - |
+        const http = require('http');
+        const requests = [];
+        let responseStatus = 204;
+        http.createServer((request, response) => {
+          if (request.method === 'GET' && request.url === '/health') {
+            response.writeHead(200).end('ok');
+            return;
+          }
+          if (request.method === 'GET' && request.url === '/requests') {
+            response.writeHead(200, { 'content-type': 'application/json' })
+              .end(JSON.stringify(requests));
+            return;
+          }
+          if (request.method === 'POST' && request.url === '/control/reset') {
+            requests.length = 0;
+            response.writeHead(204).end();
+            return;
+          }
+          if (request.method === 'POST' && request.url.startsWith('/control/status/')) {
+            responseStatus = Number(request.url.split('/').pop());
+            response.writeHead(204).end();
+            return;
+          }
+          const chunks = [];
+          request.on('data', chunk => chunks.push(chunk));
+          request.on('end', () => {
+            requests.push({
+              method: request.method,
+              url: request.url,
+              headers: request.headers,
+              body: Buffer.concat(chunks).toString(),
+            });
+            response.writeHead(responseStatus).end();
+          });
+        }).listen(8080, '0.0.0.0');
+    ports: ["58080:8080"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  server:
+    image: golang:1.23.0
+    profiles: [server]
+    user: "65532:65532"
+    working_dir: /workspace
+    command: ["go", "run", "./cmd/monitor-server"]
+    environment:
+      DBS_MONITOR_CONFIG_FILE: /etc/dbs-monitor/config.yaml
+      GOCACHE: /tmp/go-build
+      GOMODCACHE: /tmp/go-mod
+      HOME: /tmp
+    volumes:
+      - .:/workspace:ro
+      - ./config/server-minimal.yaml:/etc/dbs-monitor/config.yaml:ro

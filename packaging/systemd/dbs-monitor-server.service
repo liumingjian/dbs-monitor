@@ -1,6 +1,6 @@
 [Unit]
 Description=DBS Monitor Server
-After=network-online.target dbs-monitor-postgres.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -8,7 +8,8 @@ Type=simple
 User=dbsmon
 Group=dbsmon
 WorkingDirectory=/opt/dbs-monitor
-EnvironmentFile=/opt/dbs-monitor/etc/dbs-monitor.env
+StateDirectory=dbs-monitor dbs-monitor/diagnostics
+EnvironmentFile=/etc/dbs-monitor/server.env
 ExecStart=/opt/dbs-monitor/bin/dbs-monitor-server
 Restart=always
 RestartSec=5

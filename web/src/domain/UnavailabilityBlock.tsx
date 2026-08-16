@@ -4,6 +4,12 @@ import type { components } from '../api/schema'
 export type Unavailability = components['schemas']['Unavailability']
 
 type Copy = { title: string; description: string; action: string }
+type Destinations = { current: string; collection: string }
+type UnavailabilityBlockProps = {
+  code: Unavailability
+  href: string
+  detail?: string
+}
 
 export function unavailabilityCopy(code: Unavailability): Copy {
   switch (code) {
@@ -24,9 +30,40 @@ export function unavailabilityCopy(code: Unavailability): Copy {
   }
 }
 
-export function UnavailabilityBlock({ code }: { code: Unavailability }) {
+export function unavailabilityHref(code: Unavailability, destinations: Destinations): string {
+  switch (code) {
+    case 'NO_SAMPLES_YET':
+    case 'NO_DATA_IN_RANGE':
+    case 'COUNTER_RESET':
+      return destinations.current
+    case 'STALE':
+    case 'COLLECTION_PAUSED':
+    case 'COLLECTION_FAILED':
+    case 'DB_UNREACHABLE':
+    case 'AGENT_OFFLINE':
+    case 'PERMISSION_DENIED':
+    case 'EXTENSION_MISSING':
+    case 'FEATURE_DISABLED':
+    case 'VERSION_UNSUPPORTED':
+    case 'NOT_APPLICABLE_ROLE':
+      return destinations.collection
+    default:
+      return assertNever(code)
+  }
+}
+
+export function UnavailabilityBlock({ code, href, detail }: UnavailabilityBlockProps) {
   const copy = unavailabilityCopy(code)
-  return <Alert type="info" showIcon message={copy.title} description={copy.description} action={<Button size="small">{copy.action}</Button>} />
+  return <Alert
+    type="info"
+    showIcon
+    title={copy.title}
+    description={<>
+      <div>{copy.description}</div>
+      {detail && <div>{detail}</div>}
+    </>}
+    action={<Button size="small" href={href}>{copy.action}</Button>}
+  />
 }
 
 function assertNever(value: never): never {

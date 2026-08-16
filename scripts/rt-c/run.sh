@@ -75,9 +75,9 @@ $psql_cmd -Atc "SHOW ALL" >"$results/postgresql-settings.tsv"
 df -k "$RT_C_DATA_PATH" >"$results/disk.txt"
 
 $psql_cmd -v start="$start" -v days="$days" -v series_count="$series_count" <<'SQL'
-INSERT INTO instance (id, name, host, port, database_name, username, password)
+INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version)
 SELECT ('00000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
-       'rt-c-' || lpad(i::text, 2, '0'), '127.0.0.1', 5432, 'rt_c', 'rt_c', 'disposable'
+       'rt-c-' || lpad(i::text, 2, '0'), '127.0.0.1', 5432, 'rt_c', 'rt_c', decode('01', 'hex'), 1
 FROM generate_series(1, 50) AS i;
 
 INSERT INTO metric_series (instance_id, metric_id, labels, labels_key, first_seen, last_seen)

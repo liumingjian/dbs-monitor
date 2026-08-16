@@ -1,0 +1,163 @@
+name: release-gate
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated release tag to re-evaluate
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate candidate and archived decision
+        id: validate
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tag = process.env.RELEASE_TAG;
+            const tagMatch = /^v\d+\.\d+\.\d+(-rc\.\d+)?$/.exec(tag);
+            if (!tagMatch) {
+              core.setFailed(`unsupported release tag: ${tag}`);
+              return;
+            }
+            const isReleaseCandidate = tagMatch[1] !== undefined;
+
+            const actorPermission = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner,
+              repo,
+              username: context.actor,
+            });
+            if (!['admin', 'maintain', 'write'].includes(actorPermission.data.permission)) {
+              core.setFailed(`release gate actor ${context.actor} is not a maintainer`);
+              return;
+            }
+
+            const tagReference = await github.rest.git.getRef({ owner, repo, ref: `tags/${tag}` });
+            if (tagReference.data.object.type !== 'tag') {
+              core.setFailed(`${tag} is not an annotated tag`);
+              return;
+            }
+            const annotatedTag = await github.rest.git.getTag({
+              owner,
+              repo,
+              tag_sha: tagReference.data.object.sha,
+            });
+            if (annotatedTag.data.object.type !== 'commit') {
+              core.setFailed(`${tag} does not resolve directly to a commit`);
+              return;
+            }
+            const candidateSHA = annotatedTag.data.object.sha;
+
+            const workflowRuns = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: 'check-full.yml',
+              head_sha: candidateSHA,
+              status: 'success',
+              per_page: 100,
+            });
+            const checkFullRun = workflowRuns.data.workflow_runs.find(
+              run => run.conclusion === 'success' && run.head_sha === candidateSHA
+            );
+            if (!checkFullRun) {
+              core.setFailed(`candidate ${candidateSHA} has no successful check-full run`);
+              return;
+            }
+            const workflowRunArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner,
+              repo,
+              run_id: checkFullRun.id,
+              per_page: 100,
+            });
+            const vulnerabilityReportArtifact = workflowRunArtifacts.data.artifacts.find(artifact =>
+              artifact.name === `vulnerability-reports-${candidateSHA}` && !artifact.expired
+            );
+            if (!vulnerabilityReportArtifact) {
+              core.setFailed(`check-full run ${checkFullRun.id} has no readable vulnerability report`);
+              return;
+            }
+
+            const repository = await github.rest.repos.get({ owner, repo });
+            let validationFiles = [];
+            try {
+              const validationDirectory = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: 'docs/validation',
+                ref: repository.data.default_branch,
+              });
+              validationFiles = Array.isArray(validationDirectory.data) ? validationDirectory.data : [];
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+            }
+
+            const validationReports = [];
+            const reportFiles = validationFiles.filter(
+              file => file.type === 'file' && file.name.endsWith('.json')
+            );
+            for (const file of reportFiles) {
+              const response = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: file.path,
+                ref: repository.data.default_branch,
+              });
+              const reportContents = Buffer.from(response.data.content, response.data.encoding).toString('utf8');
+              const report = JSON.parse(reportContents);
+              if (report.candidate_sha === candidateSHA) {
+                validationReports.push(report);
+              }
+            }
+            const formalReports = validationReports.filter(report =>
+              report.profile === 'final' && report.provisional === false && ['GO', 'NO-GO'].includes(report.verdict)
+            );
+            if (formalReports.length === 0) {
+              core.setFailed(`candidate ${candidateSHA} has not been formally evaluated; PROVISIONAL-PASS is insufficient`);
+              return;
+            }
+            const goReport = formalReports.find(report => report.verdict === 'GO');
+            if (!isReleaseCandidate && !goReport) {
+              core.setFailed(`formal tag ${tag} requires verdict GO`);
+              return;
+            }
+            let verdict = formalReports[0].verdict;
+            if (goReport) {
+              verdict = 'GO';
+            }
+            core.setOutput('candidate', candidateSHA);
+            core.setOutput('check_full_run_id', String(checkFullRun.id));
+            core.summary
+              .addHeading('Release gate')
+              .addTable([
+                [{ data: 'Tag', header: true }, { data: 'Candidate', header: true }, { data: 'Verdict', header: true }],
+                [tag, candidateSHA, verdict],
+              ])
+              .write();
+      - name: Read archived vulnerability reports
+        uses: actions/download-artifact@v4
+        with:
+          name: vulnerability-reports-${{ steps.validate.outputs.candidate }}
+          path: results/vulnerability-reports
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.validate.outputs.check_full_run_id }}
+      - name: Verify archived vulnerability reports
+        run: |
+          test -s results/vulnerability-reports/govulncheck.txt
+          test -s results/vulnerability-reports/npm-audit.json

@@ -5,6 +5,7 @@
 > 决策票：[T8 · 打包、部署与运行形态](https://github.com/liumingjian/dbs-monitor/issues/26)。
 > 输入边界（不重议）：地图 Notes 第 2 条（不依赖客户环境、所需一切随包自带、整包部署、交付团队运维）、第 1 条（Go 后端 + Agent，前端 `go:embed`）、[T2 · 时序存储选型与指标数据模型](04-metric-storage-model.md)（自带 PG ≥14、原生分区、`date_bin`）、[T3 · Agent 上报协议、注册与凭据模型](https://github.com/liumingjian/dbs-monitor/issues/21)（强制 TLS 自签 CA 无跳过开关、无下行通道、±30s 时间戳门槛、服务端先升 Agent 后升）、[T5 · 后端代码结构与模块边界](05-backend-code-structure.md)（启动时 goose 自动迁移、运行期配置只在库里）。
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
+> 当前适用性：本文保留为 Linux 交付的历史设计与后续参考；macOS v1 以 [18](18-v1-macos-support-boundary.md)、[19](19-v1-macos-runtime-and-postgresql.md)、[20](20-v1-macos-build-validation-and-release.md) 为准，Linux 发布票的 v1 处置见 [21](21-v1-linux-release-disposition.md)。
 
 ---
 

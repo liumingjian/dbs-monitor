@@ -1,0 +1,214 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/liumingjian/dbs-monitor/internal/db"
+	"github.com/liumingjian/dbs-monitor/internal/platformhealth"
+)
+
+func TestRefreshPlatformDatabaseHealthRecordsFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(ctx, "postgres://dbs_monitor@127.0.0.1:1/dbs_monitor?sslmode=disable&connect_timeout=1")
+	if err != nil {
+		t.Fatalf("create unavailable platform pool: %v", err)
+	}
+	defer pool.Close()
+
+	var journal bytes.Buffer
+	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), log.New(&journal, "", 0))
+	refreshPlatformDatabaseHealth(ctx, &db.Pool{Pool: pool}, health, now)
+
+	database := health.Source(platformhealth.SourcePlatformDatabase)
+	if database.Status != platformhealth.StatusFailed || database.Code != "PLATFORM_DATABASE_UNREACHABLE" {
+		t.Fatalf("platform database health = %+v, want FAILED", database)
+	}
+	if !strings.Contains(journal.String(), `"event":"platform_health_change"`) ||
+		!strings.Contains(journal.String(), `"code":"PLATFORM_DATABASE_UNREACHABLE"`) {
+		t.Fatalf("platform database journal event = %q", journal.String())
+	}
+}
+
+func TestPlatformFailureHandler(t *testing.T) {
+	now := time.Date(2026, time.August, 11, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name             string
+		path             string
+		failed           bool
+		status           int
+		contentType      string
+		body             string
+		bodyContains     bool
+		platformFaultSet bool
+		diskEmergency    bool
+	}{
+		{
+			name: "non-failed platform delegates",
+			path: "/instances", status: http.StatusOK, body: "next",
+		},
+		{
+			name: "disk emergency keeps control plane available", diskEmergency: true,
+			path: "/api/v1/instances", status: http.StatusOK, body: "next",
+		},
+		{
+			name: "diagnostics remains available during failure",
+			path: "/api/v1/diagnostics/health", failed: true, status: http.StatusOK, body: "next",
+		},
+		{
+			name: "focused diagnostics remain available during failure",
+			path: "/api/v1/diagnostics/disk", failed: true, status: http.StatusOK, body: "next",
+		},
+		{
+			name: "API failure returns JSON",
+			path: "/api/v1/instances", failed: true, status: http.StatusServiceUnavailable,
+			contentType: "application/json; charset=utf-8",
+			body:        `{"error":{"code":"INTERNAL","message":"平台自身故障"}}`, platformFaultSet: true,
+		},
+		{
+			name: "page failure returns dedicated HTML",
+			path: "/instances", failed: true, status: http.StatusServiceUnavailable,
+			contentType: "text/html; charset=utf-8",
+			body:        "平台自身故障", bodyContains: true, platformFaultSet: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), nil)
+			if test.failed {
+				health.Update(now, platformhealth.DatabaseSource(errors.New("unavailable")))
+			}
+			if test.diskEmergency {
+				health.Update(now, platformhealth.DiskSource(96, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds()))
+			}
+			next := http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.WriteHeader(http.StatusOK)
+				_, _ = writer.Write([]byte("next"))
+			})
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+
+			platformFailureHandler(next, health).ServeHTTP(response, request)
+
+			if response.Code != test.status {
+				t.Fatalf("status = %d, want %d", response.Code, test.status)
+			}
+			if contentType := response.Header().Get("Content-Type"); contentType != test.contentType {
+				t.Fatalf("content type = %q, want %q", contentType, test.contentType)
+			}
+			body := response.Body.String()
+			bodyMatches := body == test.body
+			if test.bodyContains {
+				bodyMatches = strings.Contains(body, test.body)
+			}
+			if !bodyMatches {
+				t.Fatalf("body = %q, want %q (contains=%t)", body, test.body, test.bodyContains)
+			}
+			if strings.Contains(body, "暂无数据") {
+				t.Fatalf("body misrepresents platform failure as no data: %q", body)
+			}
+			if got := response.Header().Get("X-DBS-Platform-Fault") == "true"; got != test.platformFaultSet {
+				t.Fatalf("platform fault header set = %t, want %t", got, test.platformFaultSet)
+			}
+		})
+	}
+}
+
+func TestStartupFailureHandlerExposesFailedHealthAndRejectsBusinessAPI(t *testing.T) {
+	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
+	health := platformhealth.NewStore("3.0.0", now.Add(-time.Hour), nil)
+	health.Update(now, platformhealth.DatabaseSource(errors.New("connection refused")))
+	handler := startupFailureHandler(health)
+
+	healthResponse := httptest.NewRecorder()
+	handler.ServeHTTP(healthResponse, httptest.NewRequest(http.MethodGet, "/api/v1/diagnostics/health", nil))
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", healthResponse.Code)
+	}
+	var snapshot platformhealth.Snapshot
+	if err := json.Unmarshal(healthResponse.Body.Bytes(), &snapshot); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if snapshot.Status != platformhealth.StatusFailed ||
+		health.Source(platformhealth.SourcePlatformDatabase).Status != platformhealth.StatusFailed {
+		t.Fatalf("health snapshot = %+v, want platform database FAILED", snapshot)
+	}
+
+	businessResponse := httptest.NewRecorder()
+	handler.ServeHTTP(businessResponse, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if businessResponse.Code != http.StatusServiceUnavailable {
+		t.Fatalf("business status = %d, want 503", businessResponse.Code)
+	}
+	const wantBody = `{"error":{"code":"INTERNAL","message":"平台自身故障"}}`
+	if businessResponse.Body.String() != wantBody {
+		t.Fatalf("business body = %q, want %q", businessResponse.Body.String(), wantBody)
+	}
+	if strings.Contains(businessResponse.Body.String(), "DB_UNREACHABLE") ||
+		strings.Contains(businessResponse.Body.String(), "NO_DATA") {
+		t.Fatalf("business body contains target database semantics: %q", businessResponse.Body.String())
+	}
+
+	health.Update(now.Add(time.Second), platformhealth.DatabaseSource(nil))
+	beforeApplicationHandoff := httptest.NewRecorder()
+	handler.ServeHTTP(beforeApplicationHandoff, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if beforeApplicationHandoff.Code != http.StatusServiceUnavailable {
+		t.Fatalf("business status before application handoff = %d, want 503", beforeApplicationHandoff.Code)
+	}
+}
+
+func TestSwitchableHandlerPublishesRecoveredApplicationWithoutRestart(t *testing.T) {
+	health := platformhealth.NewStore("3.0.0", time.Now().Add(-time.Hour), nil)
+	health.Update(time.Now(), platformhealth.DatabaseSource(errors.New("connection refused")))
+	handler := newSwitchableHandler(startupFailureHandler(health))
+
+	beforeRecovery := httptest.NewRecorder()
+	handler.ServeHTTP(beforeRecovery, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if beforeRecovery.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status before recovery = %d, want 503", beforeRecovery.Code)
+	}
+
+	handler.Switch(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.WriteHeader(http.StatusNoContent)
+	}))
+	afterRecovery := httptest.NewRecorder()
+	handler.ServeHTTP(afterRecovery, httptest.NewRequest(http.MethodGet, "/api/v1/instances", nil))
+	if afterRecovery.Code != http.StatusNoContent {
+		t.Fatalf("status after recovery = %d, want 204", afterRecovery.Code)
+	}
+}
+
+func TestPartitionDaysRemaining(t *testing.T) {
+	lastSuccess := time.Date(2026, time.August, 1, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name    string
+		elapsed time.Duration
+		want    int
+	}{
+		{name: "initial window", want: 7},
+		{name: "partial day", elapsed: 23*time.Hour + 59*time.Minute, want: 7},
+		{name: "one full day", elapsed: 24 * time.Hour, want: 6},
+		{name: "six full days", elapsed: 6 * 24 * time.Hour, want: 1},
+		{name: "window exhausted", elapsed: 7 * 24 * time.Hour, want: 0},
+		{name: "past window is clamped", elapsed: 8 * 24 * time.Hour, want: 0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := partitionDaysRemaining(lastSuccess, lastSuccess.Add(test.elapsed)); got != test.want {
+				t.Fatalf("partitionDaysRemaining(%s) = %d, want %d", test.elapsed, got, test.want)
+			}
+		})
+	}
+}

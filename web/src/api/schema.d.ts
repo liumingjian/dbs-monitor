@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["deleteSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances": {
         parameters: {
             query?: never;
@@ -54,6 +70,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/{id}/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateInstanceCredential"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/metrics/series": {
         parameters: {
             query?: never;
@@ -62,6 +96,679 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getMetricSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/collection/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listCollectionTaskStates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/collection/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listCapabilitySnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/collection/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getCollectionPause"];
+        put: operations["updateCollectionPause"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/collection/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateCollectionTaskInterval"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/long-query-samples": {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                limit?: number;
+                offset?: number;
+                sort?: "sampled_at" | "-sampled_at" | "query_started_at" | "-query_started_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listLongQuerySamples"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/query-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getQueryStatisticsSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getSessionSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAlertRules"];
+        put?: never;
+        post: operations["createAlertRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAlertRule"];
+        put: operations["updateAlertRule"];
+        post?: never;
+        delete: operations["deleteAlertRule"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rules/{id}/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateAlertRuleEnabled"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rules/{id}/copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["copyAlertRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rule-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAlertRuleTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-rule-templates/{id}/alert-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createAlertRuleFromTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-instances/{id}/disposition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAlertDisposition"];
+        put: operations["updateAlertDisposition"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCurrentAlerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAlertHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-instances/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAlertDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-instances/{id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listAlertEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-instances/{id}/trigger-snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAlertTriggerSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-instances/{id}/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listAlertNotifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/smtp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSMTPChannel"];
+        put: operations["updateSMTPChannel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/smtp/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["testSMTPChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listWebhookTargets"];
+        put?: never;
+        post: operations["createWebhookTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/webhooks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateWebhookTarget"];
+        post?: never;
+        delete: operations["deleteWebhookTarget"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/webhooks/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["testWebhookTarget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-channels/failures": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getChannelFailures"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNotificationContacts"];
+        put?: never;
+        post: operations["createNotificationContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-contacts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateNotificationContact"];
+        post?: never;
+        delete: operations["deleteNotificationContact"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-contact-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNotificationContactGroups"];
+        put?: never;
+        post: operations["createNotificationContactGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-contact-groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateNotificationContactGroup"];
+        post?: never;
+        delete: operations["deleteNotificationContactGroup"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-policy-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getNotificationPolicySettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listNotificationPolicies"];
+        put?: never;
+        post: operations["createNotificationPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notification-policies/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateNotificationPolicy"];
+        post?: never;
+        delete: operations["deleteNotificationPolicy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance-windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listMaintenanceWindows"];
+        put?: never;
+        post: operations["createMaintenanceWindow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance-windows/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateMaintenanceWindow"];
+        post?: never;
+        delete: operations["deleteMaintenanceWindow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance-windows/{id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["endMaintenanceWindow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/performance-events": {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                recovered?: boolean;
+                disposition?: components["schemas"]["AlertDisposition"];
+                limit?: number;
+                offset?: number;
+                sort?: "derived_at" | "-derived_at" | "updated_at" | "-updated_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["listPerformanceEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/performance-events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getPerformanceEvent"];
         put?: never;
         post?: never;
         delete?: never;
@@ -86,6 +793,324 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["downloadAgentBinary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/agent/registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getAgentRegistration"];
+        put?: never;
+        post: operations["registerAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/agent/token/rotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rotateAgentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/agent/token/revocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeAgentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/instances/{id}/agent/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disableAgent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCurrentUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listUsers"];
+        put?: never;
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateUserStatus"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateUserRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resetUserPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["changeOwnPassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/platform-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPlatformEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPlatformHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/disk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDiskDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/scheduler": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getSchedulerDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/partitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPartitionDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCertificateDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/keyring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getKeyringDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/diagnostics/platform": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPlatformDiagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -95,14 +1120,446 @@ export interface components {
         /** @enum {string} */
         AlertStatus: "OK" | "PENDING" | "FIRING" | "NO_DATA" | "RECOVERED";
         /** @enum {string} */
+        HealthStatus: "CRITICAL" | "WARNING" | "UNKNOWN" | "HEALTHY" | "PAUSED";
+        /** @enum {string} */
+        InstanceAgentStatus: "offline" | "online" | "not_installed" | "permission_denied" | "error";
+        /** @enum {string} */
         CapabilityStatus: "PRESENT" | "MISSING" | "NOT_APPLICABLE" | "UNKNOWN";
-        InstanceInput: {
+        /** @enum {string} */
+        AlertAggregation: "latest" | "avg" | "max" | "min" | "sum" | "count";
+        /** @enum {string} */
+        AlertOperator: ">" | ">=" | "<" | "<=" | "=" | "!=";
+        /** @enum {string} */
+        AlertSeverity: "critical" | "warning" | "info";
+        /** @enum {string} */
+        NoDataPolicy: "ignore" | "mark_no_data";
+        /** @enum {string} */
+        AlertRuleScope: "ALL" | "INSTANCES";
+        /** @enum {string} */
+        PlatformHealthStatus: "OK" | "DEGRADED" | "FAILED" | "UNKNOWN";
+        /** @enum {string} */
+        PlatformHealthSource: "SERVER_PROCESS" | "PLATFORM_DATABASE" | "COLLECTION_SCHEDULER" | "PARTITION_MAINTENANCE" | "TLS_CERTIFICATE" | "AGENT_INGRESS" | "DISK" | "CREDENTIAL_KEYRING" | "TLS" | "PLATFORM_DATABASE_CAPACITY";
+        /** @enum {string} */
+        AlertDisposition: "NONE" | "ACKED" | "IGNORED";
+        /** @enum {string} */
+        IgnoreReasonCode: "KNOWN_ISSUE" | "FALSE_POSITIVE" | "DUPLICATE" | "IMPACT_ACCEPTABLE" | "OTHER";
+        AlertRuleInput: {
+            name: string;
+            metric_id: string;
+            aggregation: components["schemas"]["AlertAggregation"];
+            operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            threshold: number;
+            recovery_operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            recovery_threshold: number;
+            window_seconds: number;
+            consecutive_count: number;
+            recovery_consecutive_count?: number;
+            severity: components["schemas"]["AlertSeverity"];
+            no_data_policy: components["schemas"]["NoDataPolicy"];
+            scope: components["schemas"]["AlertRuleScope"];
+            instance_ids: string[];
+            evaluation_interval_seconds: number;
+            enabled: boolean;
+            /** Format: uuid */
+            notification_policy_id?: string;
+        };
+        AlertRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            metric_id: string;
+            aggregation: components["schemas"]["AlertAggregation"];
+            operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            threshold: number;
+            recovery_operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            recovery_threshold: number;
+            window_seconds: number;
+            consecutive_count: number;
+            recovery_consecutive_count: number;
+            severity: components["schemas"]["AlertSeverity"];
+            no_data_policy: components["schemas"]["NoDataPolicy"];
+            scope: components["schemas"]["AlertRuleScope"];
+            instance_ids: string[];
+            evaluation_interval_seconds: number;
+            enabled: boolean;
+            is_builtin: boolean;
+            builtin_identifier?: string;
+            /** Format: uuid */
+            notification_policy_id?: string;
+            effective_notification_policy_name: string;
+            /** Format: date-time */
+            last_triggered_at?: string;
+            current_alert_count: number;
+            source_template_id?: string;
+            source_template_version?: number;
+            /** Format: uuid */
+            created_by?: string;
+            /** Format: uuid */
+            updated_by?: string;
+            /** Format: uuid */
+            enabled_updated_by?: string;
+            /** Format: date-time */
+            enabled_updated_at?: string;
+            version: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AlertRuleEnabledInput: {
+            enabled: boolean;
+        };
+        AlertRuleTemplate: {
+            id: string;
+            version: number;
+            name: string;
+            metric_id: string;
+            aggregation: components["schemas"]["AlertAggregation"];
+            operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            threshold: number;
+            recovery_operator: components["schemas"]["AlertOperator"];
+            /** Format: double */
+            recovery_threshold: number;
+            window_seconds: number;
+            consecutive_count: number;
+            recovery_consecutive_count: number;
+            severity: components["schemas"]["AlertSeverity"];
+            no_data_policy: components["schemas"]["NoDataPolicy"];
+            evaluation_interval_seconds: number;
+        };
+        AlertRuleTemplateInstantiationInput: {
+            name?: string;
+            /** Format: double */
+            threshold?: number;
+            /** Format: double */
+            recovery_threshold?: number;
+            consecutive_count?: number;
+            recovery_consecutive_count?: number;
+            severity?: components["schemas"]["AlertSeverity"];
+            scope?: components["schemas"]["AlertRuleScope"];
+            instance_ids?: string[];
+            /** Format: uuid */
+            notification_policy_id?: string;
+            enabled?: boolean;
+        };
+        AlertRuleCopyInput: {
+            name?: string;
+        };
+        AlertDispositionInput: {
+            disposition: components["schemas"]["AlertDisposition"];
+            note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+        };
+        AlertDispositionDetail: {
+            /** Format: uuid */
+            alert_instance_id: string;
+            disposition: components["schemas"]["AlertDisposition"];
+            /** Format: uuid */
+            disposition_by?: string;
+            /** Format: date-time */
+            disposition_at?: string;
+            note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+            stops_repeat_notifications: boolean;
+            excluded_from_health_rollup: boolean;
+            history: components["schemas"]["AlertDispositionEvent"][];
+        };
+        AlertDispositionEvent: {
+            /** @enum {string} */
+            kind: "ACKED" | "IGNORED";
+            from_disposition: components["schemas"]["AlertDisposition"];
+            to_disposition: components["schemas"]["AlertDisposition"];
+            /** Format: uuid */
+            actor_id: string;
+            note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+            rule_version: number;
+            /** Format: double */
+            current_value?: number;
+            rule_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            evaluated_at: string;
+            /** Format: date-time */
+            acted_at: string;
+        };
+        /** @enum {string} */
+        AlertTriggerSnapshotResult: "SUCCESS" | "FAILED" | "NOT_APPLICABLE";
+        AlertTriggerSnapshotSession: {
+            /** Format: int32 */
+            pid: number;
+            username?: string;
+            database_name?: string;
+            client_address?: string;
+            state?: string;
+            /** Format: date-time */
+            query_started_at?: string;
+            /** Format: date-time */
+            transaction_started_at?: string;
+            /** Format: int64 */
+            query_duration_ms?: number;
+            /** Format: int64 */
+            transaction_duration_ms?: number;
+            wait_event_type?: string;
+            wait_event?: string;
+            blocking_pids: number[];
+        };
+        AlertTriggerSnapshot: {
+            result: components["schemas"]["AlertTriggerSnapshotResult"];
+            metric_id: string;
+            /** Format: date-time */
+            captured_at?: string;
+            original_match_count: number;
+            truncated: boolean;
+            failure_reason?: string;
+            sessions: components["schemas"]["AlertTriggerSnapshotSession"][];
+        };
+        AlertObservation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            instance_id: string;
+            instance_name: string;
+            /** Format: uuid */
+            rule_id: string;
+            rule_name: string;
+            rule_version: number;
+            rule_snapshot: {
+                [key: string]: unknown;
+            };
+            metric_id: string;
+            status: components["schemas"]["AlertStatus"];
+            severity: components["schemas"]["AlertSeverity"];
+            disposition: components["schemas"]["AlertDisposition"];
+            paused: boolean;
+            /** Format: date-time */
+            paused_at?: string;
+            in_maintenance: boolean;
+            /** Format: uuid */
+            maintenance_window_id?: string;
+            /** Format: double */
+            current_value?: number;
+            /** Format: double */
+            threshold?: number;
+            /** Format: date-time */
+            first_triggered_at?: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            recovered_at?: string;
+            /** Format: int64 */
+            duration_ms: number;
+            unavailability?: components["schemas"]["Unavailability"];
+        };
+        AlertObservationPage: {
+            total: number;
+            items: components["schemas"]["AlertObservation"][];
+        };
+        AlertDetail: components["schemas"]["AlertObservation"] & {
+            rule_version_history: components["schemas"]["AlertRuleVersionRecord"][];
+            /** @description Empty until notification delivery records are produced. */
+            notification_results: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** @enum {string} */
+        SMTPAuthType: "NONE" | "PLAIN" | "LOGIN";
+        /** @enum {string} */
+        SMTPTransportSecurity: "STARTTLS" | "IMPLICIT";
+        SMTPChannelInput: {
+            enabled: boolean;
+            host: string;
+            port: number;
+            /** Format: email */
+            from_address: string;
+            /** Format: email */
+            recipient: string;
+            auth_type: components["schemas"]["SMTPAuthType"];
+            username?: string;
+            /** @description Omit to retain the existing encrypted value. */
+            password?: string;
+            tls_mode: components["schemas"]["SMTPTransportSecurity"];
+        };
+        SMTPChannel: {
+            configured: boolean;
+            enabled?: boolean;
+            host?: string;
+            port?: number;
+            /** Format: email */
+            from_address?: string;
+            /** Format: email */
+            recipient?: string;
+            auth_type?: components["schemas"]["SMTPAuthType"];
+            username?: string;
+            auth_configured: boolean;
+            tls_mode?: components["schemas"]["SMTPTransportSecurity"];
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        SMTPTestInput: {
+            /** Format: email */
+            target: string;
+        };
+        NotificationQueued: {
+            /** Format: uuid */
+            id: string;
+        };
+        NotificationAttempt: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            event_type: "FIRING" | "RECOVERY" | "REPEAT" | "TEST";
+            /** @enum {string} */
+            channel: "SMTP" | "WEBHOOK";
+            target: string;
+            template_id?: string;
+            /** @enum {string} */
+            status: "PENDING" | "SENT" | "FAILED";
+            attempt_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            attempted_at?: string;
+            /** @enum {string} */
+            result?: "SENT" | "FAILED";
+            failure_reason?: string;
+            retry_count?: number;
+        };
+        WebhookTargetInput: {
+            name: string;
+            enabled: boolean;
+            /** Format: uri */
+            url: string;
+            /** @description Required when creating; omit on update to retain the encrypted value. */
+            signing_value?: string;
+            /** @description Required when creating; omit on update to retain the encrypted value. */
+            signature_header?: string;
+        };
+        WebhookTarget: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            enabled: boolean;
+            /** Format: uri */
+            url: string;
+            signing_configured: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ChannelFailureRecord: {
+            /** Format: date-time */
+            failed_at: string;
+            target: string;
+            reason: string;
+            retry_count: number;
+        };
+        ChannelFailureSummary: {
+            /** @enum {string} */
+            channel: "SMTP" | "WEBHOOK";
+            /** Format: uuid */
+            target_id?: string;
+            target: string;
+            recent_failure_count: number;
+            last_failure_reason: string;
+            /** Format: date-time */
+            last_failed_at: string;
+            recent_failures: components["schemas"]["ChannelFailureRecord"][];
+        };
+        ChannelFailureOverview: {
+            has_failures: boolean;
+            channels: components["schemas"]["ChannelFailureSummary"][];
+        };
+        /** @enum {string} */
+        MaintenanceWindowStatus: "ACTIVE" | "SCHEDULED" | "ENDED";
+        MaintenanceWindowInput: {
+            instance_ids: string[];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at: string;
+            reason: string;
+        };
+        MaintenanceWindow: components["schemas"]["MaintenanceWindowInput"] & {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            created_by: string;
+            status: components["schemas"]["MaintenanceWindowStatus"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @enum {string} */
+        PerformanceEventType: "LOCK_BLOCKING" | "LONG_TRANSACTION" | "IDLE_IN_TRANSACTION" | "ACTIVE_SESSIONS_HIGH" | "REPLICATION_LAG" | "TEMP_FILES_SURGE";
+        PerformanceEvent: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            instance_id: string;
+            /** Format: uuid */
+            alert_instance_id: string;
+            event_type: components["schemas"]["PerformanceEventType"];
+            alert_status: components["schemas"]["AlertStatus"];
+            severity: components["schemas"]["AlertSeverity"];
+            disposition: components["schemas"]["AlertDisposition"];
+            in_maintenance: boolean;
+            /** Format: uuid */
+            maintenance_window_id?: string;
+            /** Format: date-time */
+            derived_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            recovered_at?: string;
+            /** Format: int64 */
+            duration_ms: number;
+            metric_id: string;
+            /** Format: double */
+            threshold: number;
+            /** Format: double */
+            trigger_value: number;
+            cause_summary: string;
+            suggested_action: string;
+            trigger_snapshot_result: components["schemas"]["AlertTriggerSnapshotResult"];
+        };
+        PerformanceEventPage: {
+            total: number;
+            items: components["schemas"]["PerformanceEvent"][];
+        };
+        InstanceCreateInput: {
             name: string;
             host: string;
             port: number;
             database: string;
             username: string;
             password: string;
+        };
+        InstanceMetadataInput: {
+            name: string;
+            host: string;
+            port: number;
+            database: string;
+        };
+        InstanceCredentialInput: {
+            username: string;
+            password: string;
+        };
+        InstanceCredentialUpdated: {
+            username: string;
         };
         Instance: {
             /** Format: uuid */
@@ -112,12 +1569,140 @@ export interface components {
             port: number;
             database: string;
             username: string;
+            /** @description Version reported by the Agent, when one has reported. */
+            agent_version?: string;
+            /** @description Current collection setting for Agent-provided metrics. */
+            agent_metrics_enabled: boolean;
             alert_status: components["schemas"]["AlertStatus"];
+            health: components["schemas"]["InstanceHealth"];
+            agent_status: components["schemas"]["InstanceAgentStatus"];
+            /** Format: date-time */
+            last_collected_at?: string;
+            data_freshness_seconds?: number;
+            collection_pause: components["schemas"]["CollectionPauseStatus"];
+        };
+        InstanceHealth: {
+            status: components["schemas"]["HealthStatus"];
+            attribution?: components["schemas"]["HealthAttribution"];
+            counts: components["schemas"]["HealthAlertCounts"];
+            flags: components["schemas"]["HealthFlags"];
+        };
+        HealthAttribution: {
+            rule_name: string;
+            /** Format: double */
+            current_value?: number;
+        };
+        HealthAlertCounts: {
+            critical: number;
+            warning: number;
+            info: number;
+        };
+        HealthFlags: {
+            no_data: boolean;
+            in_maintenance: boolean;
+            recently_recovered: boolean;
+            ignored: number;
+            configuration_missing: number;
         };
         InstanceCreated: {
             instance: components["schemas"]["Instance"];
-            /** @description Returned once when the instance is created. */
-            agent_token: string;
+        };
+        CollectionTaskState: {
+            /** @enum {string} */
+            task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            /** @enum {string} */
+            kind: "probe" | "sql" | "agent-derived";
+            interval_seconds: number;
+            /** Format: date-time */
+            last_due_at?: string;
+            /** Format: date-time */
+            last_started_at?: string;
+            /** Format: date-time */
+            last_finished_at?: string;
+            /** Format: date-time */
+            last_success_at?: string;
+            last_result?: components["schemas"]["CollectionTaskResult"];
+            consecutive_failures: number;
+            /** Format: date-time */
+            next_eligible_at?: string;
+            last_error_code?: string;
+            last_error_message?: string;
+            /** @description Metrics produced by this task, derived from the collection task dictionary. */
+            metric_ids: string[];
+            /** @description Capabilities required by this task, derived from the collection task dictionary. */
+            required_capabilities: string[];
+        };
+        CollectionTaskIntervalInput: {
+            interval_seconds: number;
+        };
+        CapabilitySnapshotEntry: {
+            /** @enum {string} */
+            capability_id: "role.pg_monitor" | "ext.pg_stat_statements" | "topo.has_replication" | "topo.has_slot";
+            /** @enum {string} */
+            class: "fixable" | "structural";
+            status: components["schemas"]["CapabilityStatus"];
+            /** Format: date-time */
+            observed_at?: string;
+            fix_hint?: string;
+            na_reason?: string;
+            affected_metric_count: number;
+        };
+        LongQuerySample: {
+            /** Format: date-time */
+            sampled_at: string;
+            /** Format: int32 */
+            pid: number;
+            username?: string;
+            database_name?: string;
+            client_address?: string;
+            state?: string;
+            /** Format: date-time */
+            query_started_at: string;
+            /** Format: date-time */
+            transaction_started_at?: string;
+            /** Format: int64 */
+            query_duration_ms: number;
+            /** Format: int64 */
+            transaction_duration_ms?: number;
+            wait_event_type?: string;
+            wait_event?: string;
+            blocking_pids: number[];
+            snapshot_original_count: number;
+            snapshot_truncated: boolean;
+        };
+        LongQuerySamplePage: {
+            total: number;
+            items: components["schemas"]["LongQuerySample"][];
+        };
+        QueryStatisticsEntry: {
+            /** @description Native PostgreSQL query identifier represented as a string to preserve int64 precision. */
+            queryid: string;
+            /** Format: int64 */
+            database_oid: number;
+            /** Format: int64 */
+            user_oid: number;
+            /** Format: int64 */
+            calls: number;
+            /** Format: double */
+            total_exec_time_ms: number;
+        };
+        QueryStatisticsSnapshot: {
+            /** Format: date-time */
+            sampled_at?: string;
+            unavailability?: components["schemas"]["Unavailability"];
+            items: components["schemas"]["QueryStatisticsEntry"][];
+        };
+        CollectionPauseInput: {
+            paused: boolean;
+            reason?: string;
+        };
+        CollectionPauseStatus: {
+            paused: boolean;
+            /** Format: uuid */
+            updated_by?: string;
+            /** Format: date-time */
+            updated_at?: string;
+            reason?: string;
         };
         MetricSeriesResponse: {
             /** Format: date-time */
@@ -140,24 +1725,307 @@ export interface components {
         AgentReport: {
             /** Format: uuid */
             instance_id: string;
+            agent_version: string;
             /** Format: date-time */
             timestamp: string;
-            metrics: {
-                /** @enum {string} */
-                metric: "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec";
-                value: number;
-            }[];
+            metrics: components["schemas"]["AgentMetric"][];
+            /** @description Unacknowledged samples from the Agent's five-minute in-memory window. */
+            backfill?: components["schemas"]["AgentSample"][];
+        };
+        AgentReportAccepted: {
+            /** @description Version of the server that accepted the report. */
+            server_version: string;
+            /**
+             * Format: date-time
+             * @description Server time used by the Agent startup clock check.
+             */
+            server_time: string;
+        };
+        AgentRegistration: {
+            state: components["schemas"]["AgentRegistrationState"];
+            agent_expected: boolean;
+            /** Format: date-time */
+            issued_at?: string;
+            /** Format: date-time */
+            revoked_at?: string;
+            /** Format: date-time */
+            first_registered_at?: string;
+            agent_version?: string;
+            /**
+             * Format: date-time
+             * @description Latest accepted Agent heartbeat from the collection control plane.
+             */
+            last_reported_at?: string;
+            installation: components["schemas"]["AgentInstallation"];
+        };
+        AgentTokenIssued: {
+            /** @description One-time 32-byte base64url Agent token. It cannot be read again. */
+            agent_token: string;
+            registration: components["schemas"]["AgentRegistration"];
+        };
+        /** @enum {string} */
+        Role: "READONLY" | "ALERT_ADMIN" | "PLATFORM_ADMIN";
+        User: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            role: components["schemas"]["Role"];
+            enabled: boolean;
+            /** Format: date-time */
+            created_at: string;
+        };
+        UserCreateInput: {
+            username: string;
+            role: components["schemas"]["Role"];
+        };
+        UserCreated: {
+            user: components["schemas"]["User"];
+            /** @description Generated password returned only in this response. */
+            initial_password: string;
+        };
+        UserStatusInput: {
+            enabled: boolean;
+        };
+        UserRoleInput: {
+            role: components["schemas"]["Role"];
+        };
+        PasswordIssued: {
+            /** @description Generated password returned only in this response. */
+            password: string;
+        };
+        PasswordChangeInput: {
+            old_password: string;
+            new_password: string;
+        };
+        PlatformHealthSourceSnapshot: {
+            source: components["schemas"]["PlatformHealthSource"];
+            status: components["schemas"]["PlatformHealthStatus"];
+            code: string;
+            version?: string;
+            /** Format: date-time */
+            started_at?: string;
+            /** Format: date-time */
+            expires_at?: string;
+            validity_days_remaining?: number;
+            probe_capacity?: number;
+            probe_active?: number;
+            query_capacity?: number;
+            query_active?: number;
+            pending?: number;
+            /** Format: int64 */
+            skipped_backpressure?: number;
+            /** Format: int64 */
+            backoff?: number;
+            consecutive_failures?: number;
+            prebuild_days_remaining?: number;
+            disk_level?: string;
+            /** Format: double */
+            disk_usage_percent?: number;
+            /** Format: double */
+            disk_warning_percent?: number;
+            /** Format: double */
+            disk_critical_percent?: number;
+            /** Format: double */
+            disk_emergency_percent?: number;
+            /** Format: double */
+            disk_hysteresis_points?: number;
+            capacity_level?: string;
+            /** Format: int64 */
+            capacity_used_bytes?: number;
+            /** Format: int64 */
+            capacity_budget_bytes?: number;
+            /** Format: double */
+            capacity_usage_percent?: number;
+            /** Format: double */
+            capacity_warning_percent?: number;
+            /** Format: double */
+            capacity_critical_percent?: number;
+            /** Format: double */
+            capacity_emergency_percent?: number;
+            /** Format: double */
+            capacity_hysteresis_points?: number;
+        };
+        PlatformHealthSnapshot: {
+            status: components["schemas"]["PlatformHealthStatus"];
+            sources: components["schemas"]["PlatformHealthSourceSnapshot"][];
+            /** Format: date-time */
+            assembled_at: string;
         };
         Error: {
             error: {
                 /** @enum {string} */
-                code: "VALIDATION_FAILED" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INTERNAL";
+                code: "VALIDATION_FAILED" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INTERNAL" | "NETWORK_UNREACHABLE" | "AUTH_FAILED" | "VERSION_UNSUPPORTED" | "BUILTIN_RULE_DELETE_FORBIDDEN" | "BUILTIN_RULE_DISABLE_FORBIDDEN" | "BUILTIN_RULE_SEVERITY_TOO_LOW";
                 message: string;
                 field_errors?: {
                     field: string;
                     message: string;
                 }[];
             };
+        };
+        /** @enum {string} */
+        CollectionTaskResult: "SUCCESS" | "FAILED" | "TIMED_OUT" | "SKIPPED_BACKPRESSURE" | "BACKOFF";
+        SessionSnapshotEntry: {
+            /** Format: int32 */
+            pid: number;
+            username?: string;
+            database_name?: string;
+            client_address?: string;
+            state?: string;
+            /** Format: date-time */
+            query_started_at?: string;
+            /** Format: date-time */
+            transaction_started_at?: string;
+            /** Format: int64 */
+            query_duration_ms?: number;
+            /** Format: int64 */
+            transaction_duration_ms?: number;
+            wait_event_type?: string;
+            wait_event?: string;
+            blocking_pids: number[];
+        };
+        SessionSnapshot: {
+            /** Format: date-time */
+            sampled_at?: string;
+            original_count?: number;
+            truncated: boolean;
+            unavailability?: components["schemas"]["Unavailability"];
+            items: components["schemas"]["SessionSnapshotEntry"][];
+        };
+        AlertRuleVersionRecord: {
+            version: number;
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            evaluated_at: string;
+        };
+        /** @enum {string} */
+        AlertEventKind: "PENDING_STARTED" | "FIRED" | "UPDATED" | "RECOVERED" | "NO_DATA_ENTERED" | "NO_DATA_EXITED" | "FROZEN" | "UNFROZEN" | "ACKED" | "IGNORED" | "INSTANCE_REMOVED" | "NOTIFICATION_SENT" | "NOTIFICATION_FAILED" | "MAINTENANCE_SUPPRESSED";
+        AlertEvent: {
+            /** Format: int64 */
+            id: number;
+            kind: components["schemas"]["AlertEventKind"];
+            from_state: components["schemas"]["AlertStatus"];
+            to_state: components["schemas"]["AlertStatus"];
+            rule_version: number;
+            /** Format: double */
+            current_value?: number;
+            unavailability?: components["schemas"]["Unavailability"];
+            rule_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            evaluated_at: string;
+            /** Format: uuid */
+            actor_id?: string;
+            /** Format: date-time */
+            acted_at?: string;
+            from_disposition?: components["schemas"]["AlertDisposition"];
+            to_disposition?: components["schemas"]["AlertDisposition"];
+            disposition_note?: string;
+            ignore_reason_code?: components["schemas"]["IgnoreReasonCode"];
+            ignore_reason_detail?: string;
+            /** Format: uuid */
+            trigger_snapshot_id?: string;
+            in_maintenance: boolean;
+            /** Format: uuid */
+            maintenance_window_id?: string;
+        };
+        NotificationContactInput: {
+            name: string;
+            /** Format: email */
+            email: string;
+            external_id?: string;
+        };
+        NotificationContact: components["schemas"]["NotificationContactInput"] & {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        NotificationContactGroupInput: {
+            name: string;
+            contact_ids: string[];
+        };
+        NotificationContactGroup: components["schemas"]["NotificationContactGroupInput"] & {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        NotificationPolicySettings: {
+            /** @description Lowest repeat interval accepted by this deployment, in seconds. */
+            repeat_interval_minimum: number;
+        };
+        NotificationPolicyChannel: {
+            /** @enum {string} */
+            channel: "SMTP" | "WEBHOOK";
+            /** Format: uuid */
+            target_id?: string;
+        };
+        NotificationPolicyInput: {
+            name: string;
+            contact_ids: string[];
+            contact_group_ids: string[];
+            channels: components["schemas"]["NotificationPolicyChannel"][];
+            severity_filter: components["schemas"]["AlertSeverity"][];
+            /** @default true */
+            notify_on_fire: boolean;
+            /** @default true */
+            notify_on_recovery: boolean;
+            /**
+             * @description Repeat interval in seconds; the deployment minimum is exposed by notification policy settings.
+             * @default 3600
+             */
+            repeat_interval: number;
+            template_id?: string;
+        };
+        NotificationPolicy: components["schemas"]["NotificationPolicyInput"] & {
+            /** Format: uuid */
+            id: string;
+            is_default: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AgentMetric: {
+            /** @enum {string} */
+            metric: "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec";
+            /** Format: double */
+            value: number;
+        };
+        AgentSample: {
+            /** Format: date-time */
+            timestamp: string;
+            metrics: components["schemas"]["AgentMetric"][];
+        };
+        /** @enum {string} */
+        AgentRegistrationState: "NEVER_REGISTERED" | "EXPECTED_ONLINE" | "REVOKED" | "DISABLED";
+        AgentInstallation: {
+            /** @description Lowercase SHA-256 fingerprint of the platform CA certificate in DER form. */
+            ca_fingerprint_sha256: string;
+            installer_path: string;
+            authentication_path: string;
+            /** @enum {string} */
+            file_mode: "0600";
+            restart_command: string;
+        };
+        /** @enum {string} */
+        PlatformEventKind: "LOGIN_SUCCEEDED" | "LOGIN_FAILED" | "USER_CREATED" | "USER_STATUS_CHANGED" | "USER_STATUS_CHANGE_REJECTED" | "USER_ROLE_CHANGED" | "USER_PASSWORD_RESET" | "INSTANCE_CREDENTIAL_UPDATED" | "INSTANCE_REMOVED" | "MASTER_KEY_ROTATED" | "DIAGNOSTIC_BUNDLE_RECLAIMED" | "NOTIFICATION_SNAPSHOT_RECLAIMED";
+        PlatformEvent: {
+            /** Format: int64 */
+            id: number;
+            kind: components["schemas"]["PlatformEventKind"];
+            /** Format: date-time */
+            occurred_at: string;
+            actor: string;
+            /** Format: uuid */
+            subject_id?: string;
         };
     };
     responses: never;
@@ -203,6 +2071,36 @@ export interface operations {
             };
         };
     };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Logged out */
+            204: {
+                headers: {
+                    "Set-Cookie": string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listInstances: {
         parameters: {
             query?: never;
@@ -232,7 +2130,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InstanceInput"];
+                "application/json": components["schemas"]["InstanceCreateInput"];
             };
         };
         responses: {
@@ -243,6 +2141,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InstanceCreated"];
+                };
+            };
+            /** @description Connection test or version gate failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -280,7 +2187,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InstanceInput"];
+                "application/json": components["schemas"]["InstanceMetadataInput"];
             };
         };
         responses: {
@@ -291,6 +2198,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Instance"];
+                };
+            };
+            /** @description Connection test failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -312,6 +2228,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    updateInstanceCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstanceCredentialInput"];
+            };
+        };
+        responses: {
+            /** @description Credential updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceCredentialUpdated"];
+                };
+            };
+            /** @description Connection test failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
         };
     };
@@ -351,6 +2302,1714 @@ export interface operations {
             };
         };
     };
+    listCollectionTaskStates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collection task states and configured intervals */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionTaskState"][];
+                };
+            };
+        };
+    };
+    listCapabilitySnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current projected capability snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CapabilitySnapshotEntry"][];
+                };
+            };
+        };
+    };
+    getCollectionPause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current collection pause status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionPauseStatus"];
+                };
+            };
+        };
+    };
+    updateCollectionPause: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionPauseInput"];
+            };
+        };
+        responses: {
+            /** @description Updated collection pause status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionPauseStatus"];
+                };
+            };
+        };
+    };
+    updateCollectionTaskInterval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CollectionTaskIntervalInput"];
+            };
+        };
+        responses: {
+            /** @description Updated collection task state and configured interval */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionTaskState"];
+                };
+            };
+            /** @description Invalid task or interval */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listLongQuerySamples: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                limit?: number;
+                offset?: number;
+                sort?: "sampled_at" | "-sampled_at" | "query_started_at" | "-query_started_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Long-query samples captured from pg_stat_activity */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LongQuerySamplePage"];
+                };
+            };
+            /** @description Invalid time range or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getQueryStatisticsSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest query statistics snapshot or an explicit unavailability reason */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryStatisticsSnapshot"];
+                };
+            };
+        };
+    };
+    getSessionSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Latest successful pg_stat_activity session snapshot with a server-enforced hard cap */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionSnapshot"];
+                };
+            };
+        };
+    };
+    listAlertRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alert rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"][];
+                };
+            };
+        };
+    };
+    createAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid alert rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alert rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleInput"];
+            };
+        };
+        responses: {
+            /** @description Updated alert rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid alert rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Built-in alert rules cannot be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAlertRuleEnabled: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleEnabledInput"];
+            };
+        };
+        responses: {
+            /** @description Updated alert rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid enablement request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    copyAlertRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleCopyInput"];
+            };
+        };
+        responses: {
+            /** @description Copied alert rule */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid copied rule */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertRuleTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only built-in alert rule templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRuleTemplate"][];
+                };
+            };
+        };
+    };
+    createAlertRuleFromTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlertRuleTemplateInstantiationInput"];
+            };
+        };
+        responses: {
+            /** @description Created from template defaults */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRule"];
+                };
+            };
+            /** @description Invalid template overrides */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert rule template not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertDisposition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current disposition and complete disposition history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDispositionDetail"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateAlertDisposition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertDispositionInput"];
+            };
+        };
+        responses: {
+            /** @description Updated disposition and complete disposition history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDispositionDetail"];
+                };
+            };
+            /** @description Invalid disposition */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Recovered alert instances cannot be disposed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCurrentAlerts: {
+        parameters: {
+            query?: {
+                instance_id?: string;
+                include_paused?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current alert instances, excluding paused frozen alerts by default */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertObservationPage"];
+                };
+            };
+            /** @description Invalid pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertHistory: {
+        parameters: {
+            query?: {
+                instance_id?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recovered alert instance history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertObservationPage"];
+                };
+            };
+            /** @description Invalid pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertDetail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alert observation detail and rule version history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDetail"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Complete alert event history with maintenance attribution */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertEvent"][];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAlertTriggerSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trigger-time session snapshot result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertTriggerSnapshot"];
+                };
+            };
+            /** @description Alert instance not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAlertNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification delivery and attempt records for one alert instance. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationAttempt"][];
+                };
+            };
+        };
+    };
+    getSMTPChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Singleton SMTP channel; an unconfigured channel is a value. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SMTPChannel"];
+                };
+            };
+        };
+    };
+    updateSMTPChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SMTPChannelInput"];
+            };
+        };
+        responses: {
+            /** @description Updated SMTP channel without authentication material. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SMTPChannel"];
+                };
+            };
+            /** @description Invalid SMTP configuration. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    testSMTPChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SMTPTestInput"];
+            };
+        };
+        responses: {
+            /** @description Test delivery was durably queued through the normal delivery path. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationQueued"];
+                };
+            };
+            /** @description SMTP is not configured or the target is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listWebhookTargets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook targets without signing material. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTarget"][];
+                };
+            };
+        };
+    };
+    createWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookTargetInput"];
+            };
+        };
+        responses: {
+            /** @description Created Webhook target without signing material. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTarget"];
+                };
+            };
+            /** @description Invalid Webhook target. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookTargetInput"];
+            };
+        };
+        responses: {
+            /** @description Updated Webhook target without signing material. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTarget"];
+                };
+            };
+            /** @description Invalid Webhook target. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Webhook target not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Webhook target deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook target not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    testWebhookTarget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test request was durably queued through the normal delivery path. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationQueued"];
+                };
+            };
+            /** @description Webhook target is disabled. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Webhook target not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getChannelFailures: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uncleared terminal channel failures and up to 20 recent records per target. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChannelFailureOverview"];
+                };
+            };
+        };
+    };
+    listNotificationContacts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification contacts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationContact"][];
+                };
+            };
+        };
+    };
+    createNotificationContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationContactInput"];
+            };
+        };
+        responses: {
+            /** @description Contact created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationContact"];
+                };
+            };
+            /** @description Invalid contact. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateNotificationContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationContactInput"];
+            };
+        };
+        responses: {
+            /** @description Contact updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationContact"];
+                };
+            };
+            /** @description Invalid contact. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Contact not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteNotificationContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contact deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Contact not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listNotificationContactGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One-level contact groups. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationContactGroup"][];
+                };
+            };
+        };
+    };
+    createNotificationContactGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationContactGroupInput"];
+            };
+        };
+        responses: {
+            /** @description Contact group created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationContactGroup"];
+                };
+            };
+            /** @description Invalid contact group. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateNotificationContactGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationContactGroupInput"];
+            };
+        };
+        responses: {
+            /** @description Contact group updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationContactGroup"];
+                };
+            };
+            /** @description Invalid contact group. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Contact group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteNotificationContactGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Contact group deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Contact group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getNotificationPolicySettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deployment-time notification policy validation settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPolicySettings"];
+                };
+            };
+        };
+    };
+    listNotificationPolicies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification policies, including the single default. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPolicy"][];
+                };
+            };
+        };
+    };
+    createNotificationPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description Notification policy created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPolicy"];
+                };
+            };
+            /** @description Invalid notification policy. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateNotificationPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description Notification policy updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPolicy"];
+                };
+            };
+            /** @description Invalid notification policy. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Notification policy not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteNotificationPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notification policy deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Notification policy not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The default policy cannot be deleted. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMaintenanceWindows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Non-deleted maintenance windows with status projected at server time. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"][];
+                };
+            };
+        };
+    };
+    createMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWindowInput"];
+            };
+        };
+        responses: {
+            /** @description Maintenance window created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Invalid maintenance window. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWindowInput"];
+            };
+        };
+        responses: {
+            /** @description Maintenance window updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Invalid or already ended maintenance window. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Maintenance window not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Maintenance window deleted while preserving historical references. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Maintenance window not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    endMaintenanceWindow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active maintenance window ended at server time. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Maintenance window is not active. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Maintenance window not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPerformanceEvents: {
+        parameters: {
+            query: {
+                from: string;
+                to: string;
+                recovered?: boolean;
+                disposition?: components["schemas"]["AlertDisposition"];
+                limit?: number;
+                offset?: number;
+                sort?: "derived_at" | "-derived_at" | "updated_at" | "-updated_at";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performance events derived from alert instances */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceEventPage"];
+                };
+            };
+            /** @description Invalid time range, pagination, or sort */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPerformanceEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Performance event detail projected from its alert instance */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceEvent"];
+                };
+            };
+            /** @description Performance event not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     reportAgentMetrics: {
         parameters: {
             query?: never;
@@ -365,13 +4024,15 @@ export interface operations {
         };
         responses: {
             /** @description Accepted */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["AgentReportAccepted"];
+                };
             };
-            /** @description Invalid timestamp */
+            /** @description Report rejected because of clock skew or Agent version */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -387,6 +4048,602 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    downloadAgentBinary: {
+        parameters: {
+            query: {
+                arch: "linux/amd64" | "linux/arm64";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent binary for the requested architecture */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Unsupported architecture */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid token */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Agent binary distribution is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAgentRegistration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persisted Agent registration lifecycle */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRegistration"];
+                };
+            };
+        };
+    };
+    registerAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent registered and token issued once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenIssued"];
+                };
+            };
+            /** @description Agent is already registered or cannot be re-enabled */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rotateAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent token rotated and returned once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTokenIssued"];
+                };
+            };
+            /** @description Agent has no active token to rotate */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent token revoked while the Agent remains expected online */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRegistration"];
+                };
+            };
+            /** @description Agent has no active token to revoke */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    disableAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent disabled and its token invalidated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRegistration"];
+                };
+            };
+            /** @description Agent is not currently expected online */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Users */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"][];
+                };
+            };
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCreateInput"];
+            };
+        };
+        responses: {
+            /** @description User created; the generated password is returned once. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCreated"];
+                };
+            };
+            /** @description Invalid username or role */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Username already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateUserStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserStatusInput"];
+            };
+        };
+        responses: {
+            /** @description Updated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Guard rejected the change */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateUserRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserRoleInput"];
+            };
+        };
+        responses: {
+            /** @description Updated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Guard rejected the change */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resetUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Password reset; the generated password is returned once. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordIssued"];
+                };
+            };
+            /** @description Self-reset is not allowed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    changeOwnPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeInput"];
+            };
+        };
+        responses: {
+            /** @description Password changed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid old password or new password */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPlatformEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Most recent attributable platform events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformEvent"][];
+                };
+            };
+        };
+    };
+    getPlatformHealth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current in-memory platform health snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformHealthSnapshot"];
+                };
+            };
+        };
+    };
+    getDiskDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current in-memory disk watermark facts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformHealthSourceSnapshot"];
+                };
+            };
+        };
+    };
+    getSchedulerDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Most recent in-memory 60-second scheduler summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformHealthSourceSnapshot"];
+                };
+            };
+        };
+    };
+    getPartitionDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current in-memory partition maintenance headroom */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformHealthSourceSnapshot"];
+                };
+            };
+        };
+    };
+    getCertificateDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current in-memory platform certificate validity facts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformHealthSourceSnapshot"];
+                };
+            };
+        };
+    };
+    getKeyringDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current in-memory credential keyring status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformHealthSourceSnapshot"];
+                };
+            };
+        };
+    };
+    getPlatformDiagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current in-memory platform version and process start time */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformHealthSourceSnapshot"];
                 };
             };
         };

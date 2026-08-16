@@ -19,13 +19,18 @@
       required: true
       content:
         application/json:
-          schema: { $ref: ../components/schemas/instances.yaml#/InstanceInput }
+          schema: { $ref: ../components/schemas/instances.yaml#/InstanceCreateInput }
     responses:
       '201':
         description: Created
         content:
           application/json:
             schema: { $ref: ../components/schemas/instances.yaml#/InstanceCreated }
+      '400':
+        description: Connection test or version gate failed
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
 /api/v1/instances/{id}:
   parameters:
     - name: id
@@ -45,21 +50,52 @@
   put:
     tags: [instances]
     operationId: updateInstance
-    x-required-role: PLATFORM_ADMIN
+    x-required-role: ALERT_ADMIN
     requestBody:
       required: true
       content:
         application/json:
-          schema: { $ref: ../components/schemas/instances.yaml#/InstanceInput }
+          schema: { $ref: ../components/schemas/instances.yaml#/InstanceMetadataInput }
     responses:
       '200':
         description: Updated
         content:
           application/json:
             schema: { $ref: ../components/schemas/instances.yaml#/Instance }
+      '400':
+        description: Connection test failed
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
   delete:
     tags: [instances]
     operationId: deleteInstance
     x-required-role: PLATFORM_ADMIN
     responses:
       '204': { description: Deleted }
+/api/v1/instances/{id}/credentials:
+  parameters:
+    - name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  put:
+    tags: [instances]
+    operationId: updateInstanceCredential
+    x-required-role: PLATFORM_ADMIN
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: ../components/schemas/instances.yaml#/InstanceCredentialInput }
+    responses:
+      '200':
+        description: Credential updated
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/instances.yaml#/InstanceCredentialUpdated }
+      '400':
+        description: Connection test failed
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }

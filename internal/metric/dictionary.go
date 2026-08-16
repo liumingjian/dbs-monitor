@@ -134,6 +134,15 @@ func UnitFor(id MetricID) string {
 	return "count"
 }
 
+func ProducerFor(id MetricID) MetricProducer {
+	for _, item := range Metrics {
+		if item.ID == id {
+			return item.Producer
+		}
+	}
+	return ""
+}
+
 type TaskID string
 
 const (
@@ -202,16 +211,76 @@ WHERE datname NOT IN ('template0', 'template1')`,
 	{
 		ID: TaskStatActivity, Kind: TaskKindSQL, Interval: 5 * time.Second,
 		Requires: []CapabilityID{CapabilityRolePGMonitor},
-		SQL: `SELECT
-       count(*)::double precision AS connection_total,
-       count(*) FILTER (WHERE state = 'active' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS connection_active,
-       count(*) FILTER (WHERE state = 'idle in transaction' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS connection_idle_in_transaction,
-       count(*) FILTER (WHERE xact_start IS NOT NULL AND now() - xact_start > interval '5 minutes' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS long_transaction_count,
-       COALESCE(EXTRACT(epoch FROM max(now() - xact_start) FILTER (WHERE xact_start IS NOT NULL AND application_name IS DISTINCT FROM 'dbs-monitor')), 0)::double precision AS max_transaction_duration_sec,
-       count(*) FILTER (WHERE wait_event_type = 'Lock' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS lock_waiting_count,
-       count(*) FILTER (WHERE cardinality(pg_blocking_pids(pid)) > 0 AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS blocked_session_count,
-       count(*) FILTER (WHERE state = 'active' AND query_start IS NOT NULL AND now() - query_start > interval '5 seconds' AND application_name IS DISTINCT FROM 'dbs-monitor')::double precision AS long_running_query_count
-FROM pg_stat_activity`,
+		SQL: `WITH activity AS MATERIALIZED (
+    SELECT pid,
+           usename::text AS username,
+           datname::text AS database_name,
+           client_addr::text AS client_address,
+           state::text AS state,
+           query_start,
+           xact_start AS transaction_started_at,
+           GREATEST((EXTRACT(epoch FROM statement_timestamp() - query_start) * 1000)::bigint, 0) AS query_duration_ms,
+           GREATEST((EXTRACT(epoch FROM statement_timestamp() - xact_start) * 1000)::bigint, 0) AS transaction_duration_ms,
+           wait_event_type::text AS wait_event_type,
+           wait_event::text AS wait_event,
+           pg_blocking_pids(pid) AS blocking_pids,
+           application_name IS NOT DISTINCT FROM 'dbs-monitor' AS is_monitor
+    FROM pg_stat_activity
+), aggregate AS (
+    SELECT count(*)::double precision AS connection_total,
+           count(*) FILTER (WHERE state = 'active' AND NOT is_monitor)::double precision AS connection_active,
+           count(*) FILTER (WHERE state = 'idle in transaction' AND NOT is_monitor)::double precision AS connection_idle_in_transaction,
+           count(*) FILTER (WHERE transaction_started_at IS NOT NULL AND statement_timestamp() - transaction_started_at > interval '5 minutes' AND NOT is_monitor)::double precision AS long_transaction_count,
+           COALESCE(max(transaction_duration_ms) FILTER (WHERE transaction_started_at IS NOT NULL AND NOT is_monitor), 0)::double precision / 1000 AS max_transaction_duration_sec,
+           count(*) FILTER (WHERE wait_event_type = 'Lock' AND NOT is_monitor)::double precision AS lock_waiting_count,
+           count(*) FILTER (WHERE cardinality(blocking_pids) > 0 AND NOT is_monitor)::double precision AS blocked_session_count,
+           count(*) FILTER (WHERE state = 'active' AND query_start IS NOT NULL AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor)::double precision AS long_running_query_count
+    FROM activity
+), sessions AS (
+    SELECT jsonb_build_object(
+               'pid', pid, 'username', username, 'database_name', database_name,
+               'client_address', client_address, 'state', state,
+               'query_started_at', query_start,
+               'transaction_started_at', transaction_started_at,
+               'query_duration_ms', query_duration_ms,
+               'transaction_duration_ms', transaction_duration_ms,
+               'wait_event_type', wait_event_type, 'wait_event', wait_event,
+               'blocking_pids', blocking_pids
+           ) AS value
+    FROM activity
+    WHERE NOT is_monitor
+    ORDER BY pid
+    LIMIT 500
+), long_queries AS (
+    SELECT jsonb_build_object(
+               'pid', pid, 'username', username, 'database_name', database_name,
+               'client_address', client_address, 'state', state,
+               'query_started_at', query_start,
+               'transaction_started_at', transaction_started_at,
+               'query_duration_ms', query_duration_ms,
+               'transaction_duration_ms', transaction_duration_ms,
+               'wait_event_type', wait_event_type, 'wait_event', wait_event,
+               'blocking_pids', blocking_pids
+           ) AS value
+    FROM activity
+    WHERE state = 'active'
+      AND query_start IS NOT NULL
+      AND statement_timestamp() - query_start > interval '5 seconds'
+      AND NOT is_monitor
+    ORDER BY query_start, pid
+    LIMIT 100
+)
+SELECT aggregate.*,
+       statement_timestamp() AS snapshot_at,
+       COALESCE((SELECT jsonb_agg(value) FROM sessions), '[]'::jsonb) AS sessions,
+       (SELECT count(*) FROM activity WHERE NOT is_monitor)::bigint AS session_count,
+       (SELECT count(*) > 500 FROM activity WHERE NOT is_monitor) AS sessions_truncated,
+       COALESCE((SELECT jsonb_agg(value) FROM long_queries), '[]'::jsonb) AS long_query_samples,
+       (SELECT count(*) FROM activity WHERE state = 'active' AND query_start IS NOT NULL
+            AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor)::bigint AS long_query_sample_count,
+       (SELECT count(*) > 100 FROM activity WHERE state = 'active' AND query_start IS NOT NULL
+            AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor) AS long_query_samples_truncated
+FROM aggregate`,
 		Yields: []MetricYield{
 			{Metric: MetricConnectionTotal, Columns: []string{"connection_total"}},
 			{Metric: MetricConnectionActive, Columns: []string{"connection_active"}},
@@ -237,7 +306,7 @@ SELECT
        COALESCE(sender_host::text, 'standby') AS replica,
        status::text AS connection_state,
        NULL::double precision AS replay_lag_ms,
-       NULL::double precision AS wal_lag_bytes
+       pg_wal_lsn_diff(COALESCE(latest_end_lsn, flushed_lsn), pg_last_wal_replay_lsn())::double precision AS wal_lag_bytes
 FROM pg_stat_wal_receiver`,
 		Yields: []MetricYield{
 			{Metric: MetricReplicationConnectionState, Columns: []string{"replica", "connection_state"}, Dimensions: []string{"replica"}},
@@ -248,14 +317,14 @@ FROM pg_stat_wal_receiver`,
 	{
 		ID: TaskReplicationSlot, Kind: TaskKindSQL, Interval: 5 * time.Second,
 		Requires: []CapabilityID{CapabilityRolePGMonitor, CapabilityTopologyHasSlot},
-		SQL: `SELECT slot_name::text AS slot, pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)::double precision AS retained_wal_bytes
+		SQL: `SELECT slot_name::text AS slot, pg_wal_lsn_diff(pg_current_wal_lsn(), COALESCE(confirmed_flush_lsn, restart_lsn))::double precision AS retained_wal_bytes
 FROM pg_replication_slots
-WHERE restart_lsn IS NOT NULL`,
+WHERE COALESCE(confirmed_flush_lsn, restart_lsn) IS NOT NULL`,
 		Yields: []MetricYield{{Metric: MetricReplicationSlotRetainedWAL, Columns: []string{"slot", "retained_wal_bytes"}, Dimensions: []string{"slot"}}},
 	},
 	{
-		ID: TaskPreparedXacts, Kind: TaskKindSQL, Interval: 60 * time.Second,
-		SQL: `SELECT database.datname AS database,
+		ID: TaskPreparedXacts, Kind: TaskKindSQL, Interval: 5 * time.Minute,
+		SQL: `SELECT database.datname::text AS database,
        count(prepared.gid)::double precision AS prepared_xacts_count
 FROM pg_database AS database
 LEFT JOIN pg_prepared_xacts AS prepared ON prepared.database = database.datname
@@ -264,17 +333,39 @@ GROUP BY database.datname`,
 		Yields: []MetricYield{{Metric: MetricPreparedXactsCount, Columns: []string{"database", "prepared_xacts_count"}, Dimensions: []string{"database"}}},
 	},
 	{
-		ID: TaskRole, Kind: TaskKindSQL, Interval: 60 * time.Second,
-		SQL:    `SELECT CASE WHEN pg_is_in_recovery() THEN 'replica' ELSE 'primary' END AS role`,
+		ID: TaskRole, Kind: TaskKindSQL, Interval: 5 * time.Minute,
+		SQL: `SELECT CASE
+    WHEN pg_is_in_recovery() THEN 'replica'
+    WHEN EXISTS (SELECT 1 FROM pg_stat_replication) THEN 'primary'
+    ELSE 'standalone'
+END::text AS role`,
 		Yields: []MetricYield{{Metric: MetricReplicationRole, Columns: []string{"role"}}},
 	},
 	{
 		ID: TaskQueryStatistics, Kind: TaskKindSQL, Interval: 5 * time.Minute,
 		Requires: []CapabilityID{CapabilityExtensionPGStatStatements},
-		SQL: `SELECT queryid, dbid, userid, calls, total_exec_time
-FROM pg_stat_statements`,
+		SQL: `SELECT queryid,
+       dbid AS database_oid,
+       userid AS user_oid,
+       sum(calls)::bigint AS calls,
+       sum(total_exec_time)::double precision AS total_exec_time_ms
+FROM pg_stat_statements
+GROUP BY queryid, dbid, userid
+ORDER BY total_exec_time_ms DESC, queryid, dbid, userid
+LIMIT 500`,
 		Yields: nil,
 	},
+}
+
+func TaskForMetric(metricID MetricID) (Task, bool) {
+	for _, task := range Tasks {
+		for _, yield := range task.Yields {
+			if yield.Metric == metricID {
+				return task, true
+			}
+		}
+	}
+	return Task{}, false
 }
 
 type CapabilityID string
@@ -304,7 +395,7 @@ type Capability struct {
 var Capabilities = []Capability{
 	{ID: CapabilityRolePGMonitor, Class: CapabilityClassFixable, Probe: "SELECT pg_has_role(current_user, 'pg_monitor', 'member')", FixHint: "将监控账号加入 pg_monitor 角色。"},
 	{ID: CapabilityExtensionPGStatStatements, Class: CapabilityClassFixable, Probe: "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_stat_statements')", FixHint: "预加载并安装 pg_stat_statements 扩展。"},
-	{ID: CapabilityTopologyHasReplication, Class: CapabilityClassStructural, Probe: "SELECT pg_is_in_recovery() OR EXISTS (SELECT 1 FROM pg_stat_replication)", NAReason: "本实例没有复制拓扑。"},
+	{ID: CapabilityTopologyHasReplication, Class: CapabilityClassStructural, Probe: "SELECT pg_is_in_recovery() OR EXISTS (SELECT 1 FROM pg_stat_replication)", NAReason: "本实例为主库且没有备库，复制指标不适用。"},
 	{ID: CapabilityTopologyHasSlot, Class: CapabilityClassStructural, Probe: "SELECT EXISTS (SELECT 1 FROM pg_replication_slots)", NAReason: "本实例没有 replication slot。"},
 }
 

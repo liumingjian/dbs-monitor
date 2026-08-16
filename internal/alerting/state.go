@@ -15,7 +15,9 @@ type Evaluation uint8
 const (
 	Breaching Evaluation = iota
 	Recovering
+	Stable
 	Missing
+	MissingIgnored
 )
 
 type Snapshot struct {
@@ -26,9 +28,31 @@ type Snapshot struct {
 	NoDataCount       int
 }
 
+// StepCollection leaves the current snapshot untouched while collection is paused.
+// A nil snapshot remains nil so pausing cannot create an alert instance.
+func StepCollection(current *Snapshot, evaluation Evaluation, paused bool, triggerCount, recoveryCount int) *Snapshot {
+	if paused {
+		return current
+	}
+	next := Snapshot{State: OK}
+	if current != nil {
+		next = *current
+	}
+	next = Step(next, evaluation, triggerCount, recoveryCount)
+	return &next
+}
+
 func Step(current Snapshot, evaluation Evaluation, triggerCount, recoveryCount int) Snapshot {
 	switch evaluation {
+	case MissingIgnored:
+		current.BreachCount = 0
+		current.RecoveryCount = 0
+		current.NoDataCount = 0
+		return current
 	case Missing:
+		if current.State == RECOVERED {
+			return current
+		}
 		current.BreachCount = 0
 		current.RecoveryCount = 0
 		current.NoDataCount++
@@ -37,33 +61,32 @@ func Step(current Snapshot, evaluation Evaluation, triggerCount, recoveryCount i
 			current.State = NO_DATA
 		}
 		return current
-	case Breaching, Recovering:
+	case Breaching, Recovering, Stable:
 		current.NoDataCount = 0
 		if current.State == NO_DATA {
-			before := current.StateBeforeNoData
+			current.State = current.StateBeforeNoData
 			current.StateBeforeNoData = ""
-			if evaluation == Recovering && before != FIRING {
-				current.State = RECOVERED
-				return current
-			}
-			current.State = before
+			return current
 		}
+	}
+	if evaluation == Stable {
+		current.BreachCount = 0
+		current.RecoveryCount = 0
+		if current.State == PENDING {
+			current.State = OK
+		}
+		return current
 	}
 
 	if evaluation == Breaching {
 		current.RecoveryCount = 0
 		switch current.State {
-		case OK:
+		case OK, PENDING, RECOVERED:
 			current.BreachCount++
 			if current.BreachCount >= triggerCount {
 				current.State = FIRING
 			} else {
 				current.State = PENDING
-			}
-		case PENDING:
-			current.BreachCount++
-			if current.BreachCount >= triggerCount {
-				current.State = FIRING
 			}
 		}
 		return current

@@ -2,9 +2,13 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-database="dbs_monitor_e2e_$$"
-cert_dir=$(mktemp -d)
+server_tls_dir=$(mktemp -d)
+master_key_dir=$(mktemp -d)
+platform_tls_dir=$(mktemp -d)
+server_config_file=$(mktemp)
+cookie_file=$(mktemp)
 server_log=$(mktemp)
+compose_project="dbs-monitor-e2e-$$"
 server_pid=
 
 cleanup() {
@@ -12,25 +16,44 @@ cleanup() {
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
   fi
-  PGPASSWORD="${PGPASSWORD:-dbs_monitor}" psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS \"$database\" WITH (FORCE)" >/dev/null 2>&1 || true
-  rm -rf "$cert_dir" "$server_log"
+  docker compose -p "$compose_project" down --volumes --remove-orphans >/dev/null 2>&1 || true
+  rm -rf "$server_tls_dir" "$master_key_dir" "$platform_tls_dir" "$server_config_file" "$cookie_file" "$server_log"
 }
 trap cleanup EXIT INT TERM
 
 export PGPASSWORD="${PGPASSWORD:-dbs_monitor}"
-psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$database\" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'" >/dev/null
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout "$platform_tls_dir/ca.key" -out "$platform_tls_dir/ca.crt" -days 2 \
+  -subj /CN=dbs-monitor-e2e-ca >/dev/null 2>&1
+openssl req -newkey rsa:2048 -nodes \
+  -keyout "$platform_tls_dir/server.key" -out "$platform_tls_dir/server.csr" \
+  -subj /CN=localhost \
+  -addext subjectAltName=DNS:localhost,IP:127.0.0.1,DNS:acceptance-platform >/dev/null 2>&1
+openssl x509 -req -in "$platform_tls_dir/server.csr" \
+  -CA "$platform_tls_dir/ca.crt" -CAkey "$platform_tls_dir/ca.key" -CAcreateserial \
+  -out "$platform_tls_dir/server.crt" -days 2 -copy_extensions copy >/dev/null 2>&1
+chmod 0600 "$platform_tls_dir/server.key"
 
-DATABASE_URL="postgres://${PGUSER:-dbs_monitor}:$PGPASSWORD@${PGHOST:-localhost}:${PGPORT:-55432}/$database?sslmode=disable" \
+export ACCEPTANCE_PLATFORM_TLS_DIR="$platform_tls_dir"
+docker compose -p "$compose_project" --profile acceptance \
+  up -d --wait acceptance-platform
+
+platform_database_url="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55442/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$platform_tls_dir/ca.crt"
+printf 'platform_database_url: "%s"\nmaster_key_path: "%s"\nagent_binary_dir: "%s"\n' \
+  "$platform_database_url" "$master_key_dir" "$root" >"$server_config_file"
+chmod 0600 "$server_config_file"
+
+DBS_MONITOR_CONFIG_FILE="$server_config_file" \
 INITIAL_ADMIN_PASSWORD=t11-playwright-password \
 LISTEN_ADDR=127.0.0.1:18443 \
 PUBLIC_HOST=127.0.0.1 \
-CERT_DIR="$cert_dir" \
+CERT_DIR="$server_tls_dir" \
 "$root/dbs-monitor-server" >"$server_log" 2>&1 &
 server_pid=$!
 
 ready=0
 for _ in $(seq 1 60); do
-  if curl --noproxy '*' --silent --fail --cacert "$cert_dir/ca.crt" https://127.0.0.1:18443/login >/dev/null 2>&1; then
+  if curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" https://127.0.0.1:18443/login >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -45,16 +68,43 @@ if [ "$ready" -ne 1 ]; then
   exit 1
 fi
 
-now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-instance_id=11111111-1111-4111-8111-111111111111
-psql -h "${PGHOST:-localhost}" -p "${PGPORT:-55432}" -U "${PGUSER:-dbs_monitor}" -d "$database" -v ON_ERROR_STOP=1 <<SQL >/dev/null
-INSERT INTO instance (id, name, host, port, database_name, username, password)
-VALUES ('$instance_id', 'T11 smoke instance', '${PGHOST:-localhost}', ${PGPORT:-55432}, '${PGDATABASE:-dbs_monitor}', '${PGUSER:-dbs_monitor}', '$PGPASSWORD');
-INSERT INTO metric_series (instance_id, metric_id, labels, labels_key, first_seen, last_seen)
-VALUES ('$instance_id', 'pg.connection.total', '{}', '{}', '$now', '$now');
-INSERT INTO metric_sample (series_id, ts, value)
-SELECT series_id, '$now', 42 FROM metric_series WHERE instance_id = '$instance_id' AND metric_id = 'pg.connection.total';
-SQL
+curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" -c "$cookie_file" \
+  -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/login \
+  --data '{"username":"admin","password":"t11-playwright-password"}' >/dev/null
+instance_id=$(node -e 'process.stdout.write(JSON.stringify({name:"T11 smoke instance",host:process.env.PGHOST || "localhost",port:Number(process.env.PGPORT || 55432),database:process.env.PGDATABASE || "dbs_monitor",username:process.env.PGUSER || "dbs_monitor",password:process.env.PGPASSWORD}))' \
+  | curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" -b "$cookie_file" \
+  -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/instances \
+  --data-binary @- \
+  | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).instance.id))")
+series_from=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)
+series_to=$(date -u -d '1 minute' +%Y-%m-%dT%H:%M:%SZ)
+samples_ready=0
+for _ in $(seq 1 80); do
+  if curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" -b "$cookie_file" --get \
+    --data-urlencode 'metric=pg.tps' \
+    --data-urlencode "from=$series_from" \
+    --data-urlencode "to=$series_to" \
+    --data-urlencode 'step=raw' \
+    "https://127.0.0.1:18443/api/v1/instances/$instance_id/metrics/series" \
+    | node -e '
+let body = ""
+process.stdin.on("data", (chunk) => { body += chunk })
+process.stdin.on("end", () => {
+  const metric = JSON.parse(body).metrics[0]
+  const hasPoints = metric.series.some((series) => series.points.length > 0)
+  process.exit(hasPoints ? 0 : 1)
+})
+'; then
+    samples_ready=1
+    break
+  fi
+  sleep 0.25
+done
+if [ "$samples_ready" -ne 1 ]; then
+  echo "real pg.tps samples did not arrive" >&2
+  cat "$server_log" >&2
+  exit 1
+fi
 
 cd "$root/web"
 npm run e2e

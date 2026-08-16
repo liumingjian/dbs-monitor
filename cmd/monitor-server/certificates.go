@@ -16,9 +16,13 @@ import (
 )
 
 func ensureCertificates(directory, publicHost string) (string, string, error) {
+	caPath := filepath.Join(directory, "ca.crt")
 	certificatePath := filepath.Join(directory, "server.crt")
 	keyPath := filepath.Join(directory, "server.key")
 	if certificateMatchesHost(certificatePath, keyPath, publicHost) {
+		if err := ensureCertificateChain(certificatePath, caPath); err != nil {
+			return "", "", err
+		}
 		return certificatePath, keyPath, nil
 	}
 	if publicHost == "" {
@@ -55,7 +59,14 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	serverTemplate := x509.Certificate{SerialNumber: serverSerial, Subject: pkix.Name{CommonName: publicHost}, NotBefore: now.Add(-time.Minute), NotAfter: now.AddDate(2, 0, 0), ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature}
+	serverTemplate := x509.Certificate{
+		SerialNumber: serverSerial,
+		Subject:      pkix.Name{CommonName: publicHost},
+		NotBefore:    now.Add(-time.Minute),
+		NotAfter:     now.AddDate(1, 0, 0),
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
 	if ip := net.ParseIP(publicHost); ip != nil {
 		serverTemplate.IPAddresses = []net.IP{ip}
 	} else {
@@ -65,10 +76,10 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if err := writePEM(filepath.Join(directory, "ca.crt"), "CERTIFICATE", caDER, 0644); err != nil {
+	if err := writePEM(caPath, "CERTIFICATE", caDER, 0644); err != nil {
 		return "", "", err
 	}
-	if err := writePEM(certificatePath, "CERTIFICATE", serverDER, 0644); err != nil {
+	if err := writeCertificateChain(certificatePath, serverDER, caDER); err != nil {
 		return "", "", err
 	}
 	keyDER, err := x509.MarshalPKCS8PrivateKey(serverKey)
@@ -79,6 +90,47 @@ func ensureCertificates(directory, publicHost string) (string, string, error) {
 		return "", "", err
 	}
 	return certificatePath, keyPath, nil
+}
+
+func ensureCertificateChain(certificatePath, caPath string) error {
+	certificatePEM, err := os.ReadFile(certificatePath)
+	if err != nil {
+		return err
+	}
+	_, remainder := pem.Decode(certificatePEM)
+	if block, _ := pem.Decode(remainder); block != nil {
+		return nil
+	}
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		return fmt.Errorf("read TLS CA for certificate chain: %w", err)
+	}
+	file, err := os.OpenFile(certificatePath, os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if len(certificatePEM) > 0 && certificatePEM[len(certificatePEM)-1] != '\n' {
+		if _, err := file.Write([]byte("\n")); err != nil {
+			return err
+		}
+	}
+	_, err = file.Write(caPEM)
+	return err
+}
+
+func writeCertificateChain(path string, certificates ...[]byte) error {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	for _, certificate := range certificates {
+		if err := pem.Encode(file, &pem.Block{Type: "CERTIFICATE", Bytes: certificate}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func certificateMatchesHost(certificatePath, keyPath, publicHost string) bool {
@@ -98,6 +150,23 @@ func certificateMatchesHost(certificatePath, keyPath, publicHost string) bool {
 	}
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	return err == nil && certificate.VerifyHostname(publicHost) == nil
+}
+
+func certificateExpiration(certificatePath string) (*time.Time, error) {
+	contents, err := os.ReadFile(certificatePath)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(contents)
+	if block == nil {
+		return nil, fmt.Errorf("decode TLS certificate")
+	}
+	certificate, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	expiresAt := certificate.NotAfter.UTC()
+	return &expiresAt, nil
 }
 
 func writePEM(path, kind string, contents []byte, mode os.FileMode) error {

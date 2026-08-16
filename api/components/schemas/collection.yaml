@@ -1,0 +1,168 @@
+CollectionTaskResult:
+  type: string
+  enum: [SUCCESS, FAILED, TIMED_OUT, SKIPPED_BACKPRESSURE, BACKOFF]
+CollectionTaskState:
+  type: object
+  required: [task_id, kind, interval_seconds, consecutive_failures, metric_ids, required_capabilities]
+  properties:
+    task_id:
+      type: string
+      enum:
+        - pg.probe
+        - pg.stat_database
+        - pg.stat_activity
+        - pg.replication
+        - pg.replication_slot
+        - pg.prepared_xacts
+        - pg.role
+        - pg.stat_statements
+    kind:
+      type: string
+      enum: [probe, sql, agent-derived]
+    interval_seconds: { type: integer, minimum: 5 }
+    last_due_at: { type: string, format: date-time }
+    last_started_at: { type: string, format: date-time }
+    last_finished_at: { type: string, format: date-time }
+    last_success_at: { type: string, format: date-time }
+    last_result:
+      $ref: '#/CollectionTaskResult'
+    consecutive_failures: { type: integer, minimum: 0 }
+    next_eligible_at: { type: string, format: date-time }
+    last_error_code: { type: string }
+    last_error_message: { type: string }
+    metric_ids:
+      type: array
+      description: Metrics produced by this task, derived from the collection task dictionary.
+      items: { type: string }
+    required_capabilities:
+      type: array
+      description: Capabilities required by this task, derived from the collection task dictionary.
+      items: { type: string }
+CollectionTaskIntervalInput:
+  type: object
+  required: [interval_seconds]
+  properties:
+    interval_seconds: { type: integer, minimum: 5 }
+CollectionPauseInput:
+  type: object
+  required: [paused]
+  properties:
+    paused: { type: boolean }
+    reason: { type: string }
+CollectionPauseStatus:
+  type: object
+  required: [paused]
+  properties:
+    paused: { type: boolean }
+    updated_by: { type: string, format: uuid }
+    updated_at: { type: string, format: date-time }
+    reason: { type: string }
+CapabilitySnapshotEntry:
+  type: object
+  required: [capability_id, class, status, affected_metric_count]
+  properties:
+    capability_id:
+      type: string
+      enum:
+        - role.pg_monitor
+        - ext.pg_stat_statements
+        - topo.has_replication
+        - topo.has_slot
+    class:
+      type: string
+      enum: [fixable, structural]
+    status:
+      $ref: ../enums.yaml#/CapabilityStatus
+    observed_at: { type: string, format: date-time }
+    fix_hint: { type: string }
+    na_reason: { type: string }
+    affected_metric_count: { type: integer, minimum: 0 }
+LongQuerySample:
+  type: object
+  required:
+    - sampled_at
+    - pid
+    - query_started_at
+    - query_duration_ms
+    - blocking_pids
+    - snapshot_original_count
+    - snapshot_truncated
+  properties:
+    sampled_at: { type: string, format: date-time }
+    pid: { type: integer, format: int32 }
+    username: { type: string }
+    database_name: { type: string }
+    client_address: { type: string }
+    state: { type: string }
+    query_started_at: { type: string, format: date-time }
+    transaction_started_at: { type: string, format: date-time }
+    query_duration_ms: { type: integer, format: int64, minimum: 0 }
+    transaction_duration_ms: { type: integer, format: int64, minimum: 0 }
+    wait_event_type: { type: string }
+    wait_event: { type: string }
+    blocking_pids:
+      type: array
+      items: { type: integer, format: int32 }
+    snapshot_original_count: { type: integer, minimum: 0 }
+    snapshot_truncated: { type: boolean }
+LongQuerySamplePage:
+  type: object
+  required: [total, items]
+  properties:
+    total: { type: integer, minimum: 0 }
+    items:
+      type: array
+      items: { $ref: '#/LongQuerySample' }
+QueryStatisticsEntry:
+  type: object
+  required: [queryid, database_oid, user_oid, calls, total_exec_time_ms]
+  properties:
+    queryid:
+      type: string
+      description: Native PostgreSQL query identifier represented as a string to preserve int64 precision.
+    database_oid: { type: integer, format: int64, minimum: 0 }
+    user_oid: { type: integer, format: int64, minimum: 0 }
+    calls: { type: integer, format: int64, minimum: 0 }
+    total_exec_time_ms: { type: number, format: double, minimum: 0 }
+QueryStatisticsSnapshot:
+  type: object
+  required: [items]
+  properties:
+    sampled_at: { type: string, format: date-time }
+    unavailability:
+      $ref: ../enums.yaml#/Unavailability
+    items:
+      type: array
+      maxItems: 500
+      items: { $ref: '#/QueryStatisticsEntry' }
+SessionSnapshotEntry:
+  type: object
+  required: [pid, blocking_pids]
+  properties:
+    pid: { type: integer, format: int32 }
+    username: { type: string }
+    database_name: { type: string }
+    client_address: { type: string }
+    state: { type: string }
+    query_started_at: { type: string, format: date-time }
+    transaction_started_at: { type: string, format: date-time }
+    query_duration_ms: { type: integer, format: int64, minimum: 0 }
+    transaction_duration_ms: { type: integer, format: int64, minimum: 0 }
+    wait_event_type: { type: string }
+    wait_event: { type: string }
+    blocking_pids:
+      type: array
+      items: { type: integer, format: int32 }
+SessionSnapshot:
+  type: object
+  required: [truncated, items]
+  properties:
+    sampled_at: { type: string, format: date-time }
+    original_count: { type: integer, minimum: 0 }
+    truncated: { type: boolean }
+    unavailability:
+      $ref: ../enums.yaml#/Unavailability
+    items:
+      type: array
+      maxItems: 500
+      items: { $ref: '#/SessionSnapshotEntry' }

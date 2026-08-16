@@ -1,0 +1,47 @@
+name: release-evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 40-character candidate commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  pg-range:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CANDIDATE_SHA: ${{ inputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+      - name: Validate immutable candidate
+        run: |
+          case "$CANDIDATE_SHA" in
+            *[!0-9a-f]*)
+              echo "sha must be exactly 40 lowercase hexadecimal characters" >&2
+              exit 1
+              ;;
+          esac
+          if [ "${#CANDIDATE_SHA}" -ne 40 ]; then
+            echo "sha must be exactly 40 lowercase hexadecimal characters" >&2
+            exit 1
+          fi
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: make release-evidence
+      - name: Upload PG range evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pg-range-evidence-${{ inputs.sha }}
+          path: results/pg-range-evidence.json
+          if-no-files-found: error

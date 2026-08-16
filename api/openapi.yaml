@@ -7,19 +7,145 @@ servers:
 tags:
   - name: instances
   - name: metrics
+  - name: alert-rules
+  - name: alerts
+  - name: performance-events
   - name: auth
   - name: agent
+  - name: collection
+  - name: users
+  - name: platform-events
+  - name: diagnostics
+  - name: notification-settings
 paths:
   /api/v1/login:
     $ref: paths/auth.yaml#/~1api~1v1~1login
+  /api/v1/logout:
+    $ref: paths/auth.yaml#/~1api~1v1~1logout
   /api/v1/instances:
     $ref: paths/instances.yaml#/~1api~1v1~1instances
   /api/v1/instances/{id}:
     $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}
+  /api/v1/instances/{id}/credentials:
+    $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}~1credentials
   /api/v1/instances/{id}/metrics/series:
     $ref: paths/metrics.yaml#/~1api~1v1~1instances~1{id}~1metrics~1series
+  /api/v1/instances/{id}/collection/tasks:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks
+  /api/v1/instances/{id}/collection/capabilities:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1capabilities
+  /api/v1/instances/{id}/collection/pause:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1pause
+  /api/v1/instances/{id}/collection/tasks/{task_id}:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks~1{task_id}
+  /api/v1/instances/{id}/long-query-samples:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1long-query-samples
+  /api/v1/instances/{id}/query-stats:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1query-stats
+  /api/v1/instances/{id}/sessions:
+    $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1sessions
+  /api/v1/alert-rules:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules
+  /api/v1/alert-rules/{id}:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}
+  /api/v1/alert-rules/{id}/enabled:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1enabled
+  /api/v1/alert-rules/{id}/copies:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rules~1{id}~1copies
+  /api/v1/alert-rule-templates:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rule-templates
+  /api/v1/alert-rule-templates/{id}/alert-rules:
+    $ref: paths/alert-rules.yaml#/~1api~1v1~1alert-rule-templates~1{id}~1alert-rules
+  /api/v1/alert-instances/{id}/disposition:
+    $ref: paths/alert-instances.yaml#/~1api~1v1~1alert-instances~1{id}~1disposition
+  /api/v1/alerts/current:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alerts~1current
+  /api/v1/alerts/history:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alerts~1history
+  /api/v1/alert-instances/{id}:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}
+  /api/v1/alert-instances/{id}/events:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1events
+  /api/v1/alert-instances/{id}/trigger-snapshot:
+    $ref: paths/alerts.yaml#/~1api~1v1~1alert-instances~1{id}~1trigger-snapshot
+  /api/v1/alert-instances/{id}/notifications:
+    $ref: paths/notifications.yaml#/~1api~1v1~1alert-instances~1{id}~1notifications
+  /api/v1/notification-channels/smtp:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1smtp
+  /api/v1/notification-channels/smtp/test:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1smtp~1test
+  /api/v1/notification-channels/webhooks:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1webhooks
+  /api/v1/notification-channels/webhooks/{id}:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1webhooks~1{id}
+  /api/v1/notification-channels/webhooks/{id}/test:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1webhooks~1{id}~1test
+  /api/v1/notification-channels/failures:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-channels~1failures
+  /api/v1/notification-contacts:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-contacts
+  /api/v1/notification-contacts/{id}:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-contacts~1{id}
+  /api/v1/notification-contact-groups:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-contact-groups
+  /api/v1/notification-contact-groups/{id}:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-contact-groups~1{id}
+  /api/v1/notification-policy-settings:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-policy-settings
+  /api/v1/notification-policies:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-policies
+  /api/v1/notification-policies/{id}:
+    $ref: paths/notifications.yaml#/~1api~1v1~1notification-policies~1{id}
+  /api/v1/maintenance-windows:
+    $ref: paths/notifications.yaml#/~1api~1v1~1maintenance-windows
+  /api/v1/maintenance-windows/{id}:
+    $ref: paths/notifications.yaml#/~1api~1v1~1maintenance-windows~1{id}
+  /api/v1/maintenance-windows/{id}/end:
+    $ref: paths/notifications.yaml#/~1api~1v1~1maintenance-windows~1{id}~1end
+  /api/v1/instances/{id}/performance-events:
+    $ref: paths/performance-events.yaml#/~1api~1v1~1instances~1{id}~1performance-events
+  /api/v1/performance-events/{id}:
+    $ref: paths/performance-events.yaml#/~1api~1v1~1performance-events~1{id}
   /api/agent/v1/report:
     $ref: paths/agent.yaml#/~1api~1agent~1v1~1report
+  /api/v1/agent/download:
+    $ref: paths/agent-download.yaml#/~1api~1v1~1agent~1download
+  /api/v1/instances/{id}/agent/registration:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1registration
+  /api/v1/instances/{id}/agent/token/rotation:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1token~1rotation
+  /api/v1/instances/{id}/agent/token/revocation:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1token~1revocation
+  /api/v1/instances/{id}/agent/disable:
+    $ref: paths/agent-registration.yaml#/~1api~1v1~1instances~1{id}~1agent~1disable
+  /api/v1/me:
+    $ref: paths/users.yaml#/~1api~1v1~1me
+  /api/v1/users:
+    $ref: paths/users.yaml#/~1api~1v1~1users
+  /api/v1/users/{id}/status:
+    $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1status
+  /api/v1/users/{id}/role:
+    $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1role
+  /api/v1/users/{id}/password:
+    $ref: paths/users.yaml#/~1api~1v1~1users~1{id}~1password
+  /api/v1/password:
+    $ref: paths/users.yaml#/~1api~1v1~1password
+  /api/v1/platform-events:
+    $ref: paths/platform-events.yaml#/~1api~1v1~1platform-events
+  /api/v1/diagnostics/health:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1health
+  /api/v1/diagnostics/disk:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1disk
+  /api/v1/diagnostics/scheduler:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1scheduler
+  /api/v1/diagnostics/partitions:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1partitions
+  /api/v1/diagnostics/certificate:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1certificate
+  /api/v1/diagnostics/keyring:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1keyring
+  /api/v1/diagnostics/platform:
+    $ref: paths/diagnostics.yaml#/~1api~1v1~1diagnostics~1platform
 components:
   securitySchemes:
     agentToken:
@@ -30,17 +156,163 @@ components:
       $ref: components/enums.yaml#/Unavailability
     AlertStatus:
       $ref: components/enums.yaml#/AlertStatus
+    HealthStatus:
+      $ref: components/enums.yaml#/HealthStatus
+    InstanceAgentStatus:
+      $ref: components/enums.yaml#/InstanceAgentStatus
     CapabilityStatus:
       $ref: components/enums.yaml#/CapabilityStatus
-    InstanceInput:
-      $ref: components/schemas/instances.yaml#/InstanceInput
+    AlertAggregation:
+      $ref: components/enums.yaml#/AlertAggregation
+    AlertOperator:
+      $ref: components/enums.yaml#/AlertOperator
+    AlertSeverity:
+      $ref: components/enums.yaml#/AlertSeverity
+    NoDataPolicy:
+      $ref: components/enums.yaml#/NoDataPolicy
+    AlertRuleScope:
+      $ref: components/enums.yaml#/AlertRuleScope
+    PlatformHealthStatus:
+      $ref: components/enums.yaml#/PlatformHealthStatus
+    PlatformHealthSource:
+      $ref: components/enums.yaml#/PlatformHealthSource
+    AlertDisposition:
+      $ref: components/enums.yaml#/AlertDisposition
+    IgnoreReasonCode:
+      $ref: components/enums.yaml#/IgnoreReasonCode
+    AlertRuleInput:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleInput
+    AlertRule:
+      $ref: components/schemas/alert-rules.yaml#/AlertRule
+    AlertRuleEnabledInput:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleEnabledInput
+    AlertRuleTemplate:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleTemplate
+    AlertRuleTemplateInstantiationInput:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleTemplateInstantiationInput
+    AlertRuleCopyInput:
+      $ref: components/schemas/alert-rules.yaml#/AlertRuleCopyInput
+    AlertDispositionInput:
+      $ref: components/schemas/alert-instances.yaml#/AlertDispositionInput
+    AlertDispositionDetail:
+      $ref: components/schemas/alert-instances.yaml#/AlertDispositionDetail
+    AlertDispositionEvent:
+      $ref: components/schemas/alert-instances.yaml#/AlertDispositionEvent
+    AlertTriggerSnapshotResult:
+      $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshotResult
+    AlertTriggerSnapshotSession:
+      $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshotSession
+    AlertTriggerSnapshot:
+      $ref: components/schemas/alerts.yaml#/AlertTriggerSnapshot
+    AlertObservation:
+      $ref: components/schemas/alerts.yaml#/AlertObservation
+    AlertObservationPage:
+      $ref: components/schemas/alerts.yaml#/AlertObservationPage
+    AlertDetail:
+      $ref: components/schemas/alerts.yaml#/AlertDetail
+    SMTPAuthType:
+      $ref: components/schemas/notifications.yaml#/SMTPAuthType
+    SMTPTransportSecurity:
+      $ref: components/schemas/notifications.yaml#/SMTPTransportSecurity
+    SMTPChannelInput:
+      $ref: components/schemas/notifications.yaml#/SMTPChannelInput
+    SMTPChannel:
+      $ref: components/schemas/notifications.yaml#/SMTPChannel
+    SMTPTestInput:
+      $ref: components/schemas/notifications.yaml#/SMTPTestInput
+    NotificationQueued:
+      $ref: components/schemas/notifications.yaml#/NotificationQueued
+    NotificationAttempt:
+      $ref: components/schemas/notifications.yaml#/NotificationAttempt
+    WebhookTargetInput:
+      $ref: components/schemas/notifications.yaml#/WebhookTargetInput
+    WebhookTarget:
+      $ref: components/schemas/notifications.yaml#/WebhookTarget
+    ChannelFailureRecord:
+      $ref: components/schemas/notifications.yaml#/ChannelFailureRecord
+    ChannelFailureSummary:
+      $ref: components/schemas/notifications.yaml#/ChannelFailureSummary
+    ChannelFailureOverview:
+      $ref: components/schemas/notifications.yaml#/ChannelFailureOverview
+    MaintenanceWindowStatus:
+      $ref: components/schemas/notifications.yaml#/MaintenanceWindowStatus
+    MaintenanceWindowInput:
+      $ref: components/schemas/notifications.yaml#/MaintenanceWindowInput
+    MaintenanceWindow:
+      $ref: components/schemas/notifications.yaml#/MaintenanceWindow
+    PerformanceEventType:
+      $ref: components/enums.yaml#/PerformanceEventType
+    PerformanceEvent:
+      $ref: components/schemas/performance-events.yaml#/PerformanceEvent
+    PerformanceEventPage:
+      $ref: components/schemas/performance-events.yaml#/PerformanceEventPage
+    InstanceCreateInput:
+      $ref: components/schemas/instances.yaml#/InstanceCreateInput
+    InstanceMetadataInput:
+      $ref: components/schemas/instances.yaml#/InstanceMetadataInput
+    InstanceCredentialInput:
+      $ref: components/schemas/instances.yaml#/InstanceCredentialInput
+    InstanceCredentialUpdated:
+      $ref: components/schemas/instances.yaml#/InstanceCredentialUpdated
     Instance:
       $ref: components/schemas/instances.yaml#/Instance
+    InstanceHealth:
+      $ref: components/schemas/instances.yaml#/InstanceHealth
+    HealthAttribution:
+      $ref: components/schemas/instances.yaml#/HealthAttribution
+    HealthAlertCounts:
+      $ref: components/schemas/instances.yaml#/HealthAlertCounts
+    HealthFlags:
+      $ref: components/schemas/instances.yaml#/HealthFlags
     InstanceCreated:
       $ref: components/schemas/instances.yaml#/InstanceCreated
+    CollectionTaskState:
+      $ref: components/schemas/collection.yaml#/CollectionTaskState
+    CollectionTaskIntervalInput:
+      $ref: components/schemas/collection.yaml#/CollectionTaskIntervalInput
+    CapabilitySnapshotEntry:
+      $ref: components/schemas/collection.yaml#/CapabilitySnapshotEntry
+    LongQuerySample:
+      $ref: components/schemas/collection.yaml#/LongQuerySample
+    LongQuerySamplePage:
+      $ref: components/schemas/collection.yaml#/LongQuerySamplePage
+    QueryStatisticsEntry:
+      $ref: components/schemas/collection.yaml#/QueryStatisticsEntry
+    QueryStatisticsSnapshot:
+      $ref: components/schemas/collection.yaml#/QueryStatisticsSnapshot
+    CollectionPauseInput:
+      $ref: components/schemas/collection.yaml#/CollectionPauseInput
+    CollectionPauseStatus:
+      $ref: components/schemas/collection.yaml#/CollectionPauseStatus
     MetricSeriesResponse:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
     AgentReport:
       $ref: components/schemas/agent.yaml#/AgentReport
+    AgentReportAccepted:
+      $ref: components/schemas/agent.yaml#/AgentReportAccepted
+    AgentRegistration:
+      $ref: components/schemas/agent.yaml#/AgentRegistration
+    AgentTokenIssued:
+      $ref: components/schemas/agent.yaml#/AgentTokenIssued
+    Role:
+      $ref: components/schemas/users.yaml#/Role
+    User:
+      $ref: components/schemas/users.yaml#/User
+    UserCreateInput:
+      $ref: components/schemas/users.yaml#/UserCreateInput
+    UserCreated:
+      $ref: components/schemas/users.yaml#/UserCreated
+    UserStatusInput:
+      $ref: components/schemas/users.yaml#/UserStatusInput
+    UserRoleInput:
+      $ref: components/schemas/users.yaml#/UserRoleInput
+    PasswordIssued:
+      $ref: components/schemas/users.yaml#/PasswordIssued
+    PasswordChangeInput:
+      $ref: components/schemas/users.yaml#/PasswordChangeInput
+    PlatformHealthSourceSnapshot:
+      $ref: components/schemas/diagnostics.yaml#/PlatformHealthSourceSnapshot
+    PlatformHealthSnapshot:
+      $ref: components/schemas/diagnostics.yaml#/PlatformHealthSnapshot
     Error:
       $ref: components/errors.yaml#/Error
