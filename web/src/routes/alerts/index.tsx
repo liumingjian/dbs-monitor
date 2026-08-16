@@ -176,16 +176,21 @@ const currentColumns: TableColumnsType<AlertObservation> = [
   },
 ]
 
-type AlertUnavailability = Pick<AlertObservation, 'instance_id' | 'metric_id' | 'unavailability'>
+type AlertUnavailabilityReasonProps = {
+  alert: Pick<AlertObservation, 'instance_id' | 'metric_id' | 'unavailability'>
+}
 
-export function AlertUnavailabilityReason({ alert }: { alert: AlertUnavailability }) {
+export function AlertUnavailabilityReason({ alert }: AlertUnavailabilityReasonProps) {
   if (!alert.unavailability) return '—'
+
   const copy = unavailabilityCopy(alert.unavailability)
   const href = `/instances/${encodeURIComponent(alert.instance_id)}/collection?metric=${encodeURIComponent(alert.metric_id)}`
-  return <Space orientation="vertical" size={0}>
-    <Typography.Text>{copy.title}</Typography.Text>
-    <a href={href}>{copy.action}</a>
-  </Space>
+  return (
+    <Space orientation="vertical" size={0}>
+      <Typography.Text>{copy.title}</Typography.Text>
+      <a href={href}>{copy.action}</a>
+    </Space>
+  )
 }
 
 const historyColumns: TableColumnsType<AlertObservation> = [
