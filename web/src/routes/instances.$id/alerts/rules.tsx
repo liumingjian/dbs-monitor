@@ -638,7 +638,7 @@ function positiveInteger(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value > 0
 }
 
-function canWriteAlertRules(role: Role | undefined): boolean {
+export function canWriteAlertRules(role: Role | undefined): boolean {
   if (!role) return false
   switch (role) {
     case 'READONLY': return false

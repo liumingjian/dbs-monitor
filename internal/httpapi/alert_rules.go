@@ -98,6 +98,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
 	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	var updated alerting.AlertRule
 	err = handler.platform.InTx(ctx, func(tx pgx.Tx) error {
@@ -120,6 +121,7 @@ func (handler *Handler) UpdateAlertRule(ctx context.Context, request api.UpdateA
 			EvaluationIntervalSeconds: int32(input.EvaluationIntervalSeconds),
 			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
 			UpdatedAt:                 now,
+			ActorID:                   actorID,
 		})
 		if err != nil {
 			return err
@@ -195,7 +197,11 @@ func (handler *Handler) DeleteAlertRule(ctx context.Context, request api.DeleteA
 	if rule.BuiltinIdentifier.Valid {
 		return api.DeleteAlertRule409JSONResponse(errorBody(api.BUILTINRULEDELETEFORBIDDEN, "built-in collection rules cannot be deleted")), nil
 	}
-	if _, err := queries.DeleteAlertRule(ctx, ruleID); err != nil {
+	if _, err := queries.DeleteAlertRule(ctx, alerting.DeleteAlertRuleParams{
+		ID:        ruleID,
+		DeletedBy: databaseUserID(authenticatedUserID(ctx)),
+		DeletedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+	}); err != nil {
 		return nil, err
 	}
 	return api.DeleteAlertRule204Response{}, nil
@@ -301,6 +307,7 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 	}
 
 	now := pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true}
+	actorID := databaseUserID(authenticatedUserID(ctx))
 	ruleID := pgtype.UUID{Bytes: uuid.New(), Valid: true}
 	scopedInstanceIDs := toDatabaseUUIDs(input.InstanceIds)
 	databaseSourceTemplateID := pgtype.Text{}
@@ -333,6 +340,7 @@ func (handler *Handler) createAlertRule(ctx context.Context, input api.AlertRule
 			NotificationPolicyID:      toDatabaseOptionalUUID(input.NotificationPolicyId),
 			SourceTemplateID:          databaseSourceTemplateID,
 			SourceTemplateVersion:     databaseSourceTemplateVersion,
+			ActorID:                   actorID,
 		})
 		if err != nil {
 			return err
@@ -669,6 +677,14 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 	if rule.EnabledUpdatedBy.Valid {
 		value := openapi_types.UUID(rule.EnabledUpdatedBy.Bytes)
 		result.EnabledUpdatedBy = &value
+	}
+	if rule.CreatedBy.Valid {
+		value := openapi_types.UUID(rule.CreatedBy.Bytes)
+		result.CreatedBy = &value
+	}
+	if rule.UpdatedBy.Valid {
+		value := openapi_types.UUID(rule.UpdatedBy.Bytes)
+		result.UpdatedBy = &value
 	}
 	if rule.EnabledUpdatedAt.Valid {
 		value := rule.EnabledUpdatedAt.Time

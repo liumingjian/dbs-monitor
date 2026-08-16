@@ -1,8 +1,8 @@
 -- name: ListAlertRules :many
-SELECT * FROM alert_rule ORDER BY created_at, id;
+SELECT * FROM alert_rule WHERE deleted_at IS NULL ORDER BY created_at, id;
 
 -- name: GetAlertRule :one
-SELECT * FROM alert_rule WHERE id = $1;
+SELECT * FROM alert_rule WHERE id = $1 AND deleted_at IS NULL;
 
 -- name: ListAlertRuleTemplates :many
 SELECT * FROM alert_rule_template ORDER BY identifier;
@@ -38,9 +38,10 @@ INSERT INTO alert_rule (
     consecutive_count, recovery_consecutive_count, severity,
     no_data_policy, scope, evaluation_interval_seconds,
     enabled, version, created_at, updated_at, notification_policy_id,
-    source_template_id, source_template_version
+    source_template_id, source_template_version, created_by, updated_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $19, $20)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 1, $17, $17, $18, $19, $20,
+        sqlc.arg(actor_id), sqlc.arg(actor_id))
 RETURNING *;
 
 -- name: UpdateAlertRule :one
@@ -61,8 +62,9 @@ SET name = $2,
     evaluation_interval_seconds = $15,
     notification_policy_id = $16,
     version = version + 1,
-    updated_at = $17
-WHERE id = $1
+    updated_at = $17,
+    updated_by = sqlc.arg(actor_id)
+WHERE id = $1 AND deleted_at IS NULL
 RETURNING *;
 
 -- name: SetAlertRuleEnabled :one
@@ -71,12 +73,17 @@ SET enabled = $2,
     enabled_updated_by = $3,
     enabled_updated_at = $4
 WHERE id = $1
+  AND deleted_at IS NULL
 RETURNING *;
 
 -- name: DeleteAlertRule :one
-DELETE FROM alert_rule
+UPDATE alert_rule
+SET enabled = false,
+    deleted_by = $2,
+    deleted_at = $3
 WHERE id = $1
   AND builtin_identifier IS NULL
+  AND deleted_at IS NULL
 RETURNING id;
 
 -- name: DeleteAlertRuleScopeInstances :exec
@@ -115,6 +122,7 @@ LEFT JOIN alert_rule_evaluation_state evaluation_state
  AND evaluation_state.instance_id = instance.id
  AND evaluation_state.metric_dimension_key = COALESCE(metric_dimension.metric_dimension_key, '{}')
 WHERE rule.enabled
+  AND rule.deleted_at IS NULL
   AND NOT collection_config.collection_paused
   AND (rule.scope = 'ALL' OR EXISTS (
       SELECT 1
@@ -184,7 +192,8 @@ LEFT JOIN LATERAL (
 ) alert ON true
 WHERE rule.id = sqlc.arg(rule_id)
   AND instance.id = sqlc.arg(instance_id)
-  AND rule.enabled;
+  AND rule.enabled
+  AND rule.deleted_at IS NULL;
 
 -- name: SamplesInRuleWindow :many
 SELECT sample.ts, sample.value

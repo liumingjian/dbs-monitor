@@ -1609,6 +1609,12 @@ components:
           type: string
         source_template_version:
           type: integer
+        created_by:
+          type: string
+          format: uuid
+        updated_by:
+          type: string
+          format: uuid
         enabled_updated_by:
           type: string
           format: uuid

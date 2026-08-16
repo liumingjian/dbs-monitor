@@ -94,6 +94,8 @@ AlertRule:
     current_alert_count: { type: integer, minimum: 0 }
     source_template_id: { type: string }
     source_template_version: { type: integer }
+    created_by: { type: string, format: uuid }
+    updated_by: { type: string, format: uuid }
     enabled_updated_by: { type: string, format: uuid }
     enabled_updated_at: { type: string, format: date-time }
     version: { type: integer }
