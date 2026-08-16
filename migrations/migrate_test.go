@@ -102,14 +102,15 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 			('instance', 'created_by'),
 			('instance', 'credential_updated_by'),
 			('instance', 'credential_updated_at'),
+			('webhook_target', 'updated_by'),
 			('platform_event', 'actor_id'),
 			('platform_event', 'actor_subject'),
 			('platform_event', 'subject_id')
 		)`).Scan(&attributionColumns); err != nil {
 		t.Fatalf("inspect write attribution columns: %v", err)
 	}
-	if attributionColumns != 11 {
-		t.Fatalf("write attribution columns = %d, want 11", attributionColumns)
+	if attributionColumns != 12 {
+		t.Fatalf("write attribution columns = %d, want 12", attributionColumns)
 	}
 	var auditLogExists bool
 	if err := database.QueryRowContext(ctx, "SELECT to_regclass('audit_log') IS NOT NULL").Scan(&auditLogExists); err != nil {

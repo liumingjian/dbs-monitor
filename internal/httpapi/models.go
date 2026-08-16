@@ -478,4 +478,5 @@ type WebhookTarget struct {
 	SigningKeyVersion         int32
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
+	UpdatedBy                 pgtype.UUID
 }

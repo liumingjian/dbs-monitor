@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { NotificationSettingsLabel } from '../root'
+import { NotificationChannelsLabel } from './header'
 import { WebhookTargetsTable } from './notifications'
 
 beforeAll(() => {
@@ -62,7 +63,8 @@ describe('Webhook notification settings', () => {
     )
 
     expect(screen.getByText('On-call gateway')).toBeTruthy()
-    expect(screen.getByText('签名已设置 ********')).toBeTruthy()
+    expect(screen.getByText('签名已设置')).toBeTruthy()
+    expect(screen.queryByText(/\*{8}/)).toBeNull()
     expect(screen.getByText('最近失败 21 次')).toBeTruthy()
     for (const name of ['测试 On-call gateway', '编辑 On-call gateway', '删除 On-call gateway']) {
       expect(screen.getByRole('button', { name })).toHaveProperty('disabled', true)
@@ -81,6 +83,12 @@ describe('Webhook notification settings', () => {
     expect(view.container.querySelector('.ant-badge-dot')).toBeNull()
 
     view.rerender(<NotificationSettingsLabel hasFailures />)
+    expect(view.container.querySelector('.ant-badge-dot')).toBeTruthy()
+  })
+
+  it('shows the failure badge on the notification channels tab label', () => {
+    const view = render(<NotificationChannelsLabel hasFailures />)
+    expect(screen.getByText('通知渠道')).toBeTruthy()
     expect(view.container.querySelector('.ant-badge-dot')).toBeTruthy()
   })
 })

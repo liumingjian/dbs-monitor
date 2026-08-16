@@ -243,6 +243,7 @@ func (handler *Handler) CreateWebhookTarget(ctx context.Context, request api.Cre
 		SignatureHeaderCiphertext: signatureHeaderCiphertext,
 		SigningKeyVersion:         signingKeyVersion,
 		CreatedAt:                 now,
+		UpdatedBy:                 databaseUserID(authenticatedUserID(ctx)),
 	})
 	if err != nil {
 		return nil, err
@@ -304,6 +305,7 @@ func (handler *Handler) UpdateWebhookTarget(ctx context.Context, request api.Upd
 		SignatureHeaderCiphertext: signatureHeaderCiphertext,
 		SigningKeyVersion:         signingKeyVersion,
 		UpdatedAt:                 pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
+		UpdatedBy:                 databaseUserID(authenticatedUserID(ctx)),
 	})
 	if err != nil {
 		return nil, err

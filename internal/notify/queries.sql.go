@@ -317,10 +317,10 @@ func (q *Queries) CreateNotificationPolicy(ctx context.Context, arg CreateNotifi
 const createWebhookTarget = `-- name: CreateWebhookTarget :one
 INSERT INTO webhook_target (
     id, name, enabled, url, signing_value_ciphertext,
-    signature_header_ciphertext, signing_key_version, created_at, updated_at
+    signature_header_ciphertext, signing_key_version, created_at, updated_at, updated_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
-RETURNING id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
+RETURNING id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at, updated_by
 `
 
 type CreateWebhookTargetParams struct {
@@ -332,6 +332,7 @@ type CreateWebhookTargetParams struct {
 	SignatureHeaderCiphertext []byte
 	SigningKeyVersion         int32
 	CreatedAt                 pgtype.Timestamptz
+	UpdatedBy                 pgtype.UUID
 }
 
 func (q *Queries) CreateWebhookTarget(ctx context.Context, arg CreateWebhookTargetParams) (WebhookTarget, error) {
@@ -344,6 +345,7 @@ func (q *Queries) CreateWebhookTarget(ctx context.Context, arg CreateWebhookTarg
 		arg.SignatureHeaderCiphertext,
 		arg.SigningKeyVersion,
 		arg.CreatedAt,
+		arg.UpdatedBy,
 	)
 	var i WebhookTarget
 	err := row.Scan(
@@ -356,6 +358,7 @@ func (q *Queries) CreateWebhookTarget(ctx context.Context, arg CreateWebhookTarg
 		&i.SigningKeyVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
@@ -751,7 +754,7 @@ func (q *Queries) GetSMTPChannelForKeyRotation(ctx context.Context) (SmtpChannel
 }
 
 const getWebhookTarget = `-- name: GetWebhookTarget :one
-SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at FROM webhook_target WHERE id = $1
+SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at, updated_by FROM webhook_target WHERE id = $1
 `
 
 func (q *Queries) GetWebhookTarget(ctx context.Context, id pgtype.UUID) (WebhookTarget, error) {
@@ -767,6 +770,7 @@ func (q *Queries) GetWebhookTarget(ctx context.Context, id pgtype.UUID) (Webhook
 		&i.SigningKeyVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UpdatedBy,
 	)
 	return i, err
 }
@@ -1352,7 +1356,7 @@ func (q *Queries) ListRepeatCandidates(ctx context.Context) ([]ListRepeatCandida
 }
 
 const listWebhookTargets = `-- name: ListWebhookTargets :many
-SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at FROM webhook_target ORDER BY name, id
+SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at, updated_by FROM webhook_target ORDER BY name, id
 `
 
 func (q *Queries) ListWebhookTargets(ctx context.Context) ([]WebhookTarget, error) {
@@ -1374,6 +1378,7 @@ func (q *Queries) ListWebhookTargets(ctx context.Context) ([]WebhookTarget, erro
 			&i.SigningKeyVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UpdatedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -1386,7 +1391,7 @@ func (q *Queries) ListWebhookTargets(ctx context.Context) ([]WebhookTarget, erro
 }
 
 const listWebhookTargetsForKeyRotation = `-- name: ListWebhookTargetsForKeyRotation :many
-SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at FROM webhook_target ORDER BY id FOR UPDATE
+SELECT id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at, updated_by FROM webhook_target ORDER BY id FOR UPDATE
 `
 
 func (q *Queries) ListWebhookTargetsForKeyRotation(ctx context.Context) ([]WebhookTarget, error) {
@@ -1408,6 +1413,7 @@ func (q *Queries) ListWebhookTargetsForKeyRotation(ctx context.Context) ([]Webho
 			&i.SigningKeyVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UpdatedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -1746,9 +1752,10 @@ SET name = $2,
     signing_value_ciphertext = $5,
     signature_header_ciphertext = $6,
     signing_key_version = $7,
-    updated_at = $8
+    updated_at = $8,
+    updated_by = $9
 WHERE id = $1
-RETURNING id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at
+RETURNING id, name, enabled, url, signing_value_ciphertext, signature_header_ciphertext, signing_key_version, created_at, updated_at, updated_by
 `
 
 type UpdateWebhookTargetParams struct {
@@ -1760,6 +1767,7 @@ type UpdateWebhookTargetParams struct {
 	SignatureHeaderCiphertext []byte
 	SigningKeyVersion         int32
 	UpdatedAt                 pgtype.Timestamptz
+	UpdatedBy                 pgtype.UUID
 }
 
 func (q *Queries) UpdateWebhookTarget(ctx context.Context, arg UpdateWebhookTargetParams) (WebhookTarget, error) {
@@ -1772,6 +1780,7 @@ func (q *Queries) UpdateWebhookTarget(ctx context.Context, arg UpdateWebhookTarg
 		arg.SignatureHeaderCiphertext,
 		arg.SigningKeyVersion,
 		arg.UpdatedAt,
+		arg.UpdatedBy,
 	)
 	var i WebhookTarget
 	err := row.Scan(
@@ -1784,6 +1793,7 @@ func (q *Queries) UpdateWebhookTarget(ctx context.Context, arg UpdateWebhookTarg
 		&i.SigningKeyVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UpdatedBy,
 	)
 	return i, err
 }

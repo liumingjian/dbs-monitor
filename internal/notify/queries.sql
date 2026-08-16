@@ -124,9 +124,9 @@ SELECT * FROM webhook_target ORDER BY id FOR UPDATE;
 -- name: CreateWebhookTarget :one
 INSERT INTO webhook_target (
     id, name, enabled, url, signing_value_ciphertext,
-    signature_header_ciphertext, signing_key_version, created_at, updated_at
+    signature_header_ciphertext, signing_key_version, created_at, updated_at, updated_by
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
 RETURNING *;
 
 -- name: UpdateWebhookTarget :one
@@ -137,7 +137,8 @@ SET name = $2,
     signing_value_ciphertext = $5,
     signature_header_ciphertext = $6,
     signing_key_version = $7,
-    updated_at = $8
+    updated_at = $8,
+    updated_by = $9
 WHERE id = $1
 RETURNING *;
 

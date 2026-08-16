@@ -526,8 +526,8 @@ entries:
     pages: ["告警设置/通知渠道", "告警设置/联系人", "告警设置/通知策略", "告警设置/维护窗口"]
     operations: [getSmtpConfig, listWebhookTargets, listContacts, listNotificationPolicies, listMaintenanceWindows, getChannelFailureSummary]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "[AC-04-S3]"
     owner_issue: 119
     reason: "S1 拍板判据「告警设置区四页齐」，纯呈现语义按 20 号 D3 必须上浏览器，加深基线不许 pending"
   - id: AC-04-F1

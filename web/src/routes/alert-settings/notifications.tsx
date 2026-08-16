@@ -296,7 +296,7 @@ function NotificationSettingsPage() {
             <Input placeholder="https://gateway.example.com/alerts" />
           </Form.Item>
           <Form.Item label="签名配置">
-            <Typography.Text>{editingWebhook?.signing_configured ? '已设置  ********' : '未设置'}</Typography.Text>
+            <Typography.Text>{editingWebhook?.signing_configured ? '已设置' : '未设置'}</Typography.Text>
           </Form.Item>
           <Form.Item
             name="signing_value"
@@ -361,7 +361,7 @@ export function WebhookTargetsTable({
           render: (_, target) => (
             <Space orientation="vertical" size={2}>
               <Tag color={target.enabled ? 'green' : 'default'}>{target.enabled ? '已启用' : '已停用'}</Tag>
-              <Typography.Text type="secondary">{target.signing_configured ? '签名已设置  ********' : '签名未设置'}</Typography.Text>
+              <Typography.Text type="secondary">{target.signing_configured ? '签名已设置' : '签名未设置'}</Typography.Text>
             </Space>
           ),
         },

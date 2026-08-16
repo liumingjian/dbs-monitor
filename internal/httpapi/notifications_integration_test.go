@@ -139,6 +139,16 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	if !target.SigningConfigured || target.Url != receiver.URL {
 		t.Fatalf("created Webhook target = %+v", target)
 	}
+	var webhookActor string
+	var webhookUpdatedAt time.Time
+	if err := platform.QueryRow(ctx, `SELECT actor.username, target.updated_at
+		FROM webhook_target target JOIN app_user actor ON actor.id = target.updated_by
+		WHERE target.id = $1`, target.Id).Scan(&webhookActor, &webhookUpdatedAt); err != nil {
+		t.Fatalf("read Webhook target update attribution: %v", err)
+	}
+	if webhookActor != "admin" || webhookUpdatedAt.IsZero() {
+		t.Fatalf("Webhook target attribution = actor %q at %s, want admin and a timestamp", webhookActor, webhookUpdatedAt)
+	}
 
 	var valueCiphertext, headerCiphertext []byte
 	var keyVersion int32
