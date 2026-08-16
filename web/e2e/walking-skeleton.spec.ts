@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 const instanceName = 'T11 smoke instance'
 
-test('[AC-01-S1] standard monitoring renders real pg_stat_database samples and keeps controls in URL state', async ({ page }) => {
+test('[AC-01-S1] [AC-05-S1] instance overview and standard monitoring expose the real collection path', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('用户名').fill('admin')
   await page.getByLabel('密码').fill('t11-playwright-password')
@@ -10,9 +10,63 @@ test('[AC-01-S1] standard monitoring renders real pg_stat_database samples and k
 
   await expect(page).toHaveURL(/\/instances$/)
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
-  await page.getByRole('row', { name: new RegExp(instanceName) }).getByRole('link', { name: '总览' }).click()
+  const instanceRow = page.getByRole('row', { name: new RegExp(instanceName) })
+  const listHealthText = await instanceRow.locator('.ant-tag').first().innerText()
+  const listAttributionText = await instanceRow.locator('td').first().locator('.ant-typography-secondary').innerText()
+  const listSeverityCounts = await Promise.all(
+    ['C', 'W', 'I'].map((severity) =>
+      instanceRow.getByText(new RegExp(`^${severity}\\d+$`)).innerText(),
+    ),
+  )
+  await instanceRow.getByRole('link', { name: '总览' }).click()
 
   await expect(page.getByRole('tab', { name: '实例总览' })).toHaveAttribute('aria-selected', 'true')
+  const overviewStatusSection = page.locator('.overview-status')
+  await expect(overviewStatusSection.locator('.ant-tag').first()).toHaveText(listHealthText)
+  await expect(overviewStatusSection.getByRole('heading')).toHaveText(listAttributionText)
+  for (const count of listSeverityCounts) {
+    await expect(overviewStatusSection.getByText(count, { exact: true })).toBeVisible()
+  }
+
+  await expect(page.locator('[data-overview-module]')).toHaveCount(7)
+  await expect(page.locator('[data-overview-module] .ant-card-head-title')).toHaveText([
+    '可用性与采集状态',
+    '当前告警摘要',
+    '核心资源',
+    '数据库负载',
+    '复制状态',
+    '近期性能事件',
+    '快速排障入口',
+  ])
+  await expect(page.getByText('近期没有性能事件')).toBeVisible()
+
+  const getLinkURL = async (accessibleName: string) => {
+    const href = await page.getByRole('link', { name: accessibleName, exact: true }).getAttribute('href')
+    if (href === null) {
+      throw new Error(`${accessibleName} link is missing an href`)
+    }
+    return new URL(href, page.url())
+  }
+
+  const overviewURL = new URL(page.url())
+  const monitoringURL = await getLinkURL('标准监控')
+  expect(monitoringURL.searchParams.get('from')).toBe(overviewURL.searchParams.get('from'))
+  expect(monitoringURL.searchParams.get('to')).toBe(overviewURL.searchParams.get('to'))
+
+  const sessionsURL = await getLinkURL('会话与阻塞')
+  expect(sessionsURL.searchParams.get('from')).toBe(overviewURL.searchParams.get('from'))
+  expect(sessionsURL.searchParams.get('to')).toBe(overviewURL.searchParams.get('to'))
+  expect(sessionsURL.searchParams.get('filter')).toBe('lock_wait')
+
+  const collectionURL = await getLinkURL('采集状态')
+  expect(collectionURL.searchParams.get('metric')).toBeNull()
+
+  const maintenanceURL = await getLinkURL('新建维护窗口')
+  expect(maintenanceURL.searchParams.get('instance_id')).toBe(overviewURL.pathname.split('/').at(-1))
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true)
+
   await page.getByRole('link', { name: '监控与报警' }).click()
 
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')
