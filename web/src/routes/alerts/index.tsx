@@ -9,6 +9,7 @@ import type { components } from '../../api/schema'
 import { AlertStatus } from '../../domain/AlertStatus'
 import { Freshness } from '../../domain/Freshness'
 import { AlertSuppressionTags } from '../../domain/SuppressionTags'
+import { unavailabilityCopy } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
 import { parseAlertListSearch, type AlertListSearch } from './search'
 
@@ -163,7 +164,7 @@ const currentColumns: TableColumnsType<AlertObservation> = [
   { title: '阈值', width: 100, render: (_, alert) => optionalNumber(alert.threshold) },
   { title: '首次触发', width: 190, render: (_, alert) => optionalTime(alert.first_triggered_at) },
   { title: '持续时间', width: 120, render: (_, alert) => durationLabel(alert.duration_ms) },
-  { title: 'No Data 原因', width: 180, render: (_, alert) => alert.unavailability ?? '—' },
+  { title: 'No Data 原因', width: 210, render: (_, alert) => <AlertUnavailabilityReason alert={alert} /> },
   {
     title: '操作',
     fixed: 'right',
@@ -174,6 +175,18 @@ const currentColumns: TableColumnsType<AlertObservation> = [
     >详情</Link>,
   },
 ]
+
+type AlertUnavailability = Pick<AlertObservation, 'instance_id' | 'metric_id' | 'unavailability'>
+
+export function AlertUnavailabilityReason({ alert }: { alert: AlertUnavailability }) {
+  if (!alert.unavailability) return '—'
+  const copy = unavailabilityCopy(alert.unavailability)
+  const href = `/instances/${encodeURIComponent(alert.instance_id)}/collection?metric=${encodeURIComponent(alert.metric_id)}`
+  return <Space orientation="vertical" size={0}>
+    <Typography.Text>{copy.title}</Typography.Text>
+    <a href={href}>{copy.action}</a>
+  </Space>
+}
 
 const historyColumns: TableColumnsType<AlertObservation> = [
   { title: '状态', width: 100, render: (_, alert) => <AlertStatus status={alert.status} /> },
