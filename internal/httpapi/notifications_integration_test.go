@@ -139,15 +139,15 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 	if !target.SigningConfigured || target.Url != receiver.URL {
 		t.Fatalf("created Webhook target = %+v", target)
 	}
-	var webhookActor string
-	var webhookUpdatedAt time.Time
+	var createdWebhookActor string
+	var createdWebhookUpdatedAt time.Time
 	if err := platform.QueryRow(ctx, `SELECT actor.username, target.updated_at
 		FROM webhook_target target JOIN app_user actor ON actor.id = target.updated_by
-		WHERE target.id = $1`, target.Id).Scan(&webhookActor, &webhookUpdatedAt); err != nil {
-		t.Fatalf("read Webhook target update attribution: %v", err)
+		WHERE target.id = $1`, target.Id).Scan(&createdWebhookActor, &createdWebhookUpdatedAt); err != nil {
+		t.Fatalf("read created Webhook target attribution: %v", err)
 	}
-	if webhookActor != "admin" || webhookUpdatedAt.IsZero() {
-		t.Fatalf("Webhook target attribution = actor %q at %s, want admin and a timestamp", webhookActor, webhookUpdatedAt)
+	if createdWebhookActor != "admin" || createdWebhookUpdatedAt.IsZero() {
+		t.Fatalf("created Webhook target attribution = actor %q at %s, want admin and a timestamp", createdWebhookActor, createdWebhookUpdatedAt)
 	}
 
 	var valueCiphertext, headerCiphertext []byte
@@ -204,12 +204,21 @@ func TestWebhookDeliveryFailuresAndSecretBoundary(t *testing.T) {
 		t.Fatalf("updated Webhook target = %+v, %v", updated, err)
 	}
 	var retainedValue, retainedHeader []byte
-	if err := platform.QueryRow(ctx, `SELECT signing_value_ciphertext, signature_header_ciphertext
-		FROM webhook_target WHERE id = $1`, target.Id).Scan(&retainedValue, &retainedHeader); err != nil {
-		t.Fatalf("read retained Webhook signing configuration: %v", err)
+	var updatedWebhookActor string
+	var updatedWebhookUpdatedAt time.Time
+	if err := platform.QueryRow(ctx, `SELECT target.signing_value_ciphertext, target.signature_header_ciphertext,
+			actor.username, target.updated_at
+		FROM webhook_target target JOIN app_user actor ON actor.id = target.updated_by
+		WHERE target.id = $1`, target.Id).
+		Scan(&retainedValue, &retainedHeader, &updatedWebhookActor, &updatedWebhookUpdatedAt); err != nil {
+		t.Fatalf("read updated Webhook target state: %v", err)
 	}
 	if !bytes.Equal(retainedValue, valueCiphertext) || !bytes.Equal(retainedHeader, headerCiphertext) {
 		t.Fatal("metadata-only Webhook update replaced signing configuration")
+	}
+	if updatedWebhookActor != "admin" || updatedWebhookUpdatedAt.Before(createdWebhookUpdatedAt) {
+		t.Fatalf("updated Webhook target attribution = actor %q at %s, want admin at or after %s",
+			updatedWebhookActor, updatedWebhookUpdatedAt, createdWebhookUpdatedAt)
 	}
 	snapshot, err = snapshotStore.Load()
 	if err != nil || len(snapshot.Webhooks) != 1 || snapshot.Webhooks[0].Name != "Primary on-call gateway" {

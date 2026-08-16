@@ -86,9 +86,12 @@ describe('Webhook notification settings', () => {
     expect(view.container.querySelector('.ant-badge-dot')).toBeTruthy()
   })
 
-  it('shows the failure badge on the notification channels tab label', () => {
-    const view = render(<NotificationChannelsLabel hasFailures />)
+  it('shows and clears the failure badge on the notification channels tab label', () => {
+    const view = render(<NotificationChannelsLabel hasFailures={false} />)
     expect(screen.getByText('通知渠道')).toBeTruthy()
+    expect(view.container.querySelector('.ant-badge-dot')).toBeNull()
+
+    view.rerender(<NotificationChannelsLabel hasFailures />)
     expect(view.container.querySelector('.ant-badge-dot')).toBeTruthy()
   })
 })
