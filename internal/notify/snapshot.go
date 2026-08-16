@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-const ChannelSnapshotFormatVersion = 1
+const (
+	ChannelSnapshotFormatVersion    = 1
+	ChannelSnapshotDeletedEventType = "notification_channel_snapshot_deleted"
+)
 
 type ChannelSnapshot struct {
 	FormatVersion int                     `json:"format_version"`
@@ -47,8 +51,90 @@ type ChannelSnapshotStore struct {
 	path string
 }
 
+type ChannelSnapshotArtifact struct {
+	Name       string
+	Bytes      int64
+	ModifiedAt time.Time
+}
+
+type ChannelSnapshotDeletionEvent struct {
+	Event        string    `json:"event"`
+	SnapshotName string    `json:"snapshot_name"`
+	Bytes        int64     `json:"bytes"`
+	DeletedAt    time.Time `json:"deleted_at"`
+}
+
+type ChannelSnapshotDeletionRecorder func(ChannelSnapshotDeletionEvent) error
+
 func NewChannelSnapshotStore(path string) *ChannelSnapshotStore {
 	return &ChannelSnapshotStore{path: path}
+}
+
+func (store *ChannelSnapshotStore) ListArtifacts() ([]ChannelSnapshotArtifact, error) {
+	snapshotInfo, err := os.Lstat(store.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return []ChannelSnapshotArtifact{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect notification channel snapshot: %w", err)
+	}
+	if !snapshotInfo.Mode().IsRegular() {
+		return []ChannelSnapshotArtifact{}, nil
+	}
+	return []ChannelSnapshotArtifact{{
+		Name:       filepath.Base(store.path),
+		Bytes:      snapshotInfo.Size(),
+		ModifiedAt: snapshotInfo.ModTime().UTC(),
+	}}, nil
+}
+
+func (store *ChannelSnapshotStore) DeleteArtifact(
+	name string,
+	deletedAt time.Time,
+	recordDeletion ChannelSnapshotDeletionRecorder,
+) error {
+	expectedName := filepath.Base(store.path)
+	if name != expectedName || filepath.Base(name) != name {
+		return fmt.Errorf("invalid notification channel snapshot name %q", name)
+	}
+	if recordDeletion == nil {
+		return errors.New("notification channel snapshot deletion requires an event recorder")
+	}
+
+	snapshotInfo, err := os.Lstat(store.path)
+	if err != nil {
+		return fmt.Errorf("inspect notification channel snapshot %s: %w", name, err)
+	}
+	if !snapshotInfo.Mode().IsRegular() {
+		return fmt.Errorf("notification channel snapshot %s is not a regular file", name)
+	}
+
+	stagedPath := filepath.Join(filepath.Dir(store.path), "."+name+".deleting")
+	if _, err := os.Lstat(stagedPath); err == nil {
+		return fmt.Errorf("notification channel snapshot deletion already staged for %s", name)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect notification channel snapshot deletion staging path: %w", err)
+	}
+	if err := os.Rename(store.path, stagedPath); err != nil {
+		return fmt.Errorf("stage notification channel snapshot deletion: %w", err)
+	}
+
+	event := ChannelSnapshotDeletionEvent{
+		Event:        ChannelSnapshotDeletedEventType,
+		SnapshotName: name,
+		Bytes:        snapshotInfo.Size(),
+		DeletedAt:    deletedAt.UTC(),
+	}
+	if err := recordDeletion(event); err != nil {
+		if restoreErr := os.Rename(stagedPath, store.path); restoreErr != nil {
+			return fmt.Errorf("record notification channel snapshot deletion event: %v; restore snapshot: %w", err, restoreErr)
+		}
+		return fmt.Errorf("record notification channel snapshot deletion event: %w", err)
+	}
+	if err := os.Remove(stagedPath); err != nil {
+		return fmt.Errorf("remove staged notification channel snapshot %s: %w", name, err)
+	}
+	return nil
 }
 
 func (store *ChannelSnapshotStore) Sync(ctx context.Context, database DBTX) error {

@@ -2,11 +2,13 @@ package notify
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestChannelSnapshotStoreWritesEncryptedConfigurationAtomically(t *testing.T) {
@@ -82,5 +84,109 @@ func TestChannelSnapshotStoreWritesEncryptedConfigurationAtomically(t *testing.T
 	}
 	if len(entries) != 1 || entries[0].Name() != filepath.Base(path) {
 		t.Fatalf("channel snapshot directory entries = %v, want only final snapshot", entries)
+	}
+}
+
+func TestChannelSnapshotStoreListsAndDeletesSnapshotWithEvent(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	name := "notification-channels.snapshot"
+	path := filepath.Join(directory, name)
+	store := NewChannelSnapshotStore(path)
+	if err := store.Write(ChannelSnapshot{
+		FormatVersion: ChannelSnapshotFormatVersion,
+		Webhooks:      []SnapshotWebhookTarget{},
+	}); err != nil {
+		t.Fatalf("write channel snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "unmanaged.snapshot"), []byte("keep"), 0o600); err != nil {
+		t.Fatalf("write unmanaged file: %v", err)
+	}
+	modifiedAt := time.Date(2026, time.August, 15, 10, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(path, modifiedAt, modifiedAt); err != nil {
+		t.Fatalf("set channel snapshot time: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat channel snapshot: %v", err)
+	}
+
+	gotArtifacts, err := store.ListArtifacts()
+	if err != nil {
+		t.Fatalf("list channel snapshot artifacts: %v", err)
+	}
+	wantArtifacts := []ChannelSnapshotArtifact{{
+		Name:       name,
+		Bytes:      info.Size(),
+		ModifiedAt: modifiedAt,
+	}}
+	if !reflect.DeepEqual(gotArtifacts, wantArtifacts) {
+		t.Fatalf("listed channel snapshot artifacts = %+v, want %+v", gotArtifacts, wantArtifacts)
+	}
+
+	var gotEvent ChannelSnapshotDeletionEvent
+	deletedAt := modifiedAt.Add(time.Hour)
+	if err := store.DeleteArtifact(name, deletedAt, func(candidate ChannelSnapshotDeletionEvent) error {
+		gotEvent = candidate
+		return nil
+	}); err != nil {
+		t.Fatalf("delete channel snapshot artifact: %v", err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("deleted channel snapshot still exists: %v", err)
+	}
+	wantEvent := ChannelSnapshotDeletionEvent{
+		Event:        "notification_channel_snapshot_deleted",
+		SnapshotName: name,
+		Bytes:        info.Size(),
+		DeletedAt:    deletedAt,
+	}
+	if !reflect.DeepEqual(gotEvent, wantEvent) {
+		t.Fatalf("channel snapshot deletion event = %+v, want %+v", gotEvent, wantEvent)
+	}
+	if _, err := os.Stat(filepath.Join(directory, "unmanaged.snapshot")); err != nil {
+		t.Fatalf("delete removed unmanaged file: %v", err)
+	}
+}
+
+func TestChannelSnapshotStoreRestoresSnapshotWhenDeletionEventFails(t *testing.T) {
+	t.Parallel()
+
+	directory := t.TempDir()
+	name := "notification-channels.snapshot"
+	path := filepath.Join(directory, name)
+	store := NewChannelSnapshotStore(path)
+	if err := store.Write(ChannelSnapshot{
+		FormatVersion: ChannelSnapshotFormatVersion,
+		Webhooks:      []SnapshotWebhookTarget{},
+	}); err != nil {
+		t.Fatalf("write channel snapshot: %v", err)
+	}
+
+	recorderError := errors.New("platform event unavailable")
+	err := store.DeleteArtifact(name, time.Now(), func(ChannelSnapshotDeletionEvent) error {
+		return recorderError
+	})
+	if !errors.Is(err, recorderError) {
+		t.Fatalf("delete channel snapshot error = %v, want event error", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("channel snapshot was not restored after event failure: %v", err)
+	}
+}
+
+func TestChannelSnapshotStoreRejectsInvalidDeletionRequests(t *testing.T) {
+	t.Parallel()
+
+	name := "notification-channels.snapshot"
+	store := NewChannelSnapshotStore(filepath.Join(t.TempDir(), name))
+	if err := store.DeleteArtifact("../"+name, time.Time{}, func(ChannelSnapshotDeletionEvent) error {
+		return nil
+	}); err == nil {
+		t.Fatal("delete channel snapshot accepted path traversal")
+	}
+	if err := store.DeleteArtifact(name, time.Time{}, nil); err == nil {
+		t.Fatal("delete channel snapshot accepted a missing event recorder")
 	}
 }
