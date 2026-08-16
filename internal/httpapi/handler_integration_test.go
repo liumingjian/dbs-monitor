@@ -623,6 +623,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	assertUnavailability(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.replication.wal_lag_bytes", 1), "NOT_APPLICABLE_ROLE")
 	slotSeriesURL := strings.Replace(seriesURL, "pg.connection.total", "pg.replication_slot.retained_wal_bytes", 1)
 	assertUnavailability(t, client, slotSeriesURL, "NOT_APPLICABLE_ROLE")
+	tpsURL := strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1)
+	assertUnavailability(t, client, tpsURL, "NO_SAMPLES_YET")
 	if _, err := pool.Exec(ctx, `UPDATE instance_capability_snapshot
 		SET states = jsonb_set(states, '{topo.has_slot}', '"PRESENT"')
 		WHERE instance_id = $1`, createBody.Instance.Id); err != nil {
@@ -726,7 +728,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 			longQuerySample.SampledAt, longQueryMetricResponse.JSON200.Metrics)
 	}
 
-	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, longQuerySample.SampledAt.Add(30*24*time.Hour+time.Nanosecond)); err != nil {
+	if err := collect.DropExpiredStatActivitySnapshots(ctx, platform, longQuerySample.SampledAt.Add(30*24*time.Hour+time.Microsecond)); err != nil {
 		t.Fatalf("expire long query samples: %v", err)
 	}
 	expiredLongQueries, err := apiClient.ListLongQuerySamplesWithResponse(ctx, createBody.Instance.Id, &api.ListLongQuerySamplesParams{
@@ -765,8 +767,6 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if oldQueryStatistics != 0 {
 		t.Fatalf("expired query statistics entries = %d, want 0", oldQueryStatistics)
 	}
-	tpsURL := strings.Replace(seriesURL, "pg.connection.total", "pg.tps", 1)
-	assertUnavailability(t, client, tpsURL, "NO_SAMPLES_YET")
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect pg_stat_database rate samples: %v", err)
 	}
@@ -937,6 +937,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	health.Update(now, platformhealth.DiskSource(
 		96, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds(),
 	))
+	health.Update(now, platformhealth.PlatformDatabaseCapacitySource(
+		96, 100, health.PlatformDatabaseCapacityLevel(), platformhealth.DefaultDiskThresholds(),
+	))
 	diagnostics := getResponse(t, client, server.URL+"/api/v1/diagnostics/health")
 	var diagnosticSnapshot api.PlatformHealthSnapshot
 	if err := json.NewDecoder(diagnostics.Body).Decode(&diagnosticSnapshot); err != nil {
@@ -977,6 +980,9 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	}
 	health.Update(now, platformhealth.DiskSource(
 		77, health.DiskLevel(), platformhealth.DefaultDiskThresholds(),
+	))
+	health.Update(now, platformhealth.PlatformDatabaseCapacitySource(
+		77, 100, health.PlatformDatabaseCapacityLevel(), platformhealth.DefaultDiskThresholds(),
 	))
 	recovered := requestJSON(t, client, http.MethodPost, server.URL+"/api/agent/v1/report", map[string]any{
 		"instance_id":   instanceID,

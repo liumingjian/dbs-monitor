@@ -14,6 +14,7 @@ jobs:
     services:
       postgres:
         image: postgres:17
+        command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
         env:
           POSTGRES_DB: dbs_monitor
           POSTGRES_USER: dbs_monitor

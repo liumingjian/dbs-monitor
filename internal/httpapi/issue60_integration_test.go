@@ -226,18 +226,17 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	assertProducedMetric(currentSeriesURL("host.cpu.usage_percent"), api.AGENTOFFLINE)
 	assertMetricPointValue(t, client, currentSeriesURL("agent.status"), metric.AgentStatusEncodings[metric.AgentStatusOffline])
 
-	unreachable := requestJSON(t, client, http.MethodPut, fmt.Sprintf("%s/api/v1/instances/%s", server.URL, instanceID), api.InstanceMetadataInput{
-		Name: "issue 60 target", Host: env("PGHOST", "localhost"), Port: 1, Database: targetDatabase,
-	}, "")
-	unreachable.Body.Close()
-	if unreachable.StatusCode != http.StatusOK {
-		t.Fatalf("make issue 60 target unreachable status = %d, want 200", unreachable.StatusCode)
+	if _, err := pool.Exec(ctx, "UPDATE instance SET port = 1 WHERE id = $1", createdBody.Instance.Id); err != nil {
+		t.Fatalf("make issue 60 target unreachable: %v", err)
 	}
 	currentClock.Advance(5 * time.Second)
 	if err := collector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect issue 60 unreachable target: %v", err)
 	}
 	assertProducedMetric(currentSeriesURL("pg.connection.total"), api.DBUNREACHABLE)
+	if _, err := pool.Exec(ctx, "UPDATE instance SET port = $2 WHERE id = $1", createdBody.Instance.Id, envInt("PGPORT", 55432)); err != nil {
+		t.Fatalf("restore issue 60 target port: %v", err)
+	}
 
 	updated := requestJSON(t, client, http.MethodPut, fmt.Sprintf("%s/api/v1/instances/%s", server.URL, instanceID), api.InstanceMetadataInput{
 		Name: "issue 60 target", Host: env("PGHOST", "localhost"), Port: envInt("PGPORT", 55432),
