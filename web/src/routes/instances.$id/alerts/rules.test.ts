@@ -51,12 +51,12 @@ describe('alert rule capability fit', () => {
   })
 })
 
-describe('A10 alert rule role matrix', () => {
+describe('alert rule write permissions', () => {
   it.each([
     ['READONLY', false],
     ['ALERT_ADMIN', true],
     ['PLATFORM_ADMIN', true],
-  ] as const)('gives %s write capability = %s while the page remains visible', (role, expected) => {
-    expect(canWriteAlertRules(role)).toBe(expected)
+  ] as const)('allows %s to write = %s', (role, canWrite) => {
+    expect(canWriteAlertRules(role)).toBe(canWrite)
   })
 })

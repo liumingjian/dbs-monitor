@@ -79,8 +79,8 @@ RETURNING *;
 -- name: DeleteAlertRule :one
 UPDATE alert_rule
 SET enabled = false,
-    deleted_by = $2,
-    deleted_at = $3
+    deleted_by = sqlc.arg(actor_id),
+    deleted_at = sqlc.arg(deleted_at)
 WHERE id = $1
   AND builtin_identifier IS NULL
   AND deleted_at IS NULL

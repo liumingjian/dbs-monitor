@@ -199,7 +199,7 @@ func (handler *Handler) DeleteAlertRule(ctx context.Context, request api.DeleteA
 	}
 	if _, err := queries.DeleteAlertRule(ctx, alerting.DeleteAlertRuleParams{
 		ID:        ruleID,
-		DeletedBy: databaseUserID(authenticatedUserID(ctx)),
+		ActorID:   databaseUserID(authenticatedUserID(ctx)),
 		DeletedAt: pgtype.Timestamptz{Time: handler.clock.Now().UTC(), Valid: true},
 	}); err != nil {
 		return nil, err
@@ -669,22 +669,13 @@ func toAPIAlertRule(ctx context.Context, queries *alerting.Queries, rule alertin
 		Version:                         int(rule.Version),
 		CreatedAt:                       rule.CreatedAt.Time,
 		UpdatedAt:                       rule.UpdatedAt.Time,
+		CreatedBy:                       toAPIOptionalUUID(rule.CreatedBy),
+		UpdatedBy:                       toAPIOptionalUUID(rule.UpdatedBy),
+		EnabledUpdatedBy:                toAPIOptionalUUID(rule.EnabledUpdatedBy),
 	}
 	if stats.LastTriggeredAt.Valid {
 		value := stats.LastTriggeredAt.Time
 		result.LastTriggeredAt = &value
-	}
-	if rule.EnabledUpdatedBy.Valid {
-		value := openapi_types.UUID(rule.EnabledUpdatedBy.Bytes)
-		result.EnabledUpdatedBy = &value
-	}
-	if rule.CreatedBy.Valid {
-		value := openapi_types.UUID(rule.CreatedBy.Bytes)
-		result.CreatedBy = &value
-	}
-	if rule.UpdatedBy.Valid {
-		value := openapi_types.UUID(rule.UpdatedBy.Bytes)
-		result.UpdatedBy = &value
 	}
 	if rule.EnabledUpdatedAt.Valid {
 		value := rule.EnabledUpdatedAt.Time

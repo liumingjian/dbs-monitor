@@ -396,12 +396,12 @@ RETURNING id
 
 type DeleteAlertRuleParams struct {
 	ID        pgtype.UUID
-	DeletedBy pgtype.UUID
+	ActorID   pgtype.UUID
 	DeletedAt pgtype.Timestamptz
 }
 
 func (q *Queries) DeleteAlertRule(ctx context.Context, arg DeleteAlertRuleParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, deleteAlertRule, arg.ID, arg.DeletedBy, arg.DeletedAt)
+	row := q.db.QueryRow(ctx, deleteAlertRule, arg.ID, arg.ActorID, arg.DeletedAt)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
