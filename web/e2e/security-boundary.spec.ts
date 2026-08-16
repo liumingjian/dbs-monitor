@@ -4,10 +4,14 @@ test('[SEC-10] production CSP keeps the login-to-chart path functional', async (
   const violations: string[] = []
   const violationPattern = /content security policy|violates.*(?:policy|directive)|refused to.*(?:policy|directive)/i
   page.on('console', (message) => {
-    if (violationPattern.test(message.text())) violations.push(message.text())
+    if (violationPattern.test(message.text())) {
+      violations.push(message.text())
+    }
   })
   page.on('pageerror', (error) => {
-    if (violationPattern.test(error.message)) violations.push(error.message)
+    if (violationPattern.test(error.message)) {
+      violations.push(error.message)
+    }
   })
 
   await page.goto('/login')
@@ -27,12 +31,15 @@ test('[SEC-10] production CSP keeps the login-to-chart path functional', async (
   const chart = page.locator('.metric-card canvas').first()
   await expect(chart).toBeVisible()
   const chartPixels = await chart.evaluate((canvas) => {
-    const context = (canvas as HTMLCanvasElement).getContext('2d')
+    const chartCanvas = canvas as HTMLCanvasElement
+    const context = chartCanvas.getContext('2d')
     if (!context) return 0
-    const pixels = context.getImageData(0, 0, (canvas as HTMLCanvasElement).width, (canvas as HTMLCanvasElement).height).data
+    const pixels = context.getImageData(0, 0, chartCanvas.width, chartCanvas.height).data
     let painted = 0
     for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] !== 0) painted++
+      if (pixels[index] !== 0) {
+        painted++
+      }
     }
     return painted
   })

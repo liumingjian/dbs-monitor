@@ -12,16 +12,19 @@ func (handler *Handler) ListPlatformEvents(ctx context.Context, _ api.ListPlatfo
 	if err != nil {
 		return nil, err
 	}
-	events := make(api.ListPlatformEvents200JSONResponse, 0, len(rows))
+	response := make(api.ListPlatformEvents200JSONResponse, 0, len(rows))
 	for _, row := range rows {
 		event := api.PlatformEvent{
-			Id: row.ID, Kind: api.PlatformEventKind(row.Kind), OccurredAt: row.OccurredAt.Time, Actor: row.Actor,
+			Id:         row.ID,
+			Kind:       api.PlatformEventKind(row.Kind),
+			OccurredAt: row.OccurredAt.Time,
+			Actor:      row.Actor,
 		}
 		if row.SubjectID.Valid {
 			subjectID := uuid.UUID(row.SubjectID.Bytes)
 			event.SubjectId = &subjectID
 		}
-		events = append(events, event)
+		response = append(response, event)
 	}
-	return events, nil
+	return response, nil
 }

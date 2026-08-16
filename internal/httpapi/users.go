@@ -100,8 +100,10 @@ func (handler *Handler) UpdateUserStatus(ctx context.Context, request api.Update
 	if errors.Is(err, errSelfDisable) || errors.Is(err, errLastPlatformAdmin) {
 		actorID := authenticatedUserID(ctx)
 		if recordErr := platformevent.Record(ctx, handler.platform, platformevent.Event{
-			Kind: platformevent.UserStatusChangeRejected, OccurredAt: handler.clock.Now().UTC(),
-			ActorID: &actorID, SubjectID: &request.Id,
+			Kind:       platformevent.UserStatusChangeRejected,
+			OccurredAt: handler.clock.Now().UTC(),
+			ActorID:    &actorID,
+			SubjectID:  &request.Id,
 		}); recordErr != nil {
 			return nil, recordErr
 		}

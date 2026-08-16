@@ -483,7 +483,10 @@ func changedSources(previous, current []SourceSnapshot) []sourceChange {
 			continue
 		}
 		changes = append(changes, sourceChange{
-			Source: source.Source, PreviousStatus: before.Status, Status: source.Status, Code: source.Code,
+			Source:                source.Source,
+			PreviousStatus:        before.Status,
+			Status:                source.Status,
+			Code:                  source.Code,
 			ValidityDaysRemaining: source.ValidityDaysRemaining,
 		})
 	}

@@ -30,26 +30,26 @@ import (
 const securityAdminPassword = "acceptance-admin-password"
 
 type securityRuntime struct {
-	baseURL string
-	caPath  string
-	client  *api.ClientWithResponses
-	http    *http.Client
-	logPath string
+	baseURL    string
+	caPath     string
+	client     *api.ClientWithResponses
+	httpClient *http.Client
+	logPath    string
 }
 
 type securityServerOptions struct {
-	port        int
-	absoluteTTL time.Duration
-	idleTTL     time.Duration
-	fixture     string
-	embedWeb    bool
+	port               int
+	absoluteTTL        time.Duration
+	idleTTL            time.Duration
+	certificateFixture string
+	embedWeb           bool
 }
 
 func TestAcceptance_SEC_1(t *testing.T) {
 	runSecurityEntry(t, "SEC-1", "six exact security headers covered API, static, and Agent handler chains", func(t *testing.T) {
 		runtime := startSecurityRuntime(t, securityServerOptions{port: 18450})
 		loginSecurityUser(t, runtime.client, "admin", securityAdminPassword)
-		want := securityHeaderGolden(t)
+		expectedHeaders := securityHeaderGolden(t)
 		for _, request := range []struct {
 			name   string
 			method string
@@ -69,20 +69,20 @@ func TestAcceptance_SEC_1(t *testing.T) {
 				if request.body != "" {
 					req.Header.Set("Content-Type", "application/json")
 				}
-				response, err := runtime.http.Do(req)
+				response, err := runtime.httpClient.Do(req)
 				if err != nil {
 					t.Fatalf("request %s: %v", request.path, err)
 				}
 				response.Body.Close()
-				assertSecurityHeaders(t, response.Header, want)
+				assertSecurityHeaders(t, response.Header, expectedHeaders)
 			})
 		}
-		csp := want["Content-Security-Policy"]
+		csp := expectedHeaders["Content-Security-Policy"]
 		if regexp.MustCompile(`script-src[^;]*(?:'unsafe-inline'|'unsafe-eval')`).MatchString(csp) {
 			t.Fatalf("CSP script-src permits inline or evaluated scripts: %s", csp)
 		}
-		if want["Strict-Transport-Security"] != "max-age=31536000" {
-			t.Fatalf("HSTS = %q, want max-age only", want["Strict-Transport-Security"])
+		if expectedHeaders["Strict-Transport-Security"] != "max-age=31536000" {
+			t.Fatalf("HSTS = %q, want max-age only", expectedHeaders["Strict-Transport-Security"])
 		}
 	})
 }
@@ -91,10 +91,10 @@ func TestAcceptance_SEC_2(t *testing.T) {
 	runSecurityEntry(t, "SEC-2", "TLS 1.2 was rejected while TLS 1.3 and the pinned generated CA completed a business request", func(t *testing.T) {
 		runtime := startSecurityRuntime(t, securityServerOptions{port: 18451})
 		roots, _ := loadSecurityCertificate(t, runtime.caPath)
-		tls12 := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
+		tls12Client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{
 			RootCAs: roots, MinVersion: tls.VersionTLS12, MaxVersion: tls.VersionTLS12,
 		}}, Timeout: 5 * time.Second}
-		if response, err := tls12.Get(runtime.baseURL + "/"); err == nil {
+		if response, err := tls12Client.Get(runtime.baseURL + "/"); err == nil {
 			response.Body.Close()
 			t.Fatal("TLS 1.2 handshake unexpectedly succeeded")
 		}
@@ -102,8 +102,9 @@ func TestAcceptance_SEC_2(t *testing.T) {
 		pinnedClient := pinnedSecurityClient(t, runtime.baseURL, runtime.caPath, time.Time{})
 		loginSecurityUser(t, pinnedClient, "admin", securityAdminPassword)
 		me, err := pinnedClient.GetCurrentUserWithResponse(context.Background())
-		if err != nil || me.StatusCode() != http.StatusOK || me.JSON200 == nil {
-			t.Fatalf("TLS 1.3 business request = status %d body %s error %v", me.StatusCode(), me.Body, err)
+		requireSecurityResponse(t, "TLS 1.3 business request", err)
+		if me.StatusCode() != http.StatusOK || me.JSON200 == nil {
+			t.Fatalf("TLS 1.3 business request = status %d body %s", me.StatusCode(), me.Body)
 		}
 	})
 }
@@ -121,32 +122,36 @@ func TestAcceptance_SEC_6(t *testing.T) {
 		assertSecurityAuthenticated(t, logoutClient, http.StatusOK)
 		assertSecurityAuthenticated(t, peerClient, http.StatusOK)
 		loggedOut, err := logoutClient.DeleteSessionWithResponse(context.Background(), api.DeleteSessionJSONRequestBody{})
-		if err != nil || loggedOut.StatusCode() != http.StatusNoContent {
-			t.Fatalf("logout = status %d body %s error %v", loggedOut.StatusCode(), loggedOut.Body, err)
+		requireSecurityResponse(t, "logout", err)
+		if loggedOut.StatusCode() != http.StatusNoContent {
+			t.Fatalf("logout = status %d body %s", loggedOut.StatusCode(), loggedOut.Body)
 		}
 		assertSecurityAuthenticated(t, logoutClient, http.StatusUnauthorized)
 		assertSecurityAuthenticated(t, peerClient, http.StatusOK)
 
 		passwordUser := createSecurityUser(t, runtime.client, "sec-6-password-user", api.READONLY)
-		current := newSecurityClient(t, runtime.baseURL, runtime.caPath)
-		other := newSecurityClient(t, runtime.baseURL, runtime.caPath)
-		loginSecurityUser(t, current, passwordUser.User.Username, passwordUser.InitialPassword)
-		loginSecurityUser(t, other, passwordUser.User.Username, passwordUser.InitialPassword)
-		changed, err := current.ChangeOwnPasswordWithResponse(context.Background(), api.PasswordChangeInput{
-			OldPassword: passwordUser.InitialPassword, NewPassword: "sec-6-new-password-value",
+		currentSession := newSecurityClient(t, runtime.baseURL, runtime.caPath)
+		otherSession := newSecurityClient(t, runtime.baseURL, runtime.caPath)
+		loginSecurityUser(t, currentSession, passwordUser.User.Username, passwordUser.InitialPassword)
+		loginSecurityUser(t, otherSession, passwordUser.User.Username, passwordUser.InitialPassword)
+		changed, err := currentSession.ChangeOwnPasswordWithResponse(context.Background(), api.PasswordChangeInput{
+			OldPassword: passwordUser.InitialPassword,
+			NewPassword: "sec-6-new-password-value",
 		})
-		if err != nil || changed.StatusCode() != http.StatusNoContent {
-			t.Fatalf("change password = status %d body %s error %v", changed.StatusCode(), changed.Body, err)
+		requireSecurityResponse(t, "change password", err)
+		if changed.StatusCode() != http.StatusNoContent {
+			t.Fatalf("change password = status %d body %s", changed.StatusCode(), changed.Body)
 		}
-		assertSecurityAuthenticated(t, current, http.StatusOK)
-		assertSecurityAuthenticated(t, other, http.StatusUnauthorized)
+		assertSecurityAuthenticated(t, currentSession, http.StatusOK)
+		assertSecurityAuthenticated(t, otherSession, http.StatusUnauthorized)
 
 		resetUser := createSecurityUser(t, runtime.client, "sec-6-reset-user", api.READONLY)
 		resetSession := newSecurityClient(t, runtime.baseURL, runtime.caPath)
 		loginSecurityUser(t, resetSession, resetUser.User.Username, resetUser.InitialPassword)
 		reset, err := runtime.client.ResetUserPasswordWithResponse(context.Background(), resetUser.User.Id)
-		if err != nil || reset.StatusCode() != http.StatusOK || reset.JSON200 == nil {
-			t.Fatalf("reset password = status %d body %s error %v", reset.StatusCode(), reset.Body, err)
+		requireSecurityResponse(t, "reset password", err)
+		if reset.StatusCode() != http.StatusOK || reset.JSON200 == nil {
+			t.Fatalf("reset password = status %d body %s", reset.StatusCode(), reset.Body)
 		}
 		assertSecurityAuthenticated(t, resetSession, http.StatusUnauthorized)
 		resetLogin := newSecurityClient(t, runtime.baseURL, runtime.caPath)
@@ -157,8 +162,9 @@ func TestAcceptance_SEC_6(t *testing.T) {
 		disabledClient := newSecurityClient(t, runtime.baseURL, runtime.caPath)
 		loginSecurityUser(t, disabledClient, disabledUser.User.Username, disabledUser.InitialPassword)
 		disabled, err := runtime.client.UpdateUserStatusWithResponse(context.Background(), disabledUser.User.Id, api.UserStatusInput{Enabled: false})
-		if err != nil || disabled.StatusCode() != http.StatusOK {
-			t.Fatalf("disable user = status %d body %s error %v", disabled.StatusCode(), disabled.Body, err)
+		requireSecurityResponse(t, "disable user", err)
+		if disabled.StatusCode() != http.StatusOK {
+			t.Fatalf("disable user = status %d body %s", disabled.StatusCode(), disabled.Body)
 		}
 		assertSecurityAuthenticated(t, disabledClient, http.StatusUnauthorized)
 	})
@@ -170,8 +176,9 @@ func TestAcceptance_SEC_7(t *testing.T) {
 		login, err := runtime.client.CreateSessionWithResponse(context.Background(), api.CreateSessionJSONRequestBody{
 			Username: "admin", Password: securityAdminPassword,
 		})
-		if err != nil || login.StatusCode() != http.StatusNoContent {
-			t.Fatalf("login = status %d body %s error %v", login.StatusCode(), login.Body, err)
+		requireSecurityResponse(t, "login", err)
+		if login.StatusCode() != http.StatusNoContent {
+			t.Fatalf("login = status %d body %s", login.StatusCode(), login.Body)
 		}
 		cookies := login.HTTPResponse.Cookies()
 		if len(cookies) != 1 {
@@ -185,8 +192,9 @@ func TestAcceptance_SEC_7(t *testing.T) {
 		assertTokenAbsentFromRawResponse(t, cookie.Value, login.Body, login.HTTPResponse)
 
 		me, err := runtime.client.GetCurrentUserWithResponse(context.Background())
-		if err != nil || me.StatusCode() != http.StatusOK {
-			t.Fatalf("current user = status %d body %s error %v", me.StatusCode(), me.Body, err)
+		requireSecurityResponse(t, "current user", err)
+		if me.StatusCode() != http.StatusOK {
+			t.Fatalf("current user = status %d body %s", me.StatusCode(), me.Body)
 		}
 		assertTokenAbsentFromRawResponse(t, cookie.Value, me.Body, me.HTTPResponse)
 	})
@@ -198,12 +206,14 @@ func TestAcceptance_SEC_8(t *testing.T) {
 		loginSecurityUser(t, runtime.client, "admin", securityAdminPassword)
 
 		const failedPassword = "sec-8-failed-login-secret"
-		failed := newSecurityClient(t, runtime.baseURL, runtime.caPath)
-		failedLogin, err := failed.CreateSessionWithResponse(context.Background(), api.CreateSessionJSONRequestBody{
-			Username: "sec-8-missing-user", Password: failedPassword,
+		failedLoginClient := newSecurityClient(t, runtime.baseURL, runtime.caPath)
+		failedLogin, err := failedLoginClient.CreateSessionWithResponse(context.Background(), api.CreateSessionJSONRequestBody{
+			Username: "sec-8-missing-user",
+			Password: failedPassword,
 		})
-		if err != nil || failedLogin.StatusCode() != http.StatusUnauthorized {
-			t.Fatalf("failed login = status %d body %s error %v", failedLogin.StatusCode(), failedLogin.Body, err)
+		requireSecurityResponse(t, "failed login", err)
+		if failedLogin.StatusCode() != http.StatusUnauthorized {
+			t.Fatalf("failed login = status %d body %s", failedLogin.StatusCode(), failedLogin.Body)
 		}
 		if strings.Contains(string(failedLogin.Body), failedPassword) {
 			t.Fatal("failed login response echoed the submitted password")
@@ -213,48 +223,64 @@ func TestAcceptance_SEC_8(t *testing.T) {
 		alertUser := createSecurityUser(t, runtime.client, "sec-8-alert-user", api.ALERTADMIN)
 		disabledUser := createSecurityUser(t, runtime.client, "sec-8-disabled-user", api.READONLY)
 		disabled, err := runtime.client.UpdateUserStatusWithResponse(context.Background(), disabledUser.User.Id, api.UserStatusInput{Enabled: false})
-		if err != nil || disabled.StatusCode() != http.StatusOK {
-			t.Fatalf("disable user = status %d body %s error %v", disabled.StatusCode(), disabled.Body, err)
+		requireSecurityResponse(t, "disable user", err)
+		if disabled.StatusCode() != http.StatusOK {
+			t.Fatalf("disable user = status %d body %s", disabled.StatusCode(), disabled.Body)
 		}
 		me, err := runtime.client.GetCurrentUserWithResponse(context.Background())
-		if err != nil || me.JSON200 == nil {
-			t.Fatalf("read administrator identity: %v", err)
+		requireSecurityResponse(t, "read administrator identity", err)
+		if me.JSON200 == nil {
+			t.Fatalf("read administrator identity = status %d body %s", me.StatusCode(), me.Body)
 		}
 		rejected, err := runtime.client.UpdateUserStatusWithResponse(context.Background(), me.JSON200.Id, api.UserStatusInput{Enabled: false})
-		if err != nil || rejected.StatusCode() != http.StatusBadRequest {
-			t.Fatalf("rejected self-disable = status %d body %s error %v", rejected.StatusCode(), rejected.Body, err)
+		requireSecurityResponse(t, "rejected self-disable", err)
+		if rejected.StatusCode() != http.StatusBadRequest {
+			t.Fatalf("rejected self-disable = status %d body %s", rejected.StatusCode(), rejected.Body)
 		}
 
 		const credential = "sec-8-instance-credential-secret"
 		created, err := runtime.client.CreateInstanceWithResponse(context.Background(), api.InstanceCreateInput{
-			Name: "SEC-8 credential target", Host: "localhost", Port: envInt(t, "ACCEPTANCE_TARGET_PORT", 55447),
-			Database: "monitored", Username: "monitored", Password: "monitored",
+			Name:     "SEC-8 credential target",
+			Host:     "localhost",
+			Port:     envInt(t, "ACCEPTANCE_TARGET_PORT", 55447),
+			Database: "monitored",
+			Username: "monitored",
+			Password: "monitored",
 		})
-		if err != nil || created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
-			t.Fatalf("create credential target = status %d body %s error %v", created.StatusCode(), created.Body, err)
+		requireSecurityResponse(t, "create credential target", err)
+		if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
+			t.Fatalf("create credential target = status %d body %s", created.StatusCode(), created.Body)
 		}
 		instanceID := created.JSON201.Instance.Id
 		defer func() { _, _ = runtime.client.DeleteInstanceWithResponse(context.Background(), instanceID) }()
 		updated, err := runtime.client.UpdateInstanceCredentialWithResponse(context.Background(), instanceID, api.InstanceCredentialInput{
-			Username: "sec8_monitor", Password: credential,
+			Username: "sec8_monitor",
+			Password: credential,
 		})
-		if err != nil || updated.StatusCode() != http.StatusOK {
-			t.Fatalf("update credential = status %d body %s error %v", updated.StatusCode(), updated.Body, err)
+		requireSecurityResponse(t, "update credential", err)
+		if updated.StatusCode() != http.StatusOK {
+			t.Fatalf("update credential = status %d body %s", updated.StatusCode(), updated.Body)
 		}
-		if regexp.MustCompile(regexp.QuoteMeta(credential)).Match(updated.Body) {
+		if strings.Contains(string(updated.Body), credential) {
 			t.Fatal("credential update raw response body echoed the submitted credential")
 		}
 
-		viewer := newSecurityClient(t, runtime.baseURL, runtime.caPath)
-		alertAdmin := newSecurityClient(t, runtime.baseURL, runtime.caPath)
-		loginSecurityUser(t, viewer, viewerUser.User.Username, viewerUser.InitialPassword)
-		loginSecurityUser(t, alertAdmin, alertUser.User.Username, alertUser.InitialPassword)
-		for role, client := range map[string]*api.ClientWithResponses{
-			"READONLY": viewer, "ALERT_ADMIN": alertAdmin, "PLATFORM_ADMIN": runtime.client,
+		viewerClient := newSecurityClient(t, runtime.baseURL, runtime.caPath)
+		alertAdminClient := newSecurityClient(t, runtime.baseURL, runtime.caPath)
+		loginSecurityUser(t, viewerClient, viewerUser.User.Username, viewerUser.InitialPassword)
+		loginSecurityUser(t, alertAdminClient, alertUser.User.Username, alertUser.InitialPassword)
+		for _, roleClient := range []struct {
+			role   string
+			client *api.ClientWithResponses
+		}{
+			{role: "READONLY", client: viewerClient},
+			{role: "ALERT_ADMIN", client: alertAdminClient},
+			{role: "PLATFORM_ADMIN", client: runtime.client},
 		} {
-			events, err := client.ListPlatformEventsWithResponse(context.Background())
-			if err != nil || events.StatusCode() != http.StatusOK || events.JSON200 == nil {
-				t.Fatalf("%s event feed = status %d body %s error %v", role, events.StatusCode(), events.Body, err)
+			events, err := roleClient.client.ListPlatformEventsWithResponse(context.Background())
+			requireSecurityResponse(t, roleClient.role+" event feed", err)
+			if events.StatusCode() != http.StatusOK || events.JSON200 == nil {
+				t.Fatalf("%s event feed = status %d body %s", roleClient.role, events.StatusCode(), events.Body)
 			}
 			assertSecurityEvent(t, *events.JSON200, api.LOGINFAILED, "sec-8-missing-user", nil)
 			assertSecurityEvent(t, *events.JSON200, api.USERSTATUSCHANGED, "admin", &disabledUser.User.Id)
@@ -262,7 +288,7 @@ func TestAcceptance_SEC_8(t *testing.T) {
 			assertSecurityEvent(t, *events.JSON200, api.INSTANCECREDENTIALUPDATED, "admin", &instanceID)
 			body := string(events.Body)
 			if strings.Contains(body, failedPassword) || strings.Contains(body, credential) {
-				t.Fatalf("%s event feed exposed submitted credentials", role)
+				t.Fatalf("%s event feed exposed submitted credentials", roleClient.role)
 			}
 		}
 	})
@@ -325,22 +351,27 @@ func TestAcceptance_SEC_10(t *testing.T) {
 		runtime := startSecurityRuntime(t, securityServerOptions{port: 18455, embedWeb: true})
 		loginSecurityUser(t, runtime.client, "admin", securityAdminPassword)
 		created, err := runtime.client.CreateInstanceWithResponse(context.Background(), api.InstanceCreateInput{
-			Name: "SEC-10 browser target", Host: "127.0.0.1", Port: envInt(t, "ACCEPTANCE_TARGET_PORT", 55447),
-			Database: "monitored", Username: "monitored", Password: "monitored",
+			Name:     "SEC-10 browser target",
+			Host:     "127.0.0.1",
+			Port:     envInt(t, "ACCEPTANCE_TARGET_PORT", 55447),
+			Database: "monitored",
+			Username: "monitored",
+			Password: "monitored",
 		})
-		if err != nil || created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
-			t.Fatalf("create browser target = status %d body %s error %v", created.StatusCode(), created.Body, err)
+		requireSecurityResponse(t, "create browser target", err)
+		if created.StatusCode() != http.StatusCreated || created.JSON201 == nil {
+			t.Fatalf("create browser target = status %d body %s", created.StatusCode(), created.Body)
 		}
-		defer func() {
-			_, _ = runtime.client.DeleteInstanceWithResponse(context.Background(), created.JSON201.Instance.Id)
-		}()
-		registered, err := runtime.client.RegisterAgentWithResponse(context.Background(), created.JSON201.Instance.Id)
-		if err != nil || registered.StatusCode() != http.StatusOK || registered.JSON200 == nil || registered.JSON200.AgentToken == nil {
-			t.Fatalf("register browser target Agent = status %d body %s error %v", registered.StatusCode(), registered.Body, err)
+		instanceID := created.JSON201.Instance.Id
+		defer func() { _, _ = runtime.client.DeleteInstanceWithResponse(context.Background(), instanceID) }()
+		registered, err := runtime.client.RegisterAgentWithResponse(context.Background(), instanceID)
+		requireSecurityResponse(t, "register browser target Agent", err)
+		if registered.StatusCode() != http.StatusOK || registered.JSON200 == nil || registered.JSON200.AgentToken == nil {
+			t.Fatalf("register browser target Agent = status %d body %s", registered.StatusCode(), registered.Body)
 		}
 		reported, err := runtime.client.ReportAgentMetricsWithResponse(context.Background(), api.AgentReport{
 			AgentVersion: "1.0.0",
-			InstanceId:   created.JSON201.Instance.Id,
+			InstanceId:   instanceID,
 			Timestamp:    time.Now().UTC(),
 			Metrics: []api.AgentMetric{{
 				Metric: api.AgentMetricMetricHostCpuUsagePercent,
@@ -350,8 +381,9 @@ func TestAcceptance_SEC_10(t *testing.T) {
 			request.Header.Set("Authorization", "Bearer "+*registered.JSON200.AgentToken)
 			return nil
 		})
-		if err != nil || reported.StatusCode() != http.StatusOK {
-			t.Fatalf("report browser target metric = status %d body %s error %v", reported.StatusCode(), reported.Body, err)
+		requireSecurityResponse(t, "report browser target metric", err)
+		if reported.StatusCode() != http.StatusOK {
+			t.Fatalf("report browser target metric = status %d body %s", reported.StatusCode(), reported.Body)
 		}
 
 		command := exec.Command("npm", "exec", "playwright", "test", "e2e/security-boundary.spec.ts")
@@ -379,21 +411,21 @@ func TestAcceptance_SEC_4(t *testing.T) {
 func TestAcceptance_SEC_5(t *testing.T) {
 	runSecurityEntry(t, "SEC-5", "configured 90-second absolute and 30-second idle deadlines rejected sessions through normal authentication", func(t *testing.T) {
 		runtime := startSecurityRuntime(t, securityServerOptions{port: 18459, absoluteTTL: 90 * time.Second, idleTTL: 30 * time.Second})
-		active := runtime.client
-		idle := newSecurityClient(t, runtime.baseURL, runtime.caPath)
-		loginSecurityUser(t, active, "admin", securityAdminPassword)
-		loginSecurityUser(t, idle, "admin", securityAdminPassword)
+		activeClient := runtime.client
+		idleClient := newSecurityClient(t, runtime.baseURL, runtime.caPath)
+		loginSecurityUser(t, activeClient, "admin", securityAdminPassword)
+		loginSecurityUser(t, idleClient, "admin", securityAdminPassword)
 		started := time.Now()
 		for requestNumber := 1; requestNumber <= 8; requestNumber++ {
 			waitUntilSecurity(t, started.Add(time.Duration(requestNumber)*10*time.Second))
-			assertSecurityAuthenticated(t, active, http.StatusOK)
+			assertSecurityAuthenticated(t, activeClient, http.StatusOK)
 			if requestNumber == 3 {
 				waitUntilSecurity(t, started.Add(31*time.Second))
-				assertSecurityAuthenticated(t, idle, http.StatusUnauthorized)
+				assertSecurityAuthenticated(t, idleClient, http.StatusUnauthorized)
 			}
 		}
 		waitUntilSecurity(t, started.Add(91*time.Second))
-		assertSecurityAuthenticated(t, active, http.StatusUnauthorized)
+		assertSecurityAuthenticated(t, activeClient, http.StatusUnauthorized)
 	})
 }
 
@@ -427,8 +459,8 @@ func startSecurityRuntime(t *testing.T, options securityServerOptions) securityR
 			t.Fatalf("create %s: %v", directory, err)
 		}
 	}
-	if options.fixture != "" {
-		installSecurityCertificateFixture(t, root, certDirectory, options.fixture)
+	if options.certificateFixture != "" {
+		installSecurityCertificateFixture(t, root, certDirectory, options.certificateFixture)
 	}
 	configPath := writeSecurityConfig(t, work, keyDirectory, agentBinaryDirectory, options.absoluteTTL, options.idleTTL)
 	logPath := filepath.Join(work, "server.log")
@@ -443,7 +475,7 @@ func startSecurityRuntime(t *testing.T, options securityServerOptions) securityR
 	})
 	caPath := filepath.Join(certDirectory, "ca.crt")
 	var certificateTime time.Time
-	if options.fixture == "tls-expired" {
+	if options.certificateFixture == "tls-expired" {
 		_, certificate := loadSecurityCertificate(t, caPath)
 		certificateTime = certificate.NotAfter.Add(-time.Hour)
 	}
@@ -454,7 +486,11 @@ func startSecurityRuntime(t *testing.T, options securityServerOptions) securityR
 		t.Fatalf("create generated security client: %v", err)
 	}
 	return securityRuntime{
-		baseURL: baseURL, caPath: caPath, client: client, http: httpClient, logPath: logPath,
+		baseURL:    baseURL,
+		caPath:     caPath,
+		client:     client,
+		httpClient: httpClient,
+		logPath:    logPath,
 	}
 }
 
@@ -546,14 +582,18 @@ func pinnedSecurityClient(t *testing.T, baseURL, caPath string, currentTime time
 	return client
 }
 
-func securityHTTPClient(t *testing.T, caPath string, currentTime time.Time, verify func(tls.ConnectionState) error) *http.Client {
+func securityHTTPClient(t *testing.T, caPath string, currentTime time.Time, verifyConnection func(tls.ConnectionState) error) *http.Client {
 	t.Helper()
 	roots, _ := loadSecurityCertificate(t, caPath)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatalf("create cookie jar: %v", err)
 	}
-	config := &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13, VerifyConnection: verify}
+	config := &tls.Config{
+		RootCAs:          roots,
+		MinVersion:       tls.VersionTLS13,
+		VerifyConnection: verifyConnection,
+	}
 	if !currentTime.IsZero() {
 		config.Time = func() time.Time { return currentTime }
 	}
@@ -610,16 +650,18 @@ func loginSecurityUser(t *testing.T, client *api.ClientWithResponses, username, 
 	response, err := client.CreateSessionWithResponse(context.Background(), api.CreateSessionJSONRequestBody{
 		Username: username, Password: password,
 	})
-	if err != nil || response.StatusCode() != http.StatusNoContent {
-		t.Fatalf("login %s = status %d body %s error %v", username, response.StatusCode(), response.Body, err)
+	requireSecurityResponse(t, "login "+username, err)
+	if response.StatusCode() != http.StatusNoContent {
+		t.Fatalf("login %s = status %d body %s", username, response.StatusCode(), response.Body)
 	}
 }
 
 func createSecurityUser(t *testing.T, admin *api.ClientWithResponses, username string, role api.Role) api.UserCreated {
 	t.Helper()
 	response, err := admin.CreateUserWithResponse(context.Background(), api.UserCreateInput{Username: username, Role: role})
-	if err != nil || response.StatusCode() != http.StatusCreated || response.JSON201 == nil {
-		t.Fatalf("create %s = status %d body %s error %v", username, response.StatusCode(), response.Body, err)
+	requireSecurityResponse(t, "create "+username, err)
+	if response.StatusCode() != http.StatusCreated || response.JSON201 == nil {
+		t.Fatalf("create %s = status %d body %s", username, response.StatusCode(), response.Body)
 	}
 	return *response.JSON201
 }
@@ -627,8 +669,16 @@ func createSecurityUser(t *testing.T, admin *api.ClientWithResponses, username s
 func assertSecurityAuthenticated(t *testing.T, client *api.ClientWithResponses, want int) {
 	t.Helper()
 	response, err := client.GetCurrentUserWithResponse(context.Background())
-	if err != nil || response.StatusCode() != want {
-		t.Fatalf("current user = status %d body %s error %v, want %d", response.StatusCode(), response.Body, err, want)
+	requireSecurityResponse(t, "current user", err)
+	if response.StatusCode() != want {
+		t.Fatalf("current user = status %d body %s, want %d", response.StatusCode(), response.Body, want)
+	}
+}
+
+func requireSecurityResponse(t *testing.T, operation string, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("%s: %v", operation, err)
 	}
 }
 
@@ -702,31 +752,37 @@ func assertSecurityEvent(t *testing.T, events []api.PlatformEvent, kind api.Plat
 	t.Errorf("event feed lacks kind %s actor %q subject %v", kind, actor, subjectID)
 }
 
-func installSecurityCertificateFixture(t *testing.T, root, directory, fixture string) {
+func installSecurityCertificateFixture(t *testing.T, root, directory, fixtureName string) {
 	t.Helper()
 	fixtureRoot := filepath.Join(root, "test", "acceptance", "fixtures")
-	for destination, extension := range map[string]string{"server.crt": ".crt", "server.key": ".key", "ca.crt": ".crt"} {
-		contents, err := os.ReadFile(filepath.Join(fixtureRoot, fixture+extension))
+	files := []struct {
+		destination string
+		extension   string
+		mode        os.FileMode
+	}{
+		{destination: "server.crt", extension: ".crt", mode: 0o644},
+		{destination: "server.key", extension: ".key", mode: 0o600},
+		{destination: "ca.crt", extension: ".crt", mode: 0o644},
+	}
+	for _, file := range files {
+		contents, err := os.ReadFile(filepath.Join(fixtureRoot, fixtureName+file.extension))
 		if err != nil {
-			t.Fatalf("read %s fixture: %v", fixture, err)
+			t.Fatalf("read %s fixture: %v", fixtureName, err)
 		}
-		mode := os.FileMode(0o644)
-		if extension == ".key" {
-			mode = 0o600
-		}
-		if err := os.WriteFile(filepath.Join(directory, destination), contents, mode); err != nil {
-			t.Fatalf("install %s fixture: %v", fixture, err)
+		if err := os.WriteFile(filepath.Join(directory, file.destination), contents, file.mode); err != nil {
+			t.Fatalf("install %s fixture: %v", fixtureName, err)
 		}
 	}
 }
 
-func runCertificateSecurityEntry(t *testing.T, id string, port int, fixture, wantCode string, minimumDays int) {
-	runSecurityEntry(t, id, "real "+fixture+" certificate kept the server available with a distinguishable DEGRADED fact", func(t *testing.T) {
-		runtime := startSecurityRuntime(t, securityServerOptions{port: port, fixture: fixture})
+func runCertificateSecurityEntry(t *testing.T, id string, port int, certificateFixture, wantCode string, minimumDays int) {
+	runSecurityEntry(t, id, "real "+certificateFixture+" certificate kept the server available with a distinguishable DEGRADED fact", func(t *testing.T) {
+		runtime := startSecurityRuntime(t, securityServerOptions{port: port, certificateFixture: certificateFixture})
 		loginSecurityUser(t, runtime.client, "admin", securityAdminPassword)
 		response, err := runtime.client.GetCertificateDiagnosticsWithResponse(context.Background())
-		if err != nil || response.StatusCode() != http.StatusOK || response.JSON200 == nil {
-			t.Fatalf("certificate diagnostics = status %d body %s error %v", response.StatusCode(), response.Body, err)
+		requireSecurityResponse(t, "certificate diagnostics", err)
+		if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
+			t.Fatalf("certificate diagnostics = status %d body %s", response.StatusCode(), response.Body)
 		}
 		if response.JSON200.Status != api.PlatformHealthDegraded || response.JSON200.Code != wantCode {
 			t.Fatalf("certificate health = %s/%s, want DEGRADED/%s", response.JSON200.Status, response.JSON200.Code, wantCode)
@@ -770,7 +826,7 @@ func composeSecurityOutput(arguments ...string) (string, error) {
 	commandArguments := []string{"compose", "-p", project, "--profile", "acceptance-server"}
 	commandArguments = append(commandArguments, arguments...)
 	command := exec.Command("docker", commandArguments...)
-	command.Dir, _ = filepath.Abs(filepath.Join("..", ".."))
+	command.Dir = filepath.Join("..", "..")
 	output, err := command.CombinedOutput()
 	return string(output), err
 }

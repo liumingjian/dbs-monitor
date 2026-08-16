@@ -243,15 +243,16 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 			continue
 		}
 		testReference := *entry.TestRef
-		parts := strings.Split(testReference, "::")
-		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		referenceParts := strings.Split(testReference, "::")
+		if len(referenceParts) != 2 || referenceParts[0] == "" || referenceParts[1] == "" {
 			violations = append(violations, fmt.Sprintf("%s has malformed test_ref %q", entry.ID, testReference))
 			continue
 		}
-		if !strings.Contains(parts[1], entry.ID) && !strings.Contains(parts[1], strings.ReplaceAll(entry.ID, "-", "_")) {
+		referencedPath, referencedSymbol := referenceParts[0], referenceParts[1]
+		if !strings.Contains(referencedSymbol, entry.ID) && !strings.Contains(referencedSymbol, strings.ReplaceAll(entry.ID, "-", "_")) {
 			violations = append(violations, fmt.Sprintf("%s test_ref %q does not carry its entry ID", entry.ID, testReference))
 		}
-		testPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(parts[0])))
+		testPath := filepath.Clean(filepath.Join(root, filepath.FromSlash(referencedPath)))
 		relativePath, err := filepath.Rel(root, testPath)
 		if err != nil || relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) {
 			violations = append(violations, fmt.Sprintf("%s test_ref escapes the repository: %q", entry.ID, testReference))
@@ -259,15 +260,14 @@ func findBrokenAcceptanceReferences(root string) ([]string, error) {
 		}
 		testSource, err := os.ReadFile(testPath)
 		if err != nil {
-			violations = append(violations, fmt.Sprintf("%s test_ref path %q cannot be read", entry.ID, parts[0]))
+			violations = append(violations, fmt.Sprintf("%s test_ref path %q cannot be read", entry.ID, referencedPath))
 			continue
 		}
-		sourceReference := parts[1]
-		if strings.HasSuffix(parts[0], ".go") {
-			sourceReference, _, _ = strings.Cut(sourceReference, " ")
+		if strings.HasSuffix(referencedPath, ".go") {
+			referencedSymbol, _, _ = strings.Cut(referencedSymbol, " ")
 		}
-		if !strings.Contains(string(testSource), sourceReference) {
-			violations = append(violations, fmt.Sprintf("%s test_ref symbol %q is absent from %s", entry.ID, sourceReference, parts[0]))
+		if !strings.Contains(string(testSource), referencedSymbol) {
+			violations = append(violations, fmt.Sprintf("%s test_ref symbol %q is absent from %s", entry.ID, referencedSymbol, referencedPath))
 		}
 	}
 	return violations, nil
