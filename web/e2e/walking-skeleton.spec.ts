@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 const instanceName = 'T11 smoke instance'
 
-test('[AC-01-S1] [AC-05-S1] instance overview and standard monitoring expose the real collection path', async ({ page }) => {
+test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring expose the real collection path', async ({ page }) => {
   await page.goto('/login')
   await page.getByLabel('用户名').fill('admin')
   await page.getByLabel('密码').fill('t11-playwright-password')
@@ -93,6 +93,8 @@ test('[AC-01-S1] [AC-05-S1] instance overview and standard monitoring expose the
 
   const memoryCard = page.locator('.metric-card').filter({ has: page.getByText('内存', { exact: true }) })
   await expect(memoryCard.getByText('等待首个样本')).toBeVisible()
+  await expect(memoryCard.getByRole('link', { name: '稍后刷新' })).toHaveAttribute('href', '#monitoring-controls')
+  await expect(memoryCard).not.toContainText('0')
 
   const slowQueryCard = page.locator('.metric-card').filter({ has: page.getByText('长查询数量', { exact: true }) })
   const drilldown = slowQueryCard.getByRole('link', { name: /查看采样记录/ })
