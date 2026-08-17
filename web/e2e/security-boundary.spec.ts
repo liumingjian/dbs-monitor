@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test'
 
+import { EMPTY_STORAGE_STATE } from './auth'
+
+test.use({ storageState: EMPTY_STORAGE_STATE })
+
 test('[SEC-10] production CSP keeps the login-to-chart path functional', async ({ page }) => {
   const violations: string[] = []
   const violationPattern = /content security policy|violates.*(?:policy|directive)|refused to.*(?:policy|directive)/i

@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test'
 
+import { EMPTY_STORAGE_STATE } from './auth'
+
+test.use({ storageState: EMPTY_STORAGE_STATE })
+
 const instanceName = 'T11 smoke instance'
 
 test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring expose the real collection path', async ({ page }) => {
