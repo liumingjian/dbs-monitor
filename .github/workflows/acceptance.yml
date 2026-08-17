@@ -27,6 +27,12 @@ jobs:
         working-directory: web
       - run: npx playwright install --with-deps chromium
         working-directory: web
+      # REC-3/4 用 pg_dump/pg_restore 搬 PG17 库;runner 自带 client 16 会版本不匹配
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
       - run: make acceptance
       - name: Upload acceptance result
         if: always()
