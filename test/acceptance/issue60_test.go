@@ -234,7 +234,7 @@ func startIssue60Runtime(t *testing.T, port int) issue60Runtime {
 			t.Fatalf("create %s: %v", directory, err)
 		}
 	}
-	configPath := writeServerConfig(t, workDir, os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL"), keyDirectory, agentBinaryDirectory)
+	configPath := writeServerConfig(t, workDir, recoveryDatabase(t, platformDatabaseURL(t)), keyDirectory, agentBinaryDirectory)
 	baseURL := fmt.Sprintf("https://127.0.0.1:%d", port)
 	server := startProcess(t, "issue-60 server", serverBinary, filepath.Join(workDir, "server.log"), []string{
 		"DBS_MONITOR_CONFIG_FILE=" + configPath,

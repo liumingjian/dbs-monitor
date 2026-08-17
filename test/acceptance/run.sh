@@ -22,6 +22,9 @@ openssl x509 -req -in "$tls_dir/server.csr" \
   -CA "$tls_dir/ca.crt" -CAkey "$tls_dir/ca.key" -CAcreateserial \
   -out "$tls_dir/server.crt" -days 2 -copy_extensions copy >/dev/null 2>&1
 chmod 0600 "$tls_dir/server.key"
+# 容器内非 root 用户(UID 65532)要能读到公开证书;mktemp 目录默认 0700 在 Linux 宿主上会被挡住
+chmod 0755 "$tls_dir"
+chmod 0644 "$tls_dir/ca.crt" "$tls_dir/server.crt"
 
 cd "$root"
 export ACCEPTANCE_PLATFORM_TLS_DIR="$tls_dir"

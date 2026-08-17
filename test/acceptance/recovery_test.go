@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -184,15 +185,19 @@ func TestAcceptance_REC_6(t *testing.T) {
 func TestAcceptance_REC_7(t *testing.T) {
 	runRecoveryEntry(t, "REC-7", func(t *testing.T) {
 		databaseURL := recoveryDatabase(t, platformDatabaseURL(t))
+		seeded := newRecoveryStack(t, databaseURL, time.Minute, 24*time.Hour)
+		seeded.waitForApplication(t)
+		_ = seeded.process.Stop()
+		// 回退 goose 最新版本记录:库里对象仍在,重放最新迁移必然真实失败
 		connection := connectRecoveryDatabase(t, databaseURL)
-		if _, err := connection.Exec(context.Background(), "CREATE TABLE dbsmon.instance_identity (broken integer)"); err != nil {
+		if _, err := connection.Exec(context.Background(), "DELETE FROM dbsmon.goose_db_version WHERE version_id = (SELECT max(version_id) FROM dbsmon.goose_db_version)"); err != nil {
 			t.Fatalf("create incompatible migration fixture: %v", err)
 		}
 		connection.Close(context.Background())
 		stack := newRecoveryStackWithKey(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, stack.process, 30*time.Second)
 		assertRecoveryLogContains(t, stack.process, "migration")
-		assertRecoveryLogContains(t, stack.process, "instance_identity")
+		assertRecoveryLogContains(t, stack.process, latestMigrationName(t))
 		assertPortClosed(t, stack.address)
 	})
 }
@@ -291,12 +296,20 @@ func TestAcceptance_REC_12(t *testing.T) {
 	runRecoveryEntry(t, "REC-12", func(t *testing.T) {
 		stack := newRecoveryStack(t, recoveryDatabase(t, platformDatabaseURL(t)), time.Minute, 24*time.Hour)
 		client := stack.waitForApplication(t)
-		health, err := client.GetPlatformHealthWithResponse(context.Background())
-		if err != nil {
-			t.Fatalf("read shared-instance health: %v", err)
-		}
-		if health.JSON200 == nil || string(health.JSON200.Status) != "DEGRADED" {
-			t.Fatalf("shared-instance health = %+v; want DEGRADED", health.JSON200)
+		// 启动初期各 fact 源尚未就绪时整体为 UNKNOWN,轮询等聚合收敛到 DEGRADED
+		deadline := time.Now().Add(30 * time.Second)
+		for {
+			health, err := client.GetPlatformHealthWithResponse(context.Background())
+			if err != nil {
+				t.Fatalf("read shared-instance health: %v", err)
+			}
+			if health.JSON200 != nil && string(health.JSON200.Status) == "DEGRADED" {
+				break
+			}
+			if !time.Now().Before(deadline) {
+				t.Fatalf("shared-instance health = %+v; want DEGRADED", health.JSON200)
+			}
+			time.Sleep(200 * time.Millisecond)
 		}
 		assertRecoveryLogContains(t, stack.process, "PLATFORM_DATABASE_INSTANCE_SHARED")
 		assertRecoveryLogContains(t, stack.process, "platform_database_prerequisite_warning")
@@ -553,6 +566,16 @@ func writeRecoveryConfig(t *testing.T, work, agentDirectory string, config recov
 	return path
 }
 
+func latestMigrationName(t *testing.T) string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(repositoryRoot(t), "migrations", "*.sql"))
+	if err != nil || len(matches) == 0 {
+		t.Fatalf("list migrations: %v", err)
+	}
+	sort.Strings(matches)
+	return strings.TrimSuffix(filepath.Base(matches[len(matches)-1]), ".sql")
+}
+
 func newRecoveryKeyDirectory(t *testing.T) string {
 	t.Helper()
 	directory := filepath.Join(t.TempDir(), "credentials")
@@ -686,7 +709,7 @@ func createTriggeredRecoveryAlert(t *testing.T, client *api.ClientWithResponses,
 		enabled := true
 		consecutive := 1
 		recoveryCount := 1
-		scope := api.AlertRuleScope("INSTANCE")
+		scope := api.INSTANCES
 		instances := []uuid.UUID{instanceID}
 		threshold, recoveryThreshold, value := recoveryTriggerValues(template.Operator)
 		created, err := client.CreateAlertRuleFromTemplateWithResponse(context.Background(), template.Id, api.AlertRuleTemplateInstantiationInput{
@@ -987,7 +1010,8 @@ func waitForRelationAbsent(t *testing.T, connection *pgx.Conn, relation string) 
 
 func waitForPartitionFailure(t *testing.T, client *api.ClientWithResponses) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	// 分区跨度 1 分钟:rename 之后维护循环最长要到下一个分钟边界才会有建/删动作而暴露失败
+	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
 		diagnostics, err := client.GetPartitionDiagnosticsWithResponse(context.Background())
 		if err == nil && diagnostics.JSON200 != nil && string(diagnostics.JSON200.Status) != "OK" {

@@ -278,7 +278,7 @@ func startNotificationRuntime(t *testing.T, port int) *notificationRuntime {
 	}
 	runtime := &notificationRuntime{
 		serverBinary: serverBinary,
-		configPath:   writeServerConfig(t, workDir, os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL"), keyDir, binaryDir),
+		configPath:   writeServerConfig(t, workDir, recoveryDatabase(t, platformDatabaseURL(t)), keyDir, binaryDir),
 		certDir:      certDir,
 		baseURL:      fmt.Sprintf("https://127.0.0.1:%d", port),
 		workDir:      workDir,
