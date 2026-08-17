@@ -88,6 +88,13 @@ async function pageOverflowElements(page: Page): Promise<string[]> {
   return page.evaluate(() => [...document.querySelectorAll('body *')].flatMap((element) => {
     const bounds = element.getBoundingClientRect()
     if (bounds.left >= -1 && bounds.right <= document.documentElement.clientWidth + 1) return []
+    // 被祖先容器横向裁剪的元素（如 AntD 页签导航的滚动区）不会造成页面横向滚动，不算溢出
+    for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (getComputedStyle(ancestor).overflowX !== 'visible') {
+        const box = ancestor.getBoundingClientRect()
+        if (box.left >= -1 && box.right <= document.documentElement.clientWidth + 1) return []
+      }
+    }
     return [`${element.tagName}.${element.className} left=${bounds.left} right=${bounds.right} width=${bounds.width}`]
   }))
 }

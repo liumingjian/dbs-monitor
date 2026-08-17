@@ -130,7 +130,7 @@ test('creates alert rules and keeps built-in protections visible', async ({ page
   await page.getByRole('button', { name: '新建规则' }).click()
   await page.getByLabel('规则名称').fill('自定义连接告警')
   await expect(page.getByRole('dialog', { name: '新建告警规则' }).getByText('连续 3 次 × 30 秒 ≈ 1 分 30 秒')).toBeVisible()
-  await page.getByRole('button', { name: '保存' }).click()
+  await page.getByRole('button', { name: /保\s*存/ }).click()
 
   await expect(page.getByText('自定义连接告警')).toBeVisible()
   expect(submittedRule).toMatchObject({

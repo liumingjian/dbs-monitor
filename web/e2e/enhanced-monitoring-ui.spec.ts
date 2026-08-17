@@ -59,7 +59,7 @@ test('enhanced monitoring opens raw curves and isolates protected collection gap
     })
   })
 
-  await page.goto(`/instances/${instanceID}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&monitoring=enhanced&step=raw`)
+  await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&monitoring=enhanced&step=raw`)
 
   await expect(page.getByRole('tab', { name: '增强监控' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.locator('.enhanced-metric-card')).toHaveCount(27)

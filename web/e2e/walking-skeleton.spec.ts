@@ -45,7 +45,9 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await expect(page.getByText('近期没有性能事件')).toBeVisible()
 
   const getLinkURL = async (accessibleName: string) => {
-    const href = await page.getByRole('link', { name: accessibleName, exact: true }).getAttribute('href')
+    // 四个入口按钮都带 AntD 图标，图标 aria-label 以前缀混入可访问名（如「dashboard 标准监控」）；
+    // 要求前缀存在，同时排除页签导航里的同名纯文本链接
+    const href = await page.getByRole('link', { name: new RegExp(`^\\S+ ${accessibleName}$`) }).getAttribute('href')
     if (href === null) {
       throw new Error(`${accessibleName} link is missing an href`)
     }
@@ -85,19 +87,19 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await tpsChart.getByText('查看数据表').click()
   await expect(tpsChart.locator('tbody tr').first()).toBeVisible()
 
+  // check-e2e 不注册也不启动 monitor-agent（agent_expected=false），后端把 host.* 指标
+  // 归为 NOT_APPLICABLE_ROLE（handler.go agentMetricUnavailability）；
+  // 有数据的图表交互由上面的 TPS 卡（真实 SQL 采集路径）覆盖
   const cpuCard = page.locator('.metric-card').filter({ has: page.getByText('CPU', { exact: true }) })
-  const cpuChart = cpuCard.getByRole('figure', { name: 'CPU趋势' })
-  await expect(cpuChart).toBeVisible()
-  await cpuChart.getByText('查看数据表').click()
-  await expect(cpuChart.locator('tbody tr').first()).toBeVisible()
+  await expect(cpuCard.getByText('当前角色不适用')).toBeVisible()
 
   await cpuCard.getByRole('button', { name: /指标详情/ }).click()
   await expect(page.getByRole('dialog', { name: 'CPU' })).toContainText('host.cpu.usage_percent')
   await page.getByRole('button', { name: 'Close' }).click()
 
   const memoryCard = page.locator('.metric-card').filter({ has: page.getByText('内存', { exact: true }) })
-  await expect(memoryCard.getByText('等待首个样本')).toBeVisible()
-  await expect(memoryCard.getByRole('link', { name: '稍后刷新' })).toHaveAttribute('href', '#monitoring-controls')
+  await expect(memoryCard.getByText('当前角色不适用')).toBeVisible()
+  await expect(memoryCard.getByRole('link', { name: '查看实例角色' })).toHaveAttribute('href', /\/collection\?metric=host\.memory\.usage_percent/)
   await expect(memoryCard).not.toContainText('0')
 
   const slowQueryCard = page.locator('.metric-card').filter({ has: page.getByText('长查询数量', { exact: true }) })
@@ -113,7 +115,7 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await page.getByText('1 分钟', { exact: true }).click()
   await stepRequest
   await expect(page).toHaveURL((url) => url.searchParams.get('step') === '1m')
-  await expect(cpuChart.getByText('实际粒度：1m')).toBeVisible()
+  await expect(tpsChart.getByText('实际粒度：1m')).toBeVisible()
 
   await page.getByLabel('图表列数').getByText('3 列').click()
   await expect(page).toHaveURL((url) => url.searchParams.get('columns') === '3')
@@ -127,8 +129,9 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   const from = start.toISOString()
   const to = end.toISOString()
   const formatInput = (value: Date) => {
+    // 浏览器上下文固定 UTC（playwright.config timezoneId），这里必须用 UTC 取值，与 Node 本机时区无关
     const part = (number: number) => String(number).padStart(2, '0')
-    return `${value.getFullYear()}-${part(value.getMonth() + 1)}-${part(value.getDate())}T${part(value.getHours())}:${part(value.getMinutes())}`
+    return `${value.getUTCFullYear()}-${part(value.getUTCMonth() + 1)}-${part(value.getUTCDate())}T${part(value.getUTCHours())}:${part(value.getUTCMinutes())}`
   }
   const rangeRequest = page.waitForRequest((request) => {
     const url = new URL(request.url())
