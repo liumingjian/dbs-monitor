@@ -20,3 +20,4 @@ __pycache__/
 /dbs-monitor-server
 /dbs-monitor-agent
 /SHA256SUMS
+web/e2e/.auth/
