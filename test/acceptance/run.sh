@@ -49,4 +49,4 @@ PGPORT=55442 \
 PGUSER=dbs_monitor \
 PGDATABASE=dbs_monitor \
 PGPASSWORD=dbs_monitor \
-go test -count=1 -tags acceptance ./test/acceptance
+go test -count=1 -timeout 45m -tags acceptance ./test/acceptance

@@ -322,8 +322,9 @@ func TestAcceptance_SEC_9(t *testing.T) {
 			logs, _ := composeSecurityOutput("logs", "acceptance-server")
 			t.Fatalf("Compose server did not initialize credentials:\n%s", logs)
 		}
-		top, err := composeSecurityOutput("top", "acceptance-server", "-eo", "uid,pid,args")
-		if err != nil || !regexp.MustCompile(`(?m)^65532\s+\d+\s+/workspace/results/acceptance-server(?:\s|$)`).MatchString(top) {
+		// docker compose top 不透传 ps 参数(docker top 才行),用默认列并按 UID+CMD 匹配
+		top, err := composeSecurityOutput("top", "acceptance-server")
+		if err != nil || !regexp.MustCompile(`(?m)^\s*65532\s+\d+\s+.*/workspace/results/acceptance-server(?:\s|$)`).MatchString(top) {
 			t.Fatalf("Compose server process identity = %q, error %v", top, err)
 		}
 		if output, err := composeSecurityOutput("exec", "-T", "acceptance-server", "stat", "-c", "%u:%g:%a", "/etc/dbs-monitor/credentials"); err != nil || strings.TrimSpace(output) != "65532:65532:700" {
@@ -390,6 +391,9 @@ func TestAcceptance_SEC_10(t *testing.T) {
 		command.Dir = filepath.Join(root, "web")
 		command.Env = append(os.Environ(),
 			"E2E_BASE_URL="+runtime.baseURL,
+			// playwright 的 [setup] 项目(auth.setup.ts)读 E2E_ADMIN_*,缺省口令与本栈不符
+			"E2E_ADMIN_USERNAME=admin",
+			"E2E_ADMIN_PASSWORD="+securityAdminPassword,
 			"SECURITY_E2E_USERNAME=admin",
 			"SECURITY_E2E_PASSWORD="+securityAdminPassword,
 			"SECURITY_E2E_INSTANCE=SEC-10 browser target",

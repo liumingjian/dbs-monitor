@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -197,7 +198,8 @@ func TestAcceptance_REC_7(t *testing.T) {
 		stack := newRecoveryStackWithKey(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, stack.process, 30*time.Second)
 		assertRecoveryLogContains(t, stack.process, "migration")
-		assertRecoveryLogContains(t, stack.process, latestMigrationName(t))
+		// 服务端以版本号指名失败笔次:partial migration error (type:sql,version:NN)
+		assertRecoveryLogContains(t, stack.process, fmt.Sprintf("version:%d", latestMigrationVersion(t)))
 		assertPortClosed(t, stack.address)
 	})
 }
@@ -296,18 +298,29 @@ func TestAcceptance_REC_12(t *testing.T) {
 	runRecoveryEntry(t, "REC-12", func(t *testing.T) {
 		stack := newRecoveryStack(t, recoveryDatabase(t, platformDatabaseURL(t)), time.Minute, 24*time.Hour)
 		client := stack.waitForApplication(t)
-		// 启动初期各 fact 源尚未就绪时整体为 UNKNOWN,轮询等聚合收敛到 DEGRADED
+		// 告警档落在 PLATFORM_DATABASE 源上(DEGRADED);整体聚合里 UNKNOWN 压过 DEGRADED,
+		// 而 TLS 等事实源在该形态下恒为 UNKNOWN,不能以整体状态作断言面
 		deadline := time.Now().Add(30 * time.Second)
 		for {
 			health, err := client.GetPlatformHealthWithResponse(context.Background())
 			if err != nil {
 				t.Fatalf("read shared-instance health: %v", err)
 			}
-			if health.JSON200 != nil && string(health.JSON200.Status) == "DEGRADED" {
+			degraded := false
+			if health.JSON200 != nil {
+				for _, source := range health.JSON200.Sources {
+					if string(source.Source) == "PLATFORM_DATABASE" &&
+						string(source.Status) == "DEGRADED" &&
+						source.Code == "PLATFORM_DATABASE_PREREQUISITES_DEGRADED" {
+						degraded = true
+					}
+				}
+			}
+			if degraded {
 				break
 			}
 			if !time.Now().Before(deadline) {
-				t.Fatalf("shared-instance health = %+v; want DEGRADED", health.JSON200)
+				t.Fatalf("shared-instance health = %+v; want PLATFORM_DATABASE source DEGRADED", health.JSON200)
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
@@ -566,14 +579,19 @@ func writeRecoveryConfig(t *testing.T, work, agentDirectory string, config recov
 	return path
 }
 
-func latestMigrationName(t *testing.T) string {
+func latestMigrationVersion(t *testing.T) int {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(repositoryRoot(t), "migrations", "*.sql"))
 	if err != nil || len(matches) == 0 {
 		t.Fatalf("list migrations: %v", err)
 	}
 	sort.Strings(matches)
-	return strings.TrimSuffix(filepath.Base(matches[len(matches)-1]), ".sql")
+	name := filepath.Base(matches[len(matches)-1])
+	version, err := strconv.Atoi(strings.SplitN(name, "_", 2)[0])
+	if err != nil {
+		t.Fatalf("parse migration version from %s: %v", name, err)
+	}
+	return version
 }
 
 func newRecoveryKeyDirectory(t *testing.T) string {
@@ -742,8 +760,13 @@ func waitForRecoveryAlert(t *testing.T, client *api.ClientWithResponses, instanc
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		response, err := client.ListCurrentAlertsWithResponse(context.Background(), &api.ListCurrentAlertsParams{InstanceId: &instanceID})
-		if err == nil && response.JSON200 != nil && len(response.JSON200.Items) > 0 && response.JSON200.Items[0].FirstTriggeredAt != nil {
-			return response.JSON200.Items[0]
+		if err == nil && response.JSON200 != nil {
+			// 独立库里内置规则(scope ALL)也会产出 OK 观测,列表首位不一定是本用例的告警
+			for _, item := range response.JSON200.Items {
+				if item.FirstTriggeredAt != nil && string(item.Status) == "FIRING" {
+					return item
+				}
+			}
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

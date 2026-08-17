@@ -5,6 +5,8 @@ package acceptance
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -150,7 +152,7 @@ func runIssue60UnavailabilityEntry(t *testing.T, entryID string, serverPort int)
 	registerIssue60Agent(t, runtime.client, offlineID)
 	produced[readIssue60MetricCode(t, runtime.client, offlineID, metric.MetricHostCPUUsagePercent, time.Now().Add(-time.Minute), time.Now().Add(time.Minute))] = true
 
-	unreachableID := createIssue60Instance(t, runtime.client, entryID+" unreachable", "monitored", "monitored", 1)
+	unreachableID := createIssue60UnreachableInstance(t, runtime.client, entryID+" unreachable")
 	queryStats, err := runtime.client.GetQueryStatisticsSnapshotWithResponse(context.Background(), unreachableID)
 	if err != nil {
 		t.Fatalf("read feature-disabled query statistics: error=%v", err)
@@ -273,6 +275,42 @@ func createIssue60Instance(t *testing.T, client *api.ClientWithResponses, name, 
 		t.Fatalf("create %s through generated client: status=%d body=%s error=%v", name, created.StatusCode(), created.Body, err)
 	}
 	return created.JSON201.Instance.Id
+}
+
+// 产品在创建实例时同步校验目标连通性,直接指向死端口会被 400 拒绝;
+// 先经本地 TCP 代理指向真实目标让创建通过,随后关掉代理制造不可达。
+func createIssue60UnreachableInstance(t *testing.T, client *api.ClientWithResponses, name string) uuid.UUID {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("start unreachable-instance proxy: %v", err)
+	}
+	target := fmt.Sprintf("127.0.0.1:%d", issue60TargetPort(t))
+	go func() {
+		for {
+			downstream, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func(downstream net.Conn) {
+				upstream, err := net.Dial("tcp", target)
+				if err != nil {
+					downstream.Close()
+					return
+				}
+				go func() {
+					_, _ = io.Copy(upstream, downstream)
+					upstream.Close()
+				}()
+				_, _ = io.Copy(downstream, upstream)
+				downstream.Close()
+			}(downstream)
+		}
+	}()
+	port := listener.Addr().(*net.TCPAddr).Port
+	instanceID := createIssue60Instance(t, client, name, "monitored", "monitored", port)
+	listener.Close()
+	return instanceID
 }
 
 func setIssue60TaskIntervals(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID) {
