@@ -107,4 +107,6 @@ if [ "$samples_ready" -ne 1 ]; then
 fi
 
 cd "$root/web"
+SECURITY_E2E_PASSWORD=t11-playwright-password \
+SECURITY_E2E_INSTANCE='T11 smoke instance' \
 npm run e2e

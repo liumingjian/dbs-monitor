@@ -10,6 +10,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'https://127.0.0.1:18443',
     ignoreHTTPSErrors: true,
+    timezoneId: 'UTC',
   },
   projects: [
     {

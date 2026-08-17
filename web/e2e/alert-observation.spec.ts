@@ -95,7 +95,7 @@ test('global alert lists reuse detail and preserve trigger context into monitori
   await expect(page.getByText('暂无通知结果')).toBeVisible()
 
   const monitoring = page.getByRole('link', { name: /查看标准监控/ })
-  await expect(monitoring).toHaveAttribute('href', new RegExp(`/instances/${instanceID}\\?`))
+  await expect(monitoring).toHaveAttribute('href', new RegExp(`/instances/${instanceID}/monitoring\\?`))
   const href = await monitoring.getAttribute('href')
   const destination = new URL(href!, 'https://example.test')
   expect(destination.searchParams.get('metric')).toBe('pg.connection.total')

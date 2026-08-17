@@ -183,7 +183,7 @@ test('alert-derived event writes disposition back and preserves trigger evidence
 
   await page.getByRole('button', { name: '确认' }).click()
   await page.getByLabel('备注').fill('正在处理阻塞事务')
-  await page.getByRole('button', { name: '提交' }).click()
+  await page.getByRole('button', { name: /提\s*交/ }).click()
   await expect.poll(() => submittedDisposition).toEqual({ disposition: 'ACKED', note: '正在处理阻塞事务' })
   await expect(page.getByText('正在处理阻塞事务').first()).toBeVisible()
 
