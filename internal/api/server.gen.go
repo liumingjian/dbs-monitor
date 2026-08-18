@@ -308,7 +308,6 @@ const (
 	HealthSourcePlatformDatabase         PlatformHealthSource = "PLATFORM_DATABASE"
 	HealthSourcePlatformDatabaseCapacity PlatformHealthSource = "PLATFORM_DATABASE_CAPACITY"
 	HealthSourceServerProcess            PlatformHealthSource = "SERVER_PROCESS"
-	HealthSourceTLS                      PlatformHealthSource = "TLS"
 	HealthSourceTLSCertificate           PlatformHealthSource = "TLS_CERTIFICATE"
 )
 

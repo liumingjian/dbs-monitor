@@ -146,7 +146,7 @@ func TestDiskSourceTransitionsAreVisible(t *testing.T) {
 	}
 }
 
-func TestStoreIncludesTenHealthSubsystems(t *testing.T) {
+func TestStoreIncludesNineHealthSubsystems(t *testing.T) {
 	now := time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC)
 	store := NewStore("3.0.0", now.Add(-time.Hour), nil)
 	want := []Source{
@@ -158,7 +158,6 @@ func TestStoreIncludesTenHealthSubsystems(t *testing.T) {
 		SourceAgentIngress,
 		SourceDisk,
 		SourceCredentialKeyring,
-		SourceTLS,
 		SourcePlatformDatabaseCapacity,
 	}
 

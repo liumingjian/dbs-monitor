@@ -29,7 +29,6 @@ const (
 	SourceAgentIngress             Source = "AGENT_INGRESS"
 	SourceDisk                     Source = "DISK"
 	SourceCredentialKeyring        Source = "CREDENTIAL_KEYRING"
-	SourceTLS                      Source = "TLS"
 	SourcePlatformDatabaseCapacity Source = "PLATFORM_DATABASE_CAPACITY"
 )
 
@@ -111,7 +110,6 @@ var sourceOrder = []Source{
 	SourceAgentIngress,
 	SourceDisk,
 	SourceCredentialKeyring,
-	SourceTLS,
 	SourcePlatformDatabaseCapacity,
 }
 
