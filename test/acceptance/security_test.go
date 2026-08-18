@@ -517,7 +517,9 @@ func buildStaticSecurityBinary(t *testing.T, root, output string) {
 	t.Helper()
 	command := exec.Command("go", "build", "-ldflags", "-X main.version=1.0.0 -X main.commitSHA="+candidateSHA(), "-o", output, "./cmd/monitor-server")
 	command.Dir = root
-	command.Env = append(os.Environ(), "CGO_ENABLED=0")
+	// 该二进制只在 linux 容器(compose acceptance-server)里执行;GOARCH 沿用宿主,
+	// Apple Silicon 上 Docker 跑的正是 linux/arm64
+	command.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux")
 	if contents, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("build static security server: %v\n%s", err, contents)
 	}

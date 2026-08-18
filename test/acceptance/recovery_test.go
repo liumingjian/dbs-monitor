@@ -947,10 +947,46 @@ func postgresToolURL(t *testing.T, value string) string {
 
 func runPostgresTool(t *testing.T, name string, arguments ...string) {
 	t.Helper()
-	command := exec.Command(name, arguments...)
+	command := exec.Command(resolvePostgresTool(t, name), arguments...)
 	if contents, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("%s: %v\n%s", name, err, contents)
 	}
+}
+
+// resolvePostgresTool 找一个大版本 >= 平台 PG(17)的客户端工具:pg_dump 不支持比自身新的服务端,
+// macOS 上 Homebrew 默认 PATH 里常是旧版。
+func resolvePostgresTool(t *testing.T, name string) string {
+	t.Helper()
+	if directory := os.Getenv("ACCEPTANCE_PG_BIN_DIR"); directory != "" {
+		return filepath.Join(directory, name)
+	}
+	candidates := []string{name}
+	for _, directory := range []string{
+		"/opt/homebrew/opt/postgresql@17/bin",
+		"/opt/homebrew/opt/libpq/bin",
+		"/usr/local/opt/postgresql@17/bin",
+		"/usr/local/opt/libpq/bin",
+		"/usr/lib/postgresql/17/bin",
+	} {
+		candidates = append(candidates, filepath.Join(directory, name))
+	}
+	for _, candidate := range candidates {
+		if postgresToolMajorVersion(candidate) >= 17 {
+			return candidate
+		}
+	}
+	t.Fatalf("no %s with major version >= 17 on this host; set ACCEPTANCE_PG_BIN_DIR", name)
+	return ""
+}
+
+func postgresToolMajorVersion(path string) int {
+	output, err := exec.Command(path, "--version").Output()
+	fields := strings.Fields(string(output))
+	if err != nil || len(fields) == 0 {
+		return 0
+	}
+	major, _ := strconv.Atoi(strings.SplitN(fields[len(fields)-1], ".", 2)[0])
+	return major
 }
 
 func availableAddress(t *testing.T) string {

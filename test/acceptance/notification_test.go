@@ -382,9 +382,30 @@ func waitForNotificationAlertAndPostCommitDelivery(t *testing.T, client *api.Cli
 			t.Fatal("notification reached a network sink before the alert transaction was externally visible")
 		}
 		return alertID != uuid.Nil && sinks.mailTotal >= 1 && len(sinks.webhooks) >= 1,
-			fmt.Sprintf("alert=%s mail=%d webhook=%d", alertID, sinks.mailTotal, len(sinks.webhooks))
+			fmt.Sprintf("alert=%s mail=%d webhook=%d attempts=%s", alertID, sinks.mailTotal, len(sinks.webhooks),
+				notificationAttemptSummary(client, alertID))
 	})
 	return alertID
+}
+
+// notificationAttemptSummary 只用于失败 detail,取不到就静默降级,不打断等待循环
+func notificationAttemptSummary(client *api.ClientWithResponses, alertID uuid.UUID) string {
+	if alertID == uuid.Nil {
+		return "n/a"
+	}
+	response, err := client.ListAlertNotificationsWithResponse(context.Background(), alertID)
+	if err != nil || response.JSON200 == nil {
+		return fmt.Sprintf("unavailable (%v)", err)
+	}
+	parts := make([]string, 0, len(*response.JSON200))
+	for _, attempt := range *response.JSON200 {
+		reason := ""
+		if attempt.FailureReason != nil {
+			reason = " reason=" + *attempt.FailureReason
+		}
+		parts = append(parts, fmt.Sprintf("[%s %s%s]", attempt.Channel, attempt.Status, reason))
+	}
+	return strings.Join(parts, " ")
 }
 
 func waitForNotificationAlert(t *testing.T, client *api.ClientWithResponses, instanceID, ruleID uuid.UUID) uuid.UUID {
@@ -620,7 +641,20 @@ func eventuallyNotification(t *testing.T, timeout time.Duration, condition func(
 		detail = currentDetail
 		time.Sleep(200 * time.Millisecond)
 	}
-	t.Fatalf("notification condition not reached after %s: %s", timeout, detail)
+	t.Fatalf("notification condition not reached after %s: %s\nsmtp-sink logs:\n%s",
+		timeout, detail, notificationComposeLogs("smtp-sink"))
+}
+
+func notificationComposeLogs(service string) string {
+	project := os.Getenv("ACCEPTANCE_COMPOSE_PROJECT")
+	if project == "" {
+		return "(ACCEPTANCE_COMPOSE_PROJECT unset)"
+	}
+	output, err := exec.Command("docker", "compose", "-p", project, "logs", "--no-color", "--tail", "80", service).CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("(unavailable: %v)", err)
+	}
+	return string(output)
 }
 
 func recordNotificationResult(t *testing.T, entryID, passedMessage string, started time.Time) {
