@@ -73,9 +73,12 @@ func TestAcceptance_REC_2(t *testing.T) {
 		// 时间落点(CI run 5 实测追尾 1s),再静置 3s 让服务端排空后才能取窗口下界。
 		_ = agent.Stop()
 		time.Sleep(3 * time.Second)
-		before := time.Now().UTC()
+		// 序列化后的点位只有整秒精度:重启后 :18.4 采的样落库成 :18,会落回
+		// after=:18.3 的窗口里(mac 实测假阳性)。窗口边界对齐整秒——下界进一、
+		// 上界舍去——两侧各让出不足 1s,6s 空窗仍足以暴露真正的补点。
+		before := time.Now().UTC().Add(time.Second).Truncate(time.Second)
 		time.Sleep(6 * time.Second)
-		after := time.Now().UTC()
+		after := time.Now().UTC().Truncate(time.Second)
 		stack.startAgent(t, instanceID, token)
 		waitForRecoveryMetricAfter(t, client, instanceID, after)
 		if alert := waitForRecoveryAlert(t, client, instanceID); string(alert.Status) == "NO_DATA" {
