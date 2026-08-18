@@ -537,7 +537,12 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("4-second interval update status = %d, want 400", belowFloor.StatusCode)
 	}
 	belowFloor.Body.Close()
-	intervalUpdateStarted := time.Now().UTC()
+	// updated_at 由 PG 的 now() 落值;下界必须取自同一时钟,取测试进程时钟
+	// 会因主机与 PG(容器/VM)间亚毫秒漂移出现倒挂(#159 实测早 223µs)。
+	var intervalUpdateStarted time.Time
+	if err := pool.QueryRow(ctx, "SELECT now()").Scan(&intervalUpdateStarted); err != nil {
+		t.Fatalf("read database clock for interval lower bound: %v", err)
+	}
 	updatedInterval := requestJSON(t, client, http.MethodPut, tasksURL+"/pg.stat_activity", map[string]any{"interval_seconds": 7}, "")
 	if updatedInterval.StatusCode != http.StatusOK {
 		t.Fatalf("7-second interval update status = %d, want 200", updatedInterval.StatusCode)
