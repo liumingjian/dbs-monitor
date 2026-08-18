@@ -2,18 +2,41 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
-tls_dir=$(mktemp -d)
+# TLS 材料持久化(可用 ACCEPTANCE_TLS_HOME 覆盖):darwin 上 Go 忽略 SSL_CERT_FILE,
+# 被测 server 的 SMTP STARTTLS 验证只认系统钥匙串;CA 固定下来,macOS 用户一次性
+# sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ~/.dbs-monitor-acceptance-tls/ca.crt
+# 即可长期跑绿。CA 带 critical nameConstraints,只能给 localhost/127.0.0.1/acceptance-platform 签发,
+# 信任它不会扩大到其它站点。服务端证书仍每次重签(2 天)。
+tls_dir="${ACCEPTANCE_TLS_HOME:-$HOME/.dbs-monitor-acceptance-tls}"
+mkdir -p "$tls_dir"
 project=dbs-monitor-acceptance
 
 cleanup() {
   docker compose -p "$project" down --volumes --remove-orphans >/dev/null 2>&1 || true
-  rm -rf "$tls_dir"
+  rm -f "$tls_dir/server.csr" "$tls_dir/san.ext"
 }
 trap cleanup EXIT INT TERM
 
-openssl req -x509 -newkey rsa:2048 -nodes \
-  -keyout "$tls_dir/ca.key" -out "$tls_dir/ca.crt" -days 2 \
-  -subj /CN=dbs-monitor-acceptance-ca >/dev/null 2>&1
+if [ ! -f "$tls_dir/ca.crt" ] || [ ! -f "$tls_dir/ca.key" ] || ! openssl x509 -checkend 86400 -noout -in "$tls_dir/ca.crt" >/dev/null 2>&1; then
+  # -addext 在 macOS 自带 LibreSSL 上不可靠,扩展一律走 -config
+  cat > "$tls_dir/ca.cnf" <<'EOF'
+[req]
+distinguished_name = dn
+x509_extensions = v3_ca
+prompt = no
+[dn]
+CN = dbs-monitor-acceptance-ca
+[v3_ca]
+basicConstraints = critical,CA:TRUE
+keyUsage = critical,keyCertSign,cRLSign
+nameConstraints = critical,permitted;DNS:localhost,permitted;DNS:acceptance-platform,permitted;IP:127.0.0.1/255.255.255.255
+EOF
+  openssl req -x509 -newkey rsa:2048 -nodes \
+    -keyout "$tls_dir/ca.key" -out "$tls_dir/ca.crt" -days 3650 \
+    -config "$tls_dir/ca.cnf" >/dev/null 2>&1
+fi
+# openssl 写私钥跟随 umask,持久目录是 0755,必须显式收紧
+chmod 0600 "$tls_dir/ca.key"
 openssl req -newkey rsa:2048 -nodes \
   -keyout "$tls_dir/server.key" -out "$tls_dir/server.csr" \
   -subj /CN=localhost >/dev/null 2>&1
