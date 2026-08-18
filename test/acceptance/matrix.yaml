@@ -1272,10 +1272,10 @@ entries:
     slice: "09"
     kind: S1
     baseline: true
-    title: "平台健康成功路径：十事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
+    title: "平台健康成功路径：九事实源齐全的 OK 快照 + 结构化 60 秒汇总 + 秘密扫描全绿"
     layer: api
     asserts:
-      - "getPlatformHealth 返回总态 OK，十事实源齐全：SERVER_PROCESS、PLATFORM_DATABASE（外部前置 PG 17）、COLLECTION_SCHEDULER、PARTITION_MAINTENANCE、TLS_CERTIFICATE、AGENT_INGRESS、DISK（server 本机盘）、CREDENTIAL_KEYRING、TLS、PLATFORM_DATABASE_CAPACITY"
+      - "getPlatformHealth 返回总态 OK，九事实源齐全（34 号取代 32 号 D8 的十项列举）：SERVER_PROCESS、PLATFORM_DATABASE（外部前置 PG 17）、COLLECTION_SCHEDULER、PARTITION_MAINTENANCE、TLS_CERTIFICATE、AGENT_INGRESS、DISK（server 本机盘）、CREDENTIAL_KEYRING、PLATFORM_DATABASE_CAPACITY"
       - "快照含组装时间；事实层保留每源级别与细因"
       - "结构化事件流中存在 60 秒汇总，字段形状符合约定"
       - "秘密扫描全绿：无密码、密文、主密钥、Agent token、Authorization 头、DSN、原始 SQL、请求体"

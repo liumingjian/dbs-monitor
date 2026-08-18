@@ -69,7 +69,6 @@ PlatformHealthSource:
     - AGENT_INGRESS
     - DISK
     - CREDENTIAL_KEYRING
-    - TLS
     - PLATFORM_DATABASE_CAPACITY
   x-enum-varnames:
     - HealthSourceServerProcess
@@ -80,7 +79,6 @@ PlatformHealthSource:
     - HealthSourceAgentIngress
     - HealthSourceDisk
     - HealthSourceCredentialKeyring
-    - HealthSourceTLS
     - HealthSourcePlatformDatabaseCapacity
 AlertDisposition:
   type: string
