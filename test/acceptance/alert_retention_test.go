@@ -72,7 +72,8 @@ func TestAcceptance_AC_03_F6(t *testing.T) {
 
 func createActiveSessionRetentionRule(t *testing.T, client *api.ClientWithResponses, instanceID uuid.UUID) uuid.UUID {
 	t.Helper()
-	recoveryThreshold := 1.0
+	// validHysteresis 要求 recovery 阈值严格低于触发阈值;会话数为整数,<0.5 等价于 0
+	recoveryThreshold := 0.5
 	recoveryCount := 1
 	response, err := client.CreateAlertRuleWithResponse(context.Background(), api.AlertRuleInput{
 		Name:                      "AC-03-F6 active sessions",

@@ -253,8 +253,18 @@ func TestAcceptance_AC_04_F3(t *testing.T) {
 		t.Fatalf("channel failure summary: status=%d body=%s response=%+v error=%v", failures.StatusCode(), failures.Body, failures.JSON200, err)
 	}
 	current, err := runtime.client.ListCurrentAlertsWithResponse(context.Background(), &api.ListCurrentAlertsParams{InstanceId: &instanceID})
-	if err != nil || current.StatusCode() != http.StatusOK || current.JSON200 == nil || current.JSON200.Total != 1 || current.JSON200.Items[0].Id != alertID {
-		t.Fatalf("notification failure changed alert state: status=%d body=%s response=%+v error=%v", current.StatusCode(), current.Body, current.JSON200, err)
+	if err != nil || current.StatusCode() != http.StatusOK || current.JSON200 == nil {
+		t.Fatalf("list current alerts after delivery failure: status=%d body=%s error=%v", current.StatusCode(), current.Body, err)
+	}
+	// 独立库里内置规则也产出观测;只断本用例告警仍在 FIRING(通知失败不得改变告警状态)
+	stillFiring := false
+	for _, item := range current.JSON200.Items {
+		if item.Id == alertID && string(item.Status) == "FIRING" {
+			stillFiring = true
+		}
+	}
+	if !stillFiring {
+		t.Fatalf("notification failure changed alert state: response=%+v", current.JSON200)
 	}
 	time.Sleep(6 * time.Second)
 	if attempts := readNotificationAttempts(t, runtime.client, alertID); len(attempts) != 6 {
@@ -278,7 +288,7 @@ func startNotificationRuntime(t *testing.T, port int) *notificationRuntime {
 	}
 	runtime := &notificationRuntime{
 		serverBinary: serverBinary,
-		configPath:   writeServerConfig(t, workDir, os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL"), keyDir, binaryDir),
+		configPath:   writeServerConfig(t, workDir, recoveryDatabase(t, platformDatabaseURL(t)), keyDir, binaryDir),
 		certDir:      certDir,
 		baseURL:      fmt.Sprintf("https://127.0.0.1:%d", port),
 		workDir:      workDir,
@@ -510,19 +520,35 @@ func resetNotificationSinks(t *testing.T, webhookStatus int) {
 	t.Helper()
 	postNotificationSink(t, fmt.Sprintf("%s/control/status/%d", webhookSinkAPI, webhookStatus))
 	postNotificationSink(t, webhookSinkAPI+"/control/reset")
+	// smtp-sink 可能刚被 compose 重启,HTTP 面就绪前的瞬态失败要重试
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		err := tryResetSMTPSink()
+		if err == nil {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("reset SMTP sink: %v", err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func tryResetSMTPSink() error {
 	request, err := http.NewRequest(http.MethodDelete, smtpSinkAPI+"/api/v1/messages", strings.NewReader(`{"IDs":[]}`))
 	if err != nil {
-		t.Fatalf("build SMTP reset request: %v", err)
+		return fmt.Errorf("build SMTP reset request: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/json")
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		t.Fatalf("reset SMTP sink: %v", err)
+		return err
 	}
 	response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("reset SMTP sink status=%d", response.StatusCode)
+		return fmt.Errorf("reset SMTP sink status=%d", response.StatusCode)
 	}
+	return nil
 }
 
 func postNotificationSink(t *testing.T, target string) {

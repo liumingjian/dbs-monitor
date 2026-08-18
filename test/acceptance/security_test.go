@@ -322,8 +322,9 @@ func TestAcceptance_SEC_9(t *testing.T) {
 			logs, _ := composeSecurityOutput("logs", "acceptance-server")
 			t.Fatalf("Compose server did not initialize credentials:\n%s", logs)
 		}
-		top, err := composeSecurityOutput("top", "acceptance-server", "-eo", "uid,pid,args")
-		if err != nil || !regexp.MustCompile(`(?m)^65532\s+\d+\s+/workspace/results/acceptance-server(?:\s|$)`).MatchString(top) {
+		// docker compose top 不透传 ps 参数(docker top 才行),用默认列并按 UID+CMD 匹配
+		top, err := composeSecurityOutput("top", "acceptance-server")
+		if err != nil || !regexp.MustCompile(`(?m)^acceptance-server\s+\d+\s+65532\s+\d+\s+.*\s/workspace/results/acceptance-server(?:\s|$)`).MatchString(top) {
 			t.Fatalf("Compose server process identity = %q, error %v", top, err)
 		}
 		if output, err := composeSecurityOutput("exec", "-T", "acceptance-server", "stat", "-c", "%u:%g:%a", "/etc/dbs-monitor/credentials"); err != nil || strings.TrimSpace(output) != "65532:65532:700" {
@@ -390,6 +391,9 @@ func TestAcceptance_SEC_10(t *testing.T) {
 		command.Dir = filepath.Join(root, "web")
 		command.Env = append(os.Environ(),
 			"E2E_BASE_URL="+runtime.baseURL,
+			// playwright 的 [setup] 项目(auth.setup.ts)读 E2E_ADMIN_*,缺省口令与本栈不符
+			"E2E_ADMIN_USERNAME=admin",
+			"E2E_ADMIN_PASSWORD="+securityAdminPassword,
 			"SECURITY_E2E_USERNAME=admin",
 			"SECURITY_E2E_PASSWORD="+securityAdminPassword,
 			"SECURITY_E2E_INSTANCE=SEC-10 browser target",
@@ -462,7 +466,7 @@ func startSecurityRuntime(t *testing.T, options securityServerOptions) securityR
 	if options.certificateFixture != "" {
 		installSecurityCertificateFixture(t, root, certDirectory, options.certificateFixture)
 	}
-	configPath := writeSecurityConfig(t, work, keyDirectory, agentBinaryDirectory, options.absoluteTTL, options.idleTTL)
+	configPath := writeSecurityConfig(t, work, recoveryDatabase(t, platformDatabaseURL(t)), keyDirectory, agentBinaryDirectory, options.absoluteTTL, options.idleTTL)
 	logPath := filepath.Join(work, "server.log")
 	baseURL := "https://127.0.0.1:" + strconv.Itoa(options.port)
 	server := startProcess(t, "security server", serverBinary, logPath, []string{
@@ -474,6 +478,7 @@ func startSecurityRuntime(t *testing.T, options securityServerOptions) securityR
 		"PGDATA=/",
 	})
 	caPath := filepath.Join(certDirectory, "ca.crt")
+	waitForSecurityCertificate(t, server, caPath)
 	var certificateTime time.Time
 	if options.certificateFixture == "tls-expired" {
 		_, certificate := loadSecurityCertificate(t, caPath)
@@ -518,7 +523,27 @@ func buildStaticSecurityBinary(t *testing.T, root, output string) {
 	}
 }
 
-func writeSecurityConfig(t *testing.T, work, keyDirectory, binaryDirectory string, absoluteTTL, idleTTL time.Duration) string {
+func waitForSecurityCertificate(t *testing.T, server *managedProcess, caPath string) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		select {
+		case err := <-server.done:
+			server.done <- err
+			contents, _ := os.ReadFile(server.logPath)
+			t.Fatalf("security server exited before writing %s: %v\n%s", caPath, err, contents)
+		default:
+		}
+		if _, err := os.Stat(caPath); err == nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	contents, _ := os.ReadFile(server.logPath)
+	t.Fatalf("security server did not write %s\n%s", caPath, contents)
+}
+
+func writeSecurityConfig(t *testing.T, work, databaseURL, keyDirectory, binaryDirectory string, absoluteTTL, idleTTL time.Duration) string {
 	t.Helper()
 	if absoluteTTL == 0 {
 		absoluteTTL = 12 * time.Hour
@@ -535,7 +560,7 @@ func writeSecurityConfig(t *testing.T, work, keyDirectory, binaryDirectory strin
 	}{
 		AgentBinaryDirectory: binaryDirectory,
 		MasterKeyDirectory:   keyDirectory,
-		PlatformDatabaseURL:  os.Getenv("ACCEPTANCE_PLATFORM_DATABASE_URL"),
+		PlatformDatabaseURL:  databaseURL,
 		SessionAbsoluteTTL:   absoluteTTL.String(),
 		SessionIdleTTL:       idleTTL.String(),
 	}

@@ -27,6 +27,18 @@ jobs:
         working-directory: web
       - run: npx playwright install --with-deps chromium
         working-directory: web
+      # REC-3/4 用 pg_dump/pg_restore 搬 PG17 库;runner 自带 client 16 会版本不匹配
+      - name: Install PostgreSQL 17 client
+        run: |
+          # ubuntu-latest 默认源只有 client 16,17 要加 PGDG 仓库
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
       - run: make acceptance
       - name: Upload acceptance result
         if: always()

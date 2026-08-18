@@ -88,7 +88,7 @@ func TestAcceptance_AC_08_S1(t *testing.T) {
 			t.Fatalf("create %s: %v", directory, err)
 		}
 	}
-	configPath := writeServerConfig(t, work, platformDatabaseURL, keyDirectory, agentBinaryDirectory)
+	configPath := writeServerConfig(t, work, recoveryDatabase(t, platformDatabaseURL), keyDirectory, agentBinaryDirectory)
 	server := startProcess(t, "server", serverBinary, filepath.Join(work, "server.log"), []string{
 		"DBS_MONITOR_CONFIG_FILE=" + configPath,
 		"INITIAL_ADMIN_PASSWORD=acceptance-admin-password",
