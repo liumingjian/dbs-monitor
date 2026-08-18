@@ -322,9 +322,11 @@ func TestAcceptance_SEC_9(t *testing.T) {
 			logs, _ := composeSecurityOutput("logs", "acceptance-server")
 			t.Fatalf("Compose server did not initialize credentials:\n%s", logs)
 		}
-		// docker compose top 不透传 ps 参数(docker top 才行),用默认列并按 UID+CMD 匹配
+		// docker compose top 不透传 ps 参数(docker top 才行),用默认列并按 UID+CMD 匹配。
+		// 列序随 compose 版本变:linux CI 是 "SERVICE PID UID PPID …",macOS Docker Desktop 是
+		// 容器名单独一行 + "UID PID PPID …",两种都认
 		top, err := composeSecurityOutput("top", "acceptance-server")
-		if err != nil || !regexp.MustCompile(`(?m)^acceptance-server\s+\d+\s+65532\s+\d+\s+.*\s/workspace/results/acceptance-server(?:\s|$)`).MatchString(top) {
+		if err != nil || !regexp.MustCompile(`(?m)^(?:acceptance-server\s+\d+\s+65532\s+\d+|65532\s+\d+\s+\d+)\s+.*\s/workspace/results/acceptance-server(?:\s|$)`).MatchString(top) {
 			t.Fatalf("Compose server process identity = %q, error %v", top, err)
 		}
 		if output, err := composeSecurityOutput("exec", "-T", "acceptance-server", "stat", "-c", "%u:%g:%a", "/etc/dbs-monitor/credentials"); err != nil || strings.TrimSpace(output) != "65532:65532:700" {
