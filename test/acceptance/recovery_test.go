@@ -68,8 +68,11 @@ func TestAcceptance_REC_2(t *testing.T) {
 		agentStarted := time.Now().UTC()
 		agent := stack.startAgent(t, instanceID, token)
 		waitForRecoveryMetricAfter(t, client, instanceID, agentStarted)
-		// before 必须在 Stop 完成后取:停进程期间在途的上报仍会入库,落进窗口就是假阳性
+		// before 必须在 Stop 完成后取:停进程期间在途的上报仍会入库,落进窗口就是假阳性。
+		// 且 Stop 返回只保证 agent 进程退出;服务端可能仍在异步处理在途上报并以入库侧
+		// 时间落点(CI run 5 实测追尾 1s),再静置 3s 让服务端排空后才能取窗口下界。
 		_ = agent.Stop()
+		time.Sleep(3 * time.Second)
 		before := time.Now().UTC()
 		time.Sleep(6 * time.Second)
 		after := time.Now().UTC()
