@@ -1,8 +1,14 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 26-data-and-recovery-gate.md, 30-external-postgres-prerequisites.md
+superseded_parts: D4「唯一拒启动情形」→ 26 D3 扩为四类、30 D3.1 再加前置校验五项
+---
 # 25 · 主密钥来源与启动失败语义（无安装器形态）
 
 > 出处：[主密钥来源与启动失败语义（无安装器形态） #109](https://github.com/liumingjian/dbs-monitor/issues/109)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：**supersede 记录**。[T13](13-credential-encryption-rotation-and-revocation.md) D2 依附于「离线整包 + 安装脚本自举 + 自带 PostgreSQL」的形态，该形态已被 [18](18-v1-delivery-boundary-bs-binary.md) 作废。本文在「二进制直接运行 + 客户自备外部 PostgreSQL」的交付边界下重定主密钥的来源、首启语义与启动失败语义，重估 D1 的威胁模型，重定 D7 轮换的执行形态，并接下 [18](18-v1-delivery-boundary-bs-binary.md) D5 第 2 条移交的本地通知快照密钥来源。被推翻的原文档**不原地改写**，以本文为准。
-> 输入边界（不重议）：[T13](13-credential-encryption-rotation-and-revocation.md) D3–D6、D8、D9（密文格式与 AAD、两种写操作不合并、Agent 令牌只存哈希、轮换立即生效、备份与密钥两个独立制品、秘密永不出站）、[18](18-v1-delivery-boundary-bs-binary.md) D3/D4/D5（配置文件是规范来源、环境变量可覆盖、**秘密不进命令行**；无安装期交互；DB 不可达时 HTTP 层照常起来）、[T14](14-platform-observability-and-diagnostics.md) D2/D3（平台健康独立四态、平台故障不进目标告警链路）、[24](24-v1-acceptance-entries-d.md) D14（`AC-08-S7` 排执行序最末、轮换命令须可非交互调用）、地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105) Notes 第 7 条。
+> 输入边界（不重议）：[T13](13-credential-encryption-rotation-and-revocation.md) D3–D6、D8、D9（密文格式与 AAD、两种写操作不合并、Agent 令牌只存哈希、轮换立即生效、备份与密钥两个独立制品、秘密永不出站）、[18](18-v1-delivery-boundary-bs-binary.md) D3/D4/D5（配置文件是规范来源、环境变量可覆盖、**秘密不进命令行**；无安装期交互；DB 不可达时 HTTP 层照常起来）、[T14](14-platform-observability-and-diagnostics.md) D2/D3（平台健康独立四态、平台故障不进目标告警链路）、[24](../acceptance/24-v1-acceptance-entries-d.md) D14（`AC-08-S7` 排执行序最末、轮换命令须可非交互调用）、地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105) Notes 第 7 条。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
 ---
@@ -132,7 +138,7 @@ install -d -m 0700 -o <运行用户> -g <运行用户> /etc/dbs-monitor/credenti
 「库里已有密文、keyring 目录整个不存在」几乎必然是挂载没生效，一度考虑让它快速失败以避免半残运行。**否决**，理由两条：
 
 1. 运维视角里「目录没挂上」和「属主错了」是同一类事故，分叉两种进程行为只会让文档和排障多一条无收益的分支；
-2. [24](24-v1-acceptance-entries-d.md) 的 `AC-08-F4` 只有一条真实手段（把 `master-key-vN` `chmod` 成错误权限，或让 `current` 悬空）。若「不存在」走另一条进程路径，验收就结构性地覆盖不到它。
+2. [24](../acceptance/24-v1-acceptance-entries-d.md) 的 `AC-08-F4` 只有一条真实手段（把 `master-key-vN` `chmod` 成错误权限，或让 `current` 悬空）。若「不存在」走另一条进程路径，验收就结构性地覆盖不到它。
 
 **统一行为，统一验收面。**
 
@@ -144,7 +150,7 @@ install -d -m 0700 -o <运行用户> -g <运行用户> /etc/dbs-monitor/credenti
 
 1. **同一 `server` 二进制的子命令**，不做第二个二进制（承 [T5](05-backend-code-structure.md) 编译期同源）。
 2. **要求先停 server**，不实现在线排他维护锁。[T13](13-credential-encryption-rotation-and-revocation.md) D7.1 步骤 1 原文的「或取得排他维护锁」在此**改写为只保留停机**：50 实例量级不值得为一个低频运维动作支付「在线重加密与在线写入并发正确」的那套复杂度。
-3. **必须可被非交互调用**（[24](24-v1-acceptance-entries-d.md) D14 硬要求）：不得只有交互式确认入口，否则 `AC-08-S7` 跑不动。
+3. **必须可被非交互调用**（[24](../acceptance/24-v1-acceptance-entries-d.md) D14 硬要求）：不得只有交互式确认入口，否则 `AC-08-S7` 跑不动。
 4. **失败恢复照搬** [T13](13-credential-encryption-rotation-and-revocation.md) D7.2：新密钥未落稳不切 `current`；事务失败则全部旧行保持原版本；`current` 已切但重加密未完成时 keyring 同时保留两版，**重跑命令即可**；仍有在线行引用旧版本时不得删除旧密钥。**「中断可重跑」是验收断言点**（`AC-08-S7`）。
 
 ### 6.1 advisory lock：把「忘了停」变成一句拒绝
@@ -228,7 +234,7 @@ server 运行期间在平台库上持有一把固定 key 的会话级 `pg_adviso
 
 1. **诊断包绝不包含配置文件原文。** 只输出结构化的、脱敏后的有效配置摘要，密码类字段固定渲染为 `[REDACTED]`。
 2. **「平台库密码」加入秘密扫描禁名单**（[T14](14-platform-observability-and-diagnostics.md) §5 秘密禁区、[T9](10-ai-guardrails-and-verification.md) 相关守卫）。原禁名单写于「平台配置里不存在 PG 密码」的年代，不知道有这个东西。
-3. **`rotate-master-key` 必须可非交互调用**（[24](24-v1-acceptance-entries-d.md) D14 已登记，本文重申）。
+3. **`rotate-master-key` 必须可非交互调用**（[24](../acceptance/24-v1-acceptance-entries-d.md) D14 已登记，本文重申）。
 4. **server 运行期持有平台库 advisory lock**，轮换命令 `pg_try_advisory_lock` 失败即拒绝（D5.1）。
 5. **部署前置条件文档**新增：keyring 目录的 root 预建命令（D2）、配置文件权限要求（D7.1）、换机恢复时的 keyring 搬迁步骤（D1.1）。
 
@@ -236,7 +242,7 @@ server 运行期间在平台库上持有一把固定 key 的会话级 `pg_adviso
 
 ## 11. 验收记账：不新增矩阵条目，只修订既有判据文字
 
-[24](24-v1-acceptance-entries-d.md) 已把矩阵定稿在 **81 条条目、78 条硬底**，`matrix.yaml` 自此无 `TBD`。本文定的语义按下表挂到既有条目：
+[24](../acceptance/24-v1-acceptance-entries-d.md) 已把矩阵定稿在 **81 条条目、78 条硬底**，`matrix.yaml` 自此无 `TBD`。本文定的语义按下表挂到既有条目：
 
 | 既有条目 | 补记内容 |
 |---|---|

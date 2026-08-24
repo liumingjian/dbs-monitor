@@ -1,8 +1,15 @@
+---
+status: superseded
+kind: decision
+superseded_by: ../18-v1-delivery-boundary-bs-binary.md
+superseded_on: 2026-08-13
+note: macOS 首发路线（#100）整条作废，v1 已回到 linux。本文全文不得据以行事。
+---
 # 19 · v1 macOS 运行与 PostgreSQL 交付形态
 
 > 出处：[v1 macOS 运行与 PostgreSQL 交付形态 #100](https://github.com/liumingjian/dbs-monitor/issues/100)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
 > 输入边界：[v1 macOS 支持边界](18-v1-macos-support-boundary.md) 已冻结唯一目标为 macOS 14.0 及以上版本的 Apple silicon（`darwin/arm64`）。
-> 状态：2026-08-10 冻结。本文是对 [打包、部署与运行形态](09-packaging-and-deployment.md) 中 Linux/systemd 路线的 macOS 后续决策；v1 macOS 运行与 PostgreSQL 交付发生冲突时以本文为准。
+> 状态：2026-08-10 冻结。本文是对 [打包、部署与运行形态](../09-packaging-and-deployment.md) 中 Linux/systemd 路线的 macOS 后续决策；v1 macOS 运行与 PostgreSQL 交付发生冲突时以本文为准。
 
 ---
 
@@ -84,7 +91,7 @@ PostgreSQL 保持 17 大版本。17.x 小版本随 dbs-monitor 整包升级；17
 
 ## 6. D6 · 备份、升级与回滚
 
-v1 的升级备份仍采用“控制面可恢复、时序样本可丢弃”的既有边界：数据库逻辑备份保存升级前的完整 schema 和控制面数据，只排除时序样本数据。备份集还必须包含凭据 keyring、CA/证书及受管配置，否则恢复后的凭据密文或 Agent 信任链不可用。数据库逻辑备份与 keyring 保持为两个独立制品，不得默认打入同一 archive，沿用 [凭据加密存储、轮换与吊销](13-credential-encryption-rotation-and-revocation.md) §8.1 的既有边界。备份目录权限为 `0700`，文件为 `0600`；备份成功且可读取是升级的硬前置条件。
+v1 的升级备份仍采用“控制面可恢复、时序样本可丢弃”的既有边界：数据库逻辑备份保存升级前的完整 schema 和控制面数据，只排除时序样本数据。备份集还必须包含凭据 keyring、CA/证书及受管配置，否则恢复后的凭据密文或 Agent 信任链不可用。数据库逻辑备份与 keyring 保持为两个独立制品，不得默认打入同一 archive，沿用 [凭据加密存储、轮换与吊销](../13-credential-encryption-rotation-and-revocation.md) §8.1 的既有边界。备份目录权限为 `0700`，文件为 `0600`；备份成功且可读取是升级的硬前置条件。
 
 同大版本升级流程固定为：
 

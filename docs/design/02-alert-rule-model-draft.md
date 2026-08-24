@@ -1,3 +1,7 @@
+---
+status: active
+kind: spec
+---
 # 告警规则配置模型 v1.0
 
 > 目标：定义 PostgreSQL 监控平台 MVP 告警能力的最小领域模型、状态语义和行为边界。  

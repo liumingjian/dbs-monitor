@@ -1,8 +1,13 @@
+---
+status: partially-superseded
+kind: execution-record
+note: 矩阵骨架与判定规则在效；条目计数与产物名已被下游改写
+---
 # 20 · v1 验收矩阵的骨架与判定规则
 
 > 出处：[v1 验收矩阵的骨架与判定规则 #111](https://github.com/liumingjian/dbs-monitor/issues/111)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：**骨架与判定规则**，不是验收内容本身。逐片的具体条目由下游四张票 [#118](https://github.com/liumingjian/dbs-monitor/issues/118) / [#119](https://github.com/liumingjian/dbs-monitor/issues/119) / [#120](https://github.com/liumingjian/dbs-monitor/issues/120) / [#121](https://github.com/liumingjian/dbs-monitor/issues/121) 填入。
-> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 十片总表与五条跨片原则、[T9](10-ai-guardrails-and-verification.md) §3 的 A/B 两栏护栏登记表、[T6](07-api-contract-and-codegen.md) 的封闭 13 码与 `x-required-role` 全覆盖、[T14](14-platform-observability-and-diagnostics.md)「平台自身故障不进入目标告警或 `NO_DATA`」、[00 §4](00-decision-index.md) 四条不变式、[18](18-v1-delivery-boundary-bs-binary.md) 的 B/S 二进制交付边界、地图 #105 Notes 第 3 条（平台库是客户自备的外部前置）。
+> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 十片总表与五条跨片原则、[T9](../design/10-ai-guardrails-and-verification.md) §3 的 A/B 两栏护栏登记表、[T6](../design/07-api-contract-and-codegen.md) 的封闭 13 码与 `x-required-role` 全覆盖、[T14](../design/14-platform-observability-and-diagnostics.md)「平台自身故障不进入目标告警或 `NO_DATA`」、[00 §4](../design/00-decision-index.md) 四条不变式、[18](../design/18-v1-delivery-boundary-bs-binary.md) 的 B/S 二进制交付边界、地图 #105 Notes 第 3 条（平台库是客户自备的外部前置）。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
 ---
@@ -19,7 +24,7 @@
 
 理由：穷尽性与互斥性由 spec 目录本身背书（十片总表 + 依赖图已经是一次完整切分），且与已发布的 46 张实现票 #52–#97 天然对齐——换任何一根轴都要重新证明「覆盖全量」，且与实现票错位。
 
-**页面树与 OpenAPI 不作切分轴，作两条覆盖维。** 每条矩阵条目登记它触及的 IA 页面节点（[`03` §3`](03-monitor-platform-ia-draft.md) 首版页面树的路径）与 `operationId`。用途是**反查**：哪个页面节点、哪个 `operationId` 一条条目都没碰。这两维不参与「基线是否达标」的判定，只产出缺口清单。
+**页面树与 OpenAPI 不作切分轴，作两条覆盖维。** 每条矩阵条目登记它触及的 IA 页面节点（[`03` §3`](../design/03-monitor-platform-ia-draft.md) 首版页面树的路径）与 `operationId`。用途是**反查**：哪个页面节点、哪个 `operationId` 一条条目都没碰。这两维不参与「基线是否达标」的判定，只产出缺口清单。
 
 **片⑩（发布收口）不出矩阵条目。** 它不是业务域，其内容已分给 [#110](https://github.com/liumingjian/dbs-monitor/issues/110)（交付物与候选留痕）与 [#114](https://github.com/liumingjian/dbs-monitor/issues/114)（质量门）。矩阵中只留一行指针。
 
@@ -34,8 +39,8 @@
 | 类 | 内容 | 判定要点 |
 |---|---|---|
 | `S1` | 端到端成功路径 | 配置 → 真实采集 / 真实评估 → 页面或 API 可见。中间不得跳步。 |
-| `F1` | 权限拒绝 | 三档角色 × [`03` §8.2](03-monitor-platform-ia-draft.md) 写权限矩阵；被拒绝方必须拿到规定的拒绝语义，而非 500 或静默成功。 |
-| `F2` | 空状态 | 必须落在 `Unavailability` **封闭 13 码**之一，且**不得渲染成 0**（[T2](04-metric-storage-model.md)「不补 0」+ B6）。 |
+| `F1` | 权限拒绝 | 三档角色 × [`03` §8.2](../design/03-monitor-platform-ia-draft.md) 写权限矩阵；被拒绝方必须拿到规定的拒绝语义，而非 500 或静默成功。 |
+| `F2` | 空状态 | 必须落在 `Unavailability` **封闭 13 码**之一，且**不得渲染成 0**（[T2](../design/04-metric-storage-model.md)「不补 0」+ B6）。 |
 | `F3` | 目标库不可达 / 能力不足 | 降级且给出原因；能力四态可见；不得表现为「有数据但全零」。 |
 | `F4` | 平台自身故障 | **不得**污染目标实例告警、**不得**计入 `NO_DATA`（T14 硬约束）。 |
 
@@ -48,7 +53,7 @@
 ## 3. D3 · 三层断言的分工
 
 - **API 层是默认主断言层。** 快、稳、可矩阵化，绝大多数条目落在这一层。
-- **浏览器 E2E 只覆盖两类**：[`03` §6](03-monitor-platform-ia-draft.md) 的五条关键用户路径，以及 [T7 D10.1](08-frontend-stack-and-ui.md) 的 B6 前端必测四项（13 码全覆盖 / 缺数不是 0 / `dataUpdatedAt` / search params 往返）。
+- **浏览器 E2E 只覆盖两类**：[`03` §6](../design/03-monitor-platform-ia-draft.md) 的五条关键用户路径，以及 [T7 D10.1](../design/08-frontend-stack-and-ui.md) 的 B6 前端必测四项（13 码全覆盖 / 缺数不是 0 / `dataUpdatedAt` / search params 往返）。
 - **数据库层断言只读不写**，且仅用于 API 观测不到的效果：分区生命周期、加密列内无明文、审计留痕、迁移结果。**任何 DB 层的写操作都不属于断言，属于 D4 禁止的数据准备。**
 
 **「允许只做 API 层」的判据（可检验）**：该断言点在 UI 上**没有独立语义**——UI 只是同一份 JSON 的转述。反过来，凡断言点是「用户看到什么」（空状态文案、归因行、降级原因、数据新鲜度），必须上浏览器。
@@ -72,7 +77,7 @@
 
 ## 5. D5 · 横切组：四不变式 + 三内置规则独立计分
 
-设一个不属于任何片的**横切断言组**：`INV-1..4`（[00 §4](00-decision-index.md) 四条不变式）与 `BUILTIN-1..3`（[`02` §6.1](02-alert-rule-model-draft.md) 三条内置采集状态规则）。
+设一个不属于任何片的**横切断言组**：`INV-1..4`（[00 §4](../design/00-decision-index.md) 四条不变式）与 `BUILTIN-1..3`（[`02` §6.1](../design/02-alert-rule-model-draft.md) 三条内置采集状态规则）。
 
 **每条横切条目必须同时具备**：
 
@@ -176,7 +181,7 @@ E2E 因此变慢，这是**已接受的代价**：真实采集管线与真实接
 
 采集周期、保留期、分区跨度、通知 repeat 与退避等时间常量**做成配置项**，验收用极短值跑**真实时间轴**。
 
-**不注入假时钟到 server 进程**：[T5](05-backend-code-structure.md) 的 `clock.Clock` 接缝止步 L2，对进程内测试有效；矩阵里的 server 是独立进程，注时钟既贵又失真（失真本身会掩盖问题）。
+**不注入假时钟到 server 进程**：[T5](../design/05-backend-code-structure.md) 的 `clock.Clock` 接缝止步 L2，对进程内测试有效；矩阵里的 server 是独立进程，注时钟既贵又失真（失真本身会掩盖问题）。
 
 仅当某语义确实无法配置化时，才允许直写历史样本，且必须走 D4 白名单逐条登记。
 
@@ -190,7 +195,7 @@ E2E 因此变慢，这是**已接受的代价**：真实采集管线与真实接
 
 ## 9. D9 · 角色 fixture
 
-三档角色账号**一律经用户管理 API 创建**（[17](17-user-role-and-instance-onboarding.md) 的角色模型），初始 admin 由 `INITIAL_ADMIN_PASSWORD` 引导，**不许直插 `user` 表**。
+三档角色账号**一律经用户管理 API 创建**（[17](../design/17-user-role-and-instance-onboarding.md) 的角色模型），初始 admin 由 `INITIAL_ADMIN_PASSWORD` 引导，**不许直插 `user` 表**。
 
 - `F1`（权限拒绝）在 **API 层**用三种角色的会话各跑一遍；
 - **浏览器**只补一条 UI 断言：**可见性不收窄、写能力收窄**（不变式③里只有 UI 能证的那一面）。
@@ -207,14 +212,14 @@ E2E 因此变慢，这是**已接受的代价**：真实采集管线与真实接
 
 ---
 
-## 11. 本文新增的两道守卫（登记进 [T9](10-ai-guardrails-and-verification.md) B 栏）
+## 11. 本文新增的两道守卫（登记进 [T9](../design/10-ai-guardrails-and-verification.md) B 栏）
 
 | # | 内容 | 出处 | 兑现时机 |
 |---|---|---|---|
 | B11 | 测试与 E2E 脚本中禁止对业务表写入（白名单外命中即红） | 本文 D4 | 矩阵落地 |
 | B12 | `covered` 条目的 `test_ref` 必须在测试代码中可检索（覆盖漂移门） | 本文 D6.6 | 矩阵落地 |
 
-按 [T9](10-ai-guardrails-and-verification.md) §3.4 的纪律，这两条一经登记即有约束力。
+按 [T9](../design/10-ai-guardrails-and-verification.md) §3.4 的纪律，这两条一经登记即有约束力。
 
 ---
 

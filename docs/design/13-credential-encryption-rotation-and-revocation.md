@@ -1,3 +1,9 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 25-master-key-provenance-and-startup-failure.md
+superseded_parts: D2 全条、D1 保护面清单、D7.1 步骤 1；D3–D9 其余全部在效
+---
 # 凭据加密存储、轮换与吊销 v1.0
 
 > 目标：定死 PG 凭据、Agent 令牌与平台主密钥的归属、存储、更新、轮换、吊销、备份恢复和回显边界，并明确这套机制保护什么、不保护什么。
@@ -5,6 +11,17 @@
 > 输入边界：[T1 · 系统组件拓扑与两条采集通路的职责边界](https://github.com/liumingjian/dbs-monitor/issues/19)（PG 凭据唯一归服务端、Agent 永不持有 PG 凭据）、[T3 · Agent 上报协议、注册与凭据模型](https://github.com/liumingjian/dbs-monitor/issues/21)（绑定实例的高熵令牌、服务端只存哈希、明文一次性回显）、[T5 · 后端代码结构与模块边界](05-backend-code-structure.md)（接缝白名单封闭为五个）、[T6 · API 契约组织与代码生成流水线](07-api-contract-and-codegen.md)（请求/响应双 schema、凭据永不回显）、[T8 · 打包、部署与运行形态](09-packaging-and-deployment.md)（离线整包、非 root 运行、自带 PG）、[T10 · Walking skeleton 切片定义与验收标准](11-walking-skeleton-slice.md)（明文存储是 R3 欠账，不得提前摆加密抽象）、[T12 · 采集并发限流、超时与背压](12-collection-concurrency-timeouts-and-backpressure.md)（凭据版本变化须使旧连接池失效）。
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
 > **本票只产决策文档。** walking skeleton 继续保留其已验收的明文薄实现；R3 在生产发布声明前完成迁移、守卫与验证。
+
+
+> **当前适用性（2026-08-24 治理复核）**
+> **D2 全条已被 [`25`](25-master-key-provenance-and-startup-failure.md) 取代**：主密钥来源改为「密钥文件是唯一规范来源、
+> 环境变量只覆盖路径、KMS 出局」，三条件 + `O_EXCL` 自动生成，**keyring 故障不拒绝启动、只降平台健康**。
+> D1 的保护面/不保护面清单亦由 `25` 重定（保护面升级：外部 PG 主机整机失陷不泄露目标库密码；
+> 新增不保护面：配置文件泄露 = 平台库凭据泄露）。D7.1 步骤 1 只保留停机 + advisory lock。
+>
+> **D3–D9 其余全部在效**：密文格式与 AAD、两种写操作不合并、Agent 登记与令牌只存哈希、
+> 轮换立即生效、吊销令牌 ≠ 停用 Agent、备份与 keyring 是两个独立制品、秘密禁区。
+> 注：否决 KMS/Vault/TPM 的**理由**原本依附「整包自带」，该形态已消失；`25` 重新论证后维持否决。
 
 ---
 

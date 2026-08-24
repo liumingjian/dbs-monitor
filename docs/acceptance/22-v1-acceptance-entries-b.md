@@ -1,8 +1,13 @@
+---
+status: partially-superseded
+kind: execution-record
+note: 条目内容在效；硬底计数已被后续组累加
+---
 # 22 · v1 验收矩阵条目 B 组 · 片②③④
 
 > 出处：[v1 验收矩阵条目 B 组 · 片②③④（规则评估 → 处置 → 通知与维护窗口）#119](https://github.com/liumingjian/dbs-monitor/issues/119)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：**B 组条目的定稿与七处对骨架的增补**。骨架与判定规则见 [20](20-v1-acceptance-matrix.md)（决策票 [#111](https://github.com/liumingjian/dbs-monitor/issues/111)），A 组定稿见 [21](21-v1-acceptance-entries-a.md)（决策票 [#118](https://github.com/liumingjian/dbs-monitor/issues/118)）；**本文不原地改写 20 号与 21 号任何一条**，只在留下的填空位上定稿。
-> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片②（#42）、片③（#43）、片④（#44）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10；[21](21-v1-acceptance-entries-a.md) 的 D1（加深基线）、D7（时间参数化）、D8（`test_ref` 形态）、D9（真实手段的定性）、D10（预写 `operationId`）；[`02`](02-alert-rule-model-draft.md) 告警规则模型全文、[`03`](03-monitor-platform-ia-draft.md) §4.5/§4.6/§4.9/§6.4/§8、[`00`](00-decision-index.md) ADR-01/03/05/06/07/09、[T14](14-platform-observability-and-diagnostics.md)、[`10`](10-ai-guardrails-and-verification.md) §7.1（B7）。
+> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片②（#42）、片③（#43）、片④（#44）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10；[21](21-v1-acceptance-entries-a.md) 的 D1（加深基线）、D7（时间参数化）、D8（`test_ref` 形态）、D9（真实手段的定性）、D10（预写 `operationId`）；[`02`](../design/02-alert-rule-model-draft.md) 告警规则模型全文、[`03`](../design/03-monitor-platform-ia-draft.md) §4.5/§4.6/§4.9/§6.4/§8、[`00`](../design/00-decision-index.md) ADR-01/03/05/06/07/09、[T14](../design/14-platform-observability-and-diagnostics.md)、[`10`](../design/10-ai-guardrails-and-verification.md) §7.1（B7）。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 >
 > **编号约定**（承 21 号）：[#120](https://github.com/liumingjian/dbs-monitor/issues/120)（片⑤⑥）取 `23-`、[#121](https://github.com/liumingjian/dbs-monitor/issues/121)（片⑧+横切）取 `24-`。四组并行会话不得往同一份文档里写；`matrix.yaml` 四票共改，各组只碰自己片的行。

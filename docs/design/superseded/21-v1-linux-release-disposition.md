@@ -1,3 +1,10 @@
+---
+status: superseded
+kind: decision
+superseded_by: ../18-v1-delivery-boundary-bs-binary.md
+superseded_on: 2026-08-13
+note: macOS 首发路线（#102）整条作废，v1 已回到 linux。本文全文不得据以行事。
+---
 # 21 · 现有 Linux 发布票 #92 的 v1 处置
 
 > 出处：[现有 Linux 发布票 #92 的 v1 处置 #102](https://github.com/liumingjian/dbs-monitor/issues/102)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
@@ -19,7 +26,7 @@
 | `scripts/package-linux.sh`、`packaging/bundle/`、`packaging/systemd/` 与 Linux Make targets | **保留为 legacy 参考** | 可用于 post-v1 调研；不是 macOS `.pkg` 的实现基础或可发布资产 |
 | `docs/validation/t11-linux-amd64-progress.md` | **保留历史证据** | 证明当时的 Linux walking skeleton，不证明当前 v1 支持，也不替代未来重验 |
 | `scripts/rt-c/` 与 T11 的 453.6M 点 amd64 完整参数结果 | **保留历史证据** | 证明当时的 Linux amd64 存储选型基线；不是 macOS v1 发布门，也不替代未来 Linux 重验 |
-| [09](09-packaging-and-deployment.md) 与 [15](15-ci-and-release-pipeline.md) 的 Linux 结论 | **保留历史决策** | 不原地改写；与 macOS v1 冲突时以 18–21 为准 |
+| [09](../09-packaging-and-deployment.md) 与 [15](../15-ci-and-release-pipeline.md) 的 Linux 结论 | **保留历史决策** | 不原地改写；与 macOS v1 冲突时以 18–21 为准 |
 
 现有脚本实际只强制 `amd64/glibc 2.17` 与 `arm64/glibc 2.28` 两个基线，并没有实现 #92 所写的四个「架构 × glibc」组合。不得把两个 legacy target 的存在描述为四组合已部分上线。
 
@@ -46,7 +53,7 @@
 
 ## 3.1 · #96 随其 Linux 前提一并退出 v1
 
-#96 被 #92 阻塞，要求按 [09](09-packaging-and-deployment.md) D3.1 为原生 Linux arm64 补做端到端冒烟和 `pg_total_relation_size` 容量抽样，再与 Linux amd64 基线比较；它还要求把完整参数 RT-C 作为同一发布门留档。#92 退出 v1 后，这组证据已没有当前发布候选或发布门可以绑定，不能脱离其前提单独实现。
+#96 被 #92 阻塞，要求按 [09](../09-packaging-and-deployment.md) D3.1 为原生 Linux arm64 补做端到端冒烟和 `pg_total_relation_size` 容量抽样，再与 Linux amd64 基线比较；它还要求把完整参数 RT-C 作为同一发布门留档。#92 退出 v1 后，这组证据已没有当前发布候选或发布门可以绑定，不能脱离其前提单独实现。
 
 处置固定为：
 
@@ -62,7 +69,7 @@
 1. 重新确定 OS、架构、libc/最低版本、离线与进程管理支持边界，不默认继承四组合。
 2. 重新审计 PostgreSQL 版本、CVE、动态依赖、原生 runner 可用性和 T11 证据时效。
 3. 决定资产格式、命名、验证矩阵、tag/审批门和与 macOS Release 的隔离方式。
-4. 从 `scripts/package-linux.sh`、`packaging/`、[09](09-packaging-and-deployment.md)、[15](15-ci-and-release-pipeline.md) 和 Linux T11 记录评估复用；不因保留它们而跳过重验。
+4. 从 `scripts/package-linux.sh`、`packaging/`、[09](../09-packaging-and-deployment.md)、[15](../15-ci-and-release-pipeline.md) 和 Linux T11 记录评估复用；不因保留它们而跳过重验。
 5. 先以手动且独立命名的 workflow 验证候选；只有新 PRD 的支持证据闭合后，才允许接入对应版本的正式发布图。
 6. 重新决定是否需要 arm64 冒烟、容量抽样和完整参数 RT-C；如需要，为新候选留档原始结果，不继承 #96 的未执行验收。
 

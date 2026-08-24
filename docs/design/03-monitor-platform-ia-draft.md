@@ -1,3 +1,7 @@
+---
+status: active
+kind: spec
+---
 # 监控平台产品信息架构 v1.0
 
 > 目标：定义 PostgreSQL 监控平台 MVP 的页面结构、页面职责、导航关系和排障路径。  
@@ -5,6 +9,15 @@
 > 参考依据：[`../research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md`](../research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md)、[`01-pg-mvp-metric-dictionary.md`](01-pg-mvp-metric-dictionary.md)、[`02-alert-rule-model-draft.md`](02-alert-rule-model-draft.md)。  
 > 决策依据与否决记录：[`00-decision-index.md`](00-decision-index.md)。  
 > 当前阶段：R1 信息架构规格，不是完整 PRD、交互原型或视觉设计。
+
+
+> **当前适用性（2026-08-24 治理复核）**
+> 页面职责、排障路径、健康四档 + 已暂停 override、三档角色权限律全部在效。仅顶层节点计数过期：
+> §3 页面树的「四个顶层节点」已由 [`17-user-role-and-instance-onboarding.md`](17-user-role-and-instance-onboarding.md) D5
+> 改为五区（新增「用户管理」）；§12 关于「用户与角色管理页、实例接入页属部署接入域、交给 R6」的去向亦已由 `17` 拉进 MVP。
+> §11「不建跨实例配置缺失聚合页」的结论未被推翻，只是其论证里引用的节点数字已变。
+>
+> 本块只标注失效点，不改写原结论。
 
 ---
 

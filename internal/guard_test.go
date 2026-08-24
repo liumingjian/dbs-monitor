@@ -20,9 +20,12 @@ func requireMakeTarget(t *testing.T, makefileContents, target string) string {
 	return contents
 }
 
+// readLinuxReleaseDisposition 读的是一份已作废文档（18-v1-delivery-boundary-bs-binary
+// §12 D11 整体作废了 macOS 首发路线，Linux 已重回 v1 主线）。依赖它的三个 guard
+// 断言的是该路线下的票务处置，属待清算的死门；在清算前先跟随文件移动，保持绿。
 func readLinuxReleaseDisposition(t *testing.T) string {
 	t.Helper()
-	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
+	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "superseded", "21-v1-linux-release-disposition.md"))
 	if err != nil {
 		t.Fatalf("read Linux release disposition: %v", err)
 	}

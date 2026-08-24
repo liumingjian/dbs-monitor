@@ -1,8 +1,14 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: ../acceptance/31-real-linux-adaptation-and-final-acceptance.md
+superseded_parts: 四个二进制/双架构 SHA256SUMS → 仅 amd64；Go/No-Go 结论页改为单份 .json
+---
 # 27 · v1 交付物与候选留痕
 
 > 出处：[v1 交付物与候选留痕 #110](https://github.com/liumingjian/dbs-monitor/issues/110)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：把 [18](18-v1-delivery-boundary-bs-binary.md) D1/D10 明文移交的「交付物清单的确切内容、候选提交如何唯一标识、二进制如何产出与归档、`main` 的 branch protection 与审批门、Go/No-Go 报告格式与绑定」落成决策，并接下 [19](19-agent-distribution-and-upgrade.md) D7 的 plan B 备料清单。**本文不原地改写 20 / 21 / 22 / 23 / 24 / 26 任何一条**；对 `matrix.yaml` 的触碰仅限修订 `AC-08-S8` 一条判据文字，条目数与硬底一字不变（91 / 88）。
-> 输入边界（不重议）：[18](18-v1-delivery-boundary-bs-binary.md) D1（无安装包无安装脚本）、D6（双架构 + `CGO_ENABLED=0` + 交叉编译 + 真机验证不可替代）、D7（备份责任归客户、`migrations/` 只写 up、回滚 = 装回旧二进制 + 恢复备份）、D10（T15 D1/D2/D3 原则保留、D3.3/D4/D5 作废）；[19](19-agent-distribution-and-upgrade.md) D1（下载端点为主线、手工分发为 plan B）、D2（server 回自身版本、Agent 落后 warn、超窗拒收）、D5（CA 指纹钉扎）、D7（备料清单、否决代码签名）；[T15](15-ci-and-release-pipeline.md) D1/D2/D3 保留部分；[20](20-v1-acceptance-matrix.md) D5/D6（横切独立计分、`pending` 政策）；[26](26-data-and-recovery-gate.md) 客户责任清单（给 #116 的单向输入，本文不复述）。
+> 输入边界（不重议）：[18](18-v1-delivery-boundary-bs-binary.md) D1（无安装包无安装脚本）、D6（双架构 + `CGO_ENABLED=0` + 交叉编译 + 真机验证不可替代）、D7（备份责任归客户、`migrations/` 只写 up、回滚 = 装回旧二进制 + 恢复备份）、D10（T15 D1/D2/D3 原则保留、D3.3/D4/D5 作废）；[19](19-agent-distribution-and-upgrade.md) D1（下载端点为主线、手工分发为 plan B）、D2（server 回自身版本、Agent 落后 warn、超窗拒收）、D5（CA 指纹钉扎）、D7（备料清单、否决代码签名）；[T15](15-ci-and-release-pipeline.md) D1/D2/D3 保留部分；[20](../acceptance/20-v1-acceptance-matrix.md) D5/D6（横切独立计分、`pending` 政策）；[26](26-data-and-recovery-gate.md) 客户责任清单（给 #116 的单向输入，本文不复述）。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
 ---
@@ -101,7 +107,7 @@
    - **头部四字段**：候选 SHA、tag（可空）、执行环境（OS / arch / 平台库与目标库两个 PG 版本）、开始与结束时间。
    - **主体**：逐条目 ID 记 `pass` / `fail` / `n-a` / `pending` + `test_ref` + 耗时。
    - **顶层 `verdict`**：**判定规则写死在生成器里而不是报告里**——88 条硬底（[26](26-data-and-recovery-gate.md) 定的终态）任一非 `pass` 即 `NO-GO`。报告是事实的载体，不是规则的载体；规则若跟着报告走，改报告就能改结论。
-2. **薄壳 Markdown 结论页** `docs/validation/v1-go-no-go-<短SHA>.md`，只承载机器判不了的东西：[#115](https://github.com/liumingjian/dbs-monitor/issues/115) 的真机观感、AntD 观感门 `AC-05-S4`（[23](23-v1-acceptance-entries-c.md) 定为 `n-a`、判定归 #115）、遗留风险与例外说明。**它必须引用 JSON 的候选 SHA，且不得覆盖 `verdict`。**
+2. **薄壳 Markdown 结论页** `docs/validation/v1-go-no-go-<短SHA>.md`，只承载机器判不了的东西：[#115](https://github.com/liumingjian/dbs-monitor/issues/115) 的真机观感、AntD 观感门 `AC-05-S4`（[23](../acceptance/23-v1-acceptance-entries-c.md) 定为 `n-a`、判定归 #115）、遗留风险与例外说明。**它必须引用 JSON 的候选 SHA，且不得覆盖 `verdict`。**
 3. **两份文件都入库 `docs/validation/`**，文件名含候选短 SHA。
 4. **绑定**：tag 打在**候选 SHA** 上（保证 tag 指的就是被验的那棵树，这是 [T15](15-ci-and-release-pipeline.md) D3.2「精确提交校验」的字面要求）；报告作为后续提交合入，靠文件内 SHA 字段**单向指回**候选。
 
@@ -193,17 +199,17 @@
 
 | 本票产出 | 为什么不进矩阵 |
 |---|---|
-| `release-gate` 校验、`.tool-versions` 漂移守卫、`SHA256SUMS` 构建期产出 | 全是**构建与发布线的自检**，执行者是 CI 而不是 `make acceptance`。进矩阵等于让验收去验流水线——[20](20-v1-acceptance-matrix.md) 定的矩阵射程是产品语义 |
+| `release-gate` 校验、`.tool-versions` 漂移守卫、`SHA256SUMS` 构建期产出 | 全是**构建与发布线的自检**，执行者是 CI 而不是 `make acceptance`。进矩阵等于让验收去验流水线——[20](../acceptance/20-v1-acceptance-matrix.md) 定的矩阵射程是产品语义 |
 | `--version` 子命令与版本注入 | 二进制自报身份，无产品语义面 |
 | `agent_binary_dir` 缺失时的下载端点失败语义 | **唯一真有产品语义的一条**，落在 `AC-08-S8` 已有的下载端点面上，补一句判据即可 |
 
-由此 [24](24-v1-acceptance-entries-d.md) 的「矩阵自此无 `TBD`」与 [26](26-data-and-recovery-gate.md) 的终态 **91 条条目 / 88 条硬底 / `n-a` 5 / `pending` 2 / `exceptions` `[]`** 不被本票动摇。`AC-08-S8` 仍是那两条允许 `pending` 的普通加深之一。
+由此 [24](../acceptance/24-v1-acceptance-entries-d.md) 的「矩阵自此无 `TBD`」与 [26](26-data-and-recovery-gate.md) 的终态 **91 条条目 / 88 条硬底 / `n-a` 5 / `pending` 2 / `exceptions` `[]`** 不被本票动摇。`AC-08-S8` 仍是那两条允许 `pending` 的普通加深之一。
 
 ---
 
 ## 12. D12 · 不建交付前检查表
 
-**结论：本票不汇总 [21](21-v1-acceptance-entries-a.md)–[26](26-data-and-recovery-gate.md) 的外溢实现硬要求，只在 §14 放一张**指针表**（每条 → 出处票号与文档章节），不复述内容、不加判定。
+**结论：本票不汇总 [21](../acceptance/21-v1-acceptance-entries-a.md)–[26](26-data-and-recovery-gate.md) 的外溢实现硬要求，只在 §14 放一张**指针表**（每条 → 出处票号与文档章节），不复述内容、不加判定。
 
 **理由**：汇总表是**第二份真相**。它一旦与原票不一致，人会照着表走，而原票里每条硬要求的**论证**就丢了；且这些硬要求的正确出口是**实现票**，不是又一份文档。若要一张能勾选的表，那属于 [#114](https://github.com/liumingjian/dbs-monitor/issues/114) 的门组成，且应由 `make acceptance` 的报告去承载而非人手维护——与 D5 让报告机器生成是同一条理由。
 
@@ -224,10 +230,10 @@
 
 | 出处 | 章节 |
 |---|---|
-| [21 · A 组](21-v1-acceptance-entries-a.md) | 时间参数化取值表（分区跨度 1min） |
-| [22 · B 组](22-v1-acceptance-entries-b.md) | `repeat_interval` 下限可配、快照截断上限可配 |
-| [23 · C 组](23-v1-acceptance-entries-c.md) | 无（C 组零外溢） |
-| [24 · D 组](24-v1-acceptance-entries-d.md) | `10` §3.2 登记 `A10`/`A11`、采集新鲜度阈值可配、轮换命令可非交互调用 |
+| [21 · A 组](../acceptance/21-v1-acceptance-entries-a.md) | 时间参数化取值表（分区跨度 1min） |
+| [22 · B 组](../acceptance/22-v1-acceptance-entries-b.md) | `repeat_interval` 下限可配、快照截断上限可配 |
+| [23 · C 组](../acceptance/23-v1-acceptance-entries-c.md) | 无（C 组零外溢） |
+| [24 · D 组](../acceptance/24-v1-acceptance-entries-d.md) | `10` §3.2 登记 `A10`/`A11`、采集新鲜度阈值可配、轮换命令可非交互调用 |
 | [25 · 主密钥](25-master-key-provenance-and-startup-failure.md) | 五条，含诊断包绝不含配置文件原文 |
 | [26 · 数据与恢复门](26-data-and-recovery-gate.md) | 五条 + 环境要求 `restore-target` profile |
 | 本文 | §13 |

@@ -1,9 +1,28 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 18-v1-delivery-boundary-bs-binary.md, 30-external-postgres-prerequisites.md
+superseded_parts: 「自带 PostgreSQL」前提与 ≥14 版本口径；schema、分区、查询纪律、事务边界全部在效
+---
 # 指标存储选型与数据模型 v1.0
 
 > 出处：[T2 · 时序存储选型与指标数据模型](https://github.com/liumingjian/dbs-monitor/issues/20)（R2 地图 [#15](https://github.com/liumingjian/dbs-monitor/issues/15)）。
 > 研究输入：[RT-C · 时序数据存储候选方案](https://github.com/liumingjian/dbs-monitor/issues/16)，findings 见 `docs/research/timeseries-storage/findings.md`。
 > 定位：本文档回答「指标样本存哪、按什么模型存」。**结论 + 理由 + 被否决的方案**同页，体例承 R1 决策索引。
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
+
+
+> **当前适用性（2026-08-24 治理复核）**
+> **架构结论全部在效**：单存储不引第二引擎、窄表 `metric_sample` + series 元数据、按天 UTC 原生分区、
+> 写入侧差分只存速率、最新值查询必须带时间下界、样本与告警状态同库同事务。
+>
+> **已失效的是前提措辞，不是结论**：全文行文假定「平台自带 PostgreSQL」，而
+> [`18-v1-delivery-boundary-bs-binary.md`](18-v1-delivery-boundary-bs-binary.md) D2 已把平台库改为**客户自备的外部 PostgreSQL**，
+> 版本口径也由本文的「≥14，推荐 17，具体由 T8 定」收紧为
+> [`30-external-postgres-prerequisites.md`](30-external-postgres-prerequisites.md) D1 的**钉死 17.x、主版本不符拒绝启动、无逃生舱**（T8 已整条作废，本文对它的指向悬空）。
+> 读本文时请把「自带 PG」一律替换为「客户自备的外部 PG 17」。
+>
+> 本块只标注失效点，不改写原结论。
 
 ---
 

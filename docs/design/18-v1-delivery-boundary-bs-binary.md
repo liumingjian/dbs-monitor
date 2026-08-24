@@ -1,9 +1,27 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: ../acceptance/31-real-linux-adaptation-and-final-acceptance.md, 30-external-postgres-prerequisites.md
+superseded_parts: D1/D6 的双架构交付目标 → 31 D1 收窄为 linux/amd64；D2「版本要求另议」→ 30 结案为钉死 PG 17
+---
 # 18 · v1 交付边界：B/S 二进制直接运行验收
 
 > 出处：[交付边界 supersede 记录：B/S 二进制运行验收取代离线 tar 与 macOS .pkg 路线 #106](https://github.com/liumingjian/dbs-monitor/issues/106)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：**supersede 记录**。本文不新开产品或架构讨论，只把「B/S 二进制直接运行验收」这条交付边界固化，并逐条点名它推翻了哪些已冻结结论、哪些结论保持有效。被推翻的原文档一律**不原地改写**，以本文为准。
 > 输入边界（不重议，来自 #105 charting 会话）：地图 Notes 第 1–9 条。
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
+
+
+> **当前适用性（2026-08-24 治理复核）**
+> 本文是 supersede 记录，主体在效。两处已被再次改写：
+> - **交付架构**：本文 D1/D6 的 `linux/amd64` + `linux/arm64` 已被
+>   [`31`](../acceptance/31-real-linux-adaptation-and-final-acceptance.md) D1 收窄为 **`linux/amd64` 单架构**，arm64 整体移出 v1。
+> - **平台库版本**：D2 的「版本要求另议」已由 [`30`](30-external-postgres-prerequisites.md) D1 结案为
+>   **钉死 PG 17.x、主版本不符拒绝启动、无逃生舱**。
+>
+> 另两处文内瑕疵：§0 说「保留清单逐条见 §12」，实际在 **§13**（§12 是 macOS 路线作废）；
+> §12 称被作废的五份 macOS 文档「从未在仓库中创建」，实际它们在 `5d361cd`（2026-08-15）进入 main，
+> 现已移入 [`superseded/`](superseded/)。<!-- allow-superseded-link -->
 
 ---
 

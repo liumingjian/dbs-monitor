@@ -1,3 +1,9 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 27-v1-deliverables-and-candidate-provenance.md, ../acceptance/31-real-linux-adaptation-and-final-acceptance.md
+superseded_parts: D7 校验和清单信任根外移、CA 证书不进交付物；双架构 agent 二进制 → 仅 amd64
+---
 # 19 · Agent 分发与升级形态（无安装器）
 
 > 出处：[Agent 分发与升级形态（无安装器） #108](https://github.com/liumingjian/dbs-monitor/issues/108)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。

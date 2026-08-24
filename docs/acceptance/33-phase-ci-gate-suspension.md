@@ -1,8 +1,31 @@
+---
+status: historical
+kind: execution-record
+note: 声称的四个动作已有三个被逆转（见文首当前适用性），本文不再描述现状
+---
 # 33 · 阶段性停用合入 main 的 CI 门禁
 
 - 状态:生效中(2026-08-17 起)
 - 决策人:项目所有者(会话内口头拍板)
 - 取代面:见 §3;恢复条件见 §4
+
+
+> **当前适用性（2026-08-24 治理复核）——本文声称的四个动作，三个已被逆转。**
+> 本文以 GitHub 服务端状态生效，在仓库里不留痕迹，因此**无法自证死活**。经查 GitHub API 实况：
+>
+> | 本文声称的动作 | 2026-08-24 实况 |
+> |---|---|
+> | 停用 `check.yml` | **active（已恢复）** |
+> | 停用 `check-full.yml` | **active（已恢复）** |
+> | 停用 `acceptance.yml` | `disabled_manually`（仍停用） |
+> | 摘除 main required status check `check` | **已恢复**（`strict=true`, `contexts=[check]`） |
+>
+> 因此 [`15`](../design/15-ci-and-release-pipeline.md) D1/D2 与 [`10`](../design/10-ai-guardrails-and-verification.md) D6.1 的
+> CI 门**已重新在岗**，只有 `acceptance` workflow 仍停用。
+> 恢复承接票 [#151](https://github.com/liumingjian/dbs-monitor/issues/151) 应据此关闭或更新。
+>
+> **教训（已写入 [`docs/design/README.md`](../design/README.md)）**：靠外部服务端状态生效、靠人的判断恢复的记录，
+> 正文必须写明「生效状态的真值在哪里」，否则它在仓库里永远无法自证死活。
 
 ## 1. 决策
 
@@ -29,9 +52,9 @@
 
 ## 3. 取代了什么
 
-- **[15](15-ci-and-release-pipeline.md) T15**「PR 门为 `make check`、默认分支为
+- **[15](../design/15-ci-and-release-pipeline.md) T15**「PR 门为 `make check`、默认分支为
   `make check-full`」——停用期内两条均不执行(workflow 禁用)。
-- **[10](10-ai-guardrails-and-verification.md) T9** 的「CI PR 门」执行者——停用期内
+- **[10](../design/10-ai-guardrails-and-verification.md) T9** 的「CI PR 门」执行者——停用期内
   由开发侧 `make check`(rexec → mac)承担,规范本身(两层闭环、快层预算)不变。
 - **[28](28-v1-go-no-go-gates.md) D11** 的「main 红态只有修复类 PR 允许合入」——
   该条以 CI 门在岗为前提;停用期内合入范围由所有者按阶段目标裁量,

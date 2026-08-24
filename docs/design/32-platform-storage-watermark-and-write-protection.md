@@ -1,3 +1,9 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 34-platform-health-tls-dead-source.md
+superseded_parts: D8 第 1 条「穷尽列举十项」→ 34 D4 更正为九项；两条水位与枚举语义全部在效
+---
 # 32 · 外部平台库形态下的平台存储水位与写保护
 
 > 出处：[拆 #124 前置核对：开放票冲突裁定与修订清单 #125](https://github.com/liumingjian/dbs-monitor/issues/125)，承 [投产化 delta spec #124](https://github.com/liumingjian/dbs-monitor/issues/124) 拆票前的决策缺口。
@@ -54,7 +60,7 @@ A 线使用 `pg_database_size(current_database())` ÷ 部署期配置项「平�
 
 容量预算允许为空。未配置时：
 
-- `platform_db_capacity` 为 `UNKNOWN`，总态依 [21](21-v1-acceptance-entries-a.md) 的 `AC-09-F6` 绝不为 `OK`；
+- `platform_db_capacity` 为 `UNKNOWN`，总态依 [21](../acceptance/21-v1-acceptance-entries-a.md) 的 `AC-09-F6` 绝不为 `OK`；
 - 不拒绝 server 启动；
 - 不编默认容量；
 - 不执行样本拒写。

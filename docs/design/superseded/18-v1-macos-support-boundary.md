@@ -1,8 +1,15 @@
+---
+status: superseded
+kind: decision
+superseded_by: ../18-v1-delivery-boundary-bs-binary.md
+superseded_on: 2026-08-13
+note: macOS 首发路线（#99）整条作废，v1 已回到 linux。本文全文不得据以行事。
+---
 # 18 · v1 macOS 支持边界
 
 > 出处：[v1 macOS 支持边界：arm64、macOS 版本与最低承诺 #99](https://github.com/liumingjian/dbs-monitor/issues/99)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
 > 定位：冻结 v1 首发的操作系统、运行架构与“支持 macOS”的最低验收语义。PostgreSQL 交付形态、构建发布路线及既有 Linux 发布票的处置分别由地图 #98 的其他子票决定，本文不展开。
-> 状态：2026-08-10 冻结。本文是对 [打包、部署与运行形态](09-packaging-and-deployment.md) 与 [CI 与发布流水线](15-ci-and-release-pipeline.md) 中 Linux 双架构发布边界的后续决策；v1 首发范围冲突时以本文为准。
+> 状态：2026-08-10 冻结。本文是对 [打包、部署与运行形态](../09-packaging-and-deployment.md) 与 [CI 与发布流水线](../15-ci-and-release-pipeline.md) 中 Linux 双架构发布边界的后续决策；v1 首发范围冲突时以本文为准。
 
 ---
 

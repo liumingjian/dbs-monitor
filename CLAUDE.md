@@ -11,10 +11,13 @@ GitHub Issues 是本仓库的 issue tracker，`ready-for-agent` 表示可交给�
 
 ### Domain docs
 
-本仓库是 single-context，先读 `CONTEXT.md` 与相关 `docs/design/` 决策。见 `docs/agents/domain.md`。
+本仓库是 single-context。开工前必读两份，且通常只读这两份：
+`CONTEXT.md`（术语）与 `docs/design/LIVE.md`（当前真值索引，一行一条决策）。
 
-开工前必读：`docs/design/00-decision-index.md`。
-决策文档在 `docs/design/`；推翻任何一条须新开决策记录，不原地改写。
+`docs/design/` 全量约 25 万 token，是 smart zone 的一倍半——**不要 glob 决策正文**。
+由 `LIVE.md` 指到哪读哪；确需通读时派 subagent 只取结论。
+每份文档的 frontmatter `status` 自报死活，`superseded/` 下的一律作废、不得据以行事。
+推翻任何一条须新开决策记录，不原地改写；约定见 `docs/design/README.md`。
 
 ## 完成的定义
 

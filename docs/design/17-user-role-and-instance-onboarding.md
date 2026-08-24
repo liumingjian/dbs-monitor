@@ -1,3 +1,7 @@
+---
+status: active
+kind: decision
+---
 # 17 · 用户与角色管理与实例接入的产品语义
 
 > 出处:[S2 · 用户与角色管理与实例接入的产品语义](https://github.com/liumingjian/dbs-monitor/issues/38)(地图 [#36](https://github.com/liumingjian/dbs-monitor/issues/36) 子票)。

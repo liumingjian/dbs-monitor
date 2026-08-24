@@ -1,8 +1,12 @@
+---
+status: active
+kind: decision
+---
 # 34 · 平台健康 `TLS` 死源清算:`tls` 子系统由 `TLS_CERTIFICATE` 承载,移除重复登记
 
 - 状态:生效
 - 来源:[#158](https://github.com/liumingjian/dbs-monitor/issues/158)(#156 收尾验证时发现,PR #157 正文"产品级发现")
-- 输入边界(不重议):[14](14-platform-observability-and-diagnostics.md) D2(平台四态快照、归并序 `FAILED > UNKNOWN > DEGRADED > OK`)、[29](29-production-security-boundary.md) D3(证书过期不拒启动、`tls` 只有 `OK`/`DEGRADED`、刻意无 `FAILED` 档)、[21](21-v1-acceptance-entries-a.md) D6(`AC-09-F6`:任一事实源取不到状态 → 该源 `UNKNOWN` 且总态绝不 `OK`)。
+- 输入边界(不重议):[14](14-platform-observability-and-diagnostics.md) D2(平台四态快照、归并序 `FAILED > UNKNOWN > DEGRADED > OK`)、[29](29-production-security-boundary.md) D3(证书过期不拒启动、`tls` 只有 `OK`/`DEGRADED`、刻意无 `FAILED` 档)、[21](../acceptance/21-v1-acceptance-entries-a.md) D6(`AC-09-F6`:任一事实源取不到状态 → 该源 `UNKNOWN` 且总态绝不 `OK`)。
 
 ## 1. 现象与事实
 

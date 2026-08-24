@@ -1,8 +1,13 @@
+---
+status: partially-superseded
+kind: execution-record
+note: 条目内容在效；硬底计数已被后续组累加
+---
 # 21 · v1 验收矩阵条目 A 组 · 片①⑦⑨
 
 > 出处：[v1 验收矩阵条目 A 组 · 片①⑦⑨（采集 / 暂停 / 平台可观测性）#118](https://github.com/liumingjian/dbs-monitor/issues/118)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：**A 组条目的定稿与三处对骨架的增补**。骨架与判定规则见 [20](20-v1-acceptance-matrix.md)（决策票 [#111](https://github.com/liumingjian/dbs-monitor/issues/111)），**本文不原地改写 20 号任何一条**；本文只在 20 号留下的填空位上定稿，并把三处必要增补显式记在这里。
-> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片①（#41）、片⑦（#47）、片⑨（#49）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10；[T14](14-platform-observability-and-diagnostics.md)、[T12](12-collection-concurrency-timeouts-and-backpressure.md)、[`06`](06-metric-dictionary-and-collection-plan.md)、[`03`](03-monitor-platform-ia-draft.md) §4.8、[`00`](00-decision-index.md) ADR-08/ADR-10。
+> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片①（#41）、片⑦（#47）、片⑨（#49）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10；[T14](../design/14-platform-observability-and-diagnostics.md)、[T12](../design/12-collection-concurrency-timeouts-and-backpressure.md)、[`06`](../design/06-metric-dictionary-and-collection-plan.md)、[`03`](../design/03-monitor-platform-ia-draft.md) §4.8、[`00`](../design/00-decision-index.md) ADR-08/ADR-10。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 >
 > **编号约定**：兄弟票各开一份平行记录 —— [#119](https://github.com/liumingjian/dbs-monitor/issues/119)（片②③④）取 `22-`、[#120](https://github.com/liumingjian/dbs-monitor/issues/120)（片⑤⑥）取 `23-`、[#121](https://github.com/liumingjian/dbs-monitor/issues/121)（片⑧+横切）取 `24-`。四组并行会话不得往同一份文档里写。
@@ -71,7 +76,7 @@
 
 ## 5. D5 · journal 载体不在 `make acceptance` 内验证（对 20 号 D3 的一处让步，显式记账）
 
-[T14](14-platform-observability-and-diagnostics.md) 把「结构化 systemd journal」定为平台自身故障的三出口之一，但 `make acceptance` 的 server 是 compose 里的**裸进程**，没有 systemd，`journalctl` 不可用。
+[T14](../design/14-platform-observability-and-diagnostics.md) 把「结构化 systemd journal」定为平台自身故障的三出口之一，但 `make acceptance` 的 server 是 compose 里的**裸进程**，没有 systemd，`journalctl` 不可用。
 
 **决定**：server 的结构化事件写 stdout，矩阵断言**结构化事件本身**（字段形状 + 秘密扫描）；**journal 这个载体的真实性明确移交片⑩整机演练**。
 
