@@ -4,7 +4,9 @@ import { Badge, Button, Dropdown, Form, Input, Layout, Modal, Space, Typography 
 import { useState } from 'react'
 import { $api } from '../api/client'
 import { apiErrorMessage } from '../api/errors'
+import { pollingIntervals } from '../api/polling'
 import type { components } from '../api/schema'
+import { pausedInstanceCount } from '../domain/CollectionPausedTag'
 
 type PasswordChangeInput = components['schemas']['PasswordChangeInput']
 
@@ -43,6 +45,12 @@ function AuthenticatedHeader() {
     {},
     { refetchInterval: 15_000 },
   )
+  const instancesQuery = $api.useQuery(
+    'get',
+    '/api/v1/instances',
+    {},
+    { refetchInterval: pollingIntervals.instances },
+  )
   const changePasswordMutation = $api.useMutation('put', '/api/v1/password')
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [error, setError] = useState('')
@@ -63,7 +71,9 @@ function AuthenticatedHeader() {
   return (
     <>
       <Space size="large">
-        <Link to="/instances" className="header-link">实例列表</Link>
+        <Link to="/instances" className="header-link">
+          <InstanceListLabel pausedCount={instancesQuery.data && pausedInstanceCount(instancesQuery.data)} />
+        </Link>
         <Link to="/alerts" search={{ tab: 'current', include_paused: false }} className="header-link">全局告警</Link>
         <Link to="/users" className="header-link">用户管理</Link>
         <Link to="/alert-settings/notifications" className="header-link">
@@ -84,6 +94,13 @@ function AuthenticatedHeader() {
       />
     </>
   )
+}
+
+// 角标计的是已暂停实例数；实例列表还没到手时不渲染角标，免得把「还不知道」显示成 0。
+export function InstanceListLabel({ pausedCount }: { pausedCount: number | undefined }) {
+  const label = <span className="header-link-label" title={pausedCount ? `${pausedCount} 个实例已暂停采集` : undefined}>实例列表</span>
+  if (pausedCount === undefined) return label
+  return <Badge count={pausedCount} color="gold" offset={[8, 0]}>{label}</Badge>
 }
 
 export function NotificationSettingsLabel({ hasFailures }: { hasFailures: boolean }) {
