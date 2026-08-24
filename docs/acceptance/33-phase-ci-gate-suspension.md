@@ -22,7 +22,9 @@ note: 声称的四个动作已有三个被逆转（见文首当前适用性）�
 >
 > 因此 [`15`](../design/15-ci-and-release-pipeline.md) D1/D2 与 [`10`](../design/10-ai-guardrails-and-verification.md) D6.1 的
 > CI 门**已重新在岗**，只有 `acceptance` workflow 仍停用。
-> 恢复承接票 [#151](https://github.com/liumingjian/dbs-monitor/issues/151) 应据此关闭或更新。
+> 恢复承接票 [#151](https://github.com/liumingjian/dbs-monitor/issues/151) 已关闭，但**恢复只完成 3/4**：
+> `acceptance` workflow 至今仍是 `disabled_manually`，而本文 §4 的恢复动作里包含 `gh workflow enable acceptance.yml`。
+> 是刻意留停还是漏了一步，需要所有者确认。
 >
 > **教训（已写入 [`docs/design/README.md`](../design/README.md)）**：靠外部服务端状态生效、靠人的判断恢复的记录，
 > 正文必须写明「生效状态的真值在哪里」，否则它在仓库里永远无法自证死活。
