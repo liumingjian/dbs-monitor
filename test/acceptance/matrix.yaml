@@ -90,8 +90,8 @@ entries:
     pages: []
     operations: [updateCollectionTaskInterval]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_test.go::TestAcceptance_AC_01_F1"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-01-F2
@@ -109,8 +109,8 @@ entries:
     pages: ["实例工作台/监控与报警/标准监控", "实例工作台/采集管理/指标采集状态"]
     operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_browser_test.go::TestAcceptance_AC_01_F2"
     owner_issue: 118
     reason: "本组唯一命中 IA §6 关键路径的条目（§6.5），按 21 号 D3 由本条承载整条路径"
   - id: AC-01-F3
@@ -127,8 +127,8 @@ entries:
     pages: []
     operations: [listInstanceCapabilities, getMetricSeries]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_test.go::TestAcceptance_AC_01_F3"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-01-F4
@@ -145,8 +145,8 @@ entries:
     pages: []
     operations: [getMetricSeries]
     crosscut: [INV-4]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/platform_outage_test.go::TestAcceptance_AC_01_F4"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-01-F5
@@ -163,8 +163,8 @@ entries:
     pages: []
     operations: [getMetricSeries, listInstanceCapabilities, listInstanceCollectionTasks]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_test.go::TestAcceptance_AC_01_F5"
     owner_issue: 118
     reason: "能力四态的 UNKNOWN 态与不可达故障合并进 F3 会变成两次执行；按 21 号 D2 拆出并设为加深基线"
   - id: AC-01-F6
@@ -180,8 +180,8 @@ entries:
     pages: []
     operations: [getMetricSeries, listInstanceCapabilities]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_test.go::TestAcceptance_AC_01_F6"
     owner_issue: 118
     reason: "同 AC-01-F5，四态的 NOT_APPLICABLE 态独立成条，加深基线不许 pending"
   # ── 片02 · 告警规则与评估
@@ -917,8 +917,8 @@ entries:
     pages: ["实例工作台/采集管理/采集配置"]
     operations: [pauseInstanceCollection, resumeInstanceCollection, getMetricSeries, listInstanceCollectionTasks]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_pause_test.go::TestAcceptance_AC_07_S1"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-07-S2
@@ -937,8 +937,8 @@ entries:
     pages: ["实例工作台/采集管理/配置缺失待办", "实例工作台/采集管理/扩展 / 插件能力", "实例工作台/采集管理/采集配置"]
     operations: [listInstanceCapabilities]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_browser_test.go::TestAcceptance_AC_07_S2"
     owner_issue: 118
     reason: "S1 拍板验收判据原文（片⑦Further Notes），按 21 号 D1 设为加深基线"
   - id: AC-07-S3
@@ -959,8 +959,8 @@ entries:
     pages: []
     operations: [pauseInstanceCollection, resumeInstanceCollection]
     crosscut: [BUILTIN-1, BUILTIN-2]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_pause_test.go::TestAcceptance_AC_07_S3"
     owner_issue: 118
     reason: "暂停冻结语义跨到告警域但归属采集域（21 号 D4），设为加深基线；不放入片②以免挤占其五条基线"
   - id: AC-07-F1
@@ -976,8 +976,8 @@ entries:
     pages: []
     operations: [pauseInstanceCollection, resumeInstanceCollection]
     crosscut: [INV-3]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_pause_test.go::TestAcceptance_AC_07_F1"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-07-F2
@@ -994,8 +994,8 @@ entries:
     pages: ["实例工作台/监控与报警/标准监控", "实例列表"]
     operations: [getMetricSeries]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_browser_test.go::TestAcceptance_AC_07_F2"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-07-F3
@@ -1011,8 +1011,8 @@ entries:
     pages: ["实例工作台/采集管理/数据库连接与权限检查"]
     operations: [getMetricSeries, listInstanceCapabilities]
     crosscut: []
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_pause_test.go::TestAcceptance_AC_07_F3"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   - id: AC-07-F4
@@ -1028,8 +1028,8 @@ entries:
     pages: []
     operations: [pauseInstanceCollection]
     crosscut: [INV-4]
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/platform_outage_test.go::TestAcceptance_AC_07_F4"
     owner_issue: 118
     reason: "条目内容由 #118 定稿"
   # ── 片08 · 凭据与接入
@@ -1494,8 +1494,8 @@ entries:
       - "停目标库容器后，该内置规则真实进入 FIRING（不是只躺在规则表里）"
       - "默认严重级别 critical，实例健康随之按 INV-2 归并"
       - "目标库恢复后按滞回语义恢复，不残留未恢复告警"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_test.go::TestAcceptance_AC_01_F5 [BUILTIN-1]"
     owner_issue: 121
     reason: "按三条规则切而非按受限语义切（24 号 D9）：受限语义已由 INV-4 覆盖，重复切会让横切组两条断同一件事；「规则在表里但从来没被评估过」是最典型的改坏了没人看得出来，INV-4 全绿与它从未触发可以同时成立"
   - id: BUILTIN-2
@@ -1526,8 +1526,8 @@ entries:
       - "停采集使新鲜度超阈值后，该内置规则真实进入 FIRING"
       - "默认严重级别 warning（下限即默认，改 info 被拒由 INV-4 覆盖）"
       - "采集恢复后按滞回语义恢复"
-    status: pending
-    test_ref: null
+    status: covered
+    test_ref: "test/acceptance/collection_test.go::TestAcceptance_BUILTIN_3"
     owner_issue: 121
     reason: "独立执行一次；采集新鲜度阈值参数化到秒级是本条跑得完的前提，是 24 号 D15 外溢到实现的硬要求之一 —— 不参数化就只能直写历史样本，落进 D4 白名单，而四组定稿后 exceptions 全程为 []"
 
