@@ -41,7 +41,14 @@ supersedes: []            # 本文推翻了哪些文档
 
 **不该写**：
 
-- **验收条目、门禁清单、发布留痕、适配进度** → `docs/acceptance/`、`docs/release/`。这些是**项目状态**，交付完即失去价值，不该占用决策语料。
+- **验收条目、门禁清单、发布留痕、适配进度** → `docs/acceptance/`。这些是**项目状态**，交付完即失去价值，不该占用决策语料。
+
+  > **有几条真决策夹在那边，这是有意为之。** `docs/acceptance/` 的 23 / 24 / 28 / 31 里混着长期架构决策
+  > （`31` D1「v1 收窄为 linux/amd64」、`28` D9「runner 上的绿永不构成 Go/No-Go 证据」、
+  > `24` D12「凭据不回显的三层分工」、`23` D5「背压跳过报 NO_DATA」等）。
+  > **不要把它们复制进 `docs/design/`** —— 一条决策只能有一个家，复制出来就是第二份真值，
+  > 正是本目录刚治好的病。它们已逐条进 [`LIVE.md`](LIVE.md)，由索引负责让它们找得到。
+  > 真要归位，是把决策**移出来**并在原处留指针，不是抄一份。
 - **产品规格「是什么」** → `docs/spec/`。规格回答是什么，决策回答为什么。
 - **术语** → 根目录 `CONTEXT.md`。它是 glossary，不装实现细节。
 - **能被 `make check` 验证的约束** → 直接写成测试或 lint。可执行的不变式不需要 agent 读文档才能遵守；`internal/arch_test.go`（依赖方向）和 `01-appendix-implemented.md`（指标字典由 `internal/metric/dictionary.go` 生成）是已有的两个样板。
@@ -56,7 +63,7 @@ supersedes: []            # 本文推翻了哪些文档
 
 ## 可执行的守卫
 
-`scripts/check-docs.sh`（`make check` 第一步）强制六条：
+`scripts/check-docs.sh`（`make check` 第一步）强制七条：
 
 1. 每份决策文档都带合法的 `status`。
 2. `superseded/` 下的文档必须指名 `superseded_by`，且顶层不得残留 `status: superseded`。
@@ -64,3 +71,6 @@ supersedes: []            # 本文推翻了哪些文档
 4. 顶层决策编号唯一——撞号会让「见 18」这类简写无法解析。
 5. 所有相对 markdown 链接解析得到。
 6. `LIVE.md` 不超预算。
+7. **代码不得依赖 `superseded/` 下的文档**——活代码为死文档背书，和活文档链向死文档是同一种病。
+   （曾有三个 guard 测试断言一份已作废文档里必须存在 `darwin/arm64`、`.pkg` 等措辞，
+   等于用测试把死路线钉在仓库里、阻止清理。已于 2026-08-24 退役。）

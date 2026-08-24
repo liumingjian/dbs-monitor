@@ -98,6 +98,16 @@ else
 	report "缺少 docs/design/LIVE.md（当前真值索引）"
 fi
 
+# 7 · 代码不得依赖已作废文档（与规则 3 同源：活的东西不为死文档背书）
+code_hits=$(grep -rln 'design/superseded' \
+	--include='*.go' --include='*.ts' --include='*.tsx' \
+	--include='*.yaml' --include='*.yml' --include='*.sh' \
+	--exclude='check-docs.sh' . 2>/dev/null || true)
+if [ -n "$code_hits" ]; then
+	report "以下代码/配置引用了 superseded/ 下的作废文档，应改指在效来源或一并退役:"
+	printf '%s\n' "$code_hits" | sed 's/^/  /' >&2
+fi
+
 if [ "$fail" -ne 0 ]; then
 	printf '\ncheck-docs: 决策文档卫生检查未通过\n' >&2
 	exit 1
