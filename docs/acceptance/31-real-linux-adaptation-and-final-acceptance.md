@@ -1,8 +1,13 @@
+---
+status: active
+kind: execution-record
+note: D1「v1 收窄为 linux/amd64」是当前交付范围的规范来源
+---
 # 31 · 真 Linux 环境适配与最终验收
 
 > 出处：[真 Linux 环境适配与最终验收 #115](https://github.com/liumingjian/dbs-monitor/issues/115)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > **载体补登**：#115 是地图上唯一一张 resolution 只留在票面、未落 `docs/design/` 的决策票。本文把该 resolution 固化进仓库，**不新增、不改写任何结论**；与票面原文的差异仅两处——编号引用改为文档链接、加入本注记。以本文与票面不一致处为疑时，以票面 resolution 为准并修本文。
-> 定位：v1 真 Linux 最终验收规范。本文 supersede 以下既有双架构口径，不原地改写旧记录：[18](18-v1-delivery-boundary-bs-binary.md) D1/D6 的双架构交付目标；[19](19-agent-distribution-and-upgrade.md) D1/D7 的双架构下载允许值与双架构 plan B 备料；[27](27-v1-deliverables-and-candidate-provenance.md) 的四个二进制、双架构 `SHA256SUMS` 与 `agent_binary_dir` 必须同时含两架构的要求；`check-full` / 发布门中 arm64 交叉编译属于 v1 硬门的口径。[28](28-v1-go-no-go-gates.md) D10「不加 arm64 runner」结论仍成立，理由收紧为「arm64 已不在 v1 交付目标」。
+> 定位：v1 真 Linux 最终验收规范。本文 supersede 以下既有双架构口径，不原地改写旧记录：[18](../design/18-v1-delivery-boundary-bs-binary.md) D1/D6 的双架构交付目标；[19](../design/19-agent-distribution-and-upgrade.md) D1/D7 的双架构下载允许值与双架构 plan B 备料；[27](../design/27-v1-deliverables-and-candidate-provenance.md) 的四个二进制、双架构 `SHA256SUMS` 与 `agent_binary_dir` 必须同时含两架构的要求；`check-full` / 发布门中 arm64 交叉编译属于 v1 硬门的口径。[28](28-v1-go-no-go-gates.md) D10「不加 arm64 runner」结论仍成立，理由收紧为「arm64 已不在 v1 交付目标」。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
 ---

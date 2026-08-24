@@ -1,3 +1,10 @@
+---
+status: superseded
+kind: decision
+superseded_by: ../18-v1-delivery-boundary-bs-binary.md
+superseded_on: 2026-08-13
+note: macOS 首发路线（地图 #98 索引）整条作废，v1 已回到 linux。本文全文不得据以行事。
+---
 # v1 macOS 首发适配与发布边界索引 v1.0
 
 > 本文把 Wayfinder 地图 [#98 · v1 macOS 首发适配与发布边界](https://github.com/liumingjian/dbs-monitor/issues/98) 的 `Decisions so far` 固化到仓库。后续实现以本文索引和对应决策文档为输入，不依赖 issue 正文仍保持可见。

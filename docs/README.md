@@ -1,63 +1,35 @@
 # 文档索引
 
-> 本索引用于后续 `/wayfinder` 或其他调研/设计会话快速定位材料。  
-> 当前阶段：**R1 已完成并冻结；R2（系统架构骨架与技术选型）决策层已收口**——17 张子票全部关闭，决策文档 `04`–`15` 均为 v1.0，walking skeleton（T11）已验收（升级/回滚、PG13–17 矩阵、release gates 递延 R3）。正在进行收口合入与 `/to-spec` 前置准备。
+> 本仓库的文档分四层，**入口只有一个**：当前真值索引
+> [`design/LIVE.md`](design/LIVE.md)。开工前读它 + 根目录 `CONTEXT.md`，通常不必再读别的。
 
----
+## 1. 四层文档，各司其职
 
-## 1. 推荐阅读顺序
-
-```text
-1. docs/design/00-decision-index.md          ← R2 开工前必读
-   ↓
-2. docs/research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md
-   ↓
-3. docs/design/01-pg-mvp-metric-dictionary.md
-   ↓
-4. docs/design/02-alert-rule-model-draft.md
-   ↓
-5. docs/design/03-monitor-platform-ia-draft.md
-```
-
----
-
-## 2. 核心文档
-
-| 文档 | 作用 | 状态 |
+| 目录 | 装什么 | 什么时候读 |
 |---|---|---|
-| [`docs/design/00-decision-index.md`](design/00-decision-index.md) | R1 决策索引：十项决策的结论、理由与**被否决的方案** | v1.0，R1 结束后冻结 |
-| [`docs/research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md`](research/aliyun-rds/aliyun-rds-pg-monitor-feasibility-report.md) | 阿里云 RDS PostgreSQL 监控与报警页面可行性调研 | 已完成 |
-| [`docs/design/01-pg-mvp-metric-dictionary.md`](design/01-pg-mvp-metric-dictionary.md) | PG MVP 指标字典，定义指标口径、来源、采样、告警适用性 | **v1.0** |
-| [`docs/design/02-alert-rule-model-draft.md`](design/02-alert-rule-model-draft.md) | 告警规则配置模型，定义规则、告警实例、状态、No Data、通知等 | **v1.0** |
-| [`docs/design/03-monitor-platform-ia-draft.md`](design/03-monitor-platform-ia-draft.md) | 监控平台信息架构，定义页面树、页面职责和排障路径 | **v1.0** |
-| [`docs/design/04-metric-storage-model.md`](design/04-metric-storage-model.md) | R2 · 指标存储选型与数据模型：选型结论、schema、分区与保留、查询纪律、事务边界 | **v1.0** |
-| [`docs/design/05-backend-code-structure.md`](design/05-backend-code-structure.md) | R2 · 后端代码结构与模块边界：目录树、依赖方向、接缝白名单、错误模型、启动形态 | **v1.0** |
-| [`docs/design/06-metric-dictionary-and-collection-plan.md`](design/06-metric-dictionary-and-collection-plan.md) | R2 · 指标字典载体与采集计划：载体形态、采集任务模型、能力枚举与三态、PG13–17 矩阵、采集管线分层、可扩展性边界 | **v1.0** |
-| [`docs/design/07-api-contract-and-codegen.md`](design/07-api-contract-and-codegen.md) | R2 · API 契约组织与代码生成流水线：spec 拆分与生成流水线、资源与 URL 模型、空状态码表、枚举穷尽性、认证授权、实时性 | **v1.0** |
-| [`docs/design/08-frontend-stack-and-ui.md`](design/08-frontend-stack-and-ui.md) | R2 · 前端技术栈与 UI 体系：UI 组件体系、图表库与领域组件、数据获取层、路由、状态归属三桶、目录结构、状态视觉词汇、测试策略 | **v1.0** |
-| [`docs/design/09-packaging-and-deployment.md`](design/09-packaging-and-deployment.md) | R2 · 打包、部署与运行形态：交付物形态、自建 PG 与双架构、运行形态与自举、Agent 分发、首次启动、升级与回滚、资源基线与前置检查 | **v1.0** |
-| [`docs/design/10-ai-guardrails-and-verification.md`](design/10-ai-guardrails-and-verification.md) | R2 · AI 开发护栏与验证闭环：两层验证闭环、本地开发环境、强制测试清单与准入判据、`CLAUDE.md` 边界与两份草案、不变式的可执行化、强制点与工作方式 | **v1.0** |
-| [`docs/design/11-walking-skeleton-slice.md`](design/11-walking-skeleton-slice.md) | R2 · Walking skeleton 切片定义与验收标准：两条采集通路的切法、告警与前端的深度、鉴权与凭据、分区机制、验收标准三层、禁止清单、推翻选型的处理规则 | **v1.0** |
-| [`docs/design/12-collection-concurrency-timeouts-and-backpressure.md`](design/12-collection-concurrency-timeouts-and-backpressure.md) | R2 · 采集并发、超时与背压：中央调度、双连接生命周期、超时与退避、能力探测份额、任务状态与完整性水位、自观测边界 | **v1.0** |
-| [`docs/design/13-credential-encryption-rotation-and-revocation.md`](design/13-credential-encryption-rotation-and-revocation.md) | R2 · 凭据加密、轮换与吊销：威胁模型、PG 密文、Agent 登记与令牌生命周期、主密钥、备份恢复和回显边界 | **v1.0** |
-| [`docs/design/14-platform-observability-and-diagnostics.md`](design/14-platform-observability-and-diagnostics.md) | R2 · 平台自身运行可观测性与诊断出口：journal + 只读诊断 API、四态平台健康快照、非递归告警边界、磁盘分级保护、故障注入验收 | **v1.0** |
-| [`docs/design/15-ci-and-release-pipeline.md`](design/15-ci-and-release-pipeline.md) | R2 · CI 与发布流水线：GitHub Actions 唯一规范执行者、PR 门与 `check-full`、tag + 精确提交校验 + 人工审批发布、四组合构建矩阵、留痕规则 | **v1.0** |
-| [`docs/design/16-r2-decision-index.md`](design/16-r2-decision-index.md) | R2 收口索引：固化地图 #15 的 `Decisions so far`，以 `make check ≤120 秒` 为当前真值 | **v1.0** |
-| [`docs/design/18-v1-delivery-boundary-bs-binary.md`](design/18-v1-delivery-boundary-bs-binary.md) | **supersede 记录** · v1 交付边界改为「二进制直接运行 + 客户自备外部 PG + linux 双架构」：逐条点名推翻的 T8 / T15 结论与作废的 macOS 路线，并点名保持有效的 T2 / T12 / T13 / T14 | **v1.0** |
-| [`docs/validation/t11-windows-amd64-progress.md`](validation/t11-windows-amd64-progress.md) | T11 · Windows amd64 环境验证记录、Docker Desktop 兼容性结论与 Linux amd64 后续验收清单 | 已完成（T11 已验收） |
+| [`design/LIVE.md`](design/LIVE.md) | **当前真值索引**：一行一条决策 + 出处 | **每次开工，且通常只读这个** |
+| [`design/`](design/) | 决策日志，append-only，约 25 万 token | 由 `LIVE.md` 指到哪读哪，**不要 glob** |
+| [`design/superseded/`](design/superseded/) | 已整体作废的决策，保留作考古 | 只在追问「当时为什么那样定」时；**不得据以行事** | <!-- allow-superseded-link -->
+| [`spec/`](spec/) | 产品规格「是什么」 | 做产品语义相关的迭代时 |
+| [`acceptance/`](acceptance/) | 验收条目、Go/No-Go 门禁、发布留痕 | 做验收或发版时；条目真值在 `test/acceptance/matrix.yaml` |
+| [`research/`](research/) | 调研报告与取证资产 | 需要外部事实依据时 |
+| [`validation/`](validation/) | 环境验证记录 | 需要实测数据时 |
 
-### 2.1 四条跨文档不变式
+约定（frontmatter `status` 规范、推翻一条结论的正确动作、什么不该写进 `design/`）见
+[`design/README.md`](design/README.md)。
 
-后续路线修改任何一份规格前，应先确认不破坏以下四条（详见决策索引 §4）：
+## 2. 只在这三种情况下越过 `LIVE.md`
 
-1. **告警状态五档**（`OK / PENDING / FIRING / NO_DATA / RECOVERED`），压制是正交轴。
-2. **实例健康 = 未恢复告警的最坏归并 + 已暂停 override**，单一来源。
-3. **三档全局角色**，可见性不收窄、写能力收窄，凭据永不回显。
-4. **三条采集状态内置规则**不可删除、不可停用，严重级别下限 `warning`。
+1. **要理由，不只要结论**——`LIVE.md` 只给结论，被否决的方案和边界条件在决策文档正文里。
+2. **要做产品语义迭代**——先读 `design/01`（指标字典）、`design/02`（告警模型）、`design/03`（信息架构）
+   与 [`spec/mvp-master-spec.md`](spec/mvp-master-spec.md)。
+3. **要考古**——R1 十项 ADR 的完整理由与否决记录在 [`design/00-decision-index.md`](design/00-decision-index.md)，
+   R2 的在 [`design/16-r2-decision-index.md`](design/16-r2-decision-index.md)。两份都已降为**历史路线索引**，
+   首屏口径过期，读前先看各自的「当前适用性」块。
 
----
+需要通读大量决策时，**派 subagent 去读，只把结论带回主上下文**。
 
-## 3. 取证资产目录
+## 3. 阿里云调研取证资产
 
 阿里云调研取证资产统一放在：
 
@@ -119,27 +91,13 @@ docs/research/aliyun-rds/evidence/
 
 ---
 
-## 4. 路线进度
-
-总目标：建成可运行的 PG MVP 监控系统。
-
-| 路线 | 内容 | 状态 |
-|---|---|---|
-| **R1** | 产品 / 设计 MVP 规格 | **已完成** —— 见 [R1 地图](https://github.com/liumingjian/dbs-monitor/issues/1) |
-| **R2** | 系统架构骨架与技术选型 | **进行中** —— 见 [R2 地图](https://github.com/liumingjian/dbs-monitor/issues/15) |
-| R3 | 采集与数据模型 | 待开始 |
-| R4 | 告警评估引擎 | 待开始 |
-| R5 | 前端与交互实现 | 待开始 |
-| R6 | 接入、部署与集成运维 | 待开始 |
-
-R2 开工前请先读 [`docs/design/00-decision-index.md`](design/00-decision-index.md)——它记录了 R1 十项决策的理由与**被否决的方案**，避免重新引入已经排除掉的设计（加权健康评分、静默对象、根因抑制、实例级授权等）。
-
 ---
 
-## 5. 文件维护约定
+## 4. 文件维护约定
 
-- 原始取证资产放在 `docs/research/**/evidence/` 下，不直接散放在仓库根目录。
-- 调研报告放在 `docs/research/<topic>/` 下。
-- 派生设计文档放在 `docs/design/` 下。
-- 文档之间尽量使用相对 Markdown 链接。
-- 若后续新增截图或快照，请同步更新本索引和对应调研报告的“参考资产”列表。
+- 决策文档进 `design/`，必须带 frontmatter `status`；推翻一条须新开记录并把旧的移入 `superseded/`，**不原地改写**。
+- 验收条目 / 门禁 / 发布留痕进 `acceptance/`，**不要放进 `design/`**——它们是项目状态，交付完即失效。
+- 原始取证资产放 `research/<topic>/evidence/`，调研报告放 `research/<topic>/`。
+- 文档之间用相对 Markdown 链接；`scripts/check-docs.sh`（`make check` 第一步）会验证链接可解析、
+  编号唯一、活文档不指向 `superseded/`、`LIVE.md` 不超预算。
+- **新增或推翻决策后，改 `design/LIVE.md` 对应那一行。** 不改它，它就会像它取代的那四份索引一样过期。

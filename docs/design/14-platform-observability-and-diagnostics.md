@@ -1,3 +1,9 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 32-platform-storage-watermark-and-write-protection.md, 34-platform-health-tls-dead-source.md
+superseded_parts: D4 单一磁盘水位模型 → 32 拆成两条；D2 事实源清单经 25/29/32/34 增删，现为九源
+---
 # 平台自身运行可观测性与诊断出口 v1.0
 
 > 目标：定死「平台自己坏了」如何被看见——运行事实模型、诊断/导出入口、非递归告警边界、保留与磁盘水位策略、验收场景。
@@ -6,6 +12,17 @@
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
 > **本票只产决策文档，不修改业务代码。** 后续实现交给 R3。
 > 落盘说明：本票 2026-08-05 在 [#32 关票评论](https://github.com/liumingjian/dbs-monitor/issues/32) 中冻结结论，当时链接的即本路径但文件未随票落盘；本文档为该冻结结论的仓库落盘，内容以关票评论为准，未新增决策。
+
+
+> **当前适用性（2026-08-24 治理复核）**
+> D1 journal + 只读诊断 API、D2 四态与归并序 `FAILED > UNKNOWN > DEGRADED > OK`、D3 非递归告警边界、
+> D5 诊断出口秘密禁区、D9「绝不自动删旧分区、绝不缩短 30 天保留」——**全部在效**。
+>
+> **已改定**：D4 的单一磁盘水位模型被 [`32`](32-platform-storage-watermark-and-write-protection.md) 拆成两条互不推导的水位
+> （平台库容量 / server 本机盘），预算未配置时为 `UNKNOWN` 不猜。
+> §2 事实源清单经四次增删——`keyring`（[`25`](25-master-key-provenance-and-startup-failure.md)）、
+> `tls` 钉死为既有 `TLS_CERTIFICATE`（[`29`](29-production-security-boundary.md) D3 + [`34`](34-platform-health-tls-dead-source.md) D1）、
+> `platform_db_capacity`（`32` D3）、移除死源 `TLS`（`34` D2）——**当前为九源**，正文的「七源」与「自带 PostgreSQL」条目均已过期。
 
 ---
 

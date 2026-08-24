@@ -1,8 +1,13 @@
+---
+status: partially-superseded
+kind: execution-record
+note: 条目内容在效；硬底计数已被后续组累加
+---
 # 23 · v1 验收矩阵条目 C 组 · 片⑤⑥
 
 > 出处：[v1 验收矩阵条目 C 组 · 片⑤⑥（观察面 / 增强监控）#120](https://github.com/liumingjian/dbs-monitor/issues/120)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：**C 组条目的定稿与十一处对骨架的增补**。骨架与判定规则见 [20](20-v1-acceptance-matrix.md)（决策票 [#111](https://github.com/liumingjian/dbs-monitor/issues/111)），A 组见 [21](21-v1-acceptance-entries-a.md)（[#118](https://github.com/liumingjian/dbs-monitor/issues/118)），B 组见 [22](22-v1-acceptance-entries-b.md)（[#119](https://github.com/liumingjian/dbs-monitor/issues/119)）；**本文不原地改写 20 / 21 / 22 任何一条**，只在留下的填空位上定稿。
-> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片⑤（#45）、片⑥（#46）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10；[21](21-v1-acceptance-entries-a.md) D1（加深基线的准入）、D3（§6.5 归属）、D7（时间参数化取值表）、D8（`test_ref` 形态）、D9（真实手段的定性）、D10（预写 `operationId`）；[22](22-v1-acceptance-entries-b.md) D9（**§6.4 由 `AC-03-S3` 承载，片⑤告警详情骨架条目不重复走**）；[`03`](03-monitor-platform-ia-draft.md) §3 页面树 / §4.1–§4.5 / §4.7 / §5 / §6.1–§6.3 / §7 / §8；[`00`](00-decision-index.md) ADR-01/04/05/06/08/09 与 §4 四不变式；[`08`](08-frontend-stack-and-ui.md) D2 与 D10.1（B6 四项）；[`12`](12-collection-concurrency-timeouts-and-backpressure.md) D4/D5/D7 与 §5.3；[T14](14-platform-observability-and-diagnostics.md)。
+> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片⑤（#45）、片⑥（#46）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10；[21](21-v1-acceptance-entries-a.md) D1（加深基线的准入）、D3（§6.5 归属）、D7（时间参数化取值表）、D8（`test_ref` 形态）、D9（真实手段的定性）、D10（预写 `operationId`）；[22](22-v1-acceptance-entries-b.md) D9（**§6.4 由 `AC-03-S3` 承载，片⑤告警详情骨架条目不重复走**）；[`03`](../design/03-monitor-platform-ia-draft.md) §3 页面树 / §4.1–§4.5 / §4.7 / §5 / §6.1–§6.3 / §7 / §8；[`00`](../design/00-decision-index.md) ADR-01/04/05/06/08/09 与 §4 四不变式；[`08`](../design/08-frontend-stack-and-ui.md) D2 与 D10.1（B6 四项）；[`12`](../design/12-collection-concurrency-timeouts-and-backpressure.md) D4/D5/D7 与 §5.3；[T14](../design/14-platform-observability-and-diagnostics.md)。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 >
 > **编号约定**（承 21 / 22 号）：[#121](https://github.com/liumingjian/dbs-monitor/issues/121)（片⑧+横切）取 `24-`。四组并行会话不得往同一份文档里写；`matrix.yaml` 四票共改，各组只碰自己片的行。
@@ -92,8 +97,8 @@
 
 片⑥ 有一处**表面矛盾**，必须写下来而不是靠实现者临场猜：
 
-- [T14](14-platform-observability-and-diagnostics.md) / 20 号 D2 的 `F4`：平台自身故障**不得计入 `NO_DATA`**；
-- [`12`](12-collection-concurrency-timeouts-and-backpressure.md) D7 明文：**背压跳过不推进采集源完整性水位，连续缺数照常进 `NO_DATA`**。
+- [T14](../design/14-platform-observability-and-diagnostics.md) / 20 号 D2 的 `F4`：平台自身故障**不得计入 `NO_DATA`**；
+- [`12`](../design/12-collection-concurrency-timeouts-and-backpressure.md) D7 明文：**背压跳过不推进采集源完整性水位，连续缺数照常进 `NO_DATA`**。
 
 **决定：`12` D7 的口径优先，`AC-06-F4` 不断 `NO_DATA` 豁免，并把这句写进条目的 `reason`。**
 

@@ -39,7 +39,7 @@
 
 ## Linux amd64 后续清单（历史交接清单，已完成）
 
-以下清单是 Windows 环境交接时的原始计划；原生 Linux amd64 已完成其中的 T11 范围。升级/回滚脚本与 PG13–17 矩阵不在 T11 范围内，按上述决定延期到 R3。清单中的 Linux package target 保留原始名称以忠实记录当时步骤；[#102 处置](../design/21-v1-linux-release-disposition.md) 后，对应入口统一增加 `legacy-` 前缀，且不再属于 v1 验收。
+以下清单是 Windows 环境交接时的原始计划；原生 Linux amd64 已完成其中的 T11 范围。升级/回滚脚本与 PG13–17 矩阵不在 T11 范围内，按上述决定延期到 R3。清单中的 Linux package target 保留原始名称以忠实记录当时步骤；[#102 处置](../design/superseded/21-v1-linux-release-disposition.md) 后，对应入口统一增加 `legacy-` 前缀，且不再属于 v1 验收。
 
 在原生 Linux amd64 机器上继续，不要用 qemu 代替原生 PG 构建：
 

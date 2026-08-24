@@ -1,8 +1,13 @@
+---
+status: partially-superseded
+kind: execution-record
+note: 条目内容在效；硬底计数已被后续组累加
+---
 # 24 · v1 验收矩阵条目 D 组 · 片⑧ + 横切组
 
 > 出处：[v1 验收矩阵条目 D 组 · 片⑧ + 横切组（凭据接入 + 四不变式 + 三内置规则）#121](https://github.com/liumingjian/dbs-monitor/issues/121)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：**D 组条目的定稿、横切组的挂载形态，以及矩阵执行环境的前置编排**。骨架与判定规则见 [20](20-v1-acceptance-matrix.md)（决策票 [#111](https://github.com/liumingjian/dbs-monitor/issues/111)），A 组见 [21](21-v1-acceptance-entries-a.md)（[#118](https://github.com/liumingjian/dbs-monitor/issues/118)），B 组见 [22](22-v1-acceptance-entries-b.md)（[#119](https://github.com/liumingjian/dbs-monitor/issues/119)），C 组见 [23](23-v1-acceptance-entries-c.md)（[#120](https://github.com/liumingjian/dbs-monitor/issues/120)）；**本文不原地改写 20 / 21 / 22 / 23 任何一条**，只在留下的填空位上定稿。
-> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片⑧（#48）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10（尤其 D5 横切独立计分、D7 执行环境、D8 时间不伪造故障不模拟、D9 角色 fixture）；[21](21-v1-acceptance-entries-a.md) D1（加深基线的准入）、D7（时间参数化取值表）、D8（`test_ref` 形态）、D9（真实手段的定性）、D10（预写 `operationId`）；[22](22-v1-acceptance-entries-b.md) D6/D9；[23](23-v1-acceptance-entries-c.md) D4（`AC-05-S5`）、D7（`AC-05-F1`）、D11；[`13`](13-credential-encryption-rotation-and-revocation.md) D1–D9 与 §11 十四条实现守卫；[`17`](17-user-role-and-instance-onboarding.md) D1–D10；[`19`](19-agent-distribution-and-upgrade.md)；[`02` §6.1](02-alert-rule-model-draft.md) 三条内置采集状态规则；[`00` §4](00-decision-index.md) 四条不变式；[`10` §3.2](10-ai-guardrails-and-verification.md) A/B 两栏登记表。
+> 输入边界（不重议）：[`docs/spec/mvp-master-spec.md`](../spec/mvp-master-spec.md) 片⑧（#48）全文与其 S1 拍板验收判据；[20](20-v1-acceptance-matrix.md) 全部 D1–D10（尤其 D5 横切独立计分、D7 执行环境、D8 时间不伪造故障不模拟、D9 角色 fixture）；[21](21-v1-acceptance-entries-a.md) D1（加深基线的准入）、D7（时间参数化取值表）、D8（`test_ref` 形态）、D9（真实手段的定性）、D10（预写 `operationId`）；[22](22-v1-acceptance-entries-b.md) D6/D9；[23](23-v1-acceptance-entries-c.md) D4（`AC-05-S5`）、D7（`AC-05-F1`）、D11；[`13`](../design/13-credential-encryption-rotation-and-revocation.md) D1–D9 与 §11 十四条实现守卫；[`17`](../design/17-user-role-and-instance-onboarding.md) D1–D10；[`19`](../design/19-agent-distribution-and-upgrade.md)；[`02` §6.1](../design/02-alert-rule-model-draft.md) 三条内置采集状态规则；[`00` §4](../design/00-decision-index.md) 四条不变式；[`10` §3.2](../design/10-ai-guardrails-and-verification.md) A/B 两栏登记表。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 >
 > **本文是矩阵条目四票的最后一票**：`matrix.yaml` 自本文起无 `TBD`、无「内容待填入」。
@@ -33,7 +38,7 @@ INITIAL_ADMIN_PASSWORD 引导首启 admin
 
 **安装命令、CA 指纹钉扎、unit 写入、时钟自检不进矩阵**。理由不是省事：`compose.yaml` 里没有 systemd，跑真实安装脚本要么装不上，要么退化成「脚本里的一半步骤被跳过」的假动作——那正是 20 号 D4 要根除的形态。这三件的验证明确移交 [#110](https://github.com/liumingjian/dbs-monitor/issues/110)（交付物与候选留痕），并在本文 §19 点名，**不在矩阵里假装覆盖**。
 
-**唯一被留下的一半**是 `downloadAgentBinary` 端点的鉴权面：它是 [19](19-agent-distribution-and-upgrade.md) 新增的 HTTP 面，属 API 层，与安装演练无关。落成 `AC-08-S8`，见 D6。
+**唯一被留下的一半**是 `downloadAgentBinary` 端点的鉴权面：它是 [19](../design/19-agent-distribution-and-upgrade.md) 新增的 HTTP 面，属 API 层，与安装演练无关。落成 `AC-08-S8`，见 D6。
 
 **这条前置是其余三组的依赖**：A/B/C 三组的全部条目都跑在这套 setup 之上。执行序因此有一条硬约束——`AC-08-S1` 必须最先执行，`AC-08-S7`（主密钥轮换）必须最后执行（D14）。
 
@@ -186,7 +191,7 @@ INITIAL_ADMIN_PASSWORD 引导首启 admin
 
 ## 10. D10 · A 栏新增 `A10` / `A11`；`B7` 退回结构守卫分工
 
-20 号 D5 说横切的单测面「复用 / 扩展 A1–A5 与 A9 golden」。核对 [`10` §3.2](10-ai-guardrails-and-verification.md) 的实际九条后，**`INV-3` 与 `INV-4` 在既有 A 栏里没有落点**：A1–A5 是状态机 / 滞回 / `NO_DATA` 计数 / 冻结 / 健康归并，A6–A8 是差分与字典，A9 是枚举码 golden。骨架预填的 `INV-3 → B7`、`INV-4 → A9` 都不成立。
+20 号 D5 说横切的单测面「复用 / 扩展 A1–A5 与 A9 golden」。核对 [`10` §3.2](../design/10-ai-guardrails-and-verification.md) 的实际九条后，**`INV-3` 与 `INV-4` 在既有 A 栏里没有落点**：A1–A5 是状态机 / 滞回 / `NO_DATA` 计数 / 冻结 / 健康归并，A6–A8 是差分与字典，A9 是枚举码 golden。骨架预填的 `INV-3 → B7`、`INV-4 → A9` 都不成立。
 
 **新增两行**（登记进 `10` §3.2 A 栏）：
 
@@ -303,7 +308,7 @@ IA §6 的五条关键路径已被 A 组（§6.5 → `AC-01-F2`）、B 组（§6
 
 `enrollAgent` / `rotateAgentToken` / `revokeAgentToken` / `disableAgent` / `reenableAgent` / `downloadAgentBinary` / `updateInstanceCredential` / `testInstanceConnection` / `listUsers` / `createUser` / `updateUserRole` / `deactivateUser` / `resetUserPassword` / `changeOwnPassword`
 
-命名以 [`07`](07-api-contract-and-codegen.md) 的既有风格为准。**实现时若改名，由 B12 漂移门抓出来——这正是预写的价值**，不是笔误风险。
+命名以 [`07`](../design/07-api-contract-and-codegen.md) 的既有风格为准。**实现时若改名，由 B12 漂移门抓出来——这正是预写的价值**，不是笔误风险。
 
 ---
 

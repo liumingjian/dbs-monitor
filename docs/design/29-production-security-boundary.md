@@ -1,9 +1,15 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 34-platform-health-tls-dead-source.md
+superseded_parts: D3「tls 为第九个健康子系统」的计数与命名 → 34 钉死为既有 TLS_CERTIFICATE；子系统语义全部保留
+---
 # 29 · 生产安全边界的具体断言集
 
 > 出处：[生产安全边界的具体断言集 #112](https://github.com/liumingjian/dbs-monitor/issues/112)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：地图 Notes 第 6 条「HTTP 安全头由 server 无条件输出、server 自行终结 TLS、允许但不依赖前置反向代理」只定了边界的**存在**，没定它的**内容**。本文把这条边界写成可断言的具体取值，并逐条交代哪些能自动判定、哪些只能是文档承诺。
 > **本文不原地改写 20 / 21 / 22 / 23 / 24 / 26 / `27-external-postgres-prerequisites` 任何一条**，只在矩阵上新开第三个横切组 `SEC-1..10`。
-> 输入边界（不重议）：[17](17-user-role-and-instance-onboarding.md) D1–D4（本地账号、只停用不删除、口令随机生成一次性回显、角色守卫）、D6；[13](13-credential-encryption-rotation-and-revocation.md)（凭据加密与 Agent 令牌）；[14](14-platform-observability-and-diagnostics.md) D2（平台健康四态）、D4（磁盘分级保护）、D5（诊断出口秘密禁区）；[18](18-v1-delivery-boundary-bs-binary.md) §6 D5；[19](19-agent-distribution-and-upgrade.md)（CA 指纹钉扎、全程无 `-k`）；[25](25-master-key-provenance-and-startup-failure.md) D1/D4（配置文件是规范来源、启动失败语义）；[26](26-data-and-recovery-gate.md) D5/D7/D9（启动失败按性质两分、执行序全序、参数化不是模拟）；[20](20-v1-acceptance-matrix.md) D4/D5/D6/D8、[21](21-v1-acceptance-entries-a.md) D1/D7/D8、[24](24-v1-acceptance-entries-d.md) D7/D14；[00](00-decision-index.md) M1（目标库监控账号权限）。平台库权限与前置校验归 [外部前置 PostgreSQL 的版本要求与部署前置条件 #116](https://github.com/liumingjian/dbs-monitor/issues/116)，本文只引用不复写。
+> 输入边界（不重议）：[17](17-user-role-and-instance-onboarding.md) D1–D4（本地账号、只停用不删除、口令随机生成一次性回显、角色守卫）、D6；[13](13-credential-encryption-rotation-and-revocation.md)（凭据加密与 Agent 令牌）；[14](14-platform-observability-and-diagnostics.md) D2（平台健康四态）、D4（磁盘分级保护）、D5（诊断出口秘密禁区）；[18](18-v1-delivery-boundary-bs-binary.md) §6 D5；[19](19-agent-distribution-and-upgrade.md)（CA 指纹钉扎、全程无 `-k`）；[25](25-master-key-provenance-and-startup-failure.md) D1/D4（配置文件是规范来源、启动失败语义）；[26](26-data-and-recovery-gate.md) D5/D7/D9（启动失败按性质两分、执行序全序、参数化不是模拟）；[20](../acceptance/20-v1-acceptance-matrix.md) D4/D5/D6/D8、[21](../acceptance/21-v1-acceptance-entries-a.md) D1/D7/D8、[24](../acceptance/24-v1-acceptance-entries-d.md) D7/D14；[00](00-decision-index.md) M1（目标库监控账号权限）。平台库权限与前置校验归 [外部前置 PostgreSQL 的版本要求与部署前置条件 #116](https://github.com/liumingjian/dbs-monitor/issues/116)，本文只引用不复写。
 > 状态：v1.0，2026-08-14 HITL 拍板。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
 ---
@@ -73,7 +79,7 @@
 
 **为什么 `tls` 没有 `FAILED` 档**：`FAILED` 会被实例健康最坏归并（不变式②）判死整台平台。服务还在跑却报最坏态，与「不拒启动」自相矛盾。这是刻意的缺档，不是漏了。
 
-**与 [21](21-v1-acceptance-entries-a.md) 片⑨ `F7` 的分工**：`AC-09-F7` 断的是「证书过期这类平台自身故障不污染目标库告警与 `NO_DATA`」；本文 `SEC-3` 断的是「平台自身的健康事实源如实降级」。同一个注入手段、两个断言点，**不合并**——合并会让「平台知道自己病了」和「平台没把病传染给目标库」退化成一句话。
+**与 [21](../acceptance/21-v1-acceptance-entries-a.md) 片⑨ `F7` 的分工**：`AC-09-F7` 断的是「证书过期这类平台自身故障不污染目标库告警与 `NO_DATA`」；本文 `SEC-3` 断的是「平台自身的健康事实源如实降级」。同一个注入手段、两个断言点，**不合并**——合并会让「平台知道自己病了」和「平台没把病传染给目标库」退化成一句话。
 
 ---
 
@@ -102,7 +108,7 @@
 
 **并发会话不限制的理由**：限制并发会在双人值班、或同一个人在办公室与家里两处盯屏时把人锁在门外。这是监控平台——它存在的意义就是有人能看见。
 
-**两个 TTL 必须可配**，因为矩阵单轮 ≤10 分钟（[21](21-v1-acceptance-entries-a.md) D7），不可配就等于「过期」这条腿永远测不到。做法与 [22](22-v1-acceptance-entries-b.md) 对 `repeat_interval` 的处置一致：**参数化不是模拟**，验收调成 90 秒 / 30 秒跑的是同一段代码。
+**两个 TTL 必须可配**，因为矩阵单轮 ≤10 分钟（[21](../acceptance/21-v1-acceptance-entries-a.md) D7），不可配就等于「过期」这条腿永远测不到。做法与 [22](../acceptance/22-v1-acceptance-entries-b.md) 对 `repeat_interval` 的处置一致：**参数化不是模拟**，验收调成 90 秒 / 30 秒跑的是同一段代码。
 
 ### 4.3 不引入 CSRF token（推理写下来，不留白）
 
@@ -144,7 +150,7 @@
 - **`A12`**（[10](10-ai-guardrails-and-verification.md) §3.2 A 栏新增）：「必须可归因的写操作登记表」表驱动单测，断每一项都有 actor 落点。
 - **端到端只跑三项**（`SEC-8`）：**登录失败**（无 actor 主体，最容易被实现成匿名丢弃）、**用户停用**（有守卫，容易在守卫拒绝路径上漏留痕）、**凭据更新**（接触秘密，容易连带把秘密写进留痕）。三种最容易漏的形状各取其一。
 
-**这是第二次动 `10` §3.2 那张写着「不要往里加」的表**（第一次是 [24](24-v1-acceptance-entries-d.md) D10 加 `A10`/`A11`）。A 栏从十一条变十二条。理由同上；若日后认为 `A12` 名不副实，应回到本文重议，**不得悄悄删表行**。
+**这是第二次动 `10` §3.2 那张写着「不要往里加」的表**（第一次是 [24](../acceptance/24-v1-acceptance-entries-d.md) D10 加 `A10`/`A11`）。A 栏从十一条变十二条。理由同上；若日后认为 `A12` 名不副实，应回到本文重议，**不得悄悄删表行**。
 
 ---
 
@@ -204,7 +210,7 @@
 
 ### 8.3 `exceptions` 仍为 `[]`
 
-证书 fixture 不是业务表数据，不触 [20](20-v1-acceptance-matrix.md) D4 的 `B11` 禁令。全部会话与审计数据经业务 API 真实产生。
+证书 fixture 不是业务表数据，不触 [20](../acceptance/20-v1-acceptance-matrix.md) D4 的 `B11` 禁令。全部会话与审计数据经业务 API 真实产生。
 
 ---
 
@@ -225,7 +231,7 @@
 | 1 | 密码套件不列举 | D2 已定不承诺清单；断了就等于承诺了 |
 | 2 | HSTS 的浏览器端实际行为 | 只能断头发出；浏览器的 HSTS 缓存态不在我方射程 |
 | 3 | `npm audit` 只报告不阻断 | D7；报告本身不构成判定 |
-| 4 | 目标库监控账号最小权限 | 已由片①能力四态覆盖（[21](21-v1-acceptance-entries-a.md) D3），本票不重复断 |
+| 4 | 目标库监控账号最小权限 | 已由片①能力四态覆盖（[21](../acceptance/21-v1-acceptance-entries-a.md) D3），本票不重复断 |
 | 5 | 平台库账号最小权限 | 归 #116，本票只引用 |
 | 6 | 口令强度由生成器保证 | 归片⑧单测（[17](17-user-role-and-instance-onboarding.md) D3），不进矩阵 |
 

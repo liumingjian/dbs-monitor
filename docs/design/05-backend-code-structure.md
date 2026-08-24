@@ -1,3 +1,9 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 18-v1-delivery-boundary-bs-binary.md
+superseded_parts: §8.1 数据目录配置项、§8.5「DB 挂了可接受」；四层偏序、接缝白名单、事务归属、空状态语义全部在效
+---
 # 后端代码结构与模块边界 v1.0
 
 > 目标：定死后端代码的包划分、依赖方向、接缝清单、错误模型与启动形态。
@@ -5,6 +11,21 @@
 > 决策票：[T5 · 后端代码结构与模块边界](https://github.com/liumingjian/dbs-monitor/issues/23)。
 > 输入边界（不重议）：[T1 · 系统组件拓扑](https://github.com/liumingjian/dbs-monitor/issues/19)、[T2 · 时序存储选型与指标数据模型](https://github.com/liumingjian/dbs-monitor/issues/20)、[T3 · Agent 上报协议](https://github.com/liumingjian/dbs-monitor/issues/21)、[RT-D · Go 基础库选型基线](https://github.com/liumingjian/dbs-monitor/issues/17)。
 > 本文档的结论是 [T9 · AI 开发护栏](https://github.com/liumingjian/dbs-monitor/issues/27) 所产 `CLAUDE.md` 的主体来源。
+
+
+> **当前适用性（2026-08-24 治理复核）**
+> **四层偏序 L3 cmd → L2 编排 → L1 领域 → L0 基础设施、接缝白名单、事务归编排层、空状态是值不是 error
+> 全部在效**，且由 `internal/arch_test.go` 机器断言；`18` §12 点名保持。
+>
+> 两处因交付形态变更而失效：
+> - §8.1 配置项里的「自带 PG 连接与数据目录」——外部前置 PG 形态下平台不持有数据目录
+>   （[`18`](18-v1-delivery-boundary-bs-binary.md) D4：数据目录归客户）。「配置分两类各有唯一的家」本身仍有效。
+> - §8.5「DB 挂了平台本来也没有数据可展示，整包自带 PG 形态下可接受」——**这条与当前真值直接冲突**。
+>   `18` D5 把「DB 不可达」从边缘情况升为常态风险：server 不得退出，须重试等待并对外呈现「平台自身故障」。
+>
+> §8.3「迁移启动时自动执行」被 `18` D4 明确保留，只是它「整包交付下无人工跑迁移」的理由前提已过期。
+>
+> 本块只标注失效点，不改写原结论。
 
 ---
 

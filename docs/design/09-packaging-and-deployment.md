@@ -1,3 +1,9 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 18-v1-delivery-boundary-bs-binary.md, 19-agent-distribution-and-upgrade.md, 30-external-postgres-prerequisites.md
+superseded_parts: 交付形态整体作废（离线 tar/自建 PG/socket-only/安装脚本/glibc 下限/自动备份）；约十二条原则性条款存活，见文首当前适用性
+---
 # 打包、部署与运行形态 v1.0
 
 > 目标：定死交付物的物理形态、自带 PostgreSQL 的构建与运行形态、Agent 分发、首次启动、升级与回滚、资源基线与交付前置检查。
@@ -5,7 +11,22 @@
 > 决策票：[T8 · 打包、部署与运行形态](https://github.com/liumingjian/dbs-monitor/issues/26)。
 > 输入边界（不重议）：地图 Notes 第 2 条（不依赖客户环境、所需一切随包自带、整包部署、交付团队运维）、第 1 条（Go 后端 + Agent，前端 `go:embed`）、[T2 · 时序存储选型与指标数据模型](04-metric-storage-model.md)（自带 PG ≥14、原生分区、`date_bin`）、[T3 · Agent 上报协议、注册与凭据模型](https://github.com/liumingjian/dbs-monitor/issues/21)（强制 TLS 自签 CA 无跳过开关、无下行通道、±30s 时间戳门槛、服务端先升 Agent 后升）、[T5 · 后端代码结构与模块边界](05-backend-code-structure.md)（启动时 goose 自动迁移、运行期配置只在库里）。
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
-> 当前适用性：本文保留为 Linux 交付的历史设计与后续参考；macOS v1 以 [18](18-v1-macos-support-boundary.md)、[19](19-v1-macos-runtime-and-postgresql.md)、[20](20-v1-macos-build-validation-and-release.md) 为准，Linux 发布票的 v1 处置见 [21](21-v1-linux-release-disposition.md)。
+> **当前适用性（2026-08-24 治理复核）——本文的交付形态已整体作废，勿据以行事。**
+> 取代记录是 [`18-v1-delivery-boundary-bs-binary.md`](18-v1-delivery-boundary-bs-binary.md)；
+> 交付范围随后又被 [`31`](../acceptance/31-real-linux-adaptation-and-final-acceptance.md) D1 收窄为 **`linux/amd64` 单架构**。
+>
+> **已作废**：离线 tar + `install.sh`/`upgrade.sh`、自建可重定位 `pgsql/`、自带 PG 钉死 17、socket-only 零 TCP peer 认证、
+> glibc 下限承诺与「否决 qemu」、升级前自动备份控制面、安装期硬检查、§12 交付物清单、§14 四条未决事实。
+> 平台库现由**客户自备**（[`30`](30-external-postgres-prerequisites.md) 钉死 PG 17，主版本不符拒绝启动）。
+>
+> **仍然有效**（`18` §13 逐条点名保留，可直接引用）：否决容器镜像交付；不做发行版清单只承诺依赖面；
+> DB 不可达时 HTTP 层照常起来并呈现「平台自身故障」、**绝不渲染成没有数据**；本地通知快照是只读派生缓存不是配置源；
+> 不做平台自身 HA、不做第二套监控栈；`migrations/` 只写 up 不写 down、迁移失败即拒绝启动；
+> Agent 绝不自升级、信任根带外传递全程无 `-k`（载体已改写至 [`19`](19-agent-distribution-and-upgrade.md)）；
+> 否决内置默认口令与首访设置向导、初始管理员口令随机生成打印一次；
+> 30 天 49.1 GB 的磁盘实测事实；被监控 PG 13–17。
+>
+> 本块只标注失效点，不改写原结论。
 
 ---
 

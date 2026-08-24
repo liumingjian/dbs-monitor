@@ -1,10 +1,30 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: 18-v1-delivery-boundary-bs-binary.md, 27-v1-deliverables-and-candidate-provenance.md
+superseded_parts: D3.3 / D4 四组合矩阵 / D5 Release assets 作废；D1 D2 D3 原则与 §6 四条否决全部在效
+---
 # CI 与发布流水线 v1.0
 
 > 目标：把 R2 已冻结的验证命令（[T9](10-ai-guardrails-and-verification.md) 两层闭环）与交付形态（[T8](09-packaging-and-deployment.md) 离线 tar、双架构）落成可执行的 CI / 发布决策：触发与职责矩阵、合并门定义、发布流程和产物留痕规则。
 > 决策票：[T15 · CI 与发布流水线](https://github.com/liumingjian/dbs-monitor/issues/33)。
 > 输入边界：[T8 · 打包、部署与运行形态](09-packaging-and-deployment.md)（离线 tar、amd64+arm64、glibc 下限、原生构建否决 qemu）、[T9 · AI 开发护栏与验证闭环](10-ai-guardrails-and-verification.md)（`make check` / `make check-full` 两层闭环、「CI 只定接口不定流水线」的接口即本票的输入、否决 pre-commit hook 改为 CI PR 门）。
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
-> 当前适用性：PR `check`、宿主中立 `check-full`、精确提交校验、审批、最小权限和发布留痕继续有效；本文的 Linux 四组合发布矩阵已由 [20](20-v1-macos-build-validation-and-release.md) 与 [21](21-v1-linux-release-disposition.md) 从 macOS v1 发布图中移除。
+> **当前适用性（2026-08-24 治理复核）**
+> **仍然有效**：D1「GitHub Actions 是唯一规范 CI 执行者，不另建第二套验证体系」；
+> D2「PR 门 = `make check`，默认分支 = `make check-full`，`check-full` 失败不回溯阻断已合并 PR 但阻止发布」；
+> D3 的原则部分（只有维护者的语义化 tag 触发发布、tag 指向的精确提交必须已有成功 `check-full`、发布用最小权限）；
+> D5 的构建元数据归档与 Actions 留痕 90 天；§6 四条否决全部保留。
+>
+> **已作废**：D3.3 Environment 人工审批后归档为 Release assets、D4 四组合 `amd64/arm64 × glibc 2.17/2.28` 构建矩阵与
+> 「禁止 QEMU、须原生 runner」、D5 的 Release assets 长期保留与含 glibc 的命名规则——依据是
+> [`18`](18-v1-delivery-boundary-bs-binary.md) D10 与 [`27`](27-v1-deliverables-and-candidate-provenance.md)（明确不复活；
+> 「刻意停顿」改落在打 tag 的动作并由 `release-gate` 强制）。SHA-256 清单的信任根已由我方移至交付团队构建机。
+> 交付架构由 [`31`](../acceptance/31-real-linux-adaptation-and-final-acceptance.md) D1 收窄为 `linux/amd64`。
+>
+> 原「四组合已由 macOS v1 发布图移除」的表述整个框架不成立——Linux 就是 v1 主线。
+>
+> 本块只标注失效点，不改写原结论。
 > **本票只冻结决策。** workflow、构建 runner、打包脚本和发布配置的实现留给后续执行路线。
 > 落盘说明：本票 2026-08-05 在 [#33 关票评论](https://github.com/liumingjian/dbs-monitor/issues/33) 中冻结结论，文件未随票落盘；本文档为该冻结结论的仓库落盘，内容以关票评论为准，未新增决策。
 

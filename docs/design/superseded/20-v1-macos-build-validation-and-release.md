@@ -1,8 +1,15 @@
+---
+status: superseded
+kind: decision
+superseded_by: ../18-v1-delivery-boundary-bs-binary.md
+superseded_on: 2026-08-13
+note: macOS 首发路线（#101）整条作废，v1 已回到 linux。本文全文不得据以行事。
+---
 # 20 · v1 macOS 构建、验证与发布路线
 
 > 出处：[v1 macOS 构建、验证与发布路线 #101](https://github.com/liumingjian/dbs-monitor/issues/101)（地图 [#98](https://github.com/liumingjian/dbs-monitor/issues/98) 子票）。
 > 输入边界：[v1 macOS 支持边界](18-v1-macos-support-boundary.md) 已冻结唯一目标为 macOS 14.0 及以上版本的 Apple silicon；[v1 macOS 运行与 PostgreSQL 交付形态](19-v1-macos-runtime-and-postgresql.md) 已冻结随包 PostgreSQL 17、系统级 LaunchDaemon 和离线生命周期。
-> 状态：2026-08-11 冻结。本文是对 [CI 与发布流水线](15-ci-and-release-pipeline.md) 中 Linux 四组合路线的 macOS 后续决策；v1 macOS 构建、验证与发布发生冲突时以本文为准。
+> 状态：2026-08-11 冻结。本文是对 [CI 与发布流水线](../15-ci-and-release-pipeline.md) 中 Linux 四组合路线的 macOS 后续决策；v1 macOS 构建、验证与发布发生冲突时以本文为准。
 
 ---
 

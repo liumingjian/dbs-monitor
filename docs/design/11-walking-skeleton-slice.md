@@ -1,3 +1,8 @@
+---
+status: historical
+kind: decision
+note: 切片已验收；D7.3 的人工验收对象（离线 tar、首启三项输入、socket-only PG）已随 18 消失
+---
 # Walking Skeleton 切片定义与验收标准 v1.0
 
 > 目标：把地图 Destination 的一句话「一条真实指标能从采集穿到前端图表」变成**可执行、可验收、边界封闭**的定义——切哪一刀、切多深、凭什么算通过、一律不做什么、以及实测推翻选型时怎么办。

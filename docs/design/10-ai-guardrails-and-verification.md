@@ -1,3 +1,9 @@
+---
+status: partially-superseded
+kind: decision
+superseded_by: ../acceptance/33-phase-ci-gate-suspension.md, ../acceptance/28-v1-go-no-go-gates.md
+superseded_parts: D6.1 CI PR 门执行者一度停用（现已恢复，见 33）；D9 发布闭环整段作废；两层闭环与 ≤120 秒预算全部在效
+---
 # AI 开发护栏与验证闭环 v1.0
 
 > 目标：定死「下一个会话打开这个仓库，凭什么能自己判断自己写对了」——验证闭环的层次与内容、本地开发环境、强制测试清单、`CLAUDE.md` 的边界与体裁、不变式的可执行化、强制点与工作方式。
@@ -6,6 +12,18 @@
 > 输入边界（不重议）：[T5 · 后端代码结构与模块边界](05-backend-code-structure.md)（四层偏序 + `arch_test.go`、五个接缝、单测依赖真库、否决 golangci-lint）、[T6 · API 契约组织与代码生成流水线](07-api-contract-and-codegen.md)（`make gen` 唯一入口 + 漂移门、三条机器守卫、`assertNever`、`dataUpdatedAt`）、[T7 · 前端技术栈与 UI 体系](08-frontend-stack-and-ui.md)（三个状态桶、`domain/` 封闭清单、前端必测四项）、[T2 · 时序存储选型与指标数据模型](04-metric-storage-model.md)（三条查询纪律）、[T4 · 指标字典载体与采集计划](06-metric-dictionary-and-collection-plan.md)（两条强制测试、三条禁止线、PG13–17 矩阵）、[T8 · 打包、部署与运行形态](09-packaging-and-deployment.md)（`migrations/` 只写 up、安装/升级脚本）。
 > 状态：v1.0。后续路线要推翻其中任何一条，应新开决策记录，不在此原地改写结论。
 > **本票只产决策文档。** 两份 `CLAUDE.md`、`Makefile`、compose、GitHub Actions workflow、B 栏各条守卫测试随 [T11 · Walking skeleton 实现](https://github.com/liumingjian/dbs-monitor/issues/29) 落地（理由见 §12）。
+
+
+> **当前适用性（2026-08-24 治理复核）**
+> 两层闭环、快层 ≤120 秒预算、A/B 两栏护栏登记表与三问准入判据、`CLAUDE.md` 体裁边界、
+> 「完成 = `make check` 全绿」——**全部在效**。[`28`](../acceptance/28-v1-go-no-go-gates.md) D1 明确**不** supersede D1，
+> 并澄清「两层」约束的是开发者要记住几条命令，不是 CI 有几个 job。
+>
+> **已作废**：D9「进 R3 发布闭环：安装 → 起服务 → 升级 → 回滚并恢复控制面」整段（无安装脚本、无自动备份）。
+> **一度停用、现已恢复**：D6.1 的 CI PR 门被 [`33`](../acceptance/33-phase-ci-gate-suspension.md) 停用，
+> 经 2026-08-24 查实 `check` / `check-full` 已重新在岗。
+> **规定活、理由死**：§2.1 用「T8 自建 PG `--without-icu`」论证的 `initdb --locale=C` 与 `datlocprovider <> 'i'` 断言，
+> 论据已随自带 PG 消失，但规定由 `28` D4 / B14 独立续命。
 
 ---
 
@@ -93,13 +111,13 @@ T11/R3 边界：T11 的 `check-full` 验证真实构建、Playwright、双架构
 | A7 | 指标字典交集：解析 `01` §3 总览表与 Go 声明比对 | [T4 §2.1](06-metric-dictionary-and-collection-plan.md) | R3 |
 | A8 | 每个指标恰好被一个采集任务产出 | [T4 §3.3](06-metric-dictionary-and-collection-plan.md) | R3 |
 | A9 | **枚举码表 golden 快照** | 本票新增，见下 | **T11** |
-| A10 | 三档角色 × 页面 × 写操作的**可见性 / 写能力判定表** | 不变式③、`03` §8.1；[24](24-v1-acceptance-entries-d.md) D10 | 片⑧实现期 |
-| A11 | 三条内置采集状态规则的**受限语义判定表**（存在 / 启用 / severity 下限） | 不变式④、`02` §6.1；[24](24-v1-acceptance-entries-d.md) D10 | 片⑧实现期 |
+| A10 | 三档角色 × 页面 × 写操作的**可见性 / 写能力判定表** | 不变式③、`03` §8.1；[24](../acceptance/24-v1-acceptance-entries-d.md) D10 | 片⑧实现期 |
+| A11 | 三条内置采集状态规则的**受限语义判定表**（存在 / 启用 / severity 下限） | 不变式④、`02` §6.1；[24](../acceptance/24-v1-acceptance-entries-d.md) D10 | 片⑧实现期 |
 | A12 | **必须可归因的写操作登记表**：每一项都有 actor 落点 | [29](29-production-security-boundary.md) D5.2 | 片⑧实现期 |
 
 **A9 的理由**（本票主动加的一条）：[T2 §4](04-metric-storage-model.md) 那句「码值一经发布只增不改」原计划只写进 `CLAUDE.md`。**写进 `CLAUDE.md` 的纪律拦不住手滑**；一个 golden 文件把它升级成一道门——改码表 = 测试红 = 必须显式更新 golden = 一次有意识的行为。成本约 20 行。覆盖：`Unavailability` 13 码（[T6 §8.3](07-api-contract-and-codegen.md)）、告警五状态、能力四档、已实现的非数值指标编码（`internal/metric/enum_test.go`；复制状态在 R3 实现时追加）、三条内置采集状态规则（见 D7）。
 
-### 3.3 B 栏 · 结构守卫（不是表驱动单测；「跑在哪层」一列由 [28](28-v1-go-no-go-gates.md) D13 加入，当前全部在 `make check`）
+### 3.3 B 栏 · 结构守卫（不是表驱动单测；「跑在哪层」一列由 [28](../acceptance/28-v1-go-no-go-gates.md) D13 加入，当前全部在 `make check`）
 
 | # | 内容 | 出处 | 跑在哪层 | 兑现时机 |
 |---|---|---|---|---|
@@ -113,14 +131,14 @@ T11/R3 边界：T11 的 `check-full` 验证真实构建、Playwright、双架构
 | B8 | `CLAUDE.md` 路径存在性 | 本票新增，见 D5 | `check` | T11 |
 | B9 | `web/src/domain/` 一级条目 = 登记表 | [T7 D8.2](08-frontend-stack-and-ui.md) → D8 | `check` | T11 |
 | B10 | 迁移可用性三连（`goose up` ×2 幂等 + `sqlc vet`） | 见 D9 | `check` | T11 |
-| B11 | 测试与 E2E 脚本中禁止对业务表写入（白名单外命中即红） | [20](20-v1-acceptance-matrix.md) D4 | `check` | 矩阵落地 |
-| B12 | `covered` 条目的 `test_ref` 必须在测试代码中可检索（覆盖漂移门） | [20](20-v1-acceptance-matrix.md) D6.6 | `check` | 矩阵落地 |
+| B11 | 测试与 E2E 脚本中禁止对业务表写入（白名单外命中即红） | [20](../acceptance/20-v1-acceptance-matrix.md) D4 | `check` | 矩阵落地 |
+| B12 | `covered` 条目的 `test_ref` 必须在测试代码中可检索（覆盖漂移门） | [20](../acceptance/20-v1-acceptance-matrix.md) D6.6 | `check` | 矩阵落地 |
 | B13 | **安全头 golden 快照**：六项头的取值逐字入 golden 文件 | [29](29-production-security-boundary.md) D9 | `check` | 片⑧实现期 |
-| B14 | 平台库必须是 PG 17：查 `server_version_num` + `datlocprovider <> 'i'`，并扫 `compose.yaml` 与 workflow 的平台库 image tag | [28](28-v1-go-no-go-gates.md) D4（承 [27-ext](30-external-postgres-prerequisites.md) D7） | `check` | 矩阵落地 |
+| B14 | 平台库必须是 PG 17：查 `server_version_num` + `datlocprovider <> 'i'`，并扫 `compose.yaml` 与 workflow 的平台库 image tag | [28](../acceptance/28-v1-go-no-go-gates.md) D4（承 [27-ext](30-external-postgres-prerequisites.md) D7） | `check` | 矩阵落地 |
 
 ### 3.4 清单是一张有约束力的登记表
 
-A 栏十二条中九条要到 R3–R5 才有代码（`A10`/`A11` 由 [24](24-v1-acceptance-entries-d.md) D10 追加、`A12` 由 [29](29-production-security-boundary.md) D5.2 追加，登记动作统一归 [28](28-v1-go-no-go-gates.md) D13）。**本票现在只能登记，但登记有约束力**：
+A 栏十二条中九条要到 R3–R5 才有代码（`A10`/`A11` 由 [24](../acceptance/24-v1-acceptance-entries-d.md) D10 追加、`A12` 由 [29](29-production-security-boundary.md) D5.2 追加，登记动作统一归 [28](../acceptance/28-v1-go-no-go-gates.md) D13）。**本票现在只能登记，但登记有约束力**：
 
 > **实现某语义时，清单里有对应项而提交中没有对应的表驱动测试 = 未完成。** 这条写进根 `CLAUDE.md`。
 

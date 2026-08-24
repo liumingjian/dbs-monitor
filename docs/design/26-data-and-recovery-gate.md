@@ -1,8 +1,13 @@
+---
+status: active
+kind: decision
+note: 正文所有矩阵条目/硬底计数均已过期，真值在 test/acceptance/matrix.yaml；D2/D3 启动语义是全仓规范来源
+---
 # 26 · 数据与恢复门的具体证据
 
 > 出处：[数据与恢复门的具体证据 #113](https://github.com/liumingjian/dbs-monitor/issues/113)，属地图 [Wayfinder 地图 · 从 walking skeleton 到可投产 B/S 系统 #105](https://github.com/liumingjian/dbs-monitor/issues/105)。
 > 定位：把 [18](18-v1-delivery-boundary-bs-binary.md) §8 D7 明文移交的「三条承诺的**具体证据形式**」落成可自动判定的矩阵条目，并顺带切死启动失败语义中「连不上库」与「迁移执行失败」的分界。**本文不原地改写 20 / 21 / 22 / 23 / 24 任何一条**，只在矩阵上新增一个横切组。
-> 输入边界（不重议）：[20](20-v1-acceptance-matrix.md) D3（三层分工）、D4（反假覆盖禁令）、D5（横切独立计分）、D6（粒度与 `pending` 政策）、D7（执行环境）、D8（时间不伪造、故障不模拟）；[21](21-v1-acceptance-entries-a.md) D1（加深基线准入）、D7（时间参数化取值表）、D8（`test_ref` 形态）、D9（真实手段的定性）；[24](24-v1-acceptance-entries-d.md) D7（`rides_on` 语义）、D14（执行序两条硬约束）；[18](18-v1-delivery-boundary-bs-binary.md) §6 D5 第 1 条与 §8 D7；[25](25-master-key-provenance-and-startup-failure.md) D4/D5/D7 与 §5.1 的异步自检序；[`04` §6](04-metric-storage-model.md) D6 分区与保留四条机制；[`14` §4](14-platform-observability-and-diagnostics.md) D4 磁盘分级；[`13`](13-credential-encryption-rotation-and-revocation.md) D7/D8（备份不含 keyring、遗失即不可恢复、无后门）；地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105) Notes 第 3 / 8 条。
+> 输入边界（不重议）：[20](../acceptance/20-v1-acceptance-matrix.md) D3（三层分工）、D4（反假覆盖禁令）、D5（横切独立计分）、D6（粒度与 `pending` 政策）、D7（执行环境）、D8（时间不伪造、故障不模拟）；[21](../acceptance/21-v1-acceptance-entries-a.md) D1（加深基线准入）、D7（时间参数化取值表）、D8（`test_ref` 形态）、D9（真实手段的定性）；[24](../acceptance/24-v1-acceptance-entries-d.md) D7（`rides_on` 语义）、D14（执行序两条硬约束）；[18](18-v1-delivery-boundary-bs-binary.md) §6 D5 第 1 条与 §8 D7；[25](25-master-key-provenance-and-startup-failure.md) D4/D5/D7 与 §5.1 的异步自检序；[`04` §6](04-metric-storage-model.md) D6 分区与保留四条机制；[`14` §4](14-platform-observability-and-diagnostics.md) D4 磁盘分级；[`13`](13-credential-encryption-rotation-and-revocation.md) D7/D8（备份不含 keyring、遗失即不可恢复、无后门）；地图 [#105](https://github.com/liumingjian/dbs-monitor/issues/105) Notes 第 3 / 8 条。
 > 状态：v1.0。要推翻其中任何一条，应新开决策记录，不在此原地改写。
 
 ---
@@ -19,12 +24,12 @@
 
 三条路都摆过：拆进现有九片当加深条目、完全不进矩阵做成 [#114](https://github.com/liumingjian/dbs-monitor/issues/114) 的一道人工门、或独立成组。
 
-理由与 [20](20-v1-acceptance-matrix.md) D5 给 `INV`/`BUILTIN` 的完全同构：这十条**跨片**（重启恢复同时牵动采集、告警、Agent 会话；备份恢复牵动全库），任何一片全绿都不构成它们的覆盖；且它们恰是「改坏了没人看得出来」那一类——没有人会在每次发版前手工灌一次 `pg_dump`。
+理由与 [20](../acceptance/20-v1-acceptance-matrix.md) D5 给 `INV`/`BUILTIN` 的完全同构：这十条**跨片**（重启恢复同时牵动采集、告警、Agent 会话；备份恢复牵动全库），任何一片全绿都不构成它们的覆盖；且它们恰是「改坏了没人看得出来」那一类——没有人会在每次发版前手工灌一次 `pg_dump`。
 
 - 拆进片里会让「恢复门是否达标」永远得靠人肉汇总九片，且每条都得在某片里找一个并不自然的归属。
 - 不进矩阵则直接逃出 `make acceptance` 的自动判定，退回成人工检查表——那是本地图从一开始就在根除的形态。
 
-**十条全部 `baseline: true`**，准入照 [21](21-v1-acceptance-entries-a.md) D1：每条都是某条**已经作出的产品承诺**在自动判定面上的**唯一**落点，没有一条是锦上添花的加深。逐条的唯一性见 §10 总表的 `reason` 列。
+**十条全部 `baseline: true`**，准入照 [21](../acceptance/21-v1-acceptance-entries-a.md) D1：每条都是某条**已经作出的产品承诺**在自动判定面上的**唯一**落点，没有一条是锦上添花的加深。逐条的唯一性见 §10 总表的 `reason` 列。
 
 > 成本最高的两条是 `REC-9`（分区兜底）与 `REC-10`（进程锁）。它们曾被考虑降为允许 `pending` 的普通加深（硬底 86），**否决**：`REC-9` 恰恰是没有人会手工验的那种——`04` D6 机制 3 自称是「凌晨炸的最后一道防线」，一道从不执行的防线等于没有。
 
@@ -118,11 +123,11 @@
 1. 至少一个实例（含加密凭据）；
 2. 至少一条告警规则（含版本快照）；
 3. 至少一条**未恢复**的告警实例 + 其 AlertEvent；
-4. 样本**跨 ≥ 2 个分区**（分区跨度已由 [21](21-v1-acceptance-entries-a.md) D7 参数化到 1min，天然满足）。
+4. 样本**跨 ≥ 2 个分区**（分区跨度已由 [21](../acceptance/21-v1-acceptance-entries-a.md) D7 参数化到 1min，天然满足）。
 
 这四类才是 restore 真会漏掉的东西——外键级联、分区表的子表是否随 dump 一起走、加密列是否原样还原。
 
-数据由**片条目跑完后自然存在**，不额外造（承 [20](20-v1-acceptance-matrix.md) D4，`exceptions` 保持 `[]`）。
+数据由**片条目跑完后自然存在**，不额外造（承 [20](../acceptance/20-v1-acceptance-matrix.md) D4，`exceptions` 保持 `[]`）。
 
 ### 4.3 keyring 分离：正反两条都断
 
@@ -139,7 +144,7 @@
 
 | 条目 | 管什么 | 现场 |
 |---|---|---|
-| `AC-08-F4`（[24](24-v1-acceptance-entries-d.md)，**一字不动**） | **运行中**的 keyring 故障（权限错、文件被改）：不降格、不静默生成、恢复权限后版本号一致 | 库与密钥在同一台机器上 |
+| `AC-08-F4`（[24](../acceptance/24-v1-acceptance-entries-d.md)，**一字不动**） | **运行中**的 keyring 故障（权限错、文件被改）：不降格、不静默生成、恢复权限后版本号一致 | 库与密钥在同一台机器上 |
 | `REC-4`（本文） | **恢复链上**的密钥—库分离：换一份或缺失时明确失败 | 库来自备份，keyring 来自另一台机器 |
 
 ---
@@ -161,7 +166,7 @@
 
 ### 5.2 两种重启分开断
 
-`REC-1` 断 server 重启，`REC-2` 断 agent 重启。agent 重启多一条断言：**重启期间的缺数是真缺数**，按缺桶呈现、不补 0（承 [`04`](04-metric-storage-model.md) 不补 0 与 [20](20-v1-acceptance-matrix.md) D2 `F2`）。合成一条会让「谁重启导致的缺数」这个区分永远测不出来——而那正是 T14 要分开的两个域。
+`REC-1` 断 server 重启，`REC-2` 断 agent 重启。agent 重启多一条断言：**重启期间的缺数是真缺数**，按缺桶呈现、不补 0（承 [`04`](04-metric-storage-model.md) 不补 0 与 [20](../acceptance/20-v1-acceptance-matrix.md) D2 `F2`）。合成一条会让「谁重启导致的缺数」这个区分永远测不出来——而那正是 T14 要分开的两个域。
 
 ---
 
@@ -178,24 +183,24 @@
 
 **手段：把分区维护间隔做成部署期配置项，验收里设成极大值使循环事实上停摆，再让时间走过预建边界。**
 
-这与 [21](21-v1-acceptance-entries-a.md) D7 / [22](22-v1-acceptance-entries-b.md) 已批准的一整排参数化同源（保留期 2 分钟、`repeat_interval` 30s、快照截断 5）——**调配置项走的是与生产完全相同的判定代码路径**，这正是 [20](20-v1-acceptance-matrix.md) D8「时间参数化不伪造」的定义。
+这与 [21](../acceptance/21-v1-acceptance-entries-a.md) D7 / [22](../acceptance/22-v1-acceptance-entries-b.md) 已批准的一整排参数化同源（保留期 2 分钟、`repeat_interval` 30s、快照截断 5）——**调配置项走的是与生产完全相同的判定代码路径**，这正是 [20](../acceptance/20-v1-acceptance-matrix.md) D8「时间参数化不伪造」的定义。
 
 两条否决：
 
 | 否决项 | 理由 |
 |---|---|
 | 加 test-only 开关关掉维护循环 | 往生产代码里种测试专用分支，[`10`](10-ai-guardrails-and-verification.md) 的护栏该拦 |
-| DB 层手工 `DROP` 掉未来分区 | [20](20-v1-acceptance-matrix.md) D4 明令禁止 DB 层写操作，D3 已把「DB 层只读」写死 |
+| DB 层手工 `DROP` 掉未来分区 | [20](../acceptance/20-v1-acceptance-matrix.md) D4 明令禁止 DB 层写操作，D3 已把「DB 层只读」写死 |
 
 ---
 
 ## 7. D7 · restore 靶库：独立 profile 的真空 PG，排在片条目之后
 
-**结论：`compose.yaml` 新增 `restore-target` 空 PG 容器，独立 profile（与 [24](24-v1-acceptance-entries-d.md) 给 `postgres:12` 的处理同构），只在 `REC-3` / `REC-4` 执行时起。**
+**结论：`compose.yaml` 新增 `restore-target` 空 PG 容器，独立 profile（与 [24](../acceptance/24-v1-acceptance-entries-d.md) 给 `postgres:12` 的处理同构），只在 `REC-3` / `REC-4` 执行时起。**
 
 **否决「在平台库同实例上 `createdb` 一个空 database」**：看着省事，但它证明不了「灌进一个**空 PG**」——共用 initdb 参数、locale、编码、扩展、角色，恰好把 [18](18-v1-delivery-boundary-bs-binary.md) D7「库是自描述的」最容易翻车的那部分（依赖宿主库既有状态）整个掩盖掉。而这条承诺的全部价值就在客户拿一台全新机器恢复时成立。
 
-**执行序**：`REC-3` / `REC-4` 排在**全部片条目之后、`AC-08-S7`（主密钥轮换）之前**。这样既白嫖片条目造出的真实数据（§4.2 的四类语义覆盖几乎自动满足），又不动 [24](24-v1-acceptance-entries-d.md) D14 已定的两条执行序硬约束。
+**执行序**：`REC-3` / `REC-4` 排在**全部片条目之后、`AC-08-S7`（主密钥轮换）之前**。这样既白嫖片条目造出的真实数据（§4.2 的四类语义覆盖几乎自动满足），又不动 [24](../acceptance/24-v1-acceptance-entries-d.md) D14 已定的两条执行序硬约束。
 
 矩阵执行序因此为：`AC-08-S1` 最先 → 其余片条目 → `REC-*` → `AC-08-S7` 最末。
 
@@ -203,7 +208,7 @@
 
 ## 8. D8 · REC 组一律独立执行，`rides_on` 留空，新增 `after` 字段
 
-[24](24-v1-acceptance-entries-d.md) D7 给横切组定的是「自带断言集 + 搭车执行 + `rides_on` 记账」。**REC 组不搭车**：它的注入手段（杀进程、断库、灌 dump、停维护循环）会**改变现场**，与被搭车条目的执行相互污染。
+[24](../acceptance/24-v1-acceptance-entries-d.md) D7 给横切组定的是「自带断言集 + 搭车执行 + `rides_on` 记账」。**REC 组不搭车**：它的注入手段（杀进程、断库、灌 dump、停维护循环）会**改变现场**，与被搭车条目的执行相互污染。
 
 - `rides_on` **保留字段并写 `[]`**，以示这是刻意的（对齐 `BUILTIN-2` / `BUILTIN-3` 的先例，那两条也是 `rides_on: []` + `reason` 说明独立执行）。
 - `REC-3` / `REC-4` 对片条目的依赖是**执行序依赖**，不是搭车，用**新字段 `after:`** 记账。**不塞进 `rides_on`**：搭车是「在别人的执行现场上顺带断言」，排序是「必须等别人跑完」，两者混用会让 `rides_on` 这个刚定义一票的字段立刻失去单一含义。
@@ -252,7 +257,7 @@
 
 ## 11. D11 · 外溢到实现的硬要求（五条 + 一条环境要求）
 
-照 [21](21-v1-acceptance-entries-a.md)–[24](24-v1-acceptance-entries-d.md) 的惯例逐条列出，不藏：
+照 [21](../acceptance/21-v1-acceptance-entries-a.md)–[24](../acceptance/24-v1-acceptance-entries-d.md) 的惯例逐条列出，不藏：
 
 1. [`migrations/migrate.go`](../../migrations/migrate.go) 给 goose provider 加 `WithSessionLocker`，**锁等待超时可配**（D2）；
 2. server 启动取平台库 advisory lock，第二实例拒启动（D2 / `REC-10`）；
@@ -275,7 +280,7 @@
 | [18](18-v1-delivery-boundary-bs-binary.md) §6 D5 第 1 条 | 「DB 不可达时 HTTP 层照常起来，返回明确的平台自身故障页」 | **保留并细化**：健康端点如实报 `FAILED`、业务端点 503 而非 13 码、不承诺「可登录」（D3.3） |
 | [25](25-master-key-provenance-and-startup-failure.md) §5.2 | 「HTTP 起来、**可登录**、平台自身故障可见」 | **适用面澄清，不推翻**：那句描述的是 keyring 坏而库好的场景；库不可达时登录必然失败，`REC-6` 不断「可登录」（D3.3） |
 
-`25` 的 D1/D2/D3/D5/D6/D7/D8 与 §5.3、[18](18-v1-delivery-boundary-bs-binary.md) 其余各条、[20](20-v1-acceptance-matrix.md)–[24](24-v1-acceptance-entries-d.md) 全部条目**一字未动**。`AC-08-F4` 与 `AC-09-F5` 保持原样（D4.4 / D6）。
+`25` 的 D1/D2/D3/D5/D6/D7/D8 与 §5.3、[18](18-v1-delivery-boundary-bs-binary.md) 其余各条、[20](../acceptance/20-v1-acceptance-matrix.md)–[24](../acceptance/24-v1-acceptance-entries-d.md) 全部条目**一字未动**。`AC-08-F4` 与 `AC-09-F5` 保持原样（D4.4 / D6）。
 
 ---
 
@@ -292,7 +297,7 @@
 | 备份恢复设行数门槛 | D4.2 | 任何数字都是拍脑袋；会漏的是语义类别不是行数 |
 | 在平台库同实例上 `createdb` 空库做 restore 靶 | D7 | 共用 initdb 参数 / locale / 扩展 / 角色，掩盖「库是自描述的」最容易翻车的那部分 |
 | 加 test-only 开关关掉分区维护循环 | D6.1 | 往生产代码里种测试专用分支 |
-| DB 层手工 `DROP` 未来分区制造无匹配分区 | D6.1 | [20](20-v1-acceptance-matrix.md) D4 禁止 DB 层写操作 |
+| DB 层手工 `DROP` 未来分区制造无匹配分区 | D6.1 | [20](../acceptance/20-v1-acceptance-matrix.md) D4 禁止 DB 层写操作 |
 | `REC-3` / `REC-4` 的执行序依赖写进 `rides_on` | D8 | 搭车与排序是两件事，混用会让刚定义一票的字段立刻失去单一含义 |
 | 本票另建一份部署前置条件文档 | D9 | 与 #116 必然分叉 |
 | 库恢复后进程自退、交给 systemd 重来 | D11 | 把短暂抖动放大成进程重启，丢掉 `REC-1` 要保住的进行中状态 |

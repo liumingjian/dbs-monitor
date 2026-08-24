@@ -50,6 +50,7 @@ build:
 	sha256sum dbs-monitor-server dbs-monitor-agent > SHA256SUMS
 
 check:
+	sh scripts/check-docs.sh
 	sh scripts/check-toolchain.sh
 	sh scripts/check-generated.sh
 	go vet ./...

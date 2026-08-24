@@ -20,15 +20,6 @@ func requireMakeTarget(t *testing.T, makefileContents, target string) string {
 	return contents
 }
 
-func readLinuxReleaseDisposition(t *testing.T) string {
-	t.Helper()
-	disposition, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "docs", "design", "21-v1-linux-release-disposition.md"))
-	if err != nil {
-		t.Fatalf("read Linux release disposition: %v", err)
-	}
-	return string(disposition)
-}
-
 func TestBuildInjectsCandidateIdentity(t *testing.T) {
 	makefile, err := os.ReadFile(filepath.Join(internalRoot(t), "..", "Makefile"))
 	if err != nil {
@@ -241,62 +232,6 @@ func TestDeadDeliveryAssetsAreRemoved(t *testing.T) {
 	}
 	if strings.Contains(string(serverUnit), "dbs-monitor-postgres.service") {
 		t.Fatal("server systemd unit still depends on removed bundled PostgreSQL unit")
-	}
-}
-
-func TestIssue96IsRetiredWithTheLinuxReleaseScope(t *testing.T) {
-	dispositionText := readLinuxReleaseDisposition(t)
-	for _, required := range []string{
-		"#96",
-		"Linux arm64",
-		"darwin/arm64",
-		"453.6M",
-		"不得以缩减参数",
-		"新 PRD",
-	} {
-		if !strings.Contains(dispositionText, required) {
-			t.Errorf("Linux release disposition does not retire issue #96 completely: missing %q", required)
-		}
-	}
-}
-
-func TestIssue97IsRetiredWithoutDroppingV1ReleaseRequirements(t *testing.T) {
-	dispositionText := readLinuxReleaseDisposition(t)
-	for _, required := range []string{
-		"#97",
-		"Unavailability 13 码",
-		"API",
-		"01-appendix-implemented.md",
-		"make gen",
-		"PG13–17",
-		"升级窗口",
-		"外部探测",
-		"干净 Mac",
-		"Release assets",
-		"不得勾选",
-	} {
-		if !strings.Contains(dispositionText, required) {
-			t.Errorf("Linux release disposition does not retire issue #97 completely: missing %q", required)
-		}
-	}
-}
-
-func TestIssue50SpecIsSupersededWithoutClaimingReleaseCompletion(t *testing.T) {
-	dispositionText := readLinuxReleaseDisposition(t)
-	for _, required := range []string{
-		"#50",
-		"#36",
-		"#93",
-		"#94",
-		"被 #98/#102 取代",
-		"不表示片⑩验收完成",
-		"同一份最终 `.pkg`",
-		"真实候选",
-		"不得勾选",
-	} {
-		if !strings.Contains(dispositionText, required) {
-			t.Errorf("Linux release disposition does not supersede issue #50 safely: missing %q", required)
-		}
 	}
 }
 
