@@ -34,6 +34,7 @@ type issue60Runtime struct {
 	caPath      string
 	agentBinary string
 	workDir     string
+	databaseURL string
 }
 
 func TestAcceptance_AC_01_S1(t *testing.T) {
@@ -236,7 +237,8 @@ func startIssue60Runtime(t *testing.T, port int) issue60Runtime {
 			t.Fatalf("create %s: %v", directory, err)
 		}
 	}
-	configPath := writeServerConfig(t, workDir, recoveryDatabase(t, platformDatabaseURL(t)), keyDirectory, agentBinaryDirectory)
+	databaseURL := recoveryDatabase(t, platformDatabaseURL(t))
+	configPath := writeServerConfig(t, workDir, databaseURL, keyDirectory, agentBinaryDirectory)
 	baseURL := fmt.Sprintf("https://127.0.0.1:%d", port)
 	server := startProcess(t, "issue-60 server", serverBinary, filepath.Join(workDir, "server.log"), []string{
 		"DBS_MONITOR_CONFIG_FILE=" + configPath,
@@ -259,7 +261,7 @@ func startIssue60Runtime(t *testing.T, port int) issue60Runtime {
 	}
 	return issue60Runtime{
 		client: client, baseURL: baseURL, caPath: filepath.Join(certDirectory, "ca.crt"),
-		agentBinary: agentBinary, workDir: workDir,
+		agentBinary: agentBinary, workDir: workDir, databaseURL: databaseURL,
 	}
 }
 
