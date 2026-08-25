@@ -1,7 +1,6 @@
 # 前端
 
 TS + React + Vite 纯 SPA，AntD 6 + ECharts 6，TanStack Router + openapi-react-query。
-理由与目录结构：`docs/design/08-frontend-stack-and-ui.md`。
 
 ## 状态只有三个桶，没有第四个
 
