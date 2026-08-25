@@ -6,45 +6,11 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
-
-func TestMetricDictionaryMatchesP0Overview(t *testing.T) {
-	want := readP0Overview(t)
-	got := make(map[metric.MetricID]metricFlags, len(metric.Metrics))
-	tests := make([]struct {
-		name string
-		got  metricFlags
-		want metricFlags
-	}, 0, len(metric.Metrics))
-	for _, item := range metric.Metrics {
-		flags := metricFlags{
-			standard:  item.Standard,
-			enhanced:  item.EnhancedCandidate,
-			alertable: item.Alertability,
-		}
-		got[item.ID] = flags
-		tests = append(tests, struct {
-			name string
-			got  metricFlags
-			want metricFlags
-		}{name: string(item.ID), got: flags, want: want[item.ID]})
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if !reflect.DeepEqual(tt.got, tt.want) {
-				t.Fatalf("metric flags = %+v, want %+v", tt.got, tt.want)
-			}
-		})
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("metric dictionary differs from docs/design/01-pg-mvp-metric-dictionary.md §3:\n got: %v\nwant: %v", got, want)
-	}
-}
 
 func TestEveryServerMetricIsProducedExactlyOnce(t *testing.T) {
 	knownMetrics := make(map[metric.MetricID]struct{}, len(metric.Metrics))
@@ -194,69 +160,6 @@ func TestMetricListsMatchGeneratedContracts(t *testing.T) {
 	for _, ids := range migrationMetricLists(t) {
 		assertSetEqual(t, "migration metric constraint", metricIDs(), ids)
 	}
-}
-
-type metricFlags struct {
-	standard  bool
-	enhanced  bool
-	alertable metric.Alertability
-}
-
-func readP0Overview(t *testing.T) map[metric.MetricID]metricFlags {
-	t.Helper()
-	contents := readProjectFile(t, "docs/design/01-pg-mvp-metric-dictionary.md")
-	lines := strings.Split(contents, "\n")
-	inside := false
-	result := make(map[metric.MetricID]metricFlags)
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "## 3. P0 指标总览" {
-			inside = true
-			continue
-		}
-		if inside && strings.HasPrefix(strings.TrimSpace(line), "## ") {
-			break
-		}
-		if !inside || !strings.HasPrefix(strings.TrimSpace(line), "|") {
-			continue
-		}
-		cells := markdownCells(line)
-		if len(cells) != 6 || cells[1] == "指标 ID" || strings.HasPrefix(cells[0], "---") {
-			continue
-		}
-		result[metric.MetricID(strings.Trim(cells[1], "`"))] = metricFlags{
-			standard:  cells[3] == "是",
-			enhanced:  cells[4] == "是",
-			alertable: alertabilityFor(t, cells[5]),
-		}
-	}
-	return result
-}
-
-func alertabilityFor(t *testing.T, value string) metric.Alertability {
-	t.Helper()
-	switch strings.Trim(value, "*") {
-	case "是":
-		return metric.AlertabilityYes
-	case "否", "否，仅辅助展示":
-		return metric.AlertabilityNo
-	case "视情况":
-		return metric.AlertabilityConditional
-	default:
-		t.Fatalf("unknown alertability value %q", value)
-		return ""
-	}
-}
-
-func markdownCells(line string) []string {
-	parts := strings.Split(strings.TrimSpace(line), "|")
-	if len(parts) < 3 {
-		return nil
-	}
-	parts = parts[1 : len(parts)-1]
-	for index := range parts {
-		parts[index] = strings.TrimSpace(parts[index])
-	}
-	return parts
 }
 
 func metricIDs() []string {

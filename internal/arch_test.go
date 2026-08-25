@@ -12,7 +12,6 @@ import (
 
 var packageLayers = map[string]int{
 	"cmd/acceptance-report":     3,
-	"cmd/metric-appendix":       3,
 	"cmd/monitor-agent":         3,
 	"cmd/monitor-server":        3,
 	"cmd/pg-range-evidence":     3,
@@ -58,7 +57,7 @@ func TestInternalPackageArchitecture(t *testing.T) {
 			packageName := root.prefix + "/" + entry.Name()
 			if root.prefix == "internal" {
 				if _, forbidden := map[string]bool{"common": true, "util": true, "utils": true, "shared": true, "base": true, "helper": true}[entry.Name()]; forbidden {
-					t.Errorf("forbidden package %s; see docs/design/05-backend-code-structure.md §3.3", packageName)
+					t.Errorf("forbidden package %s", packageName)
 				}
 			}
 			if _, registered := packageLayers[packageName]; !registered {

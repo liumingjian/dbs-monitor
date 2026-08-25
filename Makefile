@@ -14,7 +14,6 @@ REDOCLY := npx --yes @redocly/cli@2.20.3
 OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
 SQLC := go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.29.0
 GOOSE := go run github.com/pressly/goose/v3/cmd/goose@v3.24.3
-METRIC_APPENDIX := go run ./cmd/metric-appendix
 
 CANDIDATE_SHA := $(shell git rev-parse HEAD)
 CANDIDATE_TAG := $(shell git describe --exact-match HEAD 2>/dev/null)
@@ -31,7 +30,6 @@ gen:
 	$(OAPI_CODEGEN) --config api/oapi-client.yaml api/openapi.bundled.yaml
 	$(OPENAPI_TYPESCRIPT) api/openapi.bundled.yaml -o web/src/api/schema.d.ts
 	$(SQLC) generate
-	$(METRIC_APPENDIX)
 
 dev-up:
 	@if [ -n "$${PGHOST_EXTERNAL:-}" ]; then \
@@ -50,7 +48,6 @@ build:
 	sha256sum dbs-monitor-server dbs-monitor-agent > SHA256SUMS
 
 check:
-	sh scripts/check-docs.sh
 	sh scripts/check-toolchain.sh
 	sh scripts/check-generated.sh
 	go vet ./...
