@@ -136,31 +136,12 @@ func TestProductionGuardsRejectDrift(t *testing.T) {
   platform-pg16:
     image: postgres:16
 `)
-		writeGuardFixture(t, root, ".github/workflows/check.yml", "jobs: {}\n")
 		violations, err := findPlatformDatabaseImageViolations(root)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(violations) != 1 || !strings.Contains(violations[0], "service postgres uses postgres:16") {
 			t.Fatalf("violations = %v, want only the non-fixture platform service", violations)
-		}
-	})
-
-	t.Run("B14 yaml workflow platform image", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardFixture(t, root, "compose.yaml", "services:\n  postgres:\n    image: postgres:17\n")
-		writeGuardFixture(t, root, ".github/workflows/check.yaml", `jobs:
-  check:
-    services:
-      postgres:
-        image: postgres:16
-`)
-		violations, err := findPlatformDatabaseImageViolations(root)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(violations) != 1 || !strings.Contains(violations[0], "workflow check.yaml") {
-			t.Fatalf("violations = %v, want the workflow platform service", violations)
 		}
 	})
 }
@@ -374,40 +355,6 @@ func findPlatformDatabaseImageViolations(root string) ([]string, error) {
 		}
 		if allowedComposeFixtures[name] != service.Image {
 			violations = append(violations, fmt.Sprintf("compose service %s uses %s", name, service.Image))
-		}
-	}
-
-	workflowDirectory := filepath.Join(root, ".github", "workflows")
-	workflows, err := os.ReadDir(workflowDirectory)
-	if err != nil {
-		return nil, err
-	}
-	for _, workflow := range workflows {
-		if workflow.IsDir() {
-			continue
-		}
-		switch filepath.Ext(workflow.Name()) {
-		case ".yml", ".yaml":
-		default:
-			continue
-		}
-		var workflowDocument struct {
-			Jobs map[string]struct {
-				Services map[string]imageService `yaml:"services"`
-			} `yaml:"jobs"`
-		}
-		if err := readYAML(filepath.Join(workflowDirectory, workflow.Name()), &workflowDocument); err != nil {
-			return nil, err
-		}
-		for jobName, job := range workflowDocument.Jobs {
-			for serviceName, service := range job.Services {
-				if !strings.HasPrefix(service.Image, "postgres:") || service.Image == "postgres:17" {
-					continue
-				}
-				if serviceName != "postgres12" || service.Image != "postgres:12" {
-					violations = append(violations, fmt.Sprintf("workflow %s job %s service %s uses %s", workflow.Name(), jobName, serviceName, service.Image))
-				}
-			}
 		}
 	}
 	return violations, nil

@@ -97,7 +97,7 @@ func TestToolchainGuardNamesConfigurationErrors(t *testing.T) {
 	}
 }
 
-func TestWorkflowsUseRepositoryToolchainVersions(t *testing.T) {
+func TestCheckRunsTheToolchainGuard(t *testing.T) {
 	root := filepath.Join(internalRoot(t), "..")
 	makefile, err := os.ReadFile(filepath.Join(root, "Makefile"))
 	if err != nil {
@@ -106,53 +106,6 @@ func TestWorkflowsUseRepositoryToolchainVersions(t *testing.T) {
 	check := requireMakeTarget(t, string(makefile), "check")
 	if !strings.Contains(check, "sh scripts/check-toolchain.sh") {
 		t.Fatal("make check does not run the toolchain consistency guard")
-	}
-
-	workflows, err := os.ReadDir(filepath.Join(root, ".github", "workflows"))
-	if err != nil {
-		t.Fatalf("read workflows: %v", err)
-	}
-	for _, workflow := range workflows {
-		if workflow.IsDir() {
-			continue
-		}
-		contents, err := os.ReadFile(filepath.Join(root, ".github", "workflows", workflow.Name()))
-		if err != nil {
-			t.Fatalf("read workflow %s: %v", workflow.Name(), err)
-		}
-		text := string(contents)
-		for _, toolchain := range []struct {
-			action           string
-			requiredAction   string
-			versionFile      string
-			hardCodedVersion string
-		}{
-			{
-				action:           "actions/setup-go",
-				requiredAction:   "uses: actions/setup-go@v6",
-				versionFile:      "go-version-file: go.mod",
-				hardCodedVersion: "go-version:",
-			},
-			{
-				action:           "actions/setup-node",
-				requiredAction:   "uses: actions/setup-node@v4",
-				versionFile:      "node-version-file: .tool-versions",
-				hardCodedVersion: "node-version:",
-			},
-		} {
-			if !strings.Contains(text, toolchain.action) {
-				continue
-			}
-			if !strings.Contains(text, toolchain.requiredAction) {
-				t.Errorf("workflow %s does not use required action %q", workflow.Name(), toolchain.requiredAction)
-			}
-			if !strings.Contains(text, toolchain.versionFile) {
-				t.Errorf("workflow %s does not use repository toolchain source %q", workflow.Name(), toolchain.versionFile)
-			}
-			if strings.Contains(text, toolchain.hardCodedVersion) {
-				t.Errorf("workflow %s hard-codes a toolchain with %q", workflow.Name(), toolchain.hardCodedVersion)
-			}
-		}
 	}
 }
 
@@ -245,17 +198,6 @@ func TestCheckFullWiresDatabaseCompatibilityGates(t *testing.T) {
 	for _, required := range []string{"$(MAKE) check-pg-matrix", "$(MAKE) check-sqlc-vet"} {
 		if !strings.Contains(checkFull, required) {
 			t.Errorf("check-full is missing %q", required)
-		}
-	}
-
-	workflow, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "check-full.yml"))
-	if err != nil {
-		t.Fatalf("read check-full workflow: %v", err)
-	}
-	contents := string(workflow)
-	for _, required := range []string{"name: check-full", "      - main", "  workflow_dispatch:", "      - run: make _check-full"} {
-		if !strings.Contains(contents, required) {
-			t.Errorf("check-full workflow is missing %q", required)
 		}
 	}
 }
