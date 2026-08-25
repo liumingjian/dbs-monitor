@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 	"github.com/liumingjian/dbs-monitor/internal/notify"
@@ -39,7 +40,7 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	defer platform.Close()
 
 	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
-	currentClock := &notificationClock{now: now}
+	currentClock := clock.NewManual(now)
 	instanceID := uuid.New()
 	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "unused-test-value")
 	if err != nil {
@@ -130,15 +131,15 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 		t.Fatalf("firing message missing alert facts:\n%s", message)
 	}
 
-	currentClock.now = now.Add(6 * time.Second)
+	currentClock.Set(now.Add(6 * time.Second))
 	if _, err := platform.Exec(ctx, `INSERT INTO instance_collect_state (instance_id, source, last_report_at)
-		VALUES ($1, 'AGENT', $2)`, instanceID, currentClock.now); err != nil {
+		VALUES ($1, 'AGENT', $2)`, instanceID, currentClock.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := evaluation.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate recovery transition: %v", err)
 	}
-	if processed, err := dispatcher.DispatchOne(ctx, currentClock.now, channels); err != nil || !processed {
+	if processed, err := dispatcher.DispatchOne(ctx, currentClock.Now(), channels); err != nil || !processed {
 		t.Fatalf("recovery delivery = %t, %v; want true, nil", processed, err)
 	}
 	if message := <-messages; !strings.Contains(message, "告警恢复") {
@@ -322,7 +323,7 @@ func TestMaintenanceWindowSuppressesWithoutStoppingEvaluationOrReplaying(t *test
 	defer platform.Close()
 
 	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
-	currentClock := &notificationClock{now: now}
+	currentClock := clock.NewManual(now)
 	instanceID := uuid.New()
 	ciphertext, keyVersion, err := keyring.EncryptPassword(instanceID, "unused-test-value")
 	if err != nil {
@@ -418,11 +419,11 @@ func TestMaintenanceWindowSuppressesWithoutStoppingEvaluationOrReplaying(t *test
 	if count, err := dispatcher.EnqueueDueRepeats(ctx, now.Add(10*time.Minute+time.Second)); err != nil || count != 0 {
 		t.Fatalf("repeat immediately after maintenance = %d, %v; want 0, nil", count, err)
 	}
-	currentClock.now = now.Add(15 * time.Minute)
+	currentClock.Set(now.Add(15 * time.Minute))
 	if err := evaluation.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate after maintenance: %v", err)
 	}
-	if count, err := dispatcher.EnqueueDueRepeats(ctx, currentClock.now); err != nil || count != 1 {
+	if count, err := dispatcher.EnqueueDueRepeats(ctx, currentClock.Now()); err != nil || count != 1 {
 		t.Fatalf("repeat at next interval = %d, %v; want 1, nil", count, err)
 	}
 
@@ -440,7 +441,7 @@ func TestMaintenanceWindowSuppressesWithoutStoppingEvaluationOrReplaying(t *test
 		Host: host, Port: port, From: "monitor@example.com", TLSMode: notify.TLSImplicit, AuthType: notify.AuthNone,
 		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true},
 	})
-	if processed, err := dispatcher.DispatchOne(ctx, currentClock.now, map[string]notify.Channel{notify.SMTPChannelKey: channel}); err != nil || !processed {
+	if processed, err := dispatcher.DispatchOne(ctx, currentClock.Now(), map[string]notify.Channel{notify.SMTPChannelKey: channel}); err != nil || !processed {
 		t.Fatalf("post-maintenance repeat delivery = %t, %v", processed, err)
 	}
 	if message := <-messages; !strings.Contains(message, "Maintenance tracer") {
@@ -449,13 +450,6 @@ func TestMaintenanceWindowSuppressesWithoutStoppingEvaluationOrReplaying(t *test
 	if err := platform.QueryRow(ctx, `SELECT in_maintenance FROM alert_instance WHERE id = $1`, alertID).Scan(&inMaintenance); err != nil || inMaintenance {
 		t.Fatalf("alert maintenance marker after evaluation = %t, %v; want false", inMaintenance, err)
 	}
-}
-
-type notificationClock struct{ now time.Time }
-
-func (clock *notificationClock) Now() time.Time { return clock.now }
-func (*notificationClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	return make(chan time.Time), func() {}
 }
 
 func waitForNotificationLock(t *testing.T, ctx context.Context, platform *db.Pool, evaluationDone <-chan error) {

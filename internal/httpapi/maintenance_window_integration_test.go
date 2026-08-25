@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 )
@@ -23,7 +24,7 @@ func TestMaintenanceWindowManagementLifecycle(t *testing.T) {
 	defer platform.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	currentClock := &maintenanceClock{now: now}
+	currentClock := clock.NewManual(now)
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
 	}
@@ -117,11 +118,4 @@ func TestMaintenanceWindowManagementLifecycle(t *testing.T) {
 	if updatedBy != created.CreatedBy || endedBy != created.CreatedBy || deletedBy != created.CreatedBy {
 		t.Fatalf("maintenance actors = updated %s, ended %s, deleted %s; want %s", updatedBy, endedBy, deletedBy, created.CreatedBy)
 	}
-}
-
-type maintenanceClock struct{ now time.Time }
-
-func (clock *maintenanceClock) Now() time.Time { return clock.now }
-func (*maintenanceClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	return make(chan time.Time), func() {}
 }

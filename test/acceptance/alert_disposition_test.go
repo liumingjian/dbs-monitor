@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
@@ -43,7 +44,7 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open acceptance credential keyring: %v", err)
 	}
-	currentClock := &dispositionAcceptanceClock{now: time.Now().UTC().Truncate(time.Second)}
+	currentClock := clock.NewManual(time.Now().UTC().Truncate(time.Second))
 	if err := httpapi.SeedAdmin(ctx, platform, "disposition-admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed bootstrap administrator: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 	ruleID := createdRule.JSON201.Id
 	alertEvaluator := evaluator.New(platform, currentClock, nil)
 
-	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
+	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.Now(), 90)
 	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate firing transition: %v", err)
 	}
@@ -151,7 +152,7 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 	assertDispositionHistory(t, dispositionDetail, createdRule.JSON201.Version)
 
 	currentClock.Advance(5 * time.Second)
-	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
+	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.Now(), 90)
 	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate disposed alert: %v", err)
 	}
@@ -161,7 +162,7 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 	}
 
 	currentClock.Advance(5 * time.Second)
-	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 20)
+	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.Now(), 20)
 	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate recovery: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 	}
 
 	currentClock.Advance(5 * time.Second)
-	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
+	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.Now(), 90)
 	if err := alertEvaluator.RunOnce(ctx); err != nil {
 		t.Fatalf("evaluate new lifecycle: %v", err)
 	}
@@ -179,20 +180,6 @@ func TestAcceptance_AC_03_S1(t *testing.T) {
 	if nextAlert.Id == initialAlert.Id || nextAlert.Status != api.FIRING || nextAlert.Disposition != api.AlertDispositionNONE {
 		t.Fatalf("new lifecycle = id %s state/disposition %s/%s, want a new FIRING/NONE alert", nextAlert.Id, nextAlert.Status, nextAlert.Disposition)
 	}
-}
-
-type dispositionAcceptanceClock struct {
-	now time.Time
-}
-
-func (current *dispositionAcceptanceClock) Now() time.Time { return current.now }
-
-func (*dispositionAcceptanceClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	return make(chan time.Time), func() {}
-}
-
-func (current *dispositionAcceptanceClock) Advance(elapsed time.Duration) {
-	current.now = current.now.Add(elapsed)
 }
 
 func dispositionAcceptancePort(t *testing.T) int {

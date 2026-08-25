@@ -88,11 +88,11 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		t.Fatalf("seed issue 60 admin: %v", err)
 	}
 
-	currentClock := newCurrentFixedClock()
-	if err := metric.EnsurePartitions(ctx, platform, currentClock.now); err != nil {
+	currentClock := newCurrentClock()
+	if err := metric.EnsurePartitions(ctx, platform, currentClock.Now()); err != nil {
 		t.Fatalf("create metric partitions: %v", err)
 	}
-	health := platformhealth.NewStore("3.0.0", currentClock.now.Add(-time.Hour), log.New(io.Discard, "", 0))
+	health := platformhealth.NewStore("3.0.0", currentClock.Now().Add(-time.Hour), log.New(io.Discard, "", 0))
 	server := httptest.NewTLSServer(httpapi.NewHandlerWithPlatformHealth(
 		platform, currentClock, keyring, monitorpg.DirectDialer{}, "3.0.0", health,
 	).Routes())
@@ -123,7 +123,7 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 			url.QueryEscape(from.Format(time.RFC3339Nano)), url.QueryEscape(to.Format(time.RFC3339Nano)))
 	}
 	currentSeriesURL := func(metricID string) string {
-		return seriesURL(metricID, currentClock.now.Add(-time.Minute), currentClock.now.Add(time.Minute))
+		return seriesURL(metricID, currentClock.Now().Add(-time.Minute), currentClock.Now().Add(time.Minute))
 	}
 	queryStatsURL := fmt.Sprintf("%s/api/v1/instances/%s/query-stats", server.URL, instanceID)
 	producedUnavailability := make(map[api.Unavailability]struct{})
@@ -178,7 +178,7 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 	assertMetricSeriesHasPoints(t, client, currentSeriesURL("collector.last_success_time"))
 	assertUnavailability(t, client, currentSeriesURL("pg.replication.wal_lag_bytes"), "NOT_APPLICABLE_ROLE")
 	assertProducedMetric(seriesURL(
-		"pg.connection.total", currentClock.now.Add(-time.Hour), currentClock.now.Add(-30*time.Minute),
+		"pg.connection.total", currentClock.Now().Add(-time.Hour), currentClock.Now().Add(-30*time.Minute),
 	), api.NODATAINRANGE)
 
 	registration := requestJSON(t, client, http.MethodPost,
@@ -188,7 +188,7 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		t.Fatalf("register issue 60 Agent: body=%+v error=%v", registrationBody, err)
 	}
 	report := requestJSON(t, client, http.MethodPost, server.URL+"/api/agent/v1/report", map[string]any{
-		"instance_id": instanceID, "agent_version": "2.0.0", "timestamp": currentClock.now,
+		"instance_id": instanceID, "agent_version": "2.0.0", "timestamp": currentClock.Now(),
 		"metrics": []map[string]any{{"metric": "host.cpu.usage_percent", "value": 25.0}},
 	}, *registrationBody.AgentToken)
 	var accepted api.AgentReportAccepted
@@ -215,12 +215,12 @@ func TestIssue60DerivedMetricsAndRealUnavailabilityProducers(t *testing.T) {
 		t.Fatalf("collect issue 60 counter reset: %v", err)
 	}
 	assertProducedMetric(seriesURL(
-		"pg.tps", currentClock.now.Add(-time.Second), currentClock.now.Add(time.Second),
+		"pg.tps", currentClock.Now().Add(-time.Second), currentClock.Now().Add(time.Second),
 	), api.COUNTERRESET)
 
 	currentClock.Advance(20 * time.Second)
 	assertProducedMetric(seriesURL(
-		"pg.connection.active", currentClock.now.Add(-time.Second), currentClock.now.Add(time.Second),
+		"pg.connection.active", currentClock.Now().Add(-time.Second), currentClock.Now().Add(time.Second),
 	), api.STALE)
 	currentClock.Advance(metric.AgentOfflineAfter)
 	assertProducedMetric(currentSeriesURL("host.cpu.usage_percent"), api.AGENTOFFLINE)

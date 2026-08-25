@@ -78,7 +78,7 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 	}
 
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	currentClock := &snapshotClock{now: now}
+	currentClock := clock.NewManual(now)
 	maintenanceOwnerID := uuid.New()
 	maintenanceWindowID := uuid.New()
 	if _, err := pool.Exec(ctx, `INSERT INTO app_user (id, username, password_hash, role, enabled, created_at)
@@ -317,8 +317,8 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 		t.Fatalf("acknowledged performance event page = %+v", eventPage)
 	}
 
-	currentClock.now = currentClock.now.Add(5 * time.Second)
-	insertSnapshotSample(t, ctx, pool, seriesID, currentClock.now)
+	currentClock.Advance(5 * time.Second)
+	insertSnapshotSample(t, ctx, pool, seriesID, currentClock.Now())
 	if err := service.RunOnce(ctx); err != nil {
 		t.Fatalf("reevaluate sustained blocking alert: %v", err)
 	}
@@ -336,8 +336,8 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 	if performanceEventCount != 1 {
 		t.Fatalf("performance event count after sustained firing = %d, want 1", performanceEventCount)
 	}
-	currentClock.now = currentClock.now.Add(5 * time.Second)
-	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 0)", seriesID, currentClock.now); err != nil {
+	currentClock.Advance(5 * time.Second)
+	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 0)", seriesID, currentClock.Now()); err != nil {
 		t.Fatalf("insert recovered blocked-session sample: %v", err)
 	}
 	if err := service.RunOnce(ctx); err != nil {
@@ -362,7 +362,7 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 		t.Fatalf("create non-applicable rule: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_rule_version (rule_id, version, snapshot, created_at)
-		VALUES ($1, 1, '{"metric_id":"pg.connection.total"}', $2)`, nonApplicableRuleID, currentClock.now); err != nil {
+		VALUES ($1, 1, '{"metric_id":"pg.connection.total"}', $2)`, nonApplicableRuleID, currentClock.Now()); err != nil {
 		t.Fatalf("create non-applicable rule version: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO alert_rule_scope_instance (rule_id, instance_id) VALUES ($1, $2)`, nonApplicableRuleID, instanceID); err != nil {
@@ -370,12 +370,12 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 	}
 	nonApplicableSeriesID, err := metric.New(pool).UpsertSeries(ctx, metric.UpsertSeriesParams{
 		InstanceID: pgtype.UUID{Bytes: instanceID, Valid: true}, MetricID: "pg.connection.total",
-		Labels: []byte(`{}`), LabelsKey: "{}", LastSeen: pgtype.Timestamptz{Time: currentClock.now, Valid: true},
+		Labels: []byte(`{}`), LabelsKey: "{}", LastSeen: pgtype.Timestamptz{Time: currentClock.Now(), Valid: true},
 	})
 	if err != nil {
 		t.Fatalf("create non-applicable series: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 2)", nonApplicableSeriesID, currentClock.now); err != nil {
+	if _, err := pool.Exec(ctx, "INSERT INTO metric_sample (series_id, ts, value) VALUES ($1, $2, 2)", nonApplicableSeriesID, currentClock.Now()); err != nil {
 		t.Fatalf("insert non-applicable metric sample: %v", err)
 	}
 	if err := service.RunOnce(ctx); err != nil {
@@ -551,13 +551,3 @@ func snapshotEnvInt(name string, fallback int) int {
 	}
 	return value
 }
-
-type snapshotClock struct{ now time.Time }
-
-func (current *snapshotClock) Now() time.Time { return current.now }
-
-func (*snapshotClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	return make(chan time.Time), func() {}
-}
-
-var _ clock.Clock = (*snapshotClock)(nil)

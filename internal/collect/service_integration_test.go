@@ -21,6 +21,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/capability"
+	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
@@ -81,12 +82,12 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	}
 
 	dialer := &countingDialer{}
-	currentClock := &fixedClock{now: time.Now().UTC()}
-	if err := metric.EnsurePartitions(ctx, platform, currentClock.now); err != nil {
+	currentClock := clock.NewManual(time.Now().UTC())
+	if err := metric.EnsurePartitions(ctx, platform, currentClock.Now()); err != nil {
 		t.Fatalf("create metric partitions: %v", err)
 	}
 	collector := New(platform, dialer, currentClock, keyring)
-	health := platformhealth.NewStore("3.0.0", currentClock.now.Add(-time.Hour), log.New(io.Discard, "", 0))
+	health := platformhealth.NewStore("3.0.0", currentClock.Now().Add(-time.Hour), log.New(io.Discard, "", 0))
 	collector.SetPlatformHealth(health)
 	eval := evaluator.New(platform, currentClock, collector.WithTriggerSnapshotConnection)
 
@@ -161,7 +162,7 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM alert_instance WHERE instance_id = $1", pgID).Scan(&alertsBeforeEmergency); err != nil {
 		t.Fatalf("count alerts before disk emergency: %v", err)
 	}
-	health.Update(currentClock.now, platformhealth.DiskSource(
+	health.Update(currentClock.Now(), platformhealth.DiskSource(
 		96, platformhealth.DiskNormal, platformhealth.DefaultDiskThresholds(),
 	))
 	currentClock.Advance(30 * time.Second)
@@ -187,7 +188,7 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	if err := collector.SetPlatformDatabaseCapacityMonitor(&capacityBudget, platformhealth.DefaultDiskThresholds()); err != nil {
 		t.Fatalf("configure platform database capacity monitor: %v", err)
 	}
-	(&centralScheduler{service: collector}).refreshPlatformDatabaseCapacityHealth(ctx, currentClock.now)
+	(&centralScheduler{service: collector}).refreshPlatformDatabaseCapacityHealth(ctx, currentClock.Now())
 	capacitySource := health.Source(platformhealth.SourcePlatformDatabaseCapacity)
 	if capacitySource.Status != platformhealth.StatusFailed || capacitySource.Code != "PLATFORM_DATABASE_CAPACITY_EMERGENCY_WATERMARK" {
 		t.Fatalf("platform database capacity source = %+v, want emergency failure", capacitySource)
@@ -249,7 +250,7 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	if _, err := pool.Exec(ctx, "UPDATE instance SET name = 'emergency control write' WHERE id = $1", pgID); err != nil {
 		t.Fatalf("control-plane write during capacity emergency: %v", err)
 	}
-	health.Update(currentClock.now, platformhealth.PlatformDatabaseCapacitySource(
+	health.Update(currentClock.Now(), platformhealth.PlatformDatabaseCapacitySource(
 		77, 100, health.PlatformDatabaseCapacityLevel(), platformhealth.DefaultDiskThresholds(),
 	))
 	collector.queryConnectionMu.Lock()
@@ -463,7 +464,7 @@ func assertReplicationSlotSemantics(
 	collector *Service,
 	target instance.ListCollectionTargetsRow,
 	instanceID pgtype.UUID,
-	currentClock *fixedClock,
+	currentClock *clock.Manual,
 ) {
 	t.Helper()
 	states := storedCapabilityStates(t, ctx, platform.Pool, instanceID)
@@ -595,7 +596,7 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 			t.Fatalf("create %s instance: %v", host, err)
 		}
 	}
-	service, err := NewWithConfig(platform, delayedFailureDialer{}, fixedClock{now: observedAt}, keyring, Config{ProbeConcurrency: 2, QueryConcurrency: 1})
+	service, err := NewWithConfig(platform, delayedFailureDialer{}, clock.NewManual(observedAt), keyring, Config{ProbeConcurrency: 2, QueryConcurrency: 1})
 	if err != nil {
 		t.Fatalf("create isolation collector: %v", err)
 	}
@@ -703,7 +704,7 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 		t.Fatalf("ensure capability test partitions: %v", err)
 	}
 
-	presentCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base}, keyring)
+	presentCollector := New(platform, monitorpg.DirectDialer{}, clock.NewManual(base), keyring)
 	if err := presentCollector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect with pg_monitor: %v", err)
 	}
@@ -754,7 +755,7 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	if _, err := admin.ExecContext(ctx, "REVOKE pg_monitor FROM "+roleIdentifier); err != nil {
 		t.Fatalf("revoke pg_monitor: %v", err)
 	}
-	missingCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base.Add(6 * time.Minute)}, keyring)
+	missingCollector := New(platform, monitorpg.DirectDialer{}, clock.NewManual(base.Add(6*time.Minute)), keyring)
 	if err := missingCollector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect after pg_monitor revoke: %v", err)
 	}
@@ -793,7 +794,7 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	originalProbe := metric.Capabilities[probeIndex].Probe
 	metric.Capabilities[probeIndex].Probe = "SELECT missing_column FROM pg_extension LIMIT 1"
 	defer func() { metric.Capabilities[probeIndex].Probe = originalProbe }()
-	unknownCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base.Add(12 * time.Minute)}, keyring)
+	unknownCollector := New(platform, monitorpg.DirectDialer{}, clock.NewManual(base.Add(12*time.Minute)), keyring)
 	if err := unknownCollector.RunOnce(ctx); err != nil {
 		t.Fatalf("collect with failed capability probe: %v", err)
 	}
@@ -810,7 +811,7 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	if err != nil || len(targets) != 1 {
 		t.Fatalf("list capability target: targets=%d error=%v", len(targets), err)
 	}
-	timeoutCollector := New(platform, monitorpg.DirectDialer{}, fixedClock{now: base.Add(18 * time.Minute)}, keyring)
+	timeoutCollector := New(platform, monitorpg.DirectDialer{}, clock.NewManual(base.Add(18*time.Minute)), keyring)
 	conn, err := timeoutCollector.queryConnection(ctx, targets[0])
 	if err != nil {
 		t.Fatalf("open capability probe connection: %v", err)
@@ -998,15 +999,3 @@ func (delayedFailureDialer) Dial(ctx context.Context, config *pgx.ConnConfig) (*
 	}
 	return nil, errors.New("dial failed")
 }
-
-type fixedClock struct {
-	now time.Time
-}
-
-func (clock fixedClock) Now() time.Time { return clock.now }
-
-func (clock fixedClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	return make(chan time.Time), func() {}
-}
-
-func (clock *fixedClock) Advance(duration time.Duration) { clock.now = clock.now.Add(duration) }

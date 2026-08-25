@@ -59,7 +59,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}
-	currentClock := newCurrentFixedClock()
+	currentClock := newCurrentClock()
 
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed admin: %v", err)
@@ -129,16 +129,16 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("copied alert rule attribution = created %v, updated %v; want actor %s",
 			copied.CreatedBy, copied.UpdatedBy, actorID)
 	}
-	assertAlertRuleAttribution(t, ctx, pool, fromTemplate.Id, actorID, currentClock.now, currentClock.now, nil)
-	assertAlertRuleAttribution(t, ctx, pool, copied.Id, actorID, currentClock.now, currentClock.now, nil)
-	deletedAt := currentClock.now
+	assertAlertRuleAttribution(t, ctx, pool, fromTemplate.Id, actorID, currentClock.Now(), currentClock.Now(), nil)
+	assertAlertRuleAttribution(t, ctx, pool, copied.Id, actorID, currentClock.Now(), currentClock.Now(), nil)
+	deletedAt := currentClock.Now()
 	for _, ruleID := range []uuid.UUID{copied.Id, fromTemplate.Id} {
 		deleted := requestJSON(t, client, http.MethodDelete, server.URL+"/api/v1/alert-rules/"+ruleID.String(), nil, "")
 		deleted.Body.Close()
 		if deleted.StatusCode != http.StatusNoContent {
 			t.Fatalf("delete copied/template rule status = %d, want 204", deleted.StatusCode)
 		}
-		assertAlertRuleAttribution(t, ctx, pool, ruleID, actorID, currentClock.now, currentClock.now, &deletedAt)
+		assertAlertRuleAttribution(t, ctx, pool, ruleID, actorID, currentClock.Now(), currentClock.Now(), &deletedAt)
 	}
 
 	rulesResponse := getResponse(t, client, server.URL+"/api/v1/alert-rules")
@@ -203,11 +203,11 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 
 	targetID := createAlertTestInstance(t, ctx, pool, keyring, "target")
 	otherID := createAlertTestInstance(t, ctx, pool, keyring, "out-of-scope")
-	reachabilitySeriesID := createAlertTestSeriesForMetric(t, ctx, pool, targetID, currentClock.now, "pg.availability.reachable")
+	reachabilitySeriesID := createAlertTestSeriesForMetric(t, ctx, pool, targetID, currentClock.Now(), "pg.availability.reachable")
 	snapshotConnections := collect.New(platform, monitorpg.DirectDialer{}, currentClock, keyring)
 	seededEvaluator := evaluator.New(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection)
 	for step := range 3 {
-		insertAlertTestSample(t, ctx, pool, reachabilitySeriesID, currentClock.now, 0)
+		insertAlertTestSample(t, ctx, pool, reachabilitySeriesID, currentClock.Now(), 0)
 		runAlertEvaluation(t, ctx, seededEvaluator)
 		if step < 2 {
 			currentClock.Advance(30 * time.Second)
@@ -226,7 +226,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 			continue
 		}
 		foundDatabaseRule = true
-		if rule.CurrentAlertCount != 2 || rule.LastTriggeredAt == nil || !rule.LastTriggeredAt.Equal(currentClock.now) {
+		if rule.CurrentAlertCount != 2 || rule.LastTriggeredAt == nil || !rule.LastTriggeredAt.Equal(currentClock.Now()) {
 			t.Fatalf("database rule list projection = %+v", rule)
 		}
 		break
@@ -283,8 +283,8 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	}
 	if createdRule.CreatedBy == nil || *createdRule.CreatedBy != adminID ||
 		createdRule.UpdatedBy == nil || *createdRule.UpdatedBy != adminID ||
-		!createdRule.CreatedAt.Equal(currentClock.now) || !createdRule.UpdatedAt.Equal(currentClock.now) {
-		t.Fatalf("created rule API attribution = %+v, want actor %s at %s", createdRule, adminID, currentClock.now)
+		!createdRule.CreatedAt.Equal(currentClock.Now()) || !createdRule.UpdatedAt.Equal(currentClock.Now()) {
+		t.Fatalf("created rule API attribution = %+v, want actor %s at %s", createdRule, adminID, currentClock.Now())
 	}
 	if err := pool.QueryRow(ctx, `SELECT rule.created_by, rule.updated_by, rule.created_at, rule.updated_at,
 		version.created_by, version.created_at
@@ -296,13 +296,13 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("read created rule attribution: %v", err)
 	}
 	if createdBy != adminID || updatedBy != adminID || createdVersionBy != adminID ||
-		!createdAt.Equal(currentClock.now) || !updatedAt.Equal(currentClock.now) || !createdVersionAt.Equal(currentClock.now) {
+		!createdAt.Equal(currentClock.Now()) || !updatedAt.Equal(currentClock.Now()) || !createdVersionAt.Equal(currentClock.Now()) {
 		t.Fatalf("created rule attribution = actors %s/%s/%s at %s/%s/%s, want %s at %s",
-			createdBy, updatedBy, createdVersionBy, createdAt, updatedAt, createdVersionAt, adminID, currentClock.now)
+			createdBy, updatedBy, createdVersionBy, createdAt, updatedAt, createdVersionAt, adminID, currentClock.Now())
 	}
 
-	seriesID := createAlertTestSeries(t, ctx, pool, targetID, currentClock.now)
-	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	seriesID := createAlertTestSeries(t, ctx, pool, targetID, currentClock.Now())
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 	eval := evaluator.New(platform, currentClock, snapshotConnections.WithTriggerSnapshotConnection)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "PENDING", 1, 0, 0, 1)
@@ -312,7 +312,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "PENDING", 1, 0, 0, 1)
 
 	currentClock.Advance(30 * time.Second)
-	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 	runAlertEvaluation(t, ctx, eval)
 	var firstAlertID uuid.UUID
 	var firstTriggeredAt time.Time
@@ -321,8 +321,8 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		createdRule.ID, targetID).Scan(&firstAlertID, &firstTriggeredAt); err != nil {
 		t.Fatalf("read firing alert: %v", err)
 	}
-	if !firstTriggeredAt.Equal(currentClock.now) {
-		t.Fatalf("first_triggered_at = %s, want %s", firstTriggeredAt, currentClock.now)
+	if !firstTriggeredAt.Equal(currentClock.Now()) {
+		t.Fatalf("first_triggered_at = %s, want %s", firstTriggeredAt, currentClock.Now())
 	}
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 2, 0, 0, 1)
 	dispositionURL := server.URL + "/api/v1/alert-instances/" + firstAlertID.String() + "/disposition"
@@ -400,7 +400,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		if index >= len(wantKinds) || event.Kind != wantKinds[index] || event.FromDisposition != wantFrom[index] ||
 			event.ToDisposition != wantKinds[index] || event.ActorID != *dispositionDetail.DispositionBy ||
 			event.RuleVersion != 1 || event.CurrentValue == nil || *event.CurrentValue != 12 ||
-			!json.Valid(event.RuleSnapshot) || !event.EvaluatedAt.Equal(firstTriggeredAt) || !event.ActedAt.Equal(currentClock.now) {
+			!json.Valid(event.RuleSnapshot) || !event.EvaluatedAt.Equal(firstTriggeredAt) || !event.ActedAt.Equal(currentClock.Now()) {
 			t.Fatalf("disposition event %d = %+v", index, event)
 		}
 	}
@@ -456,7 +456,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	}
 
 	currentClock.Advance(30 * time.Second)
-	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 4)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 4)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
 
@@ -483,9 +483,9 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("decode updated rule: %v", err)
 	}
 	if updatedRule.CreatedBy == nil || *updatedRule.CreatedBy != adminID ||
-		updatedRule.UpdatedBy == nil || *updatedRule.UpdatedBy != editorID || !updatedRule.UpdatedAt.Equal(currentClock.now) {
+		updatedRule.UpdatedBy == nil || *updatedRule.UpdatedBy != editorID || !updatedRule.UpdatedAt.Equal(currentClock.Now()) {
 		t.Fatalf("updated rule API attribution = %+v, want creator %s and editor %s at %s",
-			updatedRule, adminID, editorID, currentClock.now)
+			updatedRule, adminID, editorID, currentClock.Now())
 	}
 	var storedUpdatedBy, versionCreatedBy uuid.UUID
 	var storedUpdatedAt, versionCreatedAt time.Time
@@ -498,9 +498,9 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("read updated rule attribution: %v", err)
 	}
 	if storedUpdatedBy != editorID || versionCreatedBy != editorID ||
-		!storedUpdatedAt.Equal(currentClock.now) || !versionCreatedAt.Equal(currentClock.now) {
+		!storedUpdatedAt.Equal(currentClock.Now()) || !versionCreatedAt.Equal(currentClock.Now()) {
 		t.Fatalf("updated rule attribution = actors %s/%s at %s/%s, want %s at %s",
-			storedUpdatedBy, versionCreatedBy, storedUpdatedAt, versionCreatedAt, editorID, currentClock.now)
+			storedUpdatedBy, versionCreatedBy, storedUpdatedAt, versionCreatedAt, editorID, currentClock.Now())
 	}
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
 
@@ -520,12 +520,12 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	}
 	if disabledRule.Enabled || disabledRule.Version != 2 || disabledRule.EnabledUpdatedBy == nil ||
 		*disabledRule.EnabledUpdatedBy != adminID || disabledRule.EnabledUpdatedAt == nil ||
-		!disabledRule.EnabledUpdatedAt.Equal(currentClock.now) {
+		!disabledRule.EnabledUpdatedAt.Equal(currentClock.Now()) {
 		t.Fatalf("disabled rule audit = %+v", disabledRule)
 	}
 
 	currentClock.Advance(30 * time.Second)
-	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 1, 0, 1)
 
@@ -540,7 +540,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 
 	// Sustained anomalies update the unresolved lifecycle instead of inserting duplicates.
 	currentClock.Advance(30 * time.Second)
-	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertIdentity(t, ctx, pool, createdRule.ID, targetID, firstAlertID, firstTriggeredAt)
 	var triggerSnapshotCount int
@@ -561,13 +561,13 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	assertAlertIdentity(t, ctx, pool, createdRule.ID, targetID, firstAlertID, firstTriggeredAt)
 
 	currentClock.Advance(30 * time.Second)
-	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 	runAlertEvaluation(t, ctx, eval)
 	assertAlertState(t, ctx, pool, createdRule.ID, targetID, "FIRING", 0, 0, 0, 2)
 
 	for recoveryStep := range 2 {
 		currentClock.Advance(30 * time.Second)
-		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 4)
+		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 4)
 		runAlertEvaluation(t, ctx, eval)
 		var status string
 		var recoveryCount int
@@ -593,7 +593,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		Scan(&firstRuleVersion, &firstSnapshot, &finalRuleVersion, &finalSnapshot, &recoveredAt); err != nil {
 		t.Fatalf("read recovered lifecycle snapshots: %v", err)
 	}
-	if firstRuleVersion != 1 || finalRuleVersion != 2 || !json.Valid(firstSnapshot) || !json.Valid(finalSnapshot) || !recoveredAt.Equal(currentClock.now) {
+	if firstRuleVersion != 1 || finalRuleVersion != 2 || !json.Valid(firstSnapshot) || !json.Valid(finalSnapshot) || !recoveredAt.Equal(currentClock.Now()) {
 		t.Fatalf("lifecycle snapshots = first %d/%s final %d/%s recovered %s", firstRuleVersion, firstSnapshot, finalRuleVersion, finalSnapshot, recoveredAt)
 	}
 	var recoveredEventVersion int
@@ -610,7 +610,7 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	// A breach after recovery creates a new lifecycle; the old one remains immutable history.
 	for range 2 {
 		currentClock.Advance(30 * time.Second)
-		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 		runAlertEvaluation(t, ctx, eval)
 	}
 	var totalLifecycles, unresolvedLifecycles int
@@ -649,13 +649,13 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	configurationBatch.Queue(`INSERT INTO instance_collection_connection_state (instance_id, consecutive_failures)
 		VALUES ($1, 0)`, targetID)
 	configurationBatch.Queue(`INSERT INTO instance_capability_snapshot (instance_id, observed_at, states)
-		VALUES ($1, $2, '{}')`, targetID, currentClock.now)
+		VALUES ($1, $2, '{}')`, targetID, currentClock.Now())
 	configurationBatch.Queue(`UPDATE instance
 		SET agent_expected = true,
 		    agent_token_hash = decode(repeat('ab', 32), 'hex'),
 		    agent_token_issued_at = $2,
 		    agent_first_registered_at = $2
-		WHERE id = $1`, targetID, currentClock.now)
+		WHERE id = $1`, targetID, currentClock.Now())
 	if err := pool.SendBatch(ctx, configurationBatch).Close(); err != nil {
 		t.Fatalf("seed removable instance configuration: %v", err)
 	}
@@ -688,8 +688,8 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT name, removed_at FROM instance_identity WHERE id = $1", targetID).Scan(&removedName, &removedAt); err != nil {
 		t.Fatalf("read removed instance identity: %v", err)
 	}
-	if removedName != "target" || !removedAt.Equal(currentClock.now) {
-		t.Fatalf("removed instance identity = %q at %s, want target at %s", removedName, removedAt, currentClock.now)
+	if removedName != "target" || !removedAt.Equal(currentClock.Now()) {
+		t.Fatalf("removed instance identity = %q at %s, want target at %s", removedName, removedAt, currentClock.Now())
 	}
 	historyAfterRemoval := readInstanceHistoryCounts(t, ctx, pool, targetID)
 	wantHistoryAfterRemoval := retainedHistory
@@ -947,20 +947,8 @@ func assertAlertIdentity(t *testing.T, ctx context.Context, pool *pgxpool.Pool, 
 	}
 }
 
-type fixedClock struct {
-	now time.Time
+// newCurrentClock returns the test clock every httpapi integration test
+// starts from: the current instant, truncated to what PostgreSQL stores.
+func newCurrentClock() *clock.Manual {
+	return clock.NewManual(time.Now().UTC().Truncate(time.Microsecond))
 }
-
-func newCurrentFixedClock() *fixedClock {
-	return &fixedClock{now: time.Now().UTC().Truncate(time.Microsecond)}
-}
-
-func (clock *fixedClock) Now() time.Time { return clock.now }
-
-func (clock *fixedClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	return make(chan time.Time), func() {}
-}
-
-func (clock *fixedClock) Advance(duration time.Duration) { clock.now = clock.now.Add(duration) }
-
-var _ clock.Clock = (*fixedClock)(nil)

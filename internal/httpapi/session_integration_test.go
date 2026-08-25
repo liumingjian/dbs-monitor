@@ -92,11 +92,11 @@ func assertHostSessionCookie(t *testing.T, response *http.Response, wantMaxAge i
 func TestSessionConfiguredAbsoluteAndIdleDeadlines(t *testing.T) {
 	tests := []struct {
 		name     string
-		exercise func(*testing.T, *sessionTestClock, *http.Client, string)
+		exercise func(*testing.T, *clock.Manual, *http.Client, string)
 	}{
 		{
 			name: "absolute deadline is not extended by activity",
-			exercise: func(t *testing.T, currentClock *sessionTestClock, client *http.Client, serverURL string) {
+			exercise: func(t *testing.T, currentClock *clock.Manual, client *http.Client, serverURL string) {
 				for range 4 {
 					currentClock.Advance(20 * time.Second)
 					assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, serverURL+"/api/v1/me", nil), http.StatusOK)
@@ -107,7 +107,7 @@ func TestSessionConfiguredAbsoluteAndIdleDeadlines(t *testing.T) {
 		},
 		{
 			name: "idle deadline is extended only by activity",
-			exercise: func(t *testing.T, currentClock *sessionTestClock, client *http.Client, serverURL string) {
+			exercise: func(t *testing.T, currentClock *clock.Manual, client *http.Client, serverURL string) {
 				currentClock.Advance(29 * time.Second)
 				assertUserStatus(t, userJSONRequest(t, client, http.MethodGet, serverURL+"/api/v1/me", nil), http.StatusOK)
 				currentClock.Advance(30 * time.Second)
@@ -125,7 +125,7 @@ func TestSessionConfiguredAbsoluteAndIdleDeadlines(t *testing.T) {
 			if err := SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
 				t.Fatalf("seed administrator: %v", err)
 			}
-			currentClock := &sessionTestClock{now: time.Date(2030, time.January, 1, 12, 0, 0, 0, time.UTC)}
+			currentClock := clock.NewManual(time.Date(2030, time.January, 1, 12, 0, 0, 0, time.UTC))
 			handler := NewHandlerWithSessionConfig(platform, currentClock, nil, SessionConfig{
 				AbsoluteTTL: 90 * time.Second,
 				IdleTTL:     30 * time.Second,
@@ -140,20 +140,4 @@ func TestSessionConfiguredAbsoluteAndIdleDeadlines(t *testing.T) {
 			test.exercise(t, currentClock, client, server.URL)
 		})
 	}
-}
-
-type sessionTestClock struct {
-	now time.Time
-}
-
-func (currentClock *sessionTestClock) Now() time.Time {
-	return currentClock.now
-}
-
-func (currentClock *sessionTestClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	panic("session tests do not use tickers")
-}
-
-func (currentClock *sessionTestClock) Advance(elapsed time.Duration) {
-	currentClock.now = currentClock.now.Add(elapsed)
 }

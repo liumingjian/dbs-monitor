@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/clock"
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/evaluator"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
@@ -43,7 +44,7 @@ func TestAcceptance_AC_08_S6(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open acceptance credential keyring: %v", err)
 	}
-	currentClock := &dispositionAcceptanceClock{now: time.Now().UTC().Truncate(time.Second)}
+	currentClock := clock.NewManual(time.Now().UTC().Truncate(time.Second))
 	if err := httpapi.SeedAdmin(ctx, platform, "removal-admin", "correct horse battery staple"); err != nil {
 		t.Fatalf("seed bootstrap administrator: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestAcceptance_AC_08_S6(t *testing.T) {
 	}
 	agentToken := *registeredAgent.JSON200.AgentToken
 
-	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.now, 90)
+	reportDispositionSample(t, ctx, client, agentToken, instanceID, currentClock.Now(), 90)
 	acknowledgedRuleID := createRemovalAlertRule(t, ctx, client, instanceID, "AC-08-S6 acknowledged high CPU", 80, api.Warning)
 	createRemovalAlertRule(t, ctx, client, instanceID, "AC-08-S6 unacknowledged high CPU", 85, api.Critical)
 	if err := evaluator.New(platform, currentClock, nil).RunOnce(ctx); err != nil {
@@ -117,7 +118,7 @@ func TestAcceptance_AC_08_S6(t *testing.T) {
 	}
 
 	assertRemovedInstanceAbsent(t, ctx, client, instanceID)
-	assertRemovedAgentTokenRejected(t, ctx, client, instanceID, agentToken, currentClock.now.Add(time.Second))
+	assertRemovedAgentTokenRejected(t, ctx, client, instanceID, agentToken, currentClock.Now().Add(time.Second))
 	factsAfterRemoval := readRemovalFacts(t, ctx, platform, instanceID)
 	if factsAfterRemoval.credentialAndAgentCount != 0 || factsAfterRemoval.collectionConfigCount != 0 || factsAfterRemoval.collectionTaskOverrideCount != 0 ||
 		factsAfterRemoval.agentCollectionStateCount != 0 || factsAfterRemoval.ruleTargetCount != 0 {
