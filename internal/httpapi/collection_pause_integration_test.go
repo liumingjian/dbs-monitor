@@ -62,8 +62,8 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open credential keyring: %v", err)
 	}
-	currentClock := newCurrentFixedClock()
-	if err := metric.EnsurePartitions(ctx, platform, currentClock.now); err != nil {
+	currentClock := newCurrentClock()
+	if err := metric.EnsurePartitions(ctx, platform, currentClock.Now()); err != nil {
 		t.Fatalf("create metric partitions: %v", err)
 	}
 	if err := httpapi.SeedAdmin(ctx, platform, "admin", "correct horse battery staple"); err != nil {
@@ -93,7 +93,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if _, err := instanceQueries.RegisterAgent(ctx, instance.RegisterAgentParams{
 		ID:                 pgtype.UUID{Bytes: instanceID, Valid: true},
 		AgentTokenHash:     agentTokenHash[:],
-		AgentTokenIssuedAt: pgtype.Timestamptz{Time: currentClock.now, Valid: true},
+		AgentTokenIssuedAt: pgtype.Timestamptz{Time: currentClock.Now(), Valid: true},
 	}); err != nil {
 		t.Fatalf("register agent: %v", err)
 	}
@@ -134,10 +134,10 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		t.Fatalf("decode alert rule: %v", err)
 	}
 	ruleResponse.Body.Close()
-	seriesID := createAlertTestSeries(t, ctx, pool, instanceID, currentClock.now)
+	seriesID := createAlertTestSeries(t, ctx, pool, instanceID, currentClock.Now())
 	eval := evaluator.New(platform, currentClock, collector.WithTriggerSnapshotConnection)
 	for range 2 {
-		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+		insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 		runAlertEvaluation(t, ctx, eval)
 		currentClock.Advance(30 * time.Second)
 	}
@@ -190,7 +190,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	}
 	paused.Body.Close()
 	if !pauseBody.Paused || pauseBody.Reason != "planned retirement" || pauseBody.UpdatedBy != adminID ||
-		pauseBody.UpdatedAt == nil || !pauseBody.UpdatedAt.Equal(currentClock.now) {
+		pauseBody.UpdatedAt == nil || !pauseBody.UpdatedAt.Equal(currentClock.Now()) {
 		t.Fatalf("pause response = %+v", pauseBody)
 	}
 	if err := capabilityLock.Rollback(); err != nil {
@@ -279,8 +279,8 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 
 	seriesURL := fmt.Sprintf("%s/api/v1/instances/%s/metrics/series?metric=pg.connection.active&from=%s&to=%s&step=raw",
 		server.URL, instanceID,
-		url.QueryEscape(currentClock.now.Add(-time.Minute).Format(time.RFC3339)),
-		url.QueryEscape(currentClock.now.Add(time.Minute).Format(time.RFC3339)))
+		url.QueryEscape(currentClock.Now().Add(-time.Minute).Format(time.RFC3339)),
+		url.QueryEscape(currentClock.Now().Add(time.Minute).Format(time.RFC3339)))
 	assertUnavailability(t, client, seriesURL, "COLLECTION_PAUSED")
 
 	var samplesBefore int
@@ -290,7 +290,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		t.Fatalf("count Agent samples before pause report: %v", err)
 	}
 	agentReport := requestJSON(t, client, http.MethodPost, server.URL+"/api/agent/v1/report", map[string]any{
-		"instance_id": instanceID, "agent_version": "1.0.0", "timestamp": currentClock.now,
+		"instance_id": instanceID, "agent_version": "1.0.0", "timestamp": currentClock.Now(),
 		"metrics": []map[string]any{{"metric": "host.cpu.usage_percent", "value": 42}},
 	}, agentToken)
 	agentReport.Body.Close()
@@ -308,8 +308,8 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		WHERE series.instance_id = $1 AND series.metric_id = 'host.cpu.usage_percent'`, instanceID).Scan(&samplesAfter); err != nil {
 		t.Fatalf("count Agent samples after pause report: %v", err)
 	}
-	if !lastReportAt.Equal(currentClock.now) || samplesAfter != samplesBefore {
-		t.Fatalf("paused Agent report heartbeat %s samples %d, want %s and %d", lastReportAt, samplesAfter, currentClock.now, samplesBefore)
+	if !lastReportAt.Equal(currentClock.Now()) || samplesAfter != samplesBefore {
+		t.Fatalf("paused Agent report heartbeat %s samples %d, want %s and %d", lastReportAt, samplesAfter, currentClock.Now(), samplesBefore)
 	}
 
 	unpaused := requestJSON(t, client, http.MethodPut, pauseURL, map[string]any{"paused": false}, "")
@@ -318,7 +318,7 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 		t.Fatalf("unpause status = %d, want 200", unpaused.StatusCode)
 	}
 	assertPauseEvent(t, ctx, pool, alertID, adminID, "UNFROZEN", 1)
-	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.now, 12)
+	insertAlertTestSample(t, ctx, pool, seriesID, currentClock.Now(), 12)
 	runAlertEvaluation(t, ctx, eval)
 	var continuedID uuid.UUID
 	var alertRows int

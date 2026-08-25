@@ -16,6 +16,10 @@ _Avoid_: Global collection round, backlog item
 The fact that a new database client can connect, authenticate, and complete the lightweight probe within its deadline. It does not imply that an existing monitoring session is usable, nor does an existing usable session imply reachability.
 _Avoid_: Database healthy, collector connected
 
+**Backpressure skip**:
+A task run the platform declined to attempt because a newer due for the same collection task on the same instance had already arrived while the older one was still waiting. The instance keeps one record per collection task carrying its most recent outcome, so a stall of any length leaves one backpressure skip per task, never one per missed due.
+_Avoid_: Dropped run, throttled collection
+
 **Collection-source integrity watermark**:
 The latest time at which every enabled and applicable collection task for a source had satisfied its most recent due obligation. One successful task cannot advance the watermark while another due task is failed, skipped, or backed off.
 _Avoid_: Latest sample time, any-task success time

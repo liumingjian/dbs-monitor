@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/clock"
 )
 
 func TestToAPIAlertEventPreservesStoredFacts(t *testing.T) {
@@ -156,7 +157,7 @@ func TestAlertObservationResponsePreservesStoredFacts(t *testing.T) {
 	alertID := uuid.MustParse("20000000-0000-4000-8000-000000000001")
 	instanceID := uuid.MustParse("10000000-0000-4000-8000-000000000001")
 	ruleID := uuid.MustParse("30000000-0000-4000-8000-000000000001")
-	handler := &Handler{clock: projectionClock{now: now}}
+	handler := &Handler{clock: clock.NewManual(now)}
 
 	got, err := handler.alertObservationResponse(alertObservationProjection{
 		id:               pgtype.UUID{Bytes: alertID, Valid: true},
@@ -196,12 +197,4 @@ func TestAlertObservationResponsePreservesStoredFacts(t *testing.T) {
 	if !got.Paused || got.PausedAt == nil || !got.PausedAt.Equal(pausedAt) {
 		t.Fatalf("pause projection = %t at %v", got.Paused, got.PausedAt)
 	}
-}
-
-type projectionClock struct{ now time.Time }
-
-func (clock projectionClock) Now() time.Time { return clock.now }
-
-func (projectionClock) Ticker(time.Duration) (<-chan time.Time, func()) {
-	return make(chan time.Time), func() {}
 }

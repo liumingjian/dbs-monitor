@@ -88,6 +88,12 @@ type Service struct {
 	diskPath       string
 	diskThresholds platformhealth.DiskThresholds
 
+	// cycled is an internal seam. When set, it receives once after every
+	// scheduler cycle Run completes, so a test driving Run with a
+	// clock.Manual knows the cycle finished before it asserts. Never set in
+	// production.
+	cycled chan<- struct{}
+
 	capacityMonitorConfigured      bool
 	capacityBudgetBytes            *int64
 	capacityThresholds             platformhealth.DiskThresholds
@@ -217,11 +223,11 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		return service.executeCapabilitySnapshot(ctx, run)
 	}
 	run.startedAt = service.clock.Now().UTC()
-	startedWall := time.Now()
+	startedAt := service.clock.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
 	if service.health != nil && service.health.RejectSampleWrites() {
 		outcome.err = service.recordPlatformDatabaseCapacityEmergency(ctx, run)
-		outcome.duration = time.Since(startedWall)
+		outcome.duration = service.clock.Since(startedAt)
 		return outcome
 	}
 	if run.task.Kind != metric.TaskKindProbe {
@@ -258,6 +264,7 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 			outcome.err = fmt.Errorf("read instance credential: %w", err)
 			return outcome
 		}
+		probeStartedAt := service.clock.Now()
 		conn, err := service.dialer.Dial(taskCtx, config)
 		if err == nil {
 			var one int
@@ -266,16 +273,16 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 		}
 		if err != nil {
 			outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, true)
-			outcome.duration = time.Since(startedWall)
+			outcome.duration = service.clock.Since(startedAt)
 			return outcome
 		}
-		latency := float64(time.Since(startedWall).Microseconds()) / 1000
+		latency := float64(service.clock.Since(probeStartedAt).Microseconds()) / 1000
 		outcome.err = service.recordSuccess(ctx, run, collectedBatch{samples: []collectedSample{
 			{metricID: metric.MetricAvailabilityReachable, value: metric.NonNumericMetricEncodings[metric.MetricAvailabilityReachable.String()]["reachable"]},
 			{metricID: metric.MetricProbeLatencyMS, value: latency},
 		}})
 		outcome.result = resultSuccess
-		outcome.duration = time.Since(startedWall)
+		outcome.duration = service.clock.Since(startedAt)
 		return outcome
 	}
 
@@ -300,12 +307,12 @@ func (service *Service) executeTask(ctx context.Context, run scheduledRun) execu
 			service.invalidateQueryConnection(run.target.ID)
 		}
 		outcome.result, outcome.err = service.finishFailure(ctx, run, taskCtx, connectionFailure)
-		outcome.duration = time.Since(startedWall)
+		outcome.duration = service.clock.Since(startedAt)
 		return outcome
 	}
 	outcome.err = service.recordSuccess(ctx, run, batch)
 	outcome.result = resultSuccess
-	outcome.duration = time.Since(startedWall)
+	outcome.duration = service.clock.Since(startedAt)
 	return outcome
 }
 
@@ -371,7 +378,7 @@ func (service *Service) isCollectionPaused(ctx context.Context, instanceID pgtyp
 }
 
 func (service *Service) executeCapabilitySnapshot(ctx context.Context, run scheduledRun) executionOutcome {
-	startedWall := time.Now()
+	startedAt := service.clock.Now()
 	outcome := executionOutcome{run: run, result: resultFailed}
 	taskCtx, cancel := context.WithTimeout(ctx, capabilitySnapshotTimeout)
 	defer cancel()
@@ -391,7 +398,7 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 		if !stored && storeErr == nil {
 			outcome.result = resultSuccess
 		}
-		outcome.duration = time.Since(startedWall)
+		outcome.duration = service.clock.Since(startedAt)
 		return outcome
 	}
 	states, complete := capability.ProbeSnapshot(taskCtx, conn)
@@ -401,7 +408,7 @@ func (service *Service) executeCapabilitySnapshot(ctx context.Context, run sched
 	} else if complete || !stored {
 		outcome.result = resultSuccess
 	}
-	outcome.duration = time.Since(startedWall)
+	outcome.duration = service.clock.Since(startedAt)
 	return outcome
 }
 
@@ -759,6 +766,9 @@ func (service *Service) Run(ctx context.Context, interval time.Duration) {
 				scheduler.dispatch(ctx)
 			}
 			scheduler.logSummary(ctx, now, refreshErr)
+			if service.cycled != nil {
+				service.cycled <- struct{}{}
+			}
 		}
 	}
 }
