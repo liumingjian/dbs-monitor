@@ -1,3 +1,9 @@
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --press: 140ms;
+  --enter: 200ms;
+}
 *, *::before, *::after { box-sizing: border-box; }
 html, body, #root { margin: 0; min-height: 100%; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 body { background: #f9f9f7; color: #0b0b0b; }
@@ -8,6 +14,8 @@ figcaption { color: #52514e; font-size: 13px; }
 .header-link { color: rgba(255, 255, 255, 0.82); }
 .header-link:hover { color: #fff; }
 .header-link-label { color: inherit; }
+/* antd Badge resets color on its root, which cut the inherit chain and made this link dark-on-dark. */
+.header-link .ant-badge, .header-link .ant-badge-status-text { color: inherit; }
 .header-user { color: rgba(255, 255, 255, 0.9); }
 .workbench-heading { width: 100%; justify-content: space-between; }
 .monitoring-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; padding: 12px 0 18px; border-bottom: 1px solid #e1e0d9; }
@@ -21,12 +29,41 @@ figcaption { color: #52514e; font-size: 13px; }
 .metric-card .ant-card-head-title { font-size: 15px; }
 .metric-card .ant-card-extra { min-width: 0; }
 .metric-chart-canvas { height: 250px; width: 100%; }
+.metric-figure { margin: 0; transition: opacity 160ms var(--ease-out); }
+.metric-figure[data-loading="true"] { opacity: 0.75; }
+.metric-data-table > summary { cursor: pointer; color: #52514e; font-size: 13px; padding-top: 4px; }
+.metric-data-table[open] > summary { margin-bottom: 4px; }
+.metric-threshold-note { color: #52514e; font-size: 13px; }
+
+/* Entry: cards fade up once, staggered, so 18 charts don't land as one slab. */
+@media (prefers-reduced-motion: no-preference) {
+  .metric-grid > .metric-card, .overview-grid > .overview-card {
+    animation: card-enter var(--enter) var(--ease-out) both;
+    animation-delay: calc(var(--card-index, 0) * 40ms);
+  }
+}
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Press feedback: the interface should visibly hear the click. */
+@media (hover: hover) and (pointer: fine) {
+  .ant-btn, .metric-card .ant-card-head-title, .header-link { transition: transform var(--press) var(--ease-out), color var(--press) ease; }
+  .ant-btn:active { transform: scale(0.97); }
+}
 .settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; max-width: 760px; }
 .rule-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
 .collection-todo-item { border: 1px solid #e1e0d9; border-radius: 6px; padding: 12px 16px; background: #fff; }
 .collection-todo-item summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
 .collection-todo-item p { margin: 12px 0 8px; }
 .instance-filter-bar { width: 100%; }
+/* Evaluated-but-OK rows are context, not the reason anyone opened this page. */
+.alert-row-resolved > td { color: #6b6a65; background: #fbfbf9; }
+.time-quick-label { color: #52514e; font-size: 13px; }
+.time-quick-ranges .ant-btn { padding-inline: 9px; }
+.freshness { color: #52514e; font-size: 13px; white-space: nowrap; }
+.freshness[data-fresh="false"] { color: #ad4e00; font-weight: 600; }
 .overview-status { border-block: 1px solid #d9d8d1; padding: 18px 0; }
 .overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 .overview-card { min-width: 0; border-radius: 6px; }
@@ -62,8 +99,17 @@ figcaption { color: #52514e; font-size: 13px; }
   .overview-grid { grid-template-columns: minmax(0, 1fr); }
   .overview-card[data-overview-module="troubleshooting"] { grid-column: auto; }
   .alert-detail-grid, .rule-snapshot-layout, .event-guidance { grid-template-columns: minmax(0, 1fr); }
+  .workbench-heading .ant-space-item { min-width: 0; }
+  .monitoring-controls { gap: 10px; }
+  .monitoring-controls > .ant-space { width: 100%; }
+  .time-quick-ranges .ant-btn { padding-inline: 5px; font-size: 12px; }
+  .monitoring-controls input[type="datetime-local"] { min-width: 0; max-width: 150px; }
 }
 
 @media (min-width: 641px) and (max-width: 980px) {
   .metric-grid[data-columns="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }

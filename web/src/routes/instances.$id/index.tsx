@@ -10,12 +10,13 @@ import {
 } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Card, Descriptions, Empty, List, Space, Spin, Typography } from 'antd'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { AlertStatus } from '../../domain/AlertStatus'
 import { Freshness } from '../../domain/Freshness'
+import { formatMetricNumber } from '../../domain/MetricChart'
 import { HealthStatus } from '../../domain/HealthStatus'
 import { SuppressionTags } from '../../domain/SuppressionTags'
 import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
@@ -27,6 +28,7 @@ import {
 import { rootRoute } from '../root'
 import { metricOption, type MetricID } from './metricOptions'
 import {
+  OVERVIEW_MODULES,
   latestMetricFacts,
   overviewDestinations,
   overviewMetricGroups,
@@ -90,7 +92,6 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
   if (!instanceQuery.data) return <Alert type="error" showIcon title="无法加载实例总览" />
 
   const instance = instanceQuery.data
-  const destinations = overviewDestinations(id, search)
   const metrics = metricsQuery.data?.metrics
   const unresolvedAlertCount = instance.health.counts.critical + instance.health.counts.warning + instance.health.counts.info
 
@@ -114,8 +115,10 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
         <Space wrap>
           <Typography.Text type="secondary">{instance.host}:{instance.port} · {instance.database}</Typography.Text>
           {instance.collection_pause.paused && <Link to="/instances/$id/collection" params={{ id }}>查看采集暂停设置</Link>}
-          {instance.health.flags.in_maintenance && <Button type="link" href="/alert-settings/maintenance-windows">查看维护窗口</Button>}
-          <Button icon={<CalendarOutlined />} href={destinations.maintenance}>新建维护窗口</Button>
+          {instance.health.flags.in_maintenance && <Link to="/alert-settings/maintenance-windows">查看维护窗口</Link>}
+          <Link to="/alert-settings/maintenance-windows/new" search={{ instance_id: id }}>
+            <Button icon={<CalendarOutlined />}>新建维护窗口</Button>
+          </Link>
         </Space>
       </Space>
     </section>
@@ -148,7 +151,9 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
           { key: 'unresolved', label: '未恢复告警', children: unresolvedAlertCount },
           { key: 'attribution', label: '当前归因', children: attributionLabel(instance) },
         ]} />
-        <Button type="link" href={destinations.alerts}>查看当前告警</Button>
+        <Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}>
+          <Button type="link">查看当前告警</Button>
+        </Link>
       </OverviewCard>
 
       <OverviewCard module="resources" title="核心资源" icon={<DashboardOutlined />} loading={metricsQuery.isPending}>
@@ -157,7 +162,9 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
 
       <OverviewCard module="database" title="数据库负载" icon={<DatabaseOutlined />} loading={metricsQuery.isPending}>
         <MetricFacts id={id} search={search} metricIDs={overviewMetricGroups.database} metrics={metrics} />
-        <Button type="link" href={destinations.sessions}>查看锁等待会话</Button>
+        <Link to="/instances/$id/sessions" params={{ id }} search={{ from: search.from, to: search.to, filter: 'lock_wait' }}>
+          <Button type="link">查看锁等待会话</Button>
+        </Link>
       </OverviewCard>
 
       <OverviewCard module="replication" title="复制状态" icon={<ClusterOutlined />} loading={metricsQuery.isPending}>
@@ -170,10 +177,18 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
 
       <OverviewCard module="troubleshooting" title="快速排障入口" icon={<ToolOutlined />}>
         <Space wrap>
-          <Button type="primary" icon={<DashboardOutlined />} href={destinations.monitoring}>标准监控</Button>
-          <Button icon={<DatabaseOutlined />} href={destinations.sessions}>会话与阻塞</Button>
-          <Button icon={<AlertOutlined />} href={destinations.alerts}>当前告警</Button>
-          <Button icon={<ApiOutlined />} href={destinations.collection}>采集状态</Button>
+          <Link to="/instances/$id/monitoring" params={{ id }} search={search}>
+            <Button type="primary" icon={<DashboardOutlined />}>标准监控</Button>
+          </Link>
+          <Link to="/instances/$id/sessions" params={{ id }} search={{ from: search.from, to: search.to, filter: 'lock_wait' }}>
+            <Button icon={<DatabaseOutlined />}>会话与阻塞</Button>
+          </Link>
+          <Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}>
+            <Button icon={<AlertOutlined />}>当前告警</Button>
+          </Link>
+          <Link to="/instances/$id/collection" params={{ id }} search={search.metric ? { metric: search.metric } : {}}>
+            <Button icon={<ApiOutlined />}>采集状态</Button>
+          </Link>
         </Space>
       </OverviewCard>
     </div>
@@ -189,6 +204,7 @@ function OverviewCard({ module, title, icon, loading = false, children }: {
 }) {
   return <Card
     className="overview-card"
+    style={{ '--card-index': OVERVIEW_MODULES.indexOf(module) } as CSSProperties}
     data-overview-module={module}
     title={<Space>{icon}<span>{title}</span></Space>}
     loading={loading}
@@ -209,7 +225,11 @@ function MetricFacts({ id, search, metricIDs, metrics }: {
     const destinations = overviewDestinations(id, { ...search, metric: metricID })
     return {
       key: metricID,
-      label: <a href={destinations.monitoring}>{metricOption(metricID).label}</a>,
+      label: <Link
+        to="/instances/$id/monitoring"
+        params={{ id }}
+        search={{ ...search, metric: metricID }}
+      >{metricOption(metricID).label}</Link>,
       children: <MetricFactValue
         metricID={metricID}
         snapshot={snapshot}
@@ -311,8 +331,7 @@ function formatMetricValue(metricID: MetricID, value: number, unit: string): str
   if (metricID === 'pg.replication.connection_state') {
     return ['已停止', '启动中', '初始化', '追赶中', '流复制中', '备份中', '停止中', '等待中', '重启中'][value] ?? `未知编码 ${value}`
   }
-  const formatted = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(value)
-  return unit ? `${formatted} ${unit}` : formatted
+  return formatMetricNumber(value, unit)
 }
 
 function assertNever(value: never): never {
