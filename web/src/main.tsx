@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { ConfigProvider } from 'antd'
+import { Link, RouterProvider, createRoute, createRouter, redirect } from '@tanstack/react-router'
+import { Button, ConfigProvider, Result } from 'antd'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { alertsRoute } from './routes/alerts'
@@ -26,7 +26,15 @@ import { rootRoute } from './routes/root'
 import { usersRoute } from './routes/users'
 import './styles.css'
 
+// `/` matched nothing, so the entry URL rendered a bare English "Not Found".
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  beforeLoad: () => { throw redirect({ to: '/instances' }) },
+})
+
 const routeTree = rootRoute.addChildren([
+  indexRoute,
   loginRoute,
   alertsRoute,
   instancesRoute,
@@ -49,7 +57,12 @@ const routeTree = rootRoute.addChildren([
   maintenanceSettingsRoute,
   maintenanceNewRoute,
 ])
-const router = createRouter({ routeTree, defaultPreload: 'intent' })
+const router = createRouter({ routeTree, defaultPreload: 'intent', defaultNotFoundComponent: () => <Result
+    status="404"
+    title="页面不存在"
+    subTitle="该地址没有对应的页面，可能是链接过期或输入有误。"
+    extra={<Link to="/instances"><Button type="primary">返回实例列表</Button></Link>}
+  /> })
 const queryClient = new QueryClient()
 
 declare module '@tanstack/react-router' {

@@ -1,7 +1,6 @@
 import { DatabaseOutlined, SettingOutlined } from '@ant-design/icons'
 import { Link } from '@tanstack/react-router'
 import { Button, Space, Tabs, Typography } from 'antd'
-import { sessionPageHref } from './sessionLayout'
 import type { MonitoringSearch } from './timeRange'
 
 type WorkbenchHeaderProps = {
@@ -33,7 +32,14 @@ export function WorkbenchHeader({ id, instanceName, activeKey, search }: Workben
         key: 'monitoring',
         label: <Link to="/instances/$id/monitoring" params={{ id }} search={search}>监控与报警</Link>,
       },
-      { key: 'sessions', label: <a href={sessionPageHref(id, search)}>会话与阻塞</a> },
+      {
+        key: 'sessions',
+        label: <Link
+          to="/instances/$id/sessions"
+          params={{ id }}
+          search={{ from: search.from, to: search.to }}
+        >会话与阻塞</Link>,
+      },
       {
         key: 'events',
         label: <Link
@@ -46,7 +52,6 @@ export function WorkbenchHeader({ id, instanceName, activeKey, search }: Workben
         key: 'alerts',
         label: <Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}>告警</Link>,
       },
-      { key: 'collection', label: '采集管理', disabled: true },
     ]} />
   </>
 }

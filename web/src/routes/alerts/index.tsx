@@ -7,7 +7,7 @@ import { apiErrorMessage } from '../../api/errors'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { AlertStatus } from '../../domain/AlertStatus'
-import { Freshness } from '../../domain/Freshness'
+import { Freshness, elapsedLabel } from '../../domain/Freshness'
 import { AlertSuppressionTags } from '../../domain/SuppressionTags'
 import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
@@ -99,10 +99,17 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
               />}
             </Space>
             {current.error && <Alert type="error" showIcon title={apiErrorMessage(current.error, '当前告警加载失败')} />}
+            {!sortCoversEveryRow(current.data?.total) && <Alert
+              type="warning"
+              showIcon
+              title={`排序只覆盖本页 ${alertPageSize} 条`}
+              description="接口不支持按状态筛选，正在告警的规则可能落在其他页。"
+            />}
             <Table<AlertObservation>
               rowKey="id"
               loading={current.isPending}
-              dataSource={current.data?.items ?? []}
+              dataSource={[...(current.data?.items ?? [])].sort(compareAlertUrgency)}
+              rowClassName={(alert) => isUnresolved(alert.status) ? '' : 'alert-row-resolved'}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有符合筛选的当前告警" /> }}
               pagination={{
                 current: page,
@@ -143,12 +150,63 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
   </Space>
 }
 
+function statusRank(status: components['schemas']['AlertStatus']): number {
+  switch (status) {
+    case 'FIRING':
+      return 4
+    case 'NO_DATA':
+      return 3
+    case 'PENDING':
+      return 2
+    case 'RECOVERED':
+      return 1
+    case 'OK':
+      return 0
+    default:
+      return assertNever(status)
+  }
+}
+
+function severityRank(severity: AlertSeverity): number {
+  switch (severity) {
+    case 'critical':
+      return 3
+    case 'warning':
+      return 2
+    case 'info':
+      return 1
+    default:
+      return assertNever(severity)
+  }
+}
+
+export function isUnresolved(status: components['schemas']['AlertStatus']): boolean {
+  return statusRank(status) >= statusRank('PENDING')
+}
+
+/** The sort runs on what is loaded, and the endpoint takes only limit/offset. */
+export function sortCoversEveryRow(total: number | undefined): boolean {
+  return total === undefined || total <= alertPageSize
+}
+
+/**
+ * The endpoint returns every evaluated rule, so a single FIRING row can sit below
+ * twenty OK ones. Rank what is burning first, then by severity, then by how long.
+ */
+export function compareAlertUrgency(left: AlertObservation, right: AlertObservation): number {
+  const byStatus = statusRank(right.status) - statusRank(left.status)
+  if (byStatus !== 0) return byStatus
+  const bySeverity = severityRank(right.severity) - severityRank(left.severity)
+  if (bySeverity !== 0) return bySeverity
+  return right.duration_ms - left.duration_ms
+}
+
 const currentColumns: TableColumnsType<AlertObservation> = [
   {
     title: '状态与标记',
     width: 260,
     render: (_, alert) => <Space direction="vertical" size={4}>
-      <Space><AlertStatus status={alert.status} />{severityTag(alert.severity)}</Space>
+      <Space><AlertStatus status={alert.status} />{isUnresolved(alert.status) && severityTag(alert.severity)}</Space>
       <AlertSuppressionTags
         inMaintenance={alert.in_maintenance}
         disposition={alert.disposition}
@@ -243,20 +301,21 @@ function maintenanceWindowLabel(inMaintenance: boolean | null | undefined): stri
   return inMaintenance ? '是' : '否'
 }
 
-function optionalNumber(value: number | undefined): string {
-  return value === undefined ? '—' : String(value)
+const alertNumber = new Intl.NumberFormat('zh-CN', { maximumSignificantDigits: 4 })
+
+export function optionalNumber(value: number | undefined): string {
+  // String(8.242500000000001) wrapped the cell to three lines. Rounding is fine;
+  // compacting is not — an operator has to be able to read a threshold back.
+  return value === undefined ? '—' : alertNumber.format(value)
 }
 
 function optionalTime(value: string | undefined): string {
   return value === undefined ? '—' : new Date(value).toLocaleString()
 }
 
-function durationLabel(milliseconds: number): string {
-  const minutes = Math.floor(milliseconds / 60_000)
-  if (minutes < 60) return `${minutes} 分钟`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时`
-  return `${Math.floor(hours / 24)} 天`
+export function durationLabel(milliseconds: number): string {
+  // Flooring to minutes reported every sub-minute alert as "0 分钟".
+  return elapsedLabel(Math.floor(milliseconds / 1000))
 }
 
 function assertNever(value: never): never {

@@ -1,12 +1,12 @@
 import { InfoCircleOutlined, ProfileOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Card, Descriptions, Empty, Modal, Segmented, Select, Space, Spin, Switch, Tabs, Typography } from 'antd'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { Freshness } from '../../domain/Freshness'
-import { MetricChart, metricUnavailability, type MetricChartSeries } from '../../domain/MetricChart'
+import { MetricChart, metricUnavailability, type MetricChartSeries, type MetricThreshold } from '../../domain/MetricChart'
 import { TimeRangePicker } from '../../domain/TimeRangePicker'
 import { unavailabilityHref, type Unavailability } from '../../domain/UnavailabilityBlock'
 import { rootRoute } from '../root'
@@ -55,9 +55,34 @@ export const standardMonitoringRoute = createRoute({
 
 type ResponseMetric = components['schemas']['MetricSeriesResponse']['metrics'][number]
 type CollectionTask = components['schemas']['CollectionTaskState']
+type AlertRule = components['schemas']['AlertRule']
 
 const standardMonitoringPollingOptions = { refetchInterval: pollingIntervals.standardMonitoring }
 const enhancedMonitoringPollingOptions = { refetchInterval: pollingIntervals.enhancedMonitoring }
+
+/**
+ * A chart of a metric that has an alerting rule should show where that rule fires;
+ * without the line the operator has to hold the threshold in their head.
+ */
+export function instanceThresholds(
+  rules: AlertRule[] | undefined,
+  instanceID: string,
+  metricIDs: readonly string[],
+  metrics: ResponseMetric[] | undefined,
+): MetricThreshold[] {
+  if (!rules) return []
+  return rules
+    .filter((rule) => rule.enabled)
+    .filter((rule) => rule.scope === 'ALL' || rule.instance_ids.includes(instanceID))
+    .filter((rule) => metricIDs.includes(rule.metric_id))
+    .flatMap((rule) => {
+      // Without the metric there is no unit, and a threshold drawn against a guessed
+      // unit lands on the wrong axis. Drop it rather than invent one.
+      const unit = metrics?.find((metric) => metric.metric === rule.metric_id)?.unit
+      if (unit === undefined) return []
+      return [{ label: rule.name, unit, value: rule.threshold, severity: rule.severity }]
+    })
+}
 
 function StandardMonitoringRoutePage() {
   const { id } = standardMonitoringRoute.useParams()
@@ -95,6 +120,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
       query: { metric: standardMonitoringMetricIDs, from: search.from, to: search.to, step },
     },
   }, standardMonitoringPollingOptions)
+  const rulesQuery = $api.useQuery('get', '/api/v1/alert-rules', {}, standardMonitoringPollingOptions)
   const selectedChart = findStandardMonitoringChart(search.metric)
 
   function updateSearch(update: Partial<MonitoringSearch>) {
@@ -154,13 +180,14 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
       <section key={group.key} aria-labelledby={`${group.key}-heading`}>
         <Typography.Title id={`${group.key}-heading`} level={3}>{group.title}</Typography.Title>
         <div className="metric-grid" data-columns={columns}>
-          {group.charts.map((chart) => {
+          {group.charts.map((chart, chartIndex) => {
             const view = buildChartView(chart, metricsQuery.data?.metrics)
             const primaryMetric = chart.metrics[0]
             return (
               <Card
                 key={chart.key}
                 className="metric-card"
+                style={{ '--card-index': chartIndex } as CSSProperties}
                 title={chart.title}
                 extra={<Space size="small">
                   {chart.drilldown && <Button
@@ -185,6 +212,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
                   unavailabilityHref={metricUnavailabilityHref(id, primaryMetric, view.unavailability)}
                   connectionGroup={connected ? `standard-monitoring-${id}` : undefined}
                   loading={metricsQuery.isFetching}
+                  thresholds={instanceThresholds(rulesQuery.data, id, chart.metrics, metricsQuery.data?.metrics)}
                 />
               </Card>
             )
@@ -272,6 +300,7 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
             return <Card
               key={metricID}
               className="metric-card enhanced-metric-card"
+              style={{ '--card-index': selectedMetrics.indexOf(metricID) } as CSSProperties}
               title={option.label}
               extra={<Space size="small">
                 {metricID === 'pg.query.long_running_count' && <Button
