@@ -1,0 +1,199 @@
+/*
+ * 采集管理的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定；
+ * 在表格附近再加一个滚动容器，粘性表头就会掉进表格里。
+ *
+ * 涉及 Carbon 单类名规则（`.cds--link`、手风琴、开关）的地方，选择器写成重复类名把
+ * 优先级抬高一档 —— 只写一遍就得靠样式表注入顺序压过它，而那个顺序由打包器的模块图
+ * 决定，边距会静默算成 0（先例见 primitives/NotificationBar.css）。
+ */
+
+.collection-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，表格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.collection-page__back.collection-page__back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+}
+
+.collection-page__skeleton,
+.collection-page__content {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.collection-page__header h1,
+.collection-page__header p {
+  margin: 0;
+}
+
+.collection-page__header p {
+  color: var(--cds-text-secondary);
+}
+
+/* 采集总状态与 Agent 状态是一对，宽屏并排；1280px 下两栏各自还有 460px 以上。 */
+.collection-page__pair {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 66rem) {
+  .collection-page__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- 键值清单 ---- */
+
+.collection-kv {
+  display: grid;
+  gap: var(--dbs-spacing-sm) var(--dbs-spacing-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+@media (max-width: 42rem) {
+  .collection-kv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.collection-kv__item {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.collection-kv dt {
+  color: var(--cds-text-secondary);
+}
+
+.collection-kv dd {
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 配置缺失待办 ---- */
+
+.collection-todo__body,
+.collection-config__body {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 手风琴自带上下发丝线，紧贴面板边缘时会和面板自己的线叠成两条。 */
+.collection-todo__list.collection-todo__list {
+  border-block-start: none;
+}
+
+.collection-todo__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-sm);
+  inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.collection-todo__count {
+  color: var(--cds-text-secondary);
+  flex: none;
+}
+
+.collection-todo__hint {
+  margin: 0 0 var(--dbs-spacing-xs);
+}
+
+.collection-todo__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+  margin: 0;
+}
+
+/* ---- 表格内容 ---- */
+
+.collection-capability__na {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  min-inline-size: 0;
+}
+
+.collection-capability__na span:last-child {
+  color: var(--cds-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-metrics__capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xxs) var(--dbs-spacing-xs);
+  min-inline-size: 0;
+  color: var(--cds-text-secondary);
+}
+
+/* ---- 采集配置 ---- */
+
+/* 表格自带内边距，面板的内容区没有 flush，所以这里把它拉回到面板的左右边缘。 */
+.collection-config__table {
+  margin-inline: calc(-1 * var(--dbs-spacing-md));
+}
+
+.collection-config__editor {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  min-inline-size: 0;
+}
+
+/* 单元格里的数字输入框只需要放得下三位数加加减两个按钮。类名落在组件库的
+   `.cds--form-item` 外壳上（NumberInput 就是这么接 className 的），所以宽度给在这里。 */
+.collection-config__number.collection-config__number {
+  inline-size: 9rem;
+  flex: none;
+}
+
+.collection-config__switches {
+  display: grid;
+  gap: var(--dbs-spacing-lg);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+@media (max-width: 66rem) {
+  .collection-config__switches {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.collection-config__switch {
+  display: grid;
+  gap: var(--dbs-spacing-xs);
+  justify-items: start;
+  min-inline-size: 0;
+}
+
+.collection-config__switch p {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.collection-config__switch .dbs-form-field {
+  inline-size: 100%;
+  max-inline-size: 20rem;
+}
