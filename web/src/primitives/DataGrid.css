@@ -80,8 +80,29 @@
   transition: background-color var(--dbs-duration-fast) var(--dbs-easing);
 }
 
+/*
+ * 密集档：32px 是**行的实际高度**，不只是下限。
+ *
+ * 行上的 `block-size` 是最小值而不是上限：一行 14px 正文的行盒 20.02px，加上组件库 sm 档
+ * 单元格上下各 7px 的内边距就是 34px，行高于是名不副实。所以密集档必须把单元格上下内边距
+ * 一并压到 4px（20.02 + 8 = 28.02 < 32），行才真的落在 32px 上。页面不要再各自补这一条。
+ *
+ * 行内状态图元的尺寸也从这里传染下去：`StatusBadge` / `StatusDot` 读下面几个自定义属性，
+ * 密集档由外层表格自动生效，页面既不需要、也无法忘记逐个切换。
+ */
+.dbs-datagrid[data-density='dense'] {
+  --dbs-status-badge-block-size: 1rem; /* 16px：32px 行里上下各留 8px */
+  --dbs-status-badge-padding-inline: var(--dbs-spacing-xxs);
+  --dbs-status-badge-gap: var(--dbs-spacing-xxs);
+  --dbs-status-dot-gap: var(--dbs-spacing-xxs);
+}
+
 .dbs-datagrid[data-density='dense'] .dbs-datagrid__table tbody tr {
   block-size: var(--dbs-table-row-height-dense);
+}
+
+.dbs-datagrid[data-density='dense'] .dbs-datagrid__table tbody .dbs-datagrid__td {
+  padding-block: var(--dbs-spacing-xxs);
 }
 
 .dbs-datagrid .dbs-datagrid__table tbody tr:hover {

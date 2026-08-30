@@ -73,6 +73,13 @@
   white-space: nowrap;
 }
 
+/* 标记条（domain/SuppressionTags）默认允许换行，详情页那种宽松版式要的就是换行；
+   表格里一格只写一行，装不下交给单元格的省略号。选择器带页面前缀，特指度高于
+   `.dbs-marker-list`，两张样式表谁先加载都不影响结果。 */
+.instances-page .instances-table__markers {
+  flex-wrap: nowrap;
+}
+
 .instances-table__counts {
   /* 计数是等宽数字，右对齐后 C/W/I 三格在行与行之间对得齐。 */
   justify-content: flex-end;
@@ -109,16 +116,4 @@
 /* 密集档位下这一列不渲染（规范：32px 行丢掉缩略图），所以这里只管标准档位的高度。 */
 .instances-page .dbs-sparkline {
   inline-size: 100%;
-}
-
-/*
- * 密集档真的收到 32px。
- *
- * `DataGrid` 把行高写成 `block-size: 32px`，但单元格里一行 14px 正文的行盒是 20.02px，
- * 加上组件库 sm 档单元格上下各 7px 的内边距就是 34px —— `block-size` 是最小值不是上限，
- * 于是密集档名不副实。这不是本页特有的，任何一张密集表都会撞上（已写进结题报告，
- * 修在表格外壳里才对）。在那之前，这里只压本页单元格的上下内边距，不碰外壳的其它规则。
- */
-.instances-page .dbs-datagrid[data-density='dense'] .dbs-datagrid__td {
-  padding-block: var(--dbs-spacing-xxs);
 }

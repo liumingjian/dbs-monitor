@@ -157,6 +157,12 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 3. 组件库生成的类名（`.ant-*`）、`data-row-key` 之类的组件库私有 DOM 属性、DOM 嵌套结构：
    **一律禁止**。它们在换库时全部失效，且失效不携带任何信息。
 
+**表格的行只有一个钩子：`DataGrid` 的 `rowTestId`。** 行的外壳归共享组件，页面没有别的地方
+能给行挂标识，所以定位行既不许回到组件库的 `data-row-key`，也不该退化成「含有某个单元格的行」
+这类偶然写法。列表页一律传 `rowTestId="<实体>-row"`（`instance-row`、`alert-row`），
+测试用 `getByTestId('instance-row')`；它只挂在数据行上，骨架行与空态行不带，
+因此它的计数就等于数据行数。想定位某一行仍然用 `getByRole('row', { name: ... })`。
+
 已有的 `data-overview-module` / `data-columns` / `data-fresh` / `data-loading` 是承载领域取值的
 语义属性，不是测试标识，保留原样；只有纯粹为定位而存在的钩子才叫 `data-testid`。
 
