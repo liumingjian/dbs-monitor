@@ -3,7 +3,8 @@
 .dbs-status-dot {
   display: inline-flex;
   align-items: center;
-  gap: var(--dbs-spacing-xs);
+  /* 与 StatusBadge 同一套机制：间距由所处的密度上下文给，密集表格里自动收紧。 */
+  gap: var(--dbs-status-dot-gap, var(--dbs-spacing-xs));
   min-inline-size: 0;
 }
 

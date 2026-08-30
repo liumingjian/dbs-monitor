@@ -64,9 +64,9 @@ test('instance list renders and filters 50 instance projections', async ({ page 
     }],
   } }))
 
-  // 行不再自带 data-testid：行的外壳现在是共享的表格组件（primitives/DataGrid），
-  // 页面无法给每一行挂标识。改成「渲染了健康状态的那些行」——同样是外部可观察的事实。
-  const instanceRows = page.getByRole('row').filter({ has: page.getByTestId('health-status') })
+  // 行的外壳是共享的表格组件（primitives/DataGrid），它提供 `rowTestId` 这一个行钩子：
+  // 只挂在数据行上，骨架行与空态行不带，所以这个计数就是数据行数。
+  const instanceRows = page.getByTestId('instance-row')
 
   const startedAt = Date.now()
   await page.goto('/instances')

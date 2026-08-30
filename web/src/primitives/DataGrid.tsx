@@ -41,6 +41,15 @@ export type DataGridProps<Row> = {
   rowTone?: (row: Row) => StatusTone | undefined
   /** 行高档位：`standard` 40px（默认），`dense` 32px。永远显式，没有第三种。 */
   density?: 'standard' | 'dense'
+  /**
+   * 每一条数据行上挂的 `data-testid`，例如 `instance-row`。
+   *
+   * 表格外壳一接管行的渲染，页面就再没有地方给行挂标识了，于是测试只能退回到
+   * 「含有某个单元格内容的行」这类偶然定位，或者组件库的私有属性（`data-row-key`）。
+   * 这个钩子是**唯一**的答案：所有列表页用同一套 `<实体>-row` 命名，不要各自再发明。
+   * 只挂在真正的数据行上 —— 骨架行与空态行不带，`getByTestId` 的计数就等于数据行数。
+   */
+  rowTestId?: string
   sort?: DataGridSort
   onSortChange?: (sort: DataGridSort) => void
   /** 载入中：表体换成骨架行，表头照常显示。 */
@@ -93,6 +102,7 @@ export function DataGrid<Row>({
   rowKey,
   rowTone,
   density = 'standard',
+  rowTestId,
   sort,
   onSortChange,
   loading = false,
@@ -186,7 +196,12 @@ export function DataGrid<Row>({
 
           {!loading &&
             rows.map((row) => (
-              <TableRow key={rowKey(row)} className="dbs-datagrid__row" data-tone={rowTone?.(row)}>
+              <TableRow
+                key={rowKey(row)}
+                className="dbs-datagrid__row"
+                data-tone={rowTone?.(row)}
+                data-testid={rowTestId}
+              >
                 {columns.map((column) => (
                   <TableCell
                     key={column.key}

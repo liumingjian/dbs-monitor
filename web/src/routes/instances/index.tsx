@@ -9,9 +9,9 @@ import { $api } from '../../api/client'
 import { apiErrorMessage, applyApiFieldErrors } from '../../api/errors'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
-import { collectionPausePresentation } from '../../domain/CollectionPausedTag'
 import { Freshness } from '../../domain/Freshness'
-import { HEALTH_STATUSES } from '../../domain/HealthStatus'
+import { HEALTH_STATUSES, HealthStatus, healthLabel } from '../../domain/HealthStatus'
+import { SuppressionTags } from '../../domain/SuppressionTags'
 import { zodResolver } from '../../forms/zodResolver'
 import type { DataGridColumn } from '../../primitives/DataGrid'
 import { DataGrid } from '../../primitives/DataGrid'
@@ -22,7 +22,6 @@ import { Panel } from '../../primitives/Panel'
 import { SkeletonBlock } from '../../primitives/SkeletonBlock'
 import { Sparkline } from '../../primitives/Sparkline'
 import type { StatusTone } from '../../primitives/StatusBadge'
-import { StatusBadge } from '../../primitives/StatusBadge'
 import { StatusDot } from '../../primitives/StatusDot'
 import { TruncatedText } from '../../primitives/TruncatedText'
 import {
@@ -226,6 +225,7 @@ function InstancesPage() {
           skeletonRows={8}
           rows={pageInstances}
           rowKey={(instance) => instance.id}
+          rowTestId="instance-row"
           rowTone={severityBarTone}
           columns={instanceColumns(density)}
           empty={{
@@ -373,51 +373,6 @@ const alertSeverityOptions: AlertSeverityOption[] = [
   { value: 'info', label: 'Info 告警' },
 ]
 
-function healthLabel(status: HealthStatusValue): string {
-  switch (status) {
-    case 'CRITICAL':
-      return '严重'
-    case 'WARNING':
-      return '警告'
-    case 'UNKNOWN':
-      return '未知'
-    case 'HEALTHY':
-      return '正常'
-    case 'PAUSED':
-      return '已暂停'
-    default:
-      return assertNever(status)
-  }
-}
-
-/// 健康状态的**呈现文案**。暂停时带上已暂停时长，与实例总览页说的是同一句话
-/// （两边都走 `collectionPausePresentation`），列表与详情因此不会各说各的。
-function healthStatusText(instance: Instance): string {
-  if (instance.health.status === 'PAUSED' && instance.collection_pause.updated_at !== undefined) {
-    return collectionPausePresentation(new Date(instance.collection_pause.updated_at), new Date()).label
-  }
-  return healthLabel(instance.health.status)
-}
-
-/// 健康状态 → 展示层的状态档位。业务枚举到视觉档位的映射留在页面里：
-/// `primitives/` 不认识 `CRITICAL` 是什么，这条边界是它能被别的产品直接搬走的原因。
-function healthTone(status: HealthStatusValue): StatusTone {
-  switch (status) {
-    case 'CRITICAL':
-      return 'critical'
-    case 'WARNING':
-      return 'warning'
-    case 'HEALTHY':
-      return 'normal'
-    case 'UNKNOWN':
-      return 'unknown'
-    case 'PAUSED':
-      return 'unknown'
-    default:
-      return assertNever(status)
-  }
-}
-
 /// 行首色条只画严重与警告两档 —— 规范里这条 3px 色条说的是「这一行要处理」，
 /// 每一行都上色等于没有色条。它重复的是同一行「健康」列已经写着的字，不是唯一信号。
 function severityBarTone(instance: Instance): StatusTone | undefined {
@@ -503,11 +458,10 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
       header: '健康',
       minWidth: 96,
       grow: 1.4,
+      // 健康状态整块交给 domain/HealthStatus：文案、档位、暂停时长都在那里定义一次，
+      // 实例总览读的是同一个组件（也是同一个 data-testid），两处因此不可能各说各的。
       cell: (instance) => (
-        // data-testid 与迁移前一致：实例总览页读的是同一个标识，两处文案必须对得上。
-        <span data-testid="health-status">
-          <StatusDot tone={healthTone(instance.health.status)}>{healthStatusText(instance)}</StatusDot>
-        </span>
+        <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
       ),
     },
     {
@@ -545,7 +499,7 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
       key: 'markers',
       header: '标记',
       minWidth: 96,
-      cell: (instance) => <InstanceMarkers flags={instance.health.flags} />,
+      cell: (instance) => <SuppressionTags className="instances-table__markers" flags={instance.health.flags} />,
     },
     {
       key: 'address',
@@ -626,18 +580,6 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
   })
 
   return columns
-}
-
-function InstanceMarkers({ flags }: { flags: components['schemas']['HealthFlags'] }) {
-  return (
-    <span className="instances-table__markers">
-      {flags.no_data && <StatusBadge tone="unknown">无数据</StatusBadge>}
-      {flags.in_maintenance && <StatusBadge tone="unknown">维护中</StatusBadge>}
-      {flags.recently_recovered && <StatusBadge tone="normal">近期恢复</StatusBadge>}
-      {flags.ignored > 0 && <StatusBadge tone="unknown">{`已忽略 ${flags.ignored}`}</StatusBadge>}
-      {flags.configuration_missing > 0 && <StatusBadge tone="warning">{`配置缺失 ${flags.configuration_missing}`}</StatusBadge>}
-    </span>
-  )
 }
 
 const trendMetric = 'pg.connection.total'

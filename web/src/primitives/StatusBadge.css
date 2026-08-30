@@ -6,10 +6,13 @@
 .dbs-status-badge {
   display: inline-flex;
   align-items: center;
-  gap: var(--dbs-spacing-xxs);
+  gap: var(--dbs-status-badge-gap, var(--dbs-spacing-xxs));
   max-inline-size: 100%;
-  min-block-size: 1.25rem; /* 20px：40px 行高里上下各留 10px */
-  padding-inline: var(--dbs-spacing-xs);
+  /* 尺寸由所处的密度上下文给，缺省是 20px（40px 行高里上下各留 10px）。
+     密集表格（primitives/DataGrid 的 dense 档）在容器上改写这几个属性，徽章跟着变小，
+     所以没有「密集徽章」这个 prop —— 页面无从忘记切换，也无从各自切换成不同的值。 */
+  min-block-size: var(--dbs-status-badge-block-size, 1.25rem);
+  padding-inline: var(--dbs-status-badge-padding-inline, var(--dbs-spacing-xs));
   border-radius: var(--dbs-radius-none);
   overflow: hidden;
   white-space: nowrap;
