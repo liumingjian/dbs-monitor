@@ -1,0 +1,133 @@
+/*
+ * 会话合并页的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距一律走令牌，字体档位走 `.dbs-*` 类，没有字面量色值。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定：
+ * 在表格附近再加一个滚动容器，粘性表头就会掉进表格里（DESIGN.md 明确写了这个坑）。
+ */
+
+.sessions-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，表格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sessions-page__heading h2 {
+  margin: 0;
+}
+
+.sessions-page__heading p {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+/* 工具条：筛选控件与元信息在面板之外，和列表页样板同一档。 */
+.sessions-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--dbs-spacing-sm);
+}
+
+.sessions-toolbar__note {
+  padding-block-end: var(--dbs-spacing-xs);
+  color: var(--cds-text-secondary);
+}
+
+.sessions-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--dbs-spacing-md);
+}
+
+.sessions-meta__secondary {
+  color: var(--cds-text-secondary);
+}
+
+/* 同一份快照的五个切面。面板是 flush 的，所以切换器自己补回内边距，
+   并在下方留一条发丝线把它和表头分开。 */
+.sessions-views {
+  padding: var(--dbs-spacing-sm) var(--dbs-spacing-md);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+  /* 五档在窄屏放不下时横向排队，而不是把面板撑破。表格不受影响：这不是表格的滚动容器。 */
+  overflow: auto hidden;
+}
+
+/* 分页条在面板 footer 里，去掉 Carbon 自带的上边框：footer 上面已经有一条发丝线了。 */
+.sessions-pagination {
+  border-block-start: none;
+  inline-size: 100%;
+}
+
+/* 不可用说明：一句解释加一个去处，排版与 domain/UnavailabilityBlock 一致。 */
+.sessions-unavailable {
+  display: grid;
+  gap: var(--dbs-spacing-sm);
+  justify-items: start;
+}
+
+/* ---- 可复制的单元格 ----
+ *
+ * 复制按钮**不占布局宽度**：常驻按钮会把本来就不宽的列再吃掉 32px。它绝对定位贴在格子
+ * 尾端，悬停或键盘聚焦时才显形，但始终在 tab 序列里，键盘与读屏用户任何时候都够得着。
+ */
+
+.session-copyable {
+  position: relative;
+  display: block;
+  min-inline-size: 0;
+  /* 给按钮让出尾端的位置。只留 8px：这一页每一列都紧，16px 的让位在客户端地址那种
+     刚好装得下的列上就是一次真实的信息损失。按钮自带不透明底色，短一点也不会露字。 */
+  padding-inline-end: var(--dbs-spacing-xs);
+}
+
+.session-copyable__button {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.25rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dbs-radius-none);
+  /* 按钮压在文字尾端上，底色必须是实色，否则省略号会从按钮底下透出来。
+     取的是行悬停时的底色 —— 按钮本来就只在悬停或聚焦时才显形。 */
+  background-color: var(--cds-layer-01);
+  /* 蓝色只表示可交互，这里正是可交互 —— 但默认不抢注意力，隐形时也不占视觉。 */
+  color: var(--cds-link-primary);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.dbs-datagrid__row:hover .session-copyable__button,
+.session-copyable__button:focus-visible,
+.session-copyable__button:hover {
+  opacity: 1;
+}
+
+.session-copyable__button:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+/* 复制成功的播报节点：读屏听得见，眼睛看不见。不能用 `display: none`，那样不会被播报。 */
+.session-copyable__status {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-copyable__button {
+    transition: none;
+  }
+}

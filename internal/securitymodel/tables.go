@@ -45,9 +45,15 @@ var PageAuthorizations = []PageAuthorization{
 	{Path: "/instances/$id/alerts/rules", Sources: []string{"web/src/routes/instances.$id/alerts/rules.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id/collection", Sources: []string{"web/src/routes/instances.$id/collection.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id/settings", Sources: []string{"web/src/routes/instances.$id/settings.tsx"}, Visible: allRoles},
-	{Path: "/instances/$id/sessions", Sources: []string{"web/src/routes/instances.$id/sessions.tsx"}, Visible: allRoles},
-	{Path: "/instances/$id/sessions/long-query-samples", Sources: []string{"web/src/routes/instances.$id/longQuerySamples.tsx"}, Visible: allRoles},
-	{Path: "/instances/$id/sessions/query-statistics", Sources: []string{"web/src/routes/instances.$id/queryStatisticsPage.tsx"}, Visible: allRoles},
+	// 会话与阻塞：三个视图合并成一个多标签页面（票 #200），三份内容都在这一个地址下。
+	{Path: "/instances/$id/sessions", Sources: []string{
+		"web/src/routes/instances.$id/sessions.tsx",
+		"web/src/routes/instances.$id/longQuerySamples.tsx",
+		"web/src/routes/instances.$id/queryStatisticsPage.tsx",
+	}, Visible: allRoles},
+	// 合并前的两个子地址仍然注册着，只是重定向到对应标签，所以路由源是合并页那一个文件。
+	{Path: "/instances/$id/sessions/long-query-samples", Sources: []string{"web/src/routes/instances.$id/sessions.tsx"}, Visible: allRoles},
+	{Path: "/instances/$id/sessions/query-statistics", Sources: []string{"web/src/routes/instances.$id/sessions.tsx"}, Visible: allRoles},
 	{Path: "/alerts", Sources: []string{"web/src/routes/alerts/index.tsx"}, Visible: allRoles},
 	{Path: "/users", Sources: []string{"web/src/routes/users/index.tsx"}, Visible: allRoles},
 	// Alert settings is one merged multi-tab page. Every write on it lives in one of the four

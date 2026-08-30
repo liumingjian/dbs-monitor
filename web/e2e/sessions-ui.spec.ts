@@ -16,20 +16,44 @@ test('sessions, long-query samples, and query statistics preserve investigation 
   await expect(page.getByText('快照已截断')).toBeVisible()
   await expect(page.getByText('select * from')).toHaveCount(0)
 
-  await page.getByRole('link', { name: '长查询采样记录' }).click()
-  await expect(page).toHaveURL((url) => inheritedContext(url))
+  // 三个视图合并成一个多标签页面之后，页签是 `role="tab"` 的真锚点而不是 `role="link"`
+  // （web/CLAUDE.md 的先例：`<Tab as={链接组件}>`）。定位方式跟着角色走，断言的行为没变：
+  // 点它会导航，并且调查上下文一个参数都不丢。
+  await page.getByRole('tab', { name: '长查询采样记录' }).click()
+  await expect(page).toHaveURL((url) => inheritedContext(url) && url.searchParams.get('tab') === 'long-query-samples')
   await expect(page.getByText('标识具有时效性')).toBeVisible()
   await expect(page.getByText('4242', { exact: true })).toBeVisible()
   await expect(page.getByText('select * from')).toHaveCount(0)
 
-  await page.getByRole('link', { name: '查询统计排行' }).click()
-  await expect(page).toHaveURL((url) => inheritedContext(url))
+  await page.getByRole('tab', { name: '查询统计排行' }).click()
+  await expect(page).toHaveURL((url) => inheritedContext(url) && url.searchParams.get('tab') === 'query-statistics')
   await expect(page.getByText('987654321', { exact: true })).toBeVisible()
   await expect(page.getByText('select * from')).toHaveCount(0)
 
   await page.setViewportSize({ width: 390, height: 844 })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true)
   await page.screenshot({ path: '/tmp/issue-86-query-statistics-mobile.png', fullPage: true })
+})
+
+/// 合并没有让任何一条旧地址失效：两个旧子地址都重定向到对应标签，调查上下文原样带过去。
+test('the merged sessions page keeps every old address working', async ({ page }) => {
+  await mockAPIs(page)
+  const context = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&metric=pg.query.long_running_count&sampled_at=${encodeURIComponent(sampledAt)}`
+
+  for (const [oldPath, tab, tabName] of [
+    ['long-query-samples', 'long-query-samples', '长查询采样记录'],
+    ['query-statistics', 'query-statistics', '查询统计排行'],
+  ] as const) {
+    await page.goto(`/instances/${instanceID}/sessions/${oldPath}?${context}`)
+    await expect(page).toHaveURL((url) =>
+      url.pathname === `/instances/${instanceID}/sessions` && inheritedContext(url) && url.searchParams.get('tab') === tab)
+    await expect(page.getByRole('tab', { name: tabName })).toHaveAttribute('aria-selected', 'true')
+  }
+
+  // 会话快照那一档的地址从来没有变过，实例总览的锁等待下钻照旧落在对应切面上。
+  await page.goto(`/instances/${instanceID}/sessions?${context}&filter=lock_wait`)
+  await expect(page.getByRole('tab', { name: '当前会话' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: /锁等待 1/ })).toHaveAttribute('aria-selected', 'true')
 })
 
 async function mockAPIs(page: Page) {
