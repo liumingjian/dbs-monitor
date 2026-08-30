@@ -67,7 +67,10 @@ export function FormField({ label, helperText, errorText, required = false, chil
         </p>
       )}
       {errorText !== undefined && (
-        <p className="dbs-form-field__error dbs-caption" id={errorId}>
+        // `role="alert"` 是必需的，不是锦上添花：Carbon 的 TextArea / Select 在展开 rest props
+        // *之后*才算自己的 aria-describedby，会把这里传下去的 describedBy 覆盖掉。有了 alert 角色，
+        // 错误无论有没有被 describedby 引用到都会被读出来。
+        <p className="dbs-form-field__error dbs-caption" id={errorId} role="alert">
           {errorText}
         </p>
       )}
