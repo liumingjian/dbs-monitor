@@ -1,0 +1,33 @@
+/* 实例工作台页头。页签条本身的样式由 Carbon 的 tabs 给，这里只排版标题与操作。 */
+
+.workbench-header {
+  display: grid;
+  gap: var(--dbs-spacing-xs);
+}
+
+.workbench-header__back {
+  justify-self: start;
+}
+
+.workbench-header__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.workbench-header__heading h1,
+.workbench-header__heading p {
+  margin: 0;
+}
+
+.workbench-header__heading p {
+  color: var(--cds-text-secondary);
+}
+
+.workbench-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+}

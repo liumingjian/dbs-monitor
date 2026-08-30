@@ -10,13 +10,6 @@ body { background: #f9f9f7; color: #0b0b0b; }
 table { border-collapse: collapse; width: 100%; margin-top: 12px; }
 th, td { border-bottom: 1px solid #e1e0d9; padding: 8px; text-align: left; }
 figcaption { color: #52514e; font-size: 13px; }
-.app-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
-.header-link { color: rgba(255, 255, 255, 0.82); }
-.header-link:hover { color: #fff; }
-.header-link-label { color: inherit; }
-/* antd Badge resets color on its root, which cut the inherit chain and made this link dark-on-dark. */
-.header-link .ant-badge, .header-link .ant-badge-status-text { color: inherit; }
-.header-user { color: rgba(255, 255, 255, 0.9); }
 .workbench-heading { width: 100%; justify-content: space-between; }
 .monitoring-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; padding: 12px 0 18px; border-bottom: 1px solid #e1e0d9; }
 .enhanced-monitoring-controls .ant-select { flex: 1; }
@@ -49,7 +42,7 @@ figcaption { color: #52514e; font-size: 13px; }
 
 /* Press feedback: the interface should visibly hear the click. */
 @media (hover: hover) and (pointer: fine) {
-  .ant-btn, .metric-card .ant-card-head-title, .header-link { transition: transform var(--press) var(--ease-out), color var(--press) ease; }
+  .ant-btn, .metric-card .ant-card-head-title { transition: transform var(--press) var(--ease-out), color var(--press) ease; }
   .ant-btn:active { transform: scale(0.97); }
 }
 .settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; max-width: 760px; }
@@ -80,9 +73,6 @@ figcaption { color: #52514e; font-size: 13px; }
 .settings-section { border-top: 1px solid #e1e0d9; padding-top: 20px; }
 .settings-section-heading { width: 100%; justify-content: space-between; margin-bottom: 16px; }
 @media (max-width: 640px) {
-  .app-header { padding-inline: 16px; }
-  .app-header h3 { display: none; }
-  .app-header .ant-space { gap: 10px !important; }
   .settings-form-grid { grid-template-columns: minmax(0, 1fr); }
   .rule-editor-grid { grid-template-columns: minmax(0, 1fr); }
   .collection-todo-item summary { align-items: flex-start; flex-direction: column; }

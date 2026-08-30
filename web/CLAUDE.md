@@ -86,6 +86,23 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 跨页继承 search params：`web/src/routes/instances/index.tsx`。
 领域图表组件：`web/src/domain/MetricChart.tsx`。
 展示组件基线：`web/src/primitives/`（面板 `Panel.tsx`、表格外壳 `DataGrid.tsx`、抽屉 `Drawer.tsx`）。
+应用外框（炭黑页头 + 可折叠侧栏）：`web/src/routes/root/index.tsx`；
+折叠状态是纯模块 `web/src/routes/root/navCollapse.ts`，不要在组件里再写一份存储读写。
+
+### 页签条是导航，不是受控状态
+
+`/instances/$id/*` 与 `/alert-settings/*` 的页签条本身就是地址切换。写成
+`<Tabs selectedIndex onChange={navigate}>` 能保住 `role="tab"` 与 `aria-selected`，但页签退化成
+`<button>`：中键新开、复制链接、悬停预取全都没了，而规范不允许丢功能点。
+
+**做法：页签一律 `<Tab as={链接组件}>`。** Carbon 的 `Tab` 收 `as`，渲染出来是真锚点，而
+`role="tab"` / `aria-selected` / `aria-controls` / 方向键漫游仍由 Carbon 照常给（1.115.0 实测）。
+`selectedIndex` 由当前路由算出；`TabList` 给 `activation="manual"` —— 自动激活会让方向键在不导航的
+情况下改选中态，页签与地址就对不上了。
+
+`as` 槽只收组件，不能顺带把路由属性一起交出去（`params` / `search` 的类型与 `to` 绑定，转一手就
+退化成任意对象）。所以每个去处包成一个「已经知道自己去哪儿」的组件，并用 `useMemo` 固定它的身份 ——
+身份一变锚点就重挂，键盘焦点会被甩掉。样板见 `web/src/routes/instances.$id/workbench.tsx`。
 
 ## 测试定位
 

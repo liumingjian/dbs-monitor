@@ -1,0 +1,143 @@
+/*
+ * 应用外框的版式。颜色一律走令牌：炭黑页头、侧栏底色与发丝线都由 Carbon 的 ui-shell
+ * 样式给，这里只补规范里 Carbon 没有的三件事 —— 选中项的 3px 前导色条、分组标题、
+ * 以及折叠状态下的角标。
+ */
+
+.dbs-shell {
+  min-block-size: 100vh;
+}
+
+/* 内容区。页头是 fixed 的，侧栏也是，所以内容靠外边距让位；
+   宽屏只放大内边距，内容本身不设最大宽度 —— 表格和图表要用满给它的宽度。 */
+.dbs-shell__content {
+  margin-block-start: var(--dbs-header-height);
+  margin-inline-start: var(--dbs-shell-nav-width);
+  padding: var(--dbs-page-padding);
+  /* 这里刻意没有过渡：内容区的外边距同时受折叠状态与视口宽度影响，给它加过渡会让
+     「换一个视口宽度」这件事在 240ms 里一直处于横向溢出状态。侧栏自己的宽度是有过渡的。 */
+}
+
+.dbs-shell[data-nav='expanded'] { --dbs-shell-nav-width: var(--dbs-sidenav-width); }
+.dbs-shell[data-nav='rail'] { --dbs-shell-nav-width: var(--dbs-sidenav-width-collapsed); }
+.dbs-shell[data-nav='none'] { --dbs-shell-nav-width: 0; }
+
+@media (min-width: 100rem) {
+  .dbs-shell__content { padding: var(--dbs-page-padding-wide); }
+}
+
+/* Carbon 在 SideNav 前面会渲染一层遮罩，供它自己那套「小屏浮层导航」用。这里的侧栏是常驻的
+   （672px 以下直接退出，见文件末尾），遮罩只会在小屏上盖住整页、把点击全吃掉。 */
+.dbs-shell > .cds--side-nav__overlay {
+  display: none;
+}
+
+/* 页头是 fixed 的，`scrollIntoView` 不知道这件事，会把目标滚到页头底下。 */
+.dbs-shell__content,
+.dbs-shell__content * {
+  scroll-margin-block-start: calc(var(--dbs-header-height) + var(--dbs-spacing-xs));
+}
+
+/* 侧栏 */
+
+.dbs-shell-nav {
+  border-inline-end: 1px solid var(--cds-border-subtle);
+}
+
+.dbs-shell-nav .cds--side-nav__items {
+  padding-block-start: var(--dbs-spacing-xs);
+}
+
+.dbs-shell-nav__group {
+  list-style: none;
+}
+
+.dbs-shell-nav__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dbs-shell-nav__heading {
+  margin: 0;
+  padding: var(--dbs-spacing-sm) var(--dbs-spacing-md) var(--dbs-spacing-xxs);
+  color: var(--cds-text-secondary);
+  text-transform: none;
+}
+
+/* 选中项：选中底色 + 3px 前导色条。色条给到全部链接（选中时才上色），
+   这样选中与未选中的文字起点一致，切换时不会横向抖一下。 */
+.dbs-shell-nav .cds--side-nav__link {
+  border-inline-start: 3px solid transparent;
+}
+
+.dbs-shell-nav .cds--side-nav__link--current,
+.dbs-shell-nav .cds--side-nav__link[aria-current='page'] {
+  border-inline-start-color: var(--cds-border-interactive);
+  background-color: var(--dbs-surface-selected);
+}
+
+.dbs-shell-nav__label {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  justify-content: space-between;
+  inline-size: 100%;
+}
+
+/* 展开时未处置告警数跟在标签后面；折叠时同一个数字变成图标角上的角标。 */
+.dbs-shell-nav__count,
+.dbs-shell-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: 1rem;
+  padding-inline: 0.25rem;
+  border-radius: var(--dbs-radius-none);
+  background-color: var(--dbs-status-critical);
+  color: var(--cds-text-on-color);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
+.dbs-shell-badge-host {
+  position: relative;
+  display: inline-flex;
+}
+
+.dbs-shell-badge {
+  position: absolute;
+  inset-block-start: -0.375rem;
+  inset-inline-start: 0.5rem;
+}
+
+/* 通知渠道失败只表示「有 / 没有」，没有数量，所以是一个点而不是一个数。 */
+.dbs-shell-badge--dot {
+  min-inline-size: 0.375rem;
+  padding: 0;
+  block-size: 0.375rem;
+  inline-size: 0.375rem;
+}
+
+/* 页头里的图标按钮默认是深底浅字，角标压在图标右上角。 */
+.cds--header__action .dbs-shell-badge-host {
+  color: inherit;
+}
+
+.dbs-shell-password-form {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+
+/* 672px 以下：侧栏与它的开关一起退出，页面回到「只有页头 + 内容」。
+   这是三条路里唯一不伤人的一条 —— 让 256px 的侧栏浮在内容上会盖住页签条这类顶部控件，
+   留一条 48px 窄轨则要从 390px 的屏幕里再切掉 48px，而这些页面在手机上本来就是刚好放下的。
+   规范里手机端只有告警流一个屏（768px 收单列），那个宽度侧栏还在。 */
+@media (max-width: 41.9375rem) {
+  /* 与上面那三条同样是「类 + 属性值」的比重，写少一个属性值反而压不过它们。 */
+  .dbs-shell[data-nav='expanded'],
+  .dbs-shell[data-nav='rail'] { --dbs-shell-nav-width: 0; }
+  .dbs-shell .dbs-shell-nav,
+  .dbs-shell .cds--header__menu-toggle { display: none; }
+  .dbs-shell__content { padding: var(--dbs-spacing-md); }
+}

@@ -33,7 +33,7 @@ var (
 
 // PageAuthorizations is the page-visibility half of A10. Every role can see every registered page.
 var PageAuthorizations = []PageAuthorization{
-	{Path: AuthenticatedShell, Sources: []string{"web/src/routes/root.tsx"}, Visible: allRoles},
+	{Path: AuthenticatedShell, Sources: []string{"web/src/routes/root/index.tsx"}, Visible: allRoles},
 	{Path: "/login", Sources: []string{"web/src/routes/login.tsx"}, Visible: allRoles},
 	{Path: "/instances", Sources: []string{"web/src/routes/instances/index.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id", Sources: []string{"web/src/routes/instances.$id/index.tsx"}, Visible: allRoles},

@@ -7,6 +7,15 @@ import { OneTimePasswordModal } from '.'
 beforeAll(() => {
   const getComputedStyle = window.getComputedStyle
   vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => getComputedStyle(element))
+  // jsdom 没有 ResizeObserver，Carbon 的对话框会用到它。只是环境垫片，不动任何断言。
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    writable: true,
+    value: class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  })
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     value: vi.fn().mockImplementation(() => ({
