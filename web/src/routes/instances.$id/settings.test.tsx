@@ -83,7 +83,10 @@ describe('Agent one-time token', () => {
 
     expect(screen.getByDisplayValue('one-time-token')).toBeTruthy()
     expect(screen.getByLabelText('Agent 安装命令')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /关.*闭/ }))
+    // 名字写死成「关闭」而不是 /关.*闭/：对话框右上角的关闭按钮现在叫「关闭对话框」
+    // （primitives/Modal 的中文默认值），正则会同时命中它和页脚的「关闭」。
+    // 与 routes/users/users.test.tsx 里同一个模式的收窄一致。
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     expect(screen.queryByDisplayValue('one-time-token')).toBeNull()
     expect(screen.queryByLabelText('Agent 安装命令')).toBeNull()
   })

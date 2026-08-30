@@ -1,0 +1,193 @@
+/*
+ * 接入设置的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * 涉及 Carbon 单类名规则（`.cds--link`、输入框、复制按钮）的地方，选择器写成重复类名
+ * 把优先级抬高一档 —— 只写一遍就得靠样式表注入顺序压过它，而那个顺序由打包器的模块图
+ * 决定，边距会静默算成 0（先例见 primitives/NotificationBar.css）。
+ */
+
+.settings-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-page__back.settings-page__back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+}
+
+.settings-page__header h1,
+.settings-page__header p {
+  margin: 0;
+}
+
+.settings-page__header p {
+  color: var(--cds-text-secondary);
+}
+
+/* ---- 键值清单 ---- */
+
+.settings-kv {
+  display: grid;
+  gap: var(--dbs-spacing-sm) var(--dbs-spacing-md);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+@media (max-width: 66rem) {
+  .settings-kv {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 42rem) {
+  .settings-kv {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settings-kv__item {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.settings-kv dt {
+  color: var(--cds-text-secondary);
+}
+
+.settings-kv dd {
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---- 表单 ---- */
+
+.settings-form {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 四个字段在宽屏排成两列：名称与主机是长文本，端口与库名短，两两成对读起来最快。 */
+.settings-form__grid {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 42rem) {
+  .settings-form__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settings-form__actions {
+  display: flex;
+  gap: var(--dbs-spacing-xs);
+}
+
+/* ---- 一键复制 ---- */
+
+/* 只读长文本 + 复制按钮：输入框吃掉全部富余宽度，按钮贴着它的起始边不动。 */
+.settings-copy-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.settings-copy-row__value {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.settings-copy-row .cds--copy-btn {
+  flex: none;
+}
+
+/* 令牌与安装命令是要原样粘走的东西，等宽字体才看得出哪里断行、哪里是零。 */
+.settings-copy-row__value .cds--text-input,
+.settings-copy-row__value .cds--text-area {
+  font-family: var(--dbs-font-mono);
+}
+
+/* ---- PG 凭据 ---- */
+
+.settings-credential__password {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+}
+
+.settings-credential__mask {
+  inline-size: 10rem;
+  flex: none;
+}
+
+/* ---- Agent ---- */
+
+.settings-agent {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-agent__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+}
+
+.settings-token {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---- 危险区 ---- */
+
+/* 危险区靠一条状态色左边条与标题区分，不铺大面积红底：
+   状态色永远只是小面积记号（DESIGN.md）。 */
+.settings-danger.settings-danger {
+  border-inline-start: 3px solid var(--dbs-status-critical);
+}
+
+.settings-danger__zone {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-danger__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.settings-danger__text {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.settings-danger__text p {
+  margin: 0;
+}
+
+.settings-danger__text p:last-child {
+  color: var(--cds-text-secondary);
+}
+
+.settings-confirm {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
