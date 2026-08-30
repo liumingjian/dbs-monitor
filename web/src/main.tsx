@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Link, RouterProvider, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { Button, ConfigProvider, Result } from 'antd'
+import { RouterProvider, createRoute, createRouter, redirect } from '@tanstack/react-router'
+import { ConfigProvider } from 'antd'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { alertsRoute } from './routes/alerts'
@@ -27,6 +27,7 @@ import { sessionsRoute } from './routes/instances.$id/sessions'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { rootRoute } from './routes/root'
+import { AppErrorBoundary, NotFoundPage, RouteErrorPage } from './routes/root/errorBoundary'
 import { usersRoute } from './routes/users'
 // Carbon 令牌层。全应用唯一的 Sass 入口，必须只 import 一次；见 styles/index.scss 顶部。
 // 排在 styles.css 之前：迁移期间旧页面仍由 styles.css 决定外观。
@@ -66,12 +67,15 @@ const routeTree = rootRoute.addChildren([
   maintenanceSettingsRoute,
   maintenanceNewRoute,
 ])
-const router = createRouter({ routeTree, defaultPreload: 'intent', defaultNotFoundComponent: () => <Result
-    status="404"
-    title="页面不存在"
-    subTitle="该地址没有对应的页面，可能是链接过期或输入有误。"
-    extra={<Link to="/instances"><Button type="primary">返回实例列表</Button></Link>}
-  /> })
+// `defaultErrorComponent` 是路由级的错误边界：一个页面在渲染或取数时抛出异常，
+// 它接住那一段路由，外框与导航都还在。`AppErrorBoundary` 是外面那一层，接住外框自己
+// 和路由器初始化时抛出的异常 —— 那两类发生在路由匹配之外，没有它就是整页白屏。
+const router = createRouter({
+  routeTree,
+  defaultPreload: 'intent',
+  defaultNotFoundComponent: NotFoundPage,
+  defaultErrorComponent: RouteErrorPage,
+})
 const queryClient = new QueryClient()
 
 declare module '@tanstack/react-router' {
@@ -79,5 +83,13 @@ declare module '@tanstack/react-router' {
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><ConfigProvider><QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider></ConfigProvider></React.StrictMode>,
+  <React.StrictMode>
+    <AppErrorBoundary>
+      <ConfigProvider>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </ConfigProvider>
+    </AppErrorBoundary>
+  </React.StrictMode>,
 )
