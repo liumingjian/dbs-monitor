@@ -23,9 +23,23 @@ TS + React + Vite 纯 SPA，AntD 6 + ECharts 6，TanStack Router + openapi-react
 ## 目录
 
 路由树即页面树；页面私有件不上浮。
-`domain/` 封闭清单：`AlertStatus` / `CollectionPausedTag` / `Freshness` / `HealthStatus` / `MetricChart` / `SuppressionTags` / `TimeRangePicker` / `UnavailabilityBlock`。
-不建 `components/` / `utils/` / `shared/` / `common/`。
+共享件只有两层：`domain/`（带业务含义）与 `primitives/`（无业务含义的展示件）。
+不建 `components/` / `utils/` / `shared/` / `common/` —— 这些名字不表达取舍，什么都能塞。
 `invalidateQueries` 只许出现在 `domain/<域>/mutations.ts`。
+
+### `domain/` 仍是封闭清单
+
+`AlertStatus` / `CollectionPausedTag` / `Freshness` / `HealthStatus` / `MetricChart` / `SuppressionTags` / `TimeRangePicker` / `UnavailabilityBlock`。
+清单只增不改语义：新增项须带业务含义，且在本文件登记。通用面板、表格外壳、指标条不得进入。
+
+### `primitives/`
+
+只放展示件：面板、表格外壳、状态徽标、指标条、通知条、抽屉、表单字段外壳、内联图标集。
+判定：**能否给它起一个不含本仓库任何术语的名字，并原样搬进一个与 PostgreSQL 监控无关的产品？**
+能 → `primitives/`；名字或取值绕不开实例 / 告警 / 指标 / 采集 / 抑制 / 新鲜度等概念 → `domain/`。
+约束：不认识任何业务概念（含枚举取值与其文案映射）；不取数（无 `useQuery` / 无 `openapi-react-query`）；
+不写 `invalidateQueries`；不认识路由（无 `Link` / `useNavigate` / 无 search params）。
+一件一文件，只导出组件；不放工具函数——`primitives/` 不是新的 `utils/`。
 
 ## 先例
 
