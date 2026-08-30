@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import './changedValueFlash.css'
+import './FlashOnChange.css'
 
 /**
  * 轮询页面的一个老问题：屏幕每 10–30 秒整块重画一次，而真正变了的往往只有一两个数。
@@ -18,7 +18,7 @@ import './changedValueFlash.css'
  * `prefers-reduced-motion: reduce` 时整条动画不发射（媒体查询包着，不是靠 duration 抹掉），
  * 数值照常更新，只是不闪。
  */
-export function ChangedValue({
+export function FlashOnChange({
   value,
   children,
   className,
@@ -44,7 +44,7 @@ export function ChangedValue({
 
   return (
     <span
-      className={['dbs-changed-value', className].filter(Boolean).join(' ')}
+      className={['dbs-flash-on-change', className].filter(Boolean).join(' ')}
       data-flash={phase === 'idle' ? undefined : phase}
     >
       {children ?? value}

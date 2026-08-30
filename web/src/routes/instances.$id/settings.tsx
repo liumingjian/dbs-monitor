@@ -11,6 +11,7 @@ import type { components } from '../../api/schema'
 import { zodResolver } from '../../forms/zodResolver'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import { KeyValueList } from '../../primitives/KeyValueList'
 import { Modal } from '../../primitives/Modal'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { NumberInput } from '../../primitives/NumberInput'
@@ -698,40 +699,20 @@ export function AgentRegistrationPanel({
         <p className="dbs-caption">当前角色可以查看接入状态，但不能登记、轮换、吊销或停用。</p>
       </NotificationBar>}
 
-      <dl className="settings-kv" aria-label="Agent 接入状态">
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">登记状态</dt>
-          <dd className="dbs-body"><StatusDot tone={statePresentation.tone}>{statePresentation.label}</StatusDot></dd>
-        </div>
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">期待在线</dt>
-          <dd className="dbs-body">{registration.agent_expected ? '是' : '否'}</dd>
-        </div>
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">首次登记</dt>
-          <dd className="dbs-body">{formatOptionalTime(registration.first_registered_at)}</dd>
-        </div>
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">最近签发</dt>
-          <dd className="dbs-body">{formatOptionalTime(registration.issued_at)}</dd>
-        </div>
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">最近吊销</dt>
-          <dd className="dbs-body">{formatOptionalTime(registration.revoked_at)}</dd>
-        </div>
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">令牌文件</dt>
-          <dd className="dbs-body dbs-numeric">{registration.installation.authentication_path}</dd>
-        </div>
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">文件权限</dt>
-          <dd className="dbs-body dbs-numeric">{registration.installation.file_mode}</dd>
-        </div>
-        <div className="settings-kv__item">
-          <dt className="dbs-caption">重启命令</dt>
-          <dd className="dbs-body dbs-numeric">{registration.installation.restart_command}</dd>
-        </div>
-      </dl>
+      <KeyValueList
+        label="Agent 接入状态"
+        columns={3}
+        items={[
+          { key: 'state', label: '登记状态', value: <StatusDot tone={statePresentation.tone}>{statePresentation.label}</StatusDot> },
+          { key: 'expected', label: '期待在线', value: registration.agent_expected ? '是' : '否' },
+          { key: 'first', label: '首次登记', value: formatOptionalTime(registration.first_registered_at) },
+          { key: 'issued', label: '最近签发', value: formatOptionalTime(registration.issued_at) },
+          { key: 'revoked', label: '最近吊销', value: formatOptionalTime(registration.revoked_at) },
+          { key: 'token', label: '令牌文件', value: <span className="dbs-numeric">{registration.installation.authentication_path}</span> },
+          { key: 'mode', label: '文件权限', value: <span className="dbs-numeric">{registration.installation.file_mode}</span> },
+          { key: 'restart', label: '重启命令', value: <span className="dbs-numeric">{registration.installation.restart_command}</span> },
+        ]}
+      />
 
       {/* 指纹是 64 个十六进制字符，没有人应该手抄它 —— 它和令牌一样，只读框加一个复制按钮。
           安装指引在这里常驻，不只出现在签发令牌那一次：重装时要的就是这几行。 */}
@@ -893,20 +874,15 @@ export function AgentTokenModal({ issued, onClose }: { issued: IssuedAgentToken 
           )}
         </FormField>
 
-        <dl className="settings-kv" aria-label="安装位置">
-          <div className="settings-kv__item">
-            <dt className="dbs-caption">令牌文件</dt>
-            <dd className="dbs-body dbs-numeric">{issued.registration.installation.authentication_path}</dd>
-          </div>
-          <div className="settings-kv__item">
-            <dt className="dbs-caption">文件权限</dt>
-            <dd className="dbs-body dbs-numeric">{issued.registration.installation.file_mode}</dd>
-          </div>
-          <div className="settings-kv__item">
-            <dt className="dbs-caption">重启命令</dt>
-            <dd className="dbs-body dbs-numeric">{issued.registration.installation.restart_command}</dd>
-          </div>
-        </dl>
+        <KeyValueList
+          label="安装位置"
+          columns={3}
+          items={[
+            { key: 'token', label: '令牌文件', value: <span className="dbs-numeric">{issued.registration.installation.authentication_path}</span> },
+            { key: 'mode', label: '文件权限', value: <span className="dbs-numeric">{issued.registration.installation.file_mode}</span> },
+            { key: 'restart', label: '重启命令', value: <span className="dbs-numeric">{issued.registration.installation.restart_command}</span> },
+          ]}
+        />
       </div>
     </Modal>
   )
@@ -957,28 +933,30 @@ function assertNever(value: never): never {
 /// 服务端不回传密码，所以这里**没有**、也不该有「显示密码」的按钮。
 export function CredentialSummary({ username }: { username: string }) {
   return (
-    <dl className="settings-kv" aria-label="PG 凭据">
-      <div className="settings-kv__item">
-        <dt className="dbs-caption">用户名</dt>
-        <dd className="dbs-body dbs-numeric">{username}</dd>
-      </div>
-      <div className="settings-kv__item">
-        <dt className="dbs-caption">密码</dt>
-        <dd className="dbs-body settings-credential__password">
-          <TextInput
-            id="settings-credential-password"
-            className="settings-credential__mask"
-            labelText=""
-            hideLabel
-            aria-label="密码状态"
-            type="password"
-            value={passwordMask}
-            readOnly
-            onChange={() => undefined}
-          />
-          <span className="dbs-caption">已设置</span>
-        </dd>
-      </div>
-    </dl>
+    <KeyValueList
+      label="PG 凭据"
+      columns={3}
+      items={[
+        { key: 'username', label: '用户名', value: <span className="dbs-numeric">{username}</span> },
+        {
+          key: 'password',
+          label: '密码',
+          value: <span className="settings-credential__password">
+            <TextInput
+              id="settings-credential-password"
+              className="settings-credential__mask"
+              labelText=""
+              hideLabel
+              aria-label="密码状态"
+              type="password"
+              value={passwordMask}
+              readOnly
+              onChange={() => undefined}
+            />
+            <span className="dbs-caption">已设置</span>
+          </span>,
+        },
+      ]}
+    />
   )
 }

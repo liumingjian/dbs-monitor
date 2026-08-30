@@ -22,7 +22,7 @@ import {
   lastCollectedAtLabel,
 } from '../instanceProjection'
 import { rootRoute } from '../root'
-import { ChangedValue } from './changedValueFlash'
+import { FlashOnChange } from '../../primitives/FlashOnChange'
 import { metricOption, type MetricID } from './metricOptions'
 import {
   latestMetricFacts,
@@ -77,7 +77,7 @@ function InstanceOverviewRoutePage() {
 /// → 七个模块面板。模块的集合与顺序由 `overview.ts` 的 `OVERVIEW_MODULES` 定死，
 /// 这里不另立一套。
 ///
-/// 刷新后确实变了的数值闪一次（`changedValueFlash.tsx`）：这一页每 30 秒整块重画，
+/// 刷新后确实变了的数值闪一次（`primitives/FlashOnChange`）：这一页每 30 秒整块重画，
 /// 没有这个提示就分不清「刷新了但没变」与「变了」。
 function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const instanceQuery = $api.useQuery(
@@ -150,9 +150,9 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
       </div>
       <div className="overview-page__status-line">
         <span className="overview-page__counts dbs-numeric">
-          <ChangedValue value={counts.critical}><span data-tone="critical">C{counts.critical}</span></ChangedValue>
-          <ChangedValue value={counts.warning}><span data-tone="warning">W{counts.warning}</span></ChangedValue>
-          <ChangedValue value={counts.info}><span data-tone="unknown">I{counts.info}</span></ChangedValue>
+          <FlashOnChange value={counts.critical}><span data-tone="critical">C{counts.critical}</span></FlashOnChange>
+          <FlashOnChange value={counts.warning}><span data-tone="warning">W{counts.warning}</span></FlashOnChange>
+          <FlashOnChange value={counts.info}><span data-tone="unknown">I{counts.info}</span></FlashOnChange>
         </span>
         <SuppressionTags flags={instance.health.flags} />
       </div>
@@ -289,7 +289,7 @@ function KeyValueList({ label, items }: {
       {items.map((item) => (
         <StructuredListRow key={item.key}>
           <StructuredListCell noWrap>{item.label}</StructuredListCell>
-          <StructuredListCell><ChangedValue value={item.value} /></StructuredListCell>
+          <StructuredListCell><FlashOnChange value={item.value} /></StructuredListCell>
         </StructuredListRow>
       ))}
     </StructuredListBody>
@@ -351,7 +351,7 @@ function MetricFact({ id, search, metricID, snapshot }: {
       return <MetricBar
         key={`${fact.sampledAt}-${index}`}
         label={name}
-        value={<ChangedValue value={value} />}
+        value={<FlashOnChange value={value} />}
         ratio={ratioOf(snapshot.unit, fact.value)}
         caption={dimensionLabel(fact.labels)}
       />

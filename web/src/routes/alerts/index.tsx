@@ -1,4 +1,4 @@
-import { ContentSwitcher, Pagination, Switch, Tab, TabList, Tabs, Toggle } from '@carbon/react'
+import { ContentSwitcher, Pagination, Switch, Tab, TabList, Tabs } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
@@ -18,6 +18,7 @@ import { Panel } from '../../primitives/Panel'
 import { SkeletonBlock } from '../../primitives/SkeletonBlock'
 import type { StatusTone } from '../../primitives/StatusBadge'
 import { StatusBadge } from '../../primitives/StatusBadge'
+import { Toggle } from '../../primitives/Toggle'
 import { TruncatedText } from '../../primitives/TruncatedText'
 import { rootRoute } from '../root'
 import { browserStorage } from '../root/navCollapse'
@@ -158,7 +159,6 @@ export function AlertObservationLists({ search, onSearchChange, tabLinks, headin
 
     <div className="alert-stream__toolbar" role="group" aria-label="告警筛选">
       {showingCurrent && <Toggle
-        className="alert-stream__toggle"
         id="alert-filter-include-paused"
         size="sm"
         labelText="包含已暂停冻结告警"
@@ -214,12 +214,16 @@ export function AlertObservationLists({ search, onSearchChange, tabLinks, headin
         : <DataGrid<AlertObservation>
             label={showingCurrent ? '当前告警列表' : '告警历史列表'}
             density={density}
+            // 11 / 13 列。组件库的 16px/侧内边距在这个列数下要吃掉 974px 里的 352–416px，
+            // 表头就开始被截成「维...」。紧凑档换回一半，见下面列定义上的说明。
+            cellPadding="compact"
             loading={query.isPending}
             skeletonRows={8}
             rows={rows}
             rowKey={(alert) => alert.id}
             rowTestId={rowTestId}
             rowTone={severityBarTone}
+            rowMuted={(alert) => !isUnresolved(alert.status)}
             columns={showingCurrent ? currentColumns : historyColumns}
             empty={{
               title: emptyTitle,
@@ -422,6 +426,9 @@ function SeverityBadge({ severity, status }: { severity: AlertSeverity; status: 
 
 /// 行首 3px 色条：只画「正在烧、而且够严重」的行。每一行都上色等于没有色条。
 /// 它重复的是同一行「状态」「级别」两列已经写着的字，不是唯一信号。
+///
+/// 与它成对的是 `rowMuted`（已恢复 / 评估通过的行退到灰底次要色）：一屏里
+/// 黑字白底的那几行就是还在烧的。两件事同一个维度的两端，一行不会同时命中。
 function severityBarTone(alert: AlertObservation): StatusTone | undefined {
   if (!isUnresolved(alert.status)) return undefined
   switch (alert.severity) {
@@ -439,23 +446,31 @@ function severityBarTone(alert: AlertObservation): StatusTone | undefined {
  * 迁移前「状态与标记」一格里塞着状态、级别、抑制标记三件事，40px 的行放不下；
  * 拆成三列之后一格只写一个事实，列与列之间扫视时对得齐。
  * 触发值与阈值反过来并成一格：读它们的方式本来就是比大小，`96 / 80` 是一个事实而不是两个。
+ *
+ * 宽度按 web/CLAUDE.md 的列宽契约算出来的，不是估的（1280px 下页面可用 974px）：
+ * 每列 `minWidth` = max(表头自然宽, 这一格里压不动的内容宽) + 紧凑档的 16px 内边距，
+ * 各列一律 `grow: 1`。两条都要守住才有意义 —— `grow` 一旦不等，某些列分到的宽度就会
+ * 低于自己的 `minWidth`，表头先被截掉的正是它们。合计 934 / 958 ≤ 974，因此 1280px 下
+ * 每列都不低于自己的下限，富余按下限比例分给最需要的长文本列。
+ *
+ * 压不动的内容：状态与级别徽标、`96 / 80`、「08-11 10:15」、行内图标链接。
+ * 压得动的：实例名、规则名、指标 ID —— 它们截断并带悬停全文，且都能在详情页读到全文。
  */
 const currentColumns: DataGridColumn<AlertObservation>[] = [
-  { key: 'status', header: '状态', minWidth: 96, grow: 1.21, cell: (alert) => <AlertStatus status={alert.status} /> },
-  { key: 'severity', header: '级别', minWidth: 80, grow: 1.25, cell: (alert) => <SeverityBadge severity={alert.severity} status={alert.status} /> },
-  { key: 'instance', header: '实例', minWidth: 140, grow: 0.83, cell: (alert) => <TruncatedText>{alert.instance_name}</TruncatedText> },
+  { key: 'status', header: '状态', minWidth: 69, cell: (alert) => <AlertStatus status={alert.status} /> },
+  { key: 'severity', header: '级别', minWidth: 57, cell: (alert) => <SeverityBadge severity={alert.severity} status={alert.status} /> },
+  { key: 'instance', header: '实例', minWidth: 96, cell: (alert) => <TruncatedText>{alert.instance_name}</TruncatedText> },
   // 规则名是这一行的身份，截断它等于让读者认不出这是什么告警：文本列里富余宽度优先给它。
-  { key: 'rule', header: '规则', minWidth: 170, grow: 0.81, cell: (alert) => <TruncatedText className="alert-stream__rule">{alert.rule_name}</TruncatedText> },
+  { key: 'rule', header: '规则', minWidth: 126, cell: (alert) => <TruncatedText className="alert-stream__rule">{alert.rule_name}</TruncatedText> },
   // 指标 ID 是等宽的点分标识：装不下就省略号 + 悬停全文，绝不从中间折行。
-  { key: 'metric', header: '指标', minWidth: 150, grow: 0.68, cell: (alert) => <TruncatedText className="dbs-numeric">{alert.metric_id}</TruncatedText> },
-  { key: 'value', header: '触发值 / 阈值', minWidth: 122, grow: 1.35, numeric: true, cell: (alert) => <TruncatedText className="dbs-numeric">{valueAgainstThreshold(alert)}</TruncatedText> },
-  { key: 'duration', header: '持续时间', minWidth: 88, grow: 1.35, numeric: true, cell: (alert) => durationLabel(alert.duration_ms) },
-  { key: 'first-triggered', header: '首次触发', minWidth: 131, grow: 1.35, numeric: true, cell: (alert) => <TimeCell value={alert.first_triggered_at} /> },
+  { key: 'metric', header: '指标', minWidth: 96, cell: (alert) => <TruncatedText className="dbs-numeric">{alert.metric_id}</TruncatedText> },
+  { key: 'value', header: '触发值 / 阈值', minWidth: 106, numeric: true, cell: (alert) => <TruncatedText className="dbs-numeric">{valueAgainstThreshold(alert)}</TruncatedText> },
+  { key: 'duration', header: '持续时间', minWidth: 69, numeric: true, cell: (alert) => durationLabel(alert.duration_ms) },
+  { key: 'first-triggered', header: '首次触发', minWidth: 115, numeric: true, cell: (alert) => <TimeCell value={alert.first_triggered_at} /> },
   {
     key: 'markers',
     header: '标记',
-    minWidth: 120,
-    grow: 0.96,
+    minWidth: 69,
     cell: (alert) => <AlertSuppressionTags
       className="alert-stream__markers"
       inMaintenance={alert.in_maintenance}
@@ -464,12 +479,11 @@ const currentColumns: DataGridColumn<AlertObservation>[] = [
       pausedAt={alert.paused_at}
     />,
   },
-  { key: 'unavailability', header: 'No Data 原因', minWidth: 115, grow: 0.89, cell: (alert) => <AlertUnavailabilityReason alert={alert} iconAction /> },
+  { key: 'unavailability', header: 'No Data 原因', minWidth: 90, cell: (alert) => <AlertUnavailabilityReason alert={alert} iconAction /> },
   {
     key: 'actions',
     header: '操作',
-    minWidth: 48,
-    grow: 1.35,
+    minWidth: 41,
     align: 'end',
     // 行内操作是图标链接（与实例列表同一做法）：可访问名由 `aria-label` 显式给出、
     // 悬停提示是同一句话。写成「详情」两个字要 71px，而这个去处每一行都一样，
@@ -485,24 +499,23 @@ const currentColumns: DataGridColumn<AlertObservation>[] = [
 ]
 
 const historyColumns: DataGridColumn<AlertObservation>[] = [
-  { key: 'status', header: '状态', minWidth: 96, grow: 1.22, cell: (alert) => <AlertStatus status={alert.status} /> },
-  { key: 'severity', header: '级别', minWidth: 80, grow: 1.24, cell: (alert) => <SeverityBadge severity={alert.severity} status={alert.status} /> },
-  { key: 'instance', header: '实例', minWidth: 140, grow: 0.75, cell: (alert) => <TruncatedText>{alert.instance_name}</TruncatedText> },
-  { key: 'rule', header: '规则', minWidth: 170, grow: 0.67, cell: (alert) => <TruncatedText className="alert-stream__rule">{alert.rule_name}</TruncatedText> },
-  { key: 'triggered', header: '触发时间', minWidth: 131, grow: 1.09, numeric: true, cell: (alert) => <TimeCell value={alert.first_triggered_at} /> },
-  { key: 'recovered', header: '恢复时间', minWidth: 131, grow: 1.09, numeric: true, cell: (alert) => <TimeCell value={alert.recovered_at} /> },
-  { key: 'duration', header: '持续时间', minWidth: 88, grow: 1.50, numeric: true, cell: (alert) => durationLabel(alert.duration_ms) },
-  { key: 'value', header: '触发值 / 阈值', minWidth: 122, grow: 1.35, numeric: true, cell: (alert) => <TruncatedText className="dbs-numeric">{valueAgainstThreshold(alert)}</TruncatedText> },
-  { key: 'version', header: '规则版本', minWidth: 80, grow: 1.35, numeric: true, cell: (alert) => `版本 ${alert.rule_version}` },
+  { key: 'status', header: '状态', minWidth: 62, cell: (alert) => <AlertStatus status={alert.status} /> },
+  { key: 'severity', header: '级别', minWidth: 57, cell: (alert) => <SeverityBadge severity={alert.severity} status={alert.status} /> },
+  { key: 'instance', header: '实例', minWidth: 71, cell: (alert) => <TruncatedText>{alert.instance_name}</TruncatedText> },
+  { key: 'rule', header: '规则', minWidth: 88, cell: (alert) => <TruncatedText className="alert-stream__rule">{alert.rule_name}</TruncatedText> },
+  { key: 'triggered', header: '触发时间', minWidth: 108, numeric: true, cell: (alert) => <TimeCell value={alert.first_triggered_at} /> },
+  { key: 'recovered', header: '恢复时间', minWidth: 108, numeric: true, cell: (alert) => <TimeCell value={alert.recovered_at} /> },
+  { key: 'duration', header: '持续时间', minWidth: 69, numeric: true, cell: (alert) => durationLabel(alert.duration_ms) },
+  { key: 'value', header: '触发值 / 阈值', minWidth: 94, numeric: true, cell: (alert) => <TruncatedText className="dbs-numeric">{valueAgainstThreshold(alert)}</TruncatedText> },
+  { key: 'version', header: '规则版本', minWidth: 65, numeric: true, cell: (alert) => `版本 ${alert.rule_version}` },
   // 通知投递记录接口尚未产出（schema 上恒为空数组），这一列如实写「—」，不编一个状态出来。
-  { key: 'notification', header: '通知结果', minWidth: 60, grow: 1.30, cell: () => '—' },
-  { key: 'disposition', header: '处置记录', minWidth: 78, grow: 1.35, cell: (alert) => dispositionLabel(alert.disposition) },
-  { key: 'maintenance', header: '维护窗口', minWidth: 56, grow: 1.34, cell: (alert) => maintenanceWindowLabel(alert.in_maintenance) },
+  { key: 'notification', header: '通知结果', minWidth: 65, cell: () => '—' },
+  { key: 'disposition', header: '处置记录', minWidth: 65, cell: (alert) => dispositionLabel(alert.disposition) },
+  { key: 'maintenance', header: '维护窗口', minWidth: 65, cell: (alert) => maintenanceWindowLabel(alert.in_maintenance) },
   {
     key: 'actions',
     header: '操作',
-    minWidth: 48,
-    grow: 1.63,
+    minWidth: 41,
     align: 'end',
     // 行内操作是图标链接（与实例列表同一做法）：可访问名由 `aria-label` 显式给出、
     // 悬停提示是同一句话。写成「详情」两个字要 71px，而这个去处每一行都一样，

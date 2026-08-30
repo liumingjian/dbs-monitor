@@ -1,7 +1,6 @@
-import { Button, StructuredListBody, StructuredListCell, StructuredListRow, StructuredListWrapper } from '@carbon/react'
+import { Button } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useMemo } from 'react'
-import type { ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import type { components } from '../../api/schema'
@@ -9,6 +8,7 @@ import { AlertStatus } from '../../domain/AlertStatus'
 import { MetricChart } from '../../domain/MetricChart'
 import { unavailabilityHref } from '../../domain/UnavailabilityBlock'
 import { Icon } from '../../primitives/Icon'
+import { KeyValueList } from '../../primitives/KeyValueList'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { Panel } from '../../primitives/Panel'
 import { SkeletonBlock } from '../../primitives/SkeletonBlock'
@@ -184,29 +184,6 @@ function MonitoringIcon() {
 
 function AlertIcon() {
   return <Icon name="notification" />
-}
-
-/// 键值清单。原来是 AntD 的 `Descriptions`，这里用 Carbon 的结构化列表表达同一件事。
-function KeyValueList({ label, items, columns }: {
-  label: string
-  items: { key: string; label: string; value: ReactNode }[]
-  columns: 2 | 3
-}) {
-  return <StructuredListWrapper
-    aria-label={label}
-    isCondensed
-    className="performance-event-detail__list"
-    data-columns={columns}
-  >
-    <StructuredListBody>
-      {items.map((item) => (
-        <StructuredListRow key={item.key}>
-          <StructuredListCell noWrap>{item.label}</StructuredListCell>
-          <StructuredListCell>{item.value}</StructuredListCell>
-        </StructuredListRow>
-      ))}
-    </StructuredListBody>
-  </StructuredListWrapper>
 }
 
 function EventMetricChart({ event, monitoringSearch }: {

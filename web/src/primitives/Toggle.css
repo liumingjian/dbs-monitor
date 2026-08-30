@@ -1,0 +1,44 @@
+/*
+ * 开关：把真正的 `<button role="switch">` 铺回控件本身的位置。
+ *
+ * 组件库把那枚 button 做成 1px 的 visually-hidden 元素（`clip` + `clip-path`），
+ * 可见的滑块画在它后面的 `<label>` / `<div>` 里。于是「看得见的那块」和「控件本身」
+ * 不是同一个元素：指针瞄准控件时命中的是标签，不是开关。
+ *
+ * 修法是把 button 撑满外层并保持透明 —— 一个控件，一个命中区。它盖在标签之上
+ * （`z-index: 1`），所以点标签文字仍然会切换（点到的是 button），行为不变。
+ *
+ * 选择器是「两个类名」，特指度高于组件库自己那条单类规则，因此不依赖样式表注入顺序
+ * （NotificationBar.css 里记的是同一个坑）。
+ */
+
+.dbs-toggle {
+  position: relative;
+}
+
+.dbs-toggle .cds--toggle__button {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  overflow: visible;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  clip: auto;
+  clip-path: none;
+  inline-size: 100%;
+  block-size: 100%;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* 点不动的两种情况保持点不动的手感：只读没有可切换的东西，禁用则明说不可用。 */
+.dbs-toggle.cds--toggle--readonly .cds--toggle__button {
+  cursor: default;
+}
+
+.dbs-toggle .cds--toggle__button:disabled {
+  cursor: not-allowed;
+}

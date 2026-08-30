@@ -64,38 +64,6 @@
   min-block-size: var(--dbs-spacing-xl);
 }
 
-/*
- * Carbon 的 Toggle 把真正的 `<button role="switch">` 做成 1px 的 visually-hidden 元素，
- * 可见的滑块画在它后面的 `<label>` 里，靠 `for=` 把点击转过去。于是「这个控件的可点区域」
- * 和「这个控件本身」不是同一个元素：读屏与键盘没问题，但指针落在滑块上时命中的是 label，
- * 不是那枚 switch —— 任何按可访问名定位再点击的做法都会被判为「被遮挡」。
- *
- * 把 button 铺回控件本身的位置并保持透明：一个控件，一个命中区。角色、DOM 次序都没动，
- * 所以 Carbon 的焦点环（`button:focus + label .cds--toggle__switch::after` 兄弟选择器）
- * 照常工作。选择器带页面前缀，特指度高于 Carbon 自己那条单类规则。
- */
-.alert-stream__toggle {
-  position: relative;
-}
-
-.alert-stream__toggle .cds--toggle__button {
-  position: absolute;
-  z-index: 1;
-  inset-block-start: 0;
-  inset-inline-start: 0;
-  overflow: visible;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  clip: auto;
-  clip-path: none;
-  inline-size: 100%;
-  block-size: 100%;
-  background: transparent;
-  opacity: 0;
-  cursor: pointer;
-}
-
 .alert-stream__freshness {
   margin-inline-start: auto;
   color: var(--cds-text-secondary);

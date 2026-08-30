@@ -68,16 +68,18 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 一件一文件，只导出组件；不放工具函数——`primitives/` 不是新的 `utils/`。
 
 基线清单（页面从这里取件，不要自己再拼一套）：
-`DataGrid`（数据表格外壳） / `Drawer` / `FormField` / `Icon` / `MetricBar` / `Modal` /
-`MultiSelect` / `NotificationBar` / `NumberInput` / `Pagination` / `Panel` / `SkeletonBlock` /
-`Sparkline`（行内趋势缩略图，手写 SVG） / `StatusBadge` / `StatusDot` / `TruncatedText`。
+`DataGrid`（数据表格外壳） / `Drawer` / `Dropdown` / `FlashOnChange`（变化高亮） / `FormField` /
+`Icon` / `KeyValueList`（键值清单，原 `Descriptions`） / `MetricBar` / `Modal` / `MultiSelect` /
+`NotificationBar` / `NumberInput` / `Pagination` / `Panel` / `SkeletonBlock` /
+`Sparkline`（行内趋势缩略图，手写 SVG） / `StatusBadge` / `StatusDot` / `Toggle` / `TruncatedText`。
 页面组**不得修改**这一层；缺件写进结题报告，由协调者派活，不要在别人脚下改共享件。
 
-`Modal` / `MultiSelect` / `NumberInput` / `Pagination` 是**中文默认值外壳**：Carbon 的默认文案
-全是英文，而且不给就静默生效 —— `Modal` 的关闭按钮叫 `Close`（`aria-label` 与 `title` 两处），
-`Pagination` 的页码下拉叫 `Page of 3 pages`，`MultiSelect` 的清除按钮悬停显示
-`Clear selected items`，`NumberInput` 的加减按钮叫 `Increment number`。
-**这四个组件一律从 `primitives/` 引入，不要再直接从 Carbon 包里拿它们**，
+`Dropdown` / `Modal` / `MultiSelect` / `NumberInput` / `Pagination` / `Toggle` 是**中文默认值外壳**：
+Carbon 的默认文案全是英文，而且不给就静默生效 —— `Modal` 的关闭按钮叫 `Close`（`aria-label`
+与 `title` 两处），`Pagination` 的页码下拉叫 `Page of 3 pages`，`MultiSelect` 与 `Dropdown` 的
+展开箭头叫 `Open menu` / `Close menu`、清除按钮悬停显示 `Clear selected items`，
+`NumberInput` 的加减按钮叫 `Increment number`，`Toggle` 两侧的状态文案是 `Off` / `On`。
+**这六个组件一律从 `primitives/` 引入，不要再直接从 Carbon 包里拿它们**，
 否则英文又漏回界面里。同名 props 照常覆盖默认值。其余控件的英文默认值请就地显式给中文
 （`OverflowMenu` 的 `aria-label`、`PasswordInput` 的 `showPasswordLabel` /
 `hidePasswordLabel`、`CopyButton` 的 `iconDescription` / `feedback`、`DatePicker` 的
@@ -85,16 +87,45 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 
 表格的三条硬规则写在 `DataGrid.tsx` 顶部：1280px 及以上不横向滚动也不丢列（fixed 布局 +
 按列最小宽度分配的百分比列宽 + 省略号悬停提示），粘性表头与横向滚动容器不是同一个元素，
-行高显式给死（标准 40px / 密集 32px）。页面只需给每列 `minWidth`，不要自己设 `overflow-x`。
+行高显式给死（标准 40px / 密集 32px，表头 32px）。页面只需给每列 `minWidth`，不要自己设 `overflow-x`。
+
+**截断的悬停提示由外壳负责**：`cell` 直接返回字符串或数字的格子，外壳把全文挂成 `<td title>`，
+页面不必为此把每个格子都包一层。返回节点的格子外壳不猜 —— 提示落在真正承载文字的那个元素上，
+用 `TruncatedText`。
+
+行上有三个钩子，都由外壳给，页面没有别的地方能挂：`rowTestId`（定位，见「测试定位」）、
+`rowTone`（行首 3px 状态色条）、`rowMuted`（这一行退到灰底次要色 —— 已恢复的告警、评估通过的
+规则；它只降调，一个字都不少）、`rowId`（页内锚点的落点，例如 `#metric-<指标 ID>`，
+锚点跳到的必须是整行而不是某个格子）。
 
 **行高是量出来的，不是算出来的。** `block-size` 是下限不是上限：格子里放一个 32px 的
 `Button size="sm"`，加上组件库的单元格上下内边距就能把「40px 的行」撑到 46px，不报错也不越界。
 `DataGrid.css` 因此把单元格上下内边距归零、密集档把行内按钮收到 24px。改那几条之前先在浏览器里
 量一遍行高。
 
-`cellPadding="compact"` 是**给列多到装不下的表用的选项**：组件库的单元格左右各 16px，15 列的表
-在 1280px 下光内边距就吃掉 974px 里的 480px。紧凑档压到 8px/侧，换回 240px 字形宽度，代价是列间
-留白减半。已经调好的表不要打开它 —— 打开就得连 `minWidth` / `grow` 一起重调。
+### 列宽契约：全产品只有这一套算法
+
+1280px 下页面可用 **974px**（实测：1280 − 256px 侧栏 − 页边距）。列多到装不下时按下面的次序做，
+**不要每张表各发明一套**：
+
+1. **每列 `minWidth` = max(表头文字的自然宽, 这一格里压不动的内容宽) + 该表的单元格内边距**
+   （标准档 32px/列，紧凑档 16px/列）。压不动的是徽标、状态点、开关、行内图标按钮、
+   `96 / 80` 这类等宽事实；压得动的是名称、指标 ID、地址、备注这类长文本。
+2. **各列一律 `grow: 1`。** `grow` 不是优先级旋钮：列宽按 `minWidth × grow` 的比例分，各列
+   `grow` 一旦不等，`grow` 低的列分到的宽度就会**低于自己的 `minWidth`**，而第一个被截掉的
+   是表头。`grow` 全等时，Σ`minWidth` ≤ 974 就保证每列都不低于下限，富余按下限比例分下去。
+3. **表头不截断**，值可以。表头是「这一列是什么」的唯一说明；值截断了还有悬停全文、还有详情页，
+   表头被截成「规...」「评...」就只剩一个悬停提示可查。所以第 1 条里表头自然宽是硬下限。
+4. Σ`minWidth` > 974 时，先开 `cellPadding="compact"`（16px/侧 → 8px/侧，每列省 16px），
+   **再**回到第 1 条重算。已经调好的表不要顺手打开它 —— 打开就得连 `minWidth` 一起重调。
+5. 还是装不下，就改**这一格写什么**：长值换短读法（`08-11 10:15` + `title` 存全文）、
+   两列合成一句话、多行格拆成多列。
+6. 到这一步仍然装不下的，**写进结题报告说清楚，不要用省略号盖过去**，也不要丢列 ——
+   丢列在任何宽度下都是禁止的。取值是整句话的列（原因摘要、建议动作）在 40px 的行里
+   永远只能分到四个汉字，它属于详情页，而列表的每一行都要有去详情页的链接。
+
+**数字是量出来的，不是估的。** 中文正文 14px 下每字约 12.3px，表头「四个字」= 49px，
+但真正该做的是在浏览器里量 `range.selectNodeContents(th)` 的宽度再对着可用宽度算。
 
 @floating-ui/react 是 `Drawer` 的焦点陷阱用的直接依赖（它本来就在 Carbon 的依赖树里，
 这里只是显式声明）。除抽屉外没有第二处用它，页面组也不得因此认为可以新增依赖。
@@ -119,8 +150,8 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
   **不做页面顶部的错误汇总**。整表单级的失败（没有字段信息的那种）才用错误条。
 - 服务端字段错误用 `applyApiFieldErrors`；它返回空数组才退回整表单的错误条，两边不要都显示。
 - 控件的 `labelText` 留空并 `hideLabel` / `noLabel`，标签由 `FormField` 出——两边都给会读两遍。
-  已知缺口：Carbon 的 `TextArea` 与 `Select` 在自己算完 `aria-describedby` 后才落笔，会盖掉
-  `FormField` 交过来的那个（`TextInput` 不会，它的 `...rest` 在最后）。照样把 `describedBy` 接上去，
+  已知缺口：Carbon 的 `TextArea`、`Select` 与 `NumberInput` 在自己算完 `aria-describedby` 后才落笔，
+  会盖掉 `FormField` 交过来的那个（`TextInput` 不会，它的 `...rest` 在最后）。照样把 `describedBy` 接上去，
   不要为此改 `primitives/`，也不要改用控件自带的 `invalidText` 去绕——错误文案只有一个出口。
 
 ## 先例
@@ -136,7 +167,7 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 折叠状态是纯模块 `web/src/routes/root/navCollapse.ts`，不要在组件里再写一份存储读写。
 页面版式与列表页样板：`web/src/routes/instances/index.tsx`。
 变化高亮（刷新后确实变了的数值闪一次，400ms，尊重 `prefers-reduced-motion`）：
-`web/src/routes/instances.$id/changedValueFlash.tsx`。轮询页面照它引一次，别各写一套。
+`web/src/primitives/FlashOnChange.tsx`。轮询页面照它引一次，别各写一套。
 
 ### 列表页的三段版式与密度切换
 

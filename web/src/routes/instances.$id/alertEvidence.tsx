@@ -1,15 +1,5 @@
-import {
-  Button,
-  Select,
-  SelectItem,
-  StructuredListBody,
-  StructuredListCell,
-  StructuredListRow,
-  StructuredListWrapper,
-  TextArea,
-} from '@carbon/react'
+import { Button, Select, SelectItem, TextArea } from '@carbon/react'
 import { useState } from 'react'
-import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import type { FieldPath } from 'react-hook-form'
 import { z } from 'zod'
@@ -21,6 +11,7 @@ import { DataGrid } from '../../primitives/DataGrid'
 import type { DataGridColumn } from '../../primitives/DataGrid'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import { KeyValueList } from '../../primitives/KeyValueList'
 import { Modal } from '../../primitives/Modal'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { Panel } from '../../primitives/Panel'
@@ -236,7 +227,7 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
 
 function DispositionContent({ detail }: { detail: AlertDispositionDetail }) {
   return <div className="alert-evidence-stack">
-    <KeyValueList label="处置概览" items={[
+    <KeyValueList label="处置概览" columns={3} items={[
       { key: 'status', label: '当前状态', value: <DispositionTag disposition={detail.disposition} /> },
       { key: 'at', label: '最近处置时间', value: optionalTime(detail.disposition_at) },
       { key: 'actor', label: '处置人', value: detail.disposition_by ?? '—' },
@@ -301,6 +292,7 @@ function TriggerSnapshotContent({ snapshot }: { snapshot: components['schemas'][
         <DataGrid<AlertTriggerSnapshotSession>
           label="触发时会话"
           density="dense"
+          cellPadding="compact"
           rows={snapshot.sessions}
           rowKey={(session) => String(session.pid)}
           columns={snapshotSessionColumns}
@@ -312,24 +304,6 @@ function TriggerSnapshotContent({ snapshot }: { snapshot: components['schemas'][
   }
 }
 
-/// 键值清单。原来是 AntD 的 `Descriptions`，这里用 Carbon 的结构化列表表达同一件事。
-function KeyValueList({ label, items, columns = 1 }: {
-  label: string
-  items: { key: string; label: string; value: ReactNode }[]
-  columns?: 1 | 2
-}) {
-  return <StructuredListWrapper aria-label={label} isCondensed className="alert-evidence-list" data-columns={columns}>
-    <StructuredListBody>
-      {items.map((item) => (
-        <StructuredListRow key={item.key}>
-          <StructuredListCell noWrap>{item.label}</StructuredListCell>
-          <StructuredListCell>{item.value}</StructuredListCell>
-        </StructuredListRow>
-      ))}
-    </StructuredListBody>
-  </StructuredListWrapper>
-}
-
 export function triggerSnapshotPresentation(result: AlertTriggerSnapshotResult): TriggerSnapshotPresentation {
   switch (result) {
     case 'SUCCESS': return { label: '采集成功', kind: 'success' }
@@ -339,29 +313,37 @@ export function triggerSnapshotPresentation(result: AlertTriggerSnapshotResult):
   }
 }
 
+/// 列宽按 web/CLAUDE.md 的列宽契约算：`minWidth` = max(表头自然宽, 压不动的内容宽) + 内边距，
+/// 各列 `grow: 1`。合计 962 ≤ 974，所以表头一个都不会被截成「规...」「评...」。
+///
+/// 这两张证据表原先被排在告警详情页的半幅栅格里（≈446px），八列 / 十一列在那个宽度下
+/// 连表头都写不下 —— 缺的是容器宽度，不是列。它们现在整行铺开（`alertDetail.css`）。
 const dispositionHistoryColumns: DataGridColumn<AlertDispositionEvent>[] = [
-  { key: 'kind', header: '动作', minWidth: 90, cell: (event) => dispositionEventLabel(event.kind) },
-  { key: 'change', header: '状态变化', minWidth: 150, cell: (event) => `${dispositionLabel(event.from_disposition)} → ${dispositionLabel(event.to_disposition)}` },
-  { key: 'actor', header: '处置人', minWidth: 200, cell: (event) => <TruncatedText>{event.actor_id}</TruncatedText> },
-  { key: 'acted', header: '处置时间', minWidth: 170, cell: (event) => optionalTime(event.acted_at) },
-  { key: 'detail', header: '备注 / 原因', minWidth: 200, grow: 2, cell: (event) => <TruncatedText>{dispositionDetail(event)}</TruncatedText> },
-  { key: 'version', header: '规则版本', minWidth: 90, numeric: true, cell: (event) => String(event.rule_version) },
-  { key: 'value', header: '评估值', minWidth: 90, numeric: true, cell: (event) => optionalNumber(event.current_value) },
-  { key: 'evaluated', header: '评估时间', minWidth: 170, cell: (event) => optionalTime(event.evaluated_at) },
+  { key: 'kind', header: '动作', minWidth: 60, cell: (event) => dispositionEventLabel(event.kind) },
+  { key: 'change', header: '状态变化', minWidth: 138, cell: (event) => `${dispositionLabel(event.from_disposition)} → ${dispositionLabel(event.to_disposition)}` },
+  { key: 'actor', header: '处置人', minWidth: 102, cell: (event) => <TruncatedText>{event.actor_id}</TruncatedText> },
+  { key: 'acted', header: '处置时间', minWidth: 182, cell: (event) => optionalTime(event.acted_at) },
+  { key: 'detail', header: '备注 / 原因', minWidth: 142, cell: (event) => <TruncatedText>{dispositionDetail(event)}</TruncatedText> },
+  { key: 'version', header: '规则版本', minWidth: 84, numeric: true, cell: (event) => String(event.rule_version) },
+  { key: 'value', header: '评估值', minWidth: 72, numeric: true, cell: (event) => optionalNumber(event.current_value) },
+  { key: 'evaluated', header: '评估时间', minWidth: 182, cell: (event) => optionalTime(event.evaluated_at) },
 ]
 
+/// 十一列，两列是完整时刻（各 148px 字形）。整行铺开后可用 974px，但标准内边距要吃掉
+/// 352px，表头会全线被截；因此开紧凑档（`cellPadding="compact"`），合计 957 ≤ 974。
+/// 用户名、客户端地址、等待事件、阻塞关系四列仍会截断 —— 它们都带悬停全文。
 const snapshotSessionColumns: DataGridColumn<AlertTriggerSnapshotSession>[] = [
-  { key: 'pid', header: 'PID', minWidth: 80, numeric: true, cell: (session) => String(session.pid) },
-  { key: 'username', header: '用户', minWidth: 110, cell: (session) => optionalText(session.username) },
-  { key: 'database', header: '数据库', minWidth: 110, cell: (session) => optionalText(session.database_name) },
-  { key: 'client', header: '客户端', minWidth: 130, cell: (session) => optionalText(session.client_address) },
-  { key: 'state', header: '状态', minWidth: 110, cell: (session) => optionalText(session.state) },
-  { key: 'query-start', header: '查询开始', minWidth: 170, cell: (session) => optionalTime(session.query_started_at) },
-  { key: 'transaction-start', header: '事务开始', minWidth: 170, cell: (session) => optionalTime(session.transaction_started_at) },
-  { key: 'query-duration', header: '查询时长', minWidth: 100, numeric: true, cell: (session) => durationLabel(session.query_duration_ms) },
-  { key: 'transaction-duration', header: '事务时长', minWidth: 100, numeric: true, cell: (session) => durationLabel(session.transaction_duration_ms) },
-  { key: 'wait', header: '等待事件', minWidth: 160, cell: (session) => [session.wait_event_type, session.wait_event].filter(Boolean).join(' / ') || '—' },
-  { key: 'blocking', header: '阻塞关系', minWidth: 160, cell: (session) => session.blocking_pids.length === 0 ? '无' : `被 PID ${session.blocking_pids.join(', ')} 阻塞` },
+  { key: 'pid', header: 'PID', minWidth: 66, numeric: true, cell: (session) => String(session.pid) },
+  { key: 'username', header: '用户', minWidth: 76, cell: (session) => optionalText(session.username) },
+  { key: 'database', header: '数据库', minWidth: 62, cell: (session) => optionalText(session.database_name) },
+  { key: 'client', header: '客户端', minWidth: 86, cell: (session) => optionalText(session.client_address) },
+  { key: 'state', header: '状态', minWidth: 56, cell: (session) => optionalText(session.state) },
+  { key: 'query-start', header: '查询开始', minWidth: 164, cell: (session) => optionalTime(session.query_started_at) },
+  { key: 'transaction-start', header: '事务开始', minWidth: 164, cell: (session) => optionalTime(session.transaction_started_at) },
+  { key: 'query-duration', header: '查询时长', minWidth: 70, numeric: true, cell: (session) => durationLabel(session.query_duration_ms) },
+  { key: 'transaction-duration', header: '事务时长', minWidth: 70, numeric: true, cell: (session) => durationLabel(session.transaction_duration_ms) },
+  { key: 'wait', header: '等待事件', minWidth: 78, cell: (session) => [session.wait_event_type, session.wait_event].filter(Boolean).join(' / ') || '—' },
+  { key: 'blocking', header: '阻塞关系', minWidth: 78, cell: (session) => session.blocking_pids.length === 0 ? '无' : `被 PID ${session.blocking_pids.join(', ')} 阻塞` },
 ]
 
 function ConfirmIcon() {

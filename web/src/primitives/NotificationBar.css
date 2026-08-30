@@ -13,3 +13,33 @@
   border-radius: var(--dbs-radius-none);
   box-shadow: none;
 }
+
+/*
+ * 正文可以被压缩到零宽。
+ *
+ * Carbon 的通知条内部是一串 flex 项，而 flex 项的 `min-inline-size` 默认是 `auto` ——
+ * 「不小于内容的最小宽度」。正文里出现一个不带断词点的长串（连接串、UUID、SQL 指纹、
+ * 一句没有空格的英文报错）时，那个最小宽度就是整串的宽度：通知条撑开，它所在的容器
+ * 只要不是 `minmax(0, 1fr)` 就跟着横向溢出。
+ *
+ * **实测说明**：390px 下用一条带完整连接串的服务端错误试过，当前的页面都没有溢出 ——
+ * 组件库自己在标题上给了断词，而告警流的外层网格本来就写死了 `minmax(0, 1fr)`。
+ * 也就是说这里修的是**结构上的隐患**而不是一个正在犯的错：一个展示件不该把「不溢出」
+ * 寄托在每个调用页碰巧给了它一列可压缩的网格。两条一起给才成立 —— 只放开压缩，长串会被
+ * 裁掉；只允许断行，`min-inline-size: auto` 仍然不让它压缩。
+ */
+
+.dbs-notification.dbs-notification .cds--inline-notification__details,
+.dbs-notification.dbs-notification .cds--inline-notification__text-wrapper,
+.dbs-notification.dbs-notification .cds--actionable-notification__details,
+.dbs-notification.dbs-notification .cds--actionable-notification__text-wrapper {
+  min-inline-size: 0;
+}
+
+.dbs-notification.dbs-notification .cds--inline-notification__title,
+.dbs-notification.dbs-notification .cds--inline-notification__subtitle,
+.dbs-notification.dbs-notification .cds--actionable-notification__title,
+.dbs-notification.dbs-notification .cds--actionable-notification__subtitle {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}

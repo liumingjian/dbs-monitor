@@ -1,0 +1,44 @@
+/*
+ * 键值清单。原来各页面用的是 AntD 的 `Descriptions`，这里是一个语义定义列表 + CSS grid。
+ *
+ * 分栏是「最多几栏」而不是「就是几栏」：窄屏永远一栏，中间档最多两栏，只有
+ * `data-columns="3"` 且够宽时才三栏。断点取 42rem / 66rem，与页面版式其余处一致。
+ */
+
+.dbs-kv {
+  display: grid;
+  gap: var(--dbs-spacing-sm) var(--dbs-spacing-md);
+  margin: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 42rem) {
+  .dbs-kv[data-columns='2'],
+  .dbs-kv[data-columns='3'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 66rem) {
+  .dbs-kv[data-columns='3'] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.dbs-kv__item {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.dbs-kv__label {
+  color: var(--cds-text-secondary);
+}
+
+/* 值里常见的是路径、连接串、UUID 这类不带断词点的长串：宽度不够时随处断行，
+   而不是把整份清单顶出容器。表格里的截断是另一件事，那里由 `TruncatedText` 管。 */
+.dbs-kv__value {
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}

@@ -39,6 +39,22 @@ export type DataGridProps<Row> = {
    * 色条只是重复行内已有的状态信息，不是唯一信号。
    */
   rowTone?: (row: Row) => StatusTone | undefined
+  /**
+   * 这一行是否退到背景里：底色转灰、文字转次要色。
+   *
+   * 用途是「这一行还在，但不是现在要看的那些」—— 已恢复的告警、评估通过的规则。
+   * 与 `rowTone` 是同一个维度的两端，一行不该同时给这两个。**它只降调，不隐藏**：
+   * 内容一个字不少，仍然可选中、可复制、可点击。
+   */
+  rowMuted?: (row: Row) => boolean
+  /**
+   * 这一行的 DOM `id`，用来当页内锚点的落点（`#metric-<id>` 这类）。
+   *
+   * 行的外壳归这个组件，页面因此没有别的地方能给行挂标识；把 id 挂到某个单元格里的
+   * 元素上，锚点跳到的就是那个格子而不是那一行。要保证 id 在整页唯一。
+   * **它不是测试标识** —— 定位用 `rowTestId`。
+   */
+  rowId?: (row: Row) => string
   /** 行高档位：`standard` 40px（默认），`dense` 32px。永远显式，没有第三种。 */
   density?: 'standard' | 'dense'
   /**
@@ -96,6 +112,13 @@ function sortHint(_messageId: string, args?: { sortDirection?: string; isSortHea
   }
 }
 
+/// 单元格的悬停提示。只有纯字符串/数字的格子有明确的「全文」可言。
+function cellTitle(content: ReactNode): string | undefined {
+  if (typeof content === 'string') return content
+  if (typeof content === 'number') return String(content)
+  return undefined
+}
+
 function carbonSortDirection(direction: DataGridSort['direction']) {
   switch (direction) {
     case 'asc':
@@ -127,6 +150,8 @@ export function DataGrid<Row>({
   rows,
   rowKey,
   rowTone,
+  rowMuted,
+  rowId,
   density = 'standard',
   cellPadding = 'standard',
   rowTestId,
@@ -231,19 +256,29 @@ export function DataGrid<Row>({
             rows.map((row) => (
               <TableRow
                 key={rowKey(row)}
+                id={rowId?.(row)}
                 className="dbs-datagrid__row"
                 data-tone={rowTone?.(row)}
+                data-muted={rowMuted?.(row) === true ? 'true' : undefined}
                 data-testid={rowTestId}
               >
-                {columns.map((column) => (
-                  <TableCell
-                    key={column.key}
-                    className={column.numeric === true ? 'dbs-datagrid__td dbs-numeric' : 'dbs-datagrid__td'}
-                    data-align={columnAlign(column)}
-                  >
-                    {column.cell(row)}
-                  </TableCell>
-                ))}
+                {columns.map((column) => {
+                  const content = column.cell(row)
+                  return (
+                    <TableCell
+                      key={column.key}
+                      className={column.numeric === true ? 'dbs-datagrid__td dbs-numeric' : 'dbs-datagrid__td'}
+                      data-align={columnAlign(column)}
+                      // 单元格一律省略号截断，而省略号没有悬停提示就是信息丢失。
+                      // 只有直接返回字符串/数字的格子才由外壳代劳：返回节点的格子里，
+                      // 提示该落在真正承载文字的那个元素上（多半就是 `TruncatedText`），
+                      // 挂到 <td> 上会连带别的内容一起当成提示文案。
+                      title={cellTitle(content)}
+                    >
+                      {content}
+                    </TableCell>
+                  )
+                })}
               </TableRow>
             ))}
         </TableBody>
