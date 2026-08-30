@@ -1,5 +1,8 @@
-import { Alert, Button } from 'antd'
+import { Link } from '@carbon/react'
 import type { components } from '../api/schema'
+import { Icon } from '../primitives/Icon'
+import { NotificationBar } from '../primitives/NotificationBar'
+import './UnavailabilityBlock.css'
 
 export type Unavailability = components['schemas']['Unavailability']
 
@@ -52,18 +55,27 @@ export function unavailabilityHref(code: Unavailability, destinations: Destinati
   }
 }
 
+/// 不可用说明块。**「缺数不是 0」在视图层的落点**：指标取不到值时这里出现的是一句
+/// 「为什么没有」加一个去处，而不是一个 0 —— 缺数从不被画成一条贴地的线。
+///
+/// 十三个原因码一律走中性的说明档，不按严重度上色：这块讲的是「这里为什么没有数据」，
+/// 不是对实例健康的判断，给它状态色会和真正的告警抢注意力。
+///
+/// 去处是一个真链接（`<a href>`），不是按钮：它就是地址切换，中键新开与复制链接都得留着。
+/// 通知条的正文区被组件库限定为非交互内容，所以链接另起一行放在通知外面。
 export function UnavailabilityBlock({ code, href, detail }: UnavailabilityBlockProps) {
   const copy = unavailabilityCopy(code)
-  return <Alert
-    type="info"
-    showIcon
-    title={copy.title}
-    description={<>
-      <div>{copy.description}</div>
-      {detail && <div>{detail}</div>}
-    </>}
-    action={<Button size="small" href={href}>{copy.action}</Button>}
-  />
+  return <div className="dbs-unavailability">
+    <NotificationBar tone="info" title={copy.title}>
+      <span className="dbs-unavailability__line">{copy.description}</span>
+      {detail && <span className="dbs-unavailability__line">{detail}</span>}
+    </NotificationBar>
+    <Link className="dbs-unavailability__action" href={href} renderIcon={UnavailabilityActionIcon}>{copy.action}</Link>
+  </div>
+}
+
+function UnavailabilityActionIcon() {
+  return <Icon name="arrowRight" />
 }
 
 function assertNever(value: never): never {
