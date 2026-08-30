@@ -73,6 +73,7 @@ var PageWrites = []PageWrite{
 	{PagePath: "/instances/$id/alerts/rules", Method: "PUT", APIPath: "/api/v1/alert-rules/{id}", Allowed: alertAdmins},
 	{PagePath: "/instances/$id/alerts/rules", Method: "PUT", APIPath: "/api/v1/alert-rules/{id}/enabled", Allowed: alertAdmins},
 	{PagePath: "/instances/$id/alerts/rules", Method: "POST", APIPath: "/api/v1/alert-rules/{id}/copies", Allowed: alertAdmins},
+	{PagePath: "/instances/$id/alerts/rules", Method: "DELETE", APIPath: "/api/v1/alert-rules/{id}", Allowed: alertAdmins},
 	{PagePath: "/instances/$id/alerts/rules", Method: "POST", APIPath: "/api/v1/alert-rule-templates/{id}/alert-rules", Allowed: alertAdmins},
 
 	{PagePath: "/instances/$id/collection", Method: "PUT", APIPath: "/api/v1/instances/{id}/collection/tasks/{task_id}", Allowed: platformAdmin},

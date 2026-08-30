@@ -1,0 +1,90 @@
+/*
+ * 告警规则页的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色与间距一律走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定：
+ * 在表格附近再加一个滚动容器，粘性表头就会掉进表格里（DESIGN.md 明确写了这个坑）。
+ */
+
+.alert-rules-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，表格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.alert-rules-page__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.alert-rules-page__header h2 {
+  margin: 0;
+}
+
+.alert-rules-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+}
+
+/* 分页条在面板 footer 里，去掉 Carbon 自带的上边框：footer 上面已经有一条发丝线了。 */
+.alert-rules-pagination {
+  border-block-start: none;
+  inline-size: 100%;
+}
+
+/* ---- 表格内容 ---- */
+
+.alert-rules-table__name {
+  font-weight: 600;
+}
+
+.alert-rules-table__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--dbs-spacing-xxs);
+  /* 一格一行：装不下就交给单元格自己的省略号，不换行把行撑高。 */
+  overflow: visible;
+  white-space: nowrap;
+}
+
+/* ---- 抽屉里的表单 ----
+   两列网格：阈值这类成对的字段并排读，名称、指标、实例这类长字段跨两列。 */
+
+.alert-rules-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--dbs-spacing-md);
+  align-items: start;
+}
+
+.alert-rules-form__wide,
+.alert-rules-form > .dbs-notification {
+  grid-column: 1 / -1;
+}
+
+.alert-rules-drawer__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--dbs-spacing-xs);
+}
+
+/* 抽屉最窄档（480px）与手机上退回单列，两列会把每个控件压到读不出内容。 */
+@media (max-width: 671px) {
+  .alert-rules-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- 模板模态框 ---- */
+
+.alert-rules-templates {
+  display: grid;
+  gap: var(--dbs-spacing-sm);
+  grid-template-columns: minmax(0, 1fr);
+}
