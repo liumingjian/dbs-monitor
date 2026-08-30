@@ -2,8 +2,6 @@ import {
   Button,
   DatePicker,
   DatePickerInput,
-  Modal,
-  MultiSelect,
   Tab,
   TabList,
   TabPanel,
@@ -23,6 +21,8 @@ import { zodResolver } from '../../forms/zodResolver'
 import { DataGrid } from '../../primitives/DataGrid'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
+import { MultiSelect } from '../../primitives/MultiSelect'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { Panel } from '../../primitives/Panel'
 import { StatusBadge } from '../../primitives/StatusBadge'
@@ -478,6 +478,10 @@ function MaintenanceModal({ maintenanceWindow, initialInstanceID, instanceOption
             {(field) => <DatePicker
               datePickerType="range"
               dateFormat="Y-m-d"
+              // 日历面板的月份名、星期名与上/下月按钮由 flatpickr 出，默认是英文（`August`、
+              // `Sun`、`Previous month`）——界面是硬编码简体中文，所以显式指定语言。
+              // flatpickr 的语言包已经在组件库的依赖里，不新增任何依赖。
+              locale="zh"
               value={[startDate, endDate]}
               onChange={pickDates}
             >

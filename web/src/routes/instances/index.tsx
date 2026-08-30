@@ -1,4 +1,4 @@
-import { Button, Checkbox, ContentSwitcher, Dropdown, Modal, MultiSelect, NumberInput, Pagination, Switch, TextInput } from '@carbon/react'
+import { Button, Checkbox, ContentSwitcher, Dropdown, Switch, TextInput } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -17,7 +17,11 @@ import type { DataGridColumn } from '../../primitives/DataGrid'
 import { DataGrid } from '../../primitives/DataGrid'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
+import { MultiSelect } from '../../primitives/MultiSelect'
 import { NotificationBar } from '../../primitives/NotificationBar'
+import { NumberInput } from '../../primitives/NumberInput'
+import { Pagination } from '../../primitives/Pagination'
 import { Panel } from '../../primitives/Panel'
 import { SkeletonBlock } from '../../primitives/SkeletonBlock'
 import { Sparkline } from '../../primitives/Sparkline'
@@ -206,12 +210,6 @@ function InstancesPage() {
           pageSize={pageSize}
           pageSizes={[25, 50, 100]}
           totalItems={visibleInstances.length}
-          backwardText="上一页"
-          forwardText="下一页"
-          itemsPerPageText="每页条数"
-          itemRangeText={(min, max, total) => `第 ${min}–${max} 条，共 ${total} 条`}
-          pageRangeText={(_current, total) => `共 ${total} 页`}
-          pageNumberText="页码"
           onChange={({ page: nextPage, pageSize: nextPageSize }) => {
             setPage(nextPage)
             setPageSize(nextPageSize)
@@ -322,6 +320,9 @@ function InstanceFilterBar({ filters, onChange, freshness }: {
         className="instances-filters__control"
         titleText="至少一条该级告警"
         label="不限"
+        // 展开箭头的可访问名，组件库默认是 `Open menu` / `Close menu`。全站只有这一个单选
+        // 下拉，所以就地给；多一个就该像 `primitives/MultiSelect` 那样收进展示层。
+        translateWithId={(messageId) => (messageId === 'close.menu' ? '收起选项' : '展开选项')}
         items={alertSeverityOptions}
         itemToString={(item) => item?.label ?? ''}
         // 「不限」是清单里的一项而不是一个清除按钮：单选下拉没有可控的「空选中项」，

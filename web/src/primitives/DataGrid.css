@@ -4,7 +4,8 @@
  * 这张表的三条硬规则，改之前先读 `DataGrid.tsx` 顶部那段说明：
  *   1. 1280px 及以上不横向滚动、不丢列 —— 靠 fixed 布局 + 百分比列宽 + 省略号；
  *   2. 粘性表头与横向滚动容器不是同一个元素；
- *   3. 行高显式给死：标准 40px / 密集 32px，不吃组件库的 48px 默认值。
+ *   3. 行高显式给死：标准 40px / 密集 32px，不吃组件库的 48px 默认值，
+ *      也不让格子里的 32px 控件把行撑到 46px。
  *
  * 选择器多处带 `.dbs-datagrid` 前缀，是为了压过 Carbon 的 `.cds--data-table td`
  * 这类「一个类 + 一个元素」的规则，而不依赖样式表的注入顺序。
@@ -81,13 +82,7 @@
 }
 
 /*
- * 密集档：32px 是**行的实际高度**，不只是下限。
- *
- * 行上的 `block-size` 是最小值而不是上限：一行 14px 正文的行盒 20.02px，加上组件库 sm 档
- * 单元格上下各 7px 的内边距就是 34px，行高于是名不副实。所以密集档必须把单元格上下内边距
- * 一并压到 4px（20.02 + 8 = 28.02 < 32），行才真的落在 32px 上。页面不要再各自补这一条。
- *
- * 行内状态图元的尺寸也从这里传染下去：`StatusBadge` / `StatusDot` 读下面几个自定义属性，
+ * 行内状态图元的尺寸从这里传染下去：`StatusBadge` / `StatusDot` 读下面几个自定义属性，
  * 密集档由外层表格自动生效，页面既不需要、也无法忘记逐个切换。
  */
 .dbs-datagrid[data-density='dense'] {
@@ -101,12 +96,37 @@
   block-size: var(--dbs-table-row-height-dense);
 }
 
-.dbs-datagrid[data-density='dense'] .dbs-datagrid__table tbody .dbs-datagrid__td {
-  padding-block: var(--dbs-spacing-xxs);
-}
-
 .dbs-datagrid .dbs-datagrid__table tbody tr:hover {
   background-color: var(--cds-layer-01);
+}
+
+/*
+ * 40px / 32px 是**行的实际高度**，不只是下限，两个档位都靠下面这两条守住。
+ *
+ * 行上的 `block-size` 是最小值而不是上限，所以行高等于「单元格实际有多高」和它取大的那个。
+ * 组件库给单元格上下各 7px（md）：一行 14px 正文的行盒 20.02px，20.02 + 14 + 1px 分隔线
+ * = 35px < 40px，被 `block-size` 抬到 40px，看上去没事；但格子里放一个 32px 的图标按钮
+ * （`Button size="sm"`，行内操作就是这个高度）就是 32 + 14 + 1 = 47px，行高整整多出 7px，
+ * 不报错、不越界、只是悄悄不对 —— 迁移后的告警规则表就是这样长到 46px 的。
+ *
+ * 所以上下内边距归零，让 `block-size` 一个人说了算：单元格里的内容由 `vertical-align:
+ * middle` 居中，视觉上和有内边距时一模一样（内容本来就比行矮），而 32px 的控件 + 1px 分隔线
+ * = 33px 仍然低于 40px，标准档因此**正好**是 40px。
+ *
+ * 密集档 32px 装不下 32px 的控件（33 > 32），所以密集档把行内按钮一并收到 24px —— 和
+ * 状态图元在密集档变小是同一件事：密度是整行的事，不是某一格的事。
+ *
+ * **改这里之前先在浏览器里量一遍行高**，别照着盒模型算：`border-collapse: collapse`
+ * 会把分隔线算进行盒，差的就是这 1px。
+ */
+.dbs-datagrid .dbs-datagrid__table tbody .dbs-datagrid__td {
+  padding-block: 0;
+}
+
+.dbs-datagrid[data-density='dense'] .dbs-datagrid__table tbody .dbs-datagrid__td .cds--btn {
+  block-size: 1.5rem;
+  min-block-size: 1.5rem;
+  padding-block: 0;
 }
 
 .dbs-datagrid .dbs-datagrid__td {
@@ -120,6 +140,25 @@
 
 .dbs-datagrid .dbs-datagrid__td[data-align='end'] {
   text-align: end;
+}
+
+/* ---- 紧凑左右内边距（`cellPadding="compact"`，opt-in） ----
+ *
+ * 组件库的单元格左右各 16px。列一多，这笔开销就不再是留白而是主要成本：15 列的表在
+ * 1280px 下只分到 974px，其中 480px（49%）是内边距，字形还没落笔就少了一半宽度。
+ * 压到 8px/侧能把其中 240px 还给文字。代价是列间留白从 32px 减到 16px，所以它是选项而
+ * 不是默认值 —— 已经调好的表不打开就一点不变。
+ *
+ * 三处都要写：表头格、可排序表头里那个撑满格子的按钮（内边距在按钮上，不在 th 上）、
+ * 数据格。漏掉中间那条，可排序的表头会比它下面的列多缩进 8px。
+ */
+.dbs-datagrid[data-cell-padding='compact'] .dbs-datagrid__table thead th,
+.dbs-datagrid[data-cell-padding='compact'] .dbs-datagrid__table tbody .dbs-datagrid__td {
+  padding-inline: var(--dbs-spacing-xs);
+}
+
+.dbs-datagrid[data-cell-padding='compact'] .dbs-datagrid__table thead th .cds--table-sort {
+  padding-inline: var(--dbs-spacing-xs);
 }
 
 /* ---- 行首 3px 严重度色条 ----

@@ -7,7 +7,6 @@ import {
   HeaderMenuItem,
   HeaderName,
   HeaderNavigation,
-  Modal,
   SideNav,
   SideNavDivider,
   SideNavItems,
@@ -23,6 +22,7 @@ import type { components } from '../../api/schema'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
 import type { IconName } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import {
   browserStorage,

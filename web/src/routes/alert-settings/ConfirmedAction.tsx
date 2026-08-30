@@ -1,8 +1,9 @@
-import { Button, Modal } from '@carbon/react'
+import { Button } from '@carbon/react'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Icon } from '../../primitives/Icon'
 import type { IconName } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
 
 export type ConfirmedActionProps = {
   /** 按钮的可访问名与悬停提示，例如「删除 On-call gateway」。图标按钮没有可见文案，这是它唯一的名字。 */

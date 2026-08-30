@@ -42,6 +42,17 @@ export type DataGridProps<Row> = {
   /** 行高档位：`standard` 40px（默认），`dense` 32px。永远显式，没有第三种。 */
   density?: 'standard' | 'dense'
   /**
+   * 单元格左右内边距档位。`standard`（默认）是组件库的 16px/侧；`compact` 是 8px/侧。
+   *
+   * **这是刻意的选择项，不是可以随手打开的开关。** 每少一列内边距就多 16px 字形宽度，
+   * 一张 15 列的表能因此拿回 240px；但反过来，列与列之间的留白也从 32px 减到 16px，
+   * 密到一定程度读者就要靠表头对齐来分列了。所以只有「列数多到内边距占掉表宽近一半」
+   * 的表才该开它——已经调好的表不打开这个开关，度量就一点不变。
+   *
+   * 行高不受影响：变的只是 `padding-inline`。
+   */
+  cellPadding?: 'standard' | 'compact'
+  /**
    * 每一条数据行上挂的 `data-testid`，例如 `instance-row`。
    *
    * 表格外壳一接管行的渲染，页面就再没有地方给行挂标识了，于是测试只能退回到
@@ -68,6 +79,21 @@ export type DataGridProps<Row> = {
 
 function assertNever(value: never): never {
   throw new Error(`unhandled sort direction: ${String(value)}`)
+}
+
+/// 可排序表头的可访问描述。组件库自带的是英文（`Click to sort rows by … header in
+/// ascending order`），读屏用户会听见它，所以在这里一次性换成中文，页面不用各自再给。
+/// 列名不进这句话：它就在同一个按钮的可见文本里，重复一遍只是把同一个词读两遍。
+function sortHint(_messageId: string, args?: { sortDirection?: string; isSortHeader?: boolean }): string {
+  if (args?.isSortHeader !== true) return '点击按此列升序排序'
+  switch (args.sortDirection) {
+    case 'ASC':
+      return '点击改为按此列降序排序'
+    case 'DESC':
+      return '点击取消此列排序'
+    default:
+      return '点击按此列升序排序'
+  }
 }
 
 function carbonSortDirection(direction: DataGridSort['direction']) {
@@ -102,6 +128,7 @@ export function DataGrid<Row>({
   rowKey,
   rowTone,
   density = 'standard',
+  cellPadding = 'standard',
   rowTestId,
   sort,
   onSortChange,
@@ -134,6 +161,7 @@ export function DataGrid<Row>({
       className="dbs-datagrid"
       style={containerStyle}
       data-density={density}
+      data-cell-padding={cellPadding}
       data-testid={testId}
       aria-busy={loading ? 'true' : undefined}
     >
@@ -153,6 +181,10 @@ export function DataGrid<Row>({
             {columns.map((column) => (
               <TableHeader
                 key={column.key}
+                // 表头也会被压到放不下（15 列的表尤其），而它和单元格一样是 `overflow: hidden`
+                // + 省略号。省略号必须配悬停提示，否则「不丢列」在表头这一行就名存实亡。
+                // 只有字符串表头才给：`title` 只能是字符串，节点表头交给调用方自己处理。
+                title={typeof column.header === 'string' ? column.header : undefined}
                 // 组件库在可排序表头里把 `...rest` 摊到内部的 <button> 上、只把
                 // className 留在 <th> 上，所以对齐只能走类名，不能走 data 属性。
                 className={
@@ -161,6 +193,7 @@ export function DataGrid<Row>({
                     : 'dbs-table-header'
                 }
                 isSortable={column.sortable === true && onSortChange !== undefined}
+                translateWithId={sortHint}
                 isSortHeader={sort?.key === column.key}
                 sortDirection={sort === undefined ? 'NONE' : carbonSortDirection(sort.direction)}
                 onClick={() => handleSort(column)}
