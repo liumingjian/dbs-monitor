@@ -25,7 +25,9 @@
     "openapi-fetch": "^0.17.0",
     "openapi-react-query": "0.5.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.87.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
