@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { ConfigProvider } from 'antd'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { alertsRoute } from './routes/alerts'
@@ -28,7 +27,7 @@ import { rootRoute } from './routes/root'
 import { AppErrorBoundary, NotFoundPage, RouteErrorPage } from './routes/root/errorBoundary'
 import { usersRoute } from './routes/users'
 // Carbon 令牌层。全应用唯一的 Sass 入口，必须只 import 一次；见 styles/index.scss 顶部。
-// 排在 styles.css 之前：迁移期间旧页面仍由 styles.css 决定外观。
+// 排在 styles.css 之前：令牌先落地，styles.css 里剩下的全局元素样式才引用得到它们。
 import './styles/index.scss'
 import './styles.css'
 
@@ -84,11 +83,9 @@ declare module '@tanstack/react-router' {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AppErrorBoundary>
-      <ConfigProvider>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
-      </ConfigProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
     </AppErrorBoundary>
   </React.StrictMode>,
 )
