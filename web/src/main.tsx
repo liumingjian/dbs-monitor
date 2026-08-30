@@ -6,10 +6,14 @@ import ReactDOM from 'react-dom/client'
 import { alertsRoute } from './routes/alerts'
 import { instanceAlertDetailRoute } from './routes/instances.$id/alerts.$alertId'
 import { instanceAlertsRoute } from './routes/instances.$id/alerts'
-import { notificationSettingsRoute } from './routes/alert-settings/notifications'
-import { contactSettingsRoute } from './routes/alert-settings/contacts'
-import { maintenanceNewRoute, maintenanceSettingsRoute } from './routes/alert-settings/maintenance'
-import { policySettingsRoute } from './routes/alert-settings/policies'
+import {
+  alertSettingsRoute,
+  contactSettingsRoute,
+  maintenanceNewRoute,
+  maintenanceSettingsRoute,
+  notificationSettingsRoute,
+  policySettingsRoute,
+} from './routes/alert-settings'
 import { instanceRoute } from './routes/instances.$id'
 import { performanceEventDetailRoute } from './routes/instances.$id/performanceEventDetail'
 import { performanceEventsRoute } from './routes/instances.$id/performanceEventsPage'
@@ -54,6 +58,8 @@ const routeTree = rootRoute.addChildren([
   longQuerySamplesRoute,
   queryStatisticsRoute,
   usersRoute,
+  // 告警设置：合并后的多标签页面，加上四个旧地址的重定向。
+  alertSettingsRoute,
   notificationSettingsRoute,
   contactSettingsRoute,
   policySettingsRoute,

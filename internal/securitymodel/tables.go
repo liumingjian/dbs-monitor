@@ -50,11 +50,22 @@ var PageAuthorizations = []PageAuthorization{
 	{Path: "/instances/$id/sessions/query-statistics", Sources: []string{"web/src/routes/instances.$id/queryStatisticsPage.tsx"}, Visible: allRoles},
 	{Path: "/alerts", Sources: []string{"web/src/routes/alerts/index.tsx"}, Visible: allRoles},
 	{Path: "/users", Sources: []string{"web/src/routes/users/index.tsx"}, Visible: allRoles},
-	{Path: "/alert-settings/notifications", Sources: []string{"web/src/routes/alert-settings/notifications.tsx"}, Visible: allRoles},
-	{Path: "/alert-settings/contacts", Sources: []string{"web/src/routes/alert-settings/contacts.tsx"}, Visible: allRoles},
-	{Path: "/alert-settings/policies", Sources: []string{"web/src/routes/alert-settings/policies.tsx"}, Visible: allRoles},
-	{Path: "/alert-settings/maintenance-windows", Sources: []string{"web/src/routes/alert-settings/maintenance.tsx"}, Visible: allRoles},
-	{Path: "/alert-settings/maintenance-windows/new", Sources: []string{"web/src/routes/alert-settings/maintenance.tsx"}, Visible: allRoles},
+	// Alert settings is one merged multi-tab page. Every write on it lives in one of the four
+	// tab modules, so they are all sources of the same page.
+	{Path: "/alert-settings", Sources: []string{
+		"web/src/routes/alert-settings/index.tsx",
+		"web/src/routes/alert-settings/notifications.tsx",
+		"web/src/routes/alert-settings/contacts.tsx",
+		"web/src/routes/alert-settings/policies.tsx",
+		"web/src/routes/alert-settings/maintenance.tsx",
+	}, Visible: allRoles},
+	// The five pre-merge addresses survive as redirects onto the tabs; they render nothing
+	// themselves and therefore carry no writes.
+	{Path: "/alert-settings/notifications", Sources: []string{"web/src/routes/alert-settings/index.tsx"}, Visible: allRoles},
+	{Path: "/alert-settings/contacts", Sources: []string{"web/src/routes/alert-settings/index.tsx"}, Visible: allRoles},
+	{Path: "/alert-settings/policies", Sources: []string{"web/src/routes/alert-settings/index.tsx"}, Visible: allRoles},
+	{Path: "/alert-settings/maintenance-windows", Sources: []string{"web/src/routes/alert-settings/index.tsx"}, Visible: allRoles},
+	{Path: "/alert-settings/maintenance-windows/new", Sources: []string{"web/src/routes/alert-settings/index.tsx"}, Visible: allRoles},
 }
 
 // PageWrites is the write-capability half of A10.
@@ -86,32 +97,28 @@ var PageWrites = []PageWrite{
 	{PagePath: "/instances/$id/settings", Method: "POST", APIPath: "/api/v1/instances/{id}/agent/disable", Allowed: platformAdmin},
 	{PagePath: "/instances/$id/settings", Method: "DELETE", APIPath: "/api/v1/instances/{id}", Allowed: platformAdmin},
 
-	{PagePath: "/alert-settings/notifications", Method: "PUT", APIPath: "/api/v1/notification-channels/smtp", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/notifications", Method: "POST", APIPath: "/api/v1/notification-channels/smtp/test", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/notifications", Method: "POST", APIPath: "/api/v1/notification-channels/webhooks", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/notifications", Method: "PUT", APIPath: "/api/v1/notification-channels/webhooks/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/notifications", Method: "DELETE", APIPath: "/api/v1/notification-channels/webhooks/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/notifications", Method: "POST", APIPath: "/api/v1/notification-channels/webhooks/{id}/test", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "PUT", APIPath: "/api/v1/notification-channels/smtp", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/notification-channels/smtp/test", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/notification-channels/webhooks", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "PUT", APIPath: "/api/v1/notification-channels/webhooks/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "DELETE", APIPath: "/api/v1/notification-channels/webhooks/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/notification-channels/webhooks/{id}/test", Allowed: alertAdmins},
 
-	{PagePath: "/alert-settings/contacts", Method: "POST", APIPath: "/api/v1/notification-contacts", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/contacts", Method: "PUT", APIPath: "/api/v1/notification-contacts/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/contacts", Method: "DELETE", APIPath: "/api/v1/notification-contacts/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/contacts", Method: "POST", APIPath: "/api/v1/notification-contact-groups", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/contacts", Method: "PUT", APIPath: "/api/v1/notification-contact-groups/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/contacts", Method: "DELETE", APIPath: "/api/v1/notification-contact-groups/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/notification-contacts", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "PUT", APIPath: "/api/v1/notification-contacts/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "DELETE", APIPath: "/api/v1/notification-contacts/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/notification-contact-groups", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "PUT", APIPath: "/api/v1/notification-contact-groups/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "DELETE", APIPath: "/api/v1/notification-contact-groups/{id}", Allowed: alertAdmins},
 
-	{PagePath: "/alert-settings/policies", Method: "POST", APIPath: "/api/v1/notification-policies", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/policies", Method: "PUT", APIPath: "/api/v1/notification-policies/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/policies", Method: "DELETE", APIPath: "/api/v1/notification-policies/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/notification-policies", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "PUT", APIPath: "/api/v1/notification-policies/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "DELETE", APIPath: "/api/v1/notification-policies/{id}", Allowed: alertAdmins},
 
-	{PagePath: "/alert-settings/maintenance-windows", Method: "POST", APIPath: "/api/v1/maintenance-windows", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/maintenance-windows", Method: "PUT", APIPath: "/api/v1/maintenance-windows/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/maintenance-windows", Method: "POST", APIPath: "/api/v1/maintenance-windows/{id}/end", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/maintenance-windows", Method: "DELETE", APIPath: "/api/v1/maintenance-windows/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/maintenance-windows/new", Method: "POST", APIPath: "/api/v1/maintenance-windows", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/maintenance-windows/new", Method: "PUT", APIPath: "/api/v1/maintenance-windows/{id}", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/maintenance-windows/new", Method: "POST", APIPath: "/api/v1/maintenance-windows/{id}/end", Allowed: alertAdmins},
-	{PagePath: "/alert-settings/maintenance-windows/new", Method: "DELETE", APIPath: "/api/v1/maintenance-windows/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/maintenance-windows", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "PUT", APIPath: "/api/v1/maintenance-windows/{id}", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "POST", APIPath: "/api/v1/maintenance-windows/{id}/end", Allowed: alertAdmins},
+	{PagePath: "/alert-settings", Method: "DELETE", APIPath: "/api/v1/maintenance-windows/{id}", Allowed: alertAdmins},
 }
 
 // AttributableWrite is one A12 write-operation group and its canonical actor facts.
