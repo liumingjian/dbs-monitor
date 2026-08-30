@@ -1,0 +1,16 @@
+/*
+ * 实例范围的告警流：工作台页头 + 告警流本体。纯 CSS，颜色与间距一律走令牌。
+ * 告警流本身的版式在 `routes/alerts/alerts.css` 里，这里只负责两段之间的关系。
+ */
+
+.instance-alerts {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* 这一页没有自己的 `h1`（页头是工作台给的），页头那一行里只剩「告警规则」这一个去处，
+   靠右放才和上面工作台页头的操作对齐。两个类的比重高于告警流自己那条单类规则。 */
+.instance-alerts .alert-stream__header {
+  justify-content: flex-end;
+}
