@@ -14,6 +14,7 @@
 @use '@carbon/react/scss/motion' as motion;
 @use '@carbon/react/scss/spacing' as spacing;
 @use '@carbon/react/scss/border-radius' as radius;
+@use 'fonts';
 @use 'palette';
 
 /// 随主题变化的产品令牌。参数是一张 Carbon 主题 map，
@@ -79,6 +80,12 @@
   --dbs-spacing-lg: #{spacing.$spacing-06}; // 24px
   --dbs-spacing-xl: #{spacing.$spacing-07}; // 32px
   --dbs-spacing-xxl: #{spacing.$spacing-09}; // 48px
+
+  // 等宽字族。Carbon 不把字族发布成自定义属性（`--cds-*` 只覆盖字号档位），
+  // 而图表库的轴标签是它自己画的 SVG 文本，够不到 `.dbs-numeric` 类，
+  // 只能靠一个自定义属性把同一份字族（含中文回退栈）递进去。
+  --dbs-font-mono: #{map.get(fonts.$families, 'mono')};
+  --dbs-font-sans: #{map.get(fonts.$families, 'sans')};
 
   // DESIGN.md 的圆角刻度同样是 Carbon 的。产品面基本只用到 none。
   --dbs-radius-none: #{radius.$border-radius-00}; // 0px
