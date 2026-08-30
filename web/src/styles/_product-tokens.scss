@@ -1,0 +1,81 @@
+//
+// DESIGN.md 里 Carbon 没有对应物的令牌，发布为 CSS 自定义属性。
+//
+// 为什么不是 Sass 变量：这一族要同时被样式表和 JS 读到。`@carbon/charts` 的分类色板
+// 只接受 JS 选项（`options.color.scale`），没有任何 Sass 入口；而 DESIGN.md 要求
+// 「所有颜色以语义令牌引用，不出现字面量色值」。自定义属性是唯一能让两边共用一个
+// 真值来源的形式 —— JS 侧见 `web/src/styles/tokens.ts`。
+//
+// 前缀用 `--dbs-` 而不是 `--cds-`：`--cds-` 是 Carbon 的命名空间，混进去会在
+// Carbon 升级时静默撞名。
+//
+
+@use 'sass:map';
+@use '@carbon/react/scss/motion' as motion;
+@use '@carbon/react/scss/spacing' as spacing;
+@use '@carbon/react/scss/border-radius' as radius;
+@use 'palette';
+
+/// 随主题变化的产品令牌。参数是一张 Carbon 主题 map，
+/// 能取自 Carbon 的就从里面取，取不到的才落到 palette。
+/// 深色主题只需要用另一张 map 再 include 一次。
+@mixin theme-tokens($theme) {
+  // 状态色。critical / normal 直接复用 Carbon 的支持色，warning 是 DESIGN.md 覆盖过的。
+  --dbs-status-critical: #{map.get($theme, 'support-error')};
+  --dbs-status-warning: #{map.get($theme, 'support-warning')};
+  --dbs-status-normal: #{map.get($theme, 'support-success')};
+  --dbs-status-unknown: #{map.get($theme, 'text-secondary')};
+  --dbs-status-offline: #{map.get($theme, 'text-secondary')};
+
+  // 状态底色。Carbon 的 notification-background-* 是通知组件专用的，
+  // 色相与 DESIGN.md 的 warning 覆盖对不上，所以这一档自持。
+  --dbs-status-critical-bg: #{palette.$status-critical-bg};
+  --dbs-status-warning-bg: #{palette.$status-warning-bg};
+  --dbs-status-normal-bg: #{palette.$status-normal-bg};
+  --dbs-surface-selected: #{palette.$surface-selected};
+
+  // 数据可视化色板。Carbon v11 的主题 map 里没有 data-vis-* 令牌（v10 有，v11 移除了），
+  // 所以这六色只能由这里发布。刻意排除 red-50，避免数据系列与 status-critical 混淆。
+  --dbs-viz-1: #{palette.$viz-1};
+  --dbs-viz-2: #{palette.$viz-2};
+  --dbs-viz-3: #{palette.$viz-3};
+  --dbs-viz-4: #{palette.$viz-4};
+  --dbs-viz-5: #{palette.$viz-5};
+  --dbs-viz-6: #{palette.$viz-6};
+  --dbs-viz-grid: #{map.get($theme, 'border-subtle-00')};
+  --dbs-viz-axis: #{map.get($theme, 'text-secondary')};
+}
+
+/// 与主题无关的结构与动效令牌（DESIGN.md front matter 的 `structure:` / `motion:` 段）。
+/// 动效值取自 Carbon 的 motion 令牌 —— DESIGN.md 的 110ms / 240ms /
+/// cubic-bezier(0.2, 0, 0.38, 0.9) 与 Carbon 逐字相同，没有冲突要解。
+@mixin structure-tokens {
+  --dbs-header-height: 3rem; // 48px
+  --dbs-sidenav-width: 16rem; // 256px
+  --dbs-sidenav-width-collapsed: 3rem; // 48px
+  --dbs-table-row-height: 2.5rem; // 40px
+  --dbs-table-row-height-dense: 2rem; // 32px
+  --dbs-table-header-height: 2rem; // 32px
+  --dbs-page-padding: 1.5rem; // 24px
+  --dbs-page-padding-wide: 2rem; // 32px
+  --dbs-min-supported-width: 80rem; // 1280px
+
+  --dbs-duration-fast: #{motion.$duration-fast-02};
+  --dbs-duration-mid: #{motion.$duration-moderate-02};
+  --dbs-easing: #{motion.motion(standard, productive)};
+
+  // DESIGN.md 的 4px 间距网格就是 Carbon 的 spacing 刻度，这里只是把 Sass 变量
+  // 发布成自定义属性，让组件级的纯 CSS 也能引用（Carbon 自己不发射它们）。
+  --dbs-spacing-xxs: #{spacing.$spacing-02}; // 4px
+  --dbs-spacing-xs: #{spacing.$spacing-03}; // 8px
+  --dbs-spacing-sm: #{spacing.$spacing-04}; // 12px
+  --dbs-spacing-md: #{spacing.$spacing-05}; // 16px
+  --dbs-spacing-lg: #{spacing.$spacing-06}; // 24px
+  --dbs-spacing-xl: #{spacing.$spacing-07}; // 32px
+  --dbs-spacing-xxl: #{spacing.$spacing-09}; // 48px
+
+  // DESIGN.md 的圆角刻度同样是 Carbon 的。产品面基本只用到 none。
+  --dbs-radius-none: #{radius.$border-radius-00}; // 0px
+  --dbs-radius-xs: #{radius.$border-radius-02}; // 2px
+  --dbs-radius-sm: #{radius.$border-radius-04}; // 4px
+}

@@ -4,6 +4,8 @@
     "useDefineForClassFields": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "allowJs": false,
+    // @carbon/react 自带的类型声明过不了严格检查（上游已知，官方建议就是开这个），
+    // 而 skipLibCheck 没有按包生效的粒度，只能整体放宽。
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,

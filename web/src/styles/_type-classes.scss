@@ -1,0 +1,36 @@
+//
+// `_type.scss` 的 mixin 发射成类。
+//
+// 为什么需要这一层：组件级样式表**不能**是 Sass（见 `index.scss` 顶部的说明 —— Vite
+// 把每个 .scss 当作独立编译单元，组件表里 @use Carbon 会拿到一份没配过的 Carbon，
+// 中文回退栈与令牌覆盖全部失效，而且不报错）。所以组件侧只写纯 CSS，颜色/间距用
+// `var(--cds-*)` 与 `var(--dbs-*)`，字体档位用这里的类。
+//
+// 命名前缀 `dbs-`，与 Carbon 的 `cds-` 分开。
+//
+
+@use 'type';
+
+.dbs-body {
+  @include type.body;
+}
+
+.dbs-page-title {
+  @include type.page-title;
+}
+
+.dbs-panel-title {
+  @include type.panel-title;
+}
+
+.dbs-table-header {
+  @include type.table-header;
+}
+
+.dbs-numeric {
+  @include type.numeric;
+}
+
+.dbs-numeric-display {
+  @include type.numeric-display;
+}
