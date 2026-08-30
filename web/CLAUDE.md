@@ -69,7 +69,8 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 
 基线清单（页面从这里取件，不要自己再拼一套）：
 `DataGrid`（数据表格外壳） / `Drawer` / `FormField` / `Icon` / `MetricBar` / `NotificationBar` /
-`Panel` / `SkeletonBlock` / `StatusBadge` / `StatusDot` / `TruncatedText`。
+`Panel` / `SkeletonBlock` / `Sparkline`（行内趋势缩略图，手写 SVG） / `StatusBadge` / `StatusDot` /
+`TruncatedText`。
 页面组**不得修改**这一层；缺件写进结题报告，由协调者派活，不要在别人脚下改共享件。
 
 表格的三条硬规则写在 `DataGrid.tsx` 顶部：1280px 及以上不横向滚动也不丢列（fixed 布局 +

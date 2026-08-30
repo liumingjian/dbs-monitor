@@ -1,0 +1,93 @@
+/*
+ * 指标图。
+ *
+ * 图表库的默认外观与 DESIGN.md 的差异只有几处，都在这里压掉：
+ * 网格线与轴标签换成产品的可视化令牌（库自己在 `.cds--chart-holder` 上重新
+ * @include 了一遍 Carbon 的默认白主题，所以 `--cds-*` 在图里拿不到我们的覆盖，
+ * 必须用 `--dbs-*`），轴标签换等宽，阈值线按严重度上色。
+ *
+ * 描边 1.5px、无渐变填充、无数据点标记（`points.enabled: false`）、只有水平网格线
+ * （`grid.x.enabled: false`）都由选项与库自带样式满足，这里不重复。
+ */
+
+.metric-figure {
+  margin: 0;
+}
+
+.metric-chart-canvas {
+  block-size: 15.625rem; /* 250px */
+  inline-size: 100%;
+}
+
+/* 轴标签：等宽 + DESIGN.md 的次级文字色（Carbon 默认的那档在白底上不够 4.5:1）。 */
+.metric-figure .cds--chart-holder {
+  /* 轴刻度走等宽；图例与轴标题走带中文回退栈的正文族（库的预编译 CSS 里只有 Plex）。 */
+  --cds-charts-font-family-condensed: var(--dbs-font-mono);
+  --cds-charts-font-family: var(--dbs-font-sans);
+}
+
+.metric-figure .cds--cc--axes g.axis g.tick text {
+  fill: var(--dbs-viz-axis);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+}
+
+.metric-figure .cds--cc--axes g.axis path.domain {
+  stroke: var(--dbs-viz-grid);
+}
+
+/* 水平网格线。纵向那组由 `grid.x.enabled: false` 关掉，不靠样式藏。 */
+.metric-figure .cds--cc--grid g.y.grid g.tick line {
+  stroke: var(--dbs-viz-grid);
+}
+
+.metric-figure .cds--cc--grid rect.chart-grid-backdrop.stroked,
+.metric-figure .cds--cc--grid rect.stroke {
+  stroke: var(--dbs-viz-grid);
+}
+
+/*
+ * 阈值线。库把它写死成 red-50，且不区分严重度 —— 逐条的颜色由选项里的 `fillColor`
+ * 内联给出（取自语义令牌），这里只保证虚线与 1px 的形态不被别处改掉。
+ */
+.metric-figure .cds--cc--threshold line.threshold-line {
+  stroke-width: 1;
+  stroke-dasharray: 4;
+}
+
+/*
+ * 常驻的阈值数值。库的阈值标签只在悬停时浮出来，而旧实现是常驻的，
+ * 少一块常驻数值就是少一项能力。
+ */
+.metric-thresholds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs) var(--dbs-spacing-md);
+  margin: var(--dbs-spacing-xxs) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--cds-text-secondary);
+}
+
+.metric-thresholds li {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 6px 的虚线段，和图里那条线是同一个语汇。 */
+.metric-thresholds__rule {
+  display: inline-block;
+  inline-size: 1rem;
+  block-size: 0;
+  border-block-start: 1px dashed var(--dbs-status-unknown);
+}
+
+.metric-thresholds li[data-severity='critical'] .metric-thresholds__rule {
+  border-block-start-color: var(--dbs-status-critical);
+}
+
+.metric-thresholds li[data-severity='warning'] .metric-thresholds__rule {
+  border-block-start-color: var(--dbs-status-warning);
+}
