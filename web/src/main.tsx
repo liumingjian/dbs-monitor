@@ -21,9 +21,7 @@ import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
 import { alertRulesRoute } from './routes/instances.$id/alerts/rules'
 import { instanceSettingsRoute } from './routes/instances.$id/settings'
-import { longQuerySamplesRoute } from './routes/instances.$id/longQuerySamples'
-import { queryStatisticsRoute } from './routes/instances.$id/queryStatisticsPage'
-import { sessionsRoute } from './routes/instances.$id/sessions'
+import { longQuerySamplesRoute, queryStatisticsRoute, sessionsRoute } from './routes/instances.$id/sessions'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { rootRoute } from './routes/root'
@@ -55,6 +53,7 @@ const routeTree = rootRoute.addChildren([
   alertRulesRoute,
   collectionManagementRoute,
   instanceSettingsRoute,
+  // 会话与阻塞：合并后的多标签页面，加上两个旧子地址的重定向。
   sessionsRoute,
   longQuerySamplesRoute,
   queryStatisticsRoute,

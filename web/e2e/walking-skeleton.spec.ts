@@ -104,7 +104,10 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
 
   const slowQueryCard = page.getByTestId('metric-card').filter({ has: page.getByText('长查询数量', { exact: true }) })
   const drilldown = slowQueryCard.getByRole('link', { name: /查看采样记录/ })
-  await expect(drilldown).toHaveAttribute('href', /\/sessions\/long-query-samples\?/)
+  // 会话相关的三个视图合并成一个多标签页面（票 #200）之后，长查询下钻的规范地址是
+  // `/sessions?…&tab=long-query-samples`。旧地址仍然重定向到同一个标签，那条由
+  // `sessions-ui.spec.ts` 专门覆盖；这里断言的是「下钻直接落到采样记录上」这件事本身。
+  await expect(drilldown).toHaveAttribute('href', /\/sessions\?.*tab=long-query-samples/)
   await expect(drilldown).toHaveAttribute('href', /metric=pg.query.long_running_count/)
 
   const stepRequest = page.waitForRequest((request) => {
