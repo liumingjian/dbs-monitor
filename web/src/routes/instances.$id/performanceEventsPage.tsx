@@ -207,6 +207,10 @@ function PerformanceEventLists({ instanceID, search, onSearchChange }: {
       <DataGrid<PerformanceEvent>
         label="性能事件列表"
         density={density}
+        // 12 列。标准内边距下这张表只能靠丢列活着（见 `eventColumns` 上的说明）；
+        // 紧凑档把 16px/侧压到 8px/侧，换回 128px 字形宽度，「最近发生」与「维护窗口」
+        // 因此回到了列表里。见 `DataGrid` 的 `cellPadding`。
+        cellPadding="compact"
         loading={events.isPending}
         skeletonRows={8}
         rows={events.data?.items ?? []}
@@ -287,88 +291,110 @@ function eventTabTitle(search: PerformanceEventSearch): string {
 
 /// 列宽是在 1280px 上量出来的，不是估的。
 ///
-/// 页面可用宽度实测 976px（1280 − 256px 侧栏 − 2×24px 页边距），而表格外壳沿用组件库的
-/// 单元格左右各 16px 内边距，所以每多一列就先扣掉 32px。迁移前这张表有 12 列、声明
-/// `scroll={{ x: 1700 }}`，靠横向滚动活着；规范不允许 1280px 横向滚动，于是 976px 要装下
-/// 全部列。真去量了一遍：13 列时每格只剩 40 上下的内容宽，「告警中」被截成「告警」、
-/// 「严重」被截成「严」，一整屏没有一个完整的词 —— 那不是「装下了」，只是把丢失伪装成省略号。
+/// 页面可用宽度实测 974px（1280 − 256px 侧栏 − 页边距）。迁移前这张表有 12 列、声明
+/// `scroll={{ x: 1700 }}`，靠横向滚动活着；规范不允许 1280px 横向滚动。第一版收成十列，
+/// 把「最近发生」「维护窗口 ID」「原因摘要」「建议动作」挪去了详情页 —— 那是在组件库默认的
+/// 16px/侧内边距下唯一能让每列留住完整取值的做法（十列光内边距就是 320px）。
 ///
-/// 因此列表这一层收成十列，每列都留得下完整取值（见下方各列的 `minWidth`，合计正好 976）。
-/// 挪去详情页的四项，以及为什么它们不是信息损失：
-///   - **最近发生**：等于「首次发生 + 持续时间」，同一行里已经有这两列。
-///   - **维护窗口 ID**：一串 UUID 前缀，列表里读不出意思；「维护中」这个可扫视的标记留下。
-///   - **原因摘要 / 建议动作**：40px 的行里它们只能得到 4 个汉字加省略号。摘要本身是由
-///     事件类型、触发指标、触发值与阈值生成的一句话，而这四列都在；完整文本在详情页，
-///     每一行都有「详情」链接。
-/// 这是一次产品取舍，写进结题报告；不做的选择是「留着列但每格只显示半个词」。
+/// `cellPadding="compact"` 之后内边距减半（12 列 192px），预算多出 128px 字形宽度，
+/// 其中两列因此回到了列表里：
+///   - **最近发生**：与「首次发生」同一档紧凑时刻（全文进 `title`），108px；
+///   - **维护窗口 ID**：等宽前缀，55px，装不下就省略号 + 悬停全文 —— 它是个不透明标识，
+///     截断它只丢字形，不丢意思。
+///
+/// **另外两列仍然装不下，这里说清楚**：`原因摘要` 与 `建议动作` 的取值是整句话
+/// （迁移前各占 300px）。12 列已经用掉 773 / 782 的字形预算，两列各自只能分到 50px 上下，
+/// 也就是四个汉字加省略号 —— 那不是「装下了」，只是把丢失伪装成省略号。它们留在详情页，
+/// 每一行都有「详情」链接，而摘要本身是由事件类型、触发指标、触发值与阈值生成的一句话，
+/// 这四列都在表里。这是一次产品取舍，写进结题报告，不是靠调宽度能改的结论。
 ///
 /// 一格一个事实：40px 的行放不下两行，所以迁移前挤在「状态 / 级别」一格里的三件事
 /// （告警状态、严重度、维护归因）在这里是三列。
 ///
-/// 列只给 `minWidth`：它既是 1280px 上分配比例的依据，也是窄于 1280px 时的列宽下限。
-/// 这里的每个值都是「该列取值的自然宽度 + 32px 内边距」，所以不需要再用 `grow` 拨回来。
+/// 列只给 `minWidth`、各列一律 `grow: 1`（web/CLAUDE.md 的列宽契约）：
+/// `minWidth` = max(表头自然宽, 压不动的内容宽) + 16px 内边距，合计 965 ≤ 974，
+/// 所以每列都不低于自己的下限，表头一个都不会被截成「维...」。
 function eventColumns(search: PerformanceEventSearch): DataGridColumn<PerformanceEvent>[] {
   return [
     {
       key: 'status',
       header: '状态',
-      minWidth: 84, // 「告警中」徽标 52
+      minWidth: 68, // 「告警中」徽标 52
       cell: (event) => <AlertStatus status={event.alert_status} />,
     },
     {
       key: 'severity',
       header: '级别',
-      minWidth: 76, // 「严重」徽标 40
+      minWidth: 57, // 「严重」徽标 41
       cell: (event) => <PerformanceEventSeverityTag severity={event.severity} />,
     },
     {
       key: 'maintenance',
       header: '维护',
-      minWidth: 84, // 「维护中」徽标 52
+      minWidth: 68, // 「维护中」徽标 52
       cell: (event) => (event.in_maintenance ? <PerformanceEventMaintenanceTag inMaintenance /> : '—'),
     },
     {
       key: 'type',
       header: '事件类型',
-      minWidth: 128, // 「临时文件突增」84
+      minWidth: 101, // 「临时文件突增」85
       cell: (event) => <TruncatedText>{performanceEventTypeLabel(event.event_type)}</TruncatedText>,
     },
     {
       key: 'metric',
       header: '触发指标',
-      minWidth: 124, // `pg.lock.waiting_count` 是最长的一档，会带省略号 + 悬停全文
+      minWidth: 80, // `pg.lock.waiting_count` 是最长的一档，会带省略号 + 悬停全文
       cell: (event) => <TruncatedText className="dbs-numeric">{event.metric_id}</TruncatedText>,
     },
     {
       key: 'value',
       header: '触发值 / 阈值',
-      minWidth: 110,
+      minWidth: 100,
       numeric: true,
       cell: (event) => `${event.trigger_value} / ${event.threshold}`,
     },
     {
       key: 'derived',
       header: '首次发生',
-      minWidth: 140, // 等宽的「08/11 10:15」101（英文区域设置多一个逗号）
+      minWidth: 124, // 等宽的「08/11 10:15」108（英文区域设置多一个逗号）
       cell: (event) => eventTimeCell(event.derived_at),
+    },
+    {
+      // 「首次发生 + 持续时间」推得出它，但推导要在脑子里做减法；紧凑内边距把这一列买回来了。
+      key: 'updated',
+      header: '最近发生',
+      minWidth: 124,
+      cell: (event) => eventTimeCell(event.updated_at),
     },
     {
       key: 'duration',
       header: '持续时间',
-      minWidth: 88,
+      minWidth: 69,
       numeric: true,
       cell: (event) => performanceEventDurationLabel(event.duration_ms),
     },
     {
       key: 'disposition',
       header: '处置',
-      minWidth: 78,
+      minWidth: 59,
       cell: (event) => performanceEventDispositionLabel(event.disposition),
+    },
+    {
+      // 不透明标识，列表里读的是「有没有关联维护窗口」，具体是哪一个到详情页核对。
+      // 截断它只丢字形不丢意思，全文在悬停提示里。
+      key: 'maintenance-window',
+      header: '维护窗口',
+      minWidth: 71,
+      cell: (event) => (event.maintenance_window_id === undefined
+        ? '—'
+        : <TruncatedText className="dbs-numeric" title={event.maintenance_window_id}>
+          {event.maintenance_window_id.slice(0, 8)}
+        </TruncatedText>),
     },
     {
       key: 'detail',
       header: '操作',
-      minWidth: 64, // 「详情」28
+      minWidth: 44, // 「详情」28
       cell: (event) => <Link
         className="cds--link"
         to="/instances/$id/performance-events/$eventId"

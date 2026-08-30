@@ -1,7 +1,6 @@
 import {
   Button,
   ContentSwitcher,
-  Dropdown,
   StructuredListBody,
   StructuredListCell,
   StructuredListRow,
@@ -10,7 +9,6 @@ import {
   Tab,
   TabList,
   Tabs,
-  Toggle,
 } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
@@ -22,11 +20,13 @@ import { Freshness } from '../../domain/Freshness'
 import { MetricChart, metricUnavailability, type MetricChartSeries, type MetricThreshold } from '../../domain/MetricChart'
 import { TimeRangePicker } from '../../domain/TimeRangePicker'
 import { unavailabilityHref, type Unavailability } from '../../domain/UnavailabilityBlock'
+import { Dropdown } from '../../primitives/Dropdown'
 import { Icon } from '../../primitives/Icon'
 import { Modal } from '../../primitives/Modal'
 import { MultiSelect } from '../../primitives/MultiSelect'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { Panel } from '../../primitives/Panel'
+import { Toggle } from '../../primitives/Toggle'
 import { rootRoute } from '../root'
 import {
   buildEnhancedChartView,
@@ -94,11 +94,6 @@ const aggregationOptions = [
   { value: 'maximum', label: '最大' },
   { value: 'minimum', label: '最小' },
 ] as const satisfies readonly { value: EnhancedAggregation; label: string }[]
-
-/// 下拉展开箭头的可访问名，组件库默认是 `Open menu` / `Close menu`。
-function listBoxText(messageId: string): string {
-  return messageId === 'close.menu' ? '收起选项' : '展开选项'
-}
 
 /**
  * A chart of a metric that has an alerting rule should show where that rule fires;
@@ -229,7 +224,6 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
           size="md"
           titleText="数据粒度"
           label="自动"
-          translateWithId={listBoxText}
           items={stepOptions}
           itemToString={(item) => item?.label ?? ''}
           selectedItem={stepOptions.find((option) => option.id === step) ?? stepOptions[0]}
@@ -244,11 +238,8 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
           onChange={(value) => updateSearch({ columns: value })}
         />
         {/*
-          * `labelText` 必须给且非空：给了它，组件库才把标签渲染成真正的 `<label for>`，
-          * 点标签就能切换开关；不给的话标签是个 `<div>`，开关本体又被它盖着 ——
-          * 屏幕上看得见的那块区域于是谁也点不动（键盘仍然可用，鼠标不行）。
-          * 左右两侧的「开 / 关」文案清空：状态由 `aria-checked` 与外观表达，
-          * 不给的话组件库会漏出英文的 `Off` / `On`。
+          * 左右两侧的开关文案清空：状态由 `aria-checked` 与外观表达，这里不需要第三份。
+          * 「可见的滑块点不动」那个坑归 `primitives/Toggle` 管，页面不用再绕。
           */}
         <div className="monitoring-page__toggle">
           <Toggle

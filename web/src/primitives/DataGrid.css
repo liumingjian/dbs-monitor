@@ -51,6 +51,25 @@
   block-size: var(--dbs-table-header-height);
 }
 
+/*
+ * 表头行的上下内边距归零，理由与数据行那条（见下面 `.dbs-datagrid__td`）逐字相同：
+ * `block-size` 是下限不是上限。组件库给表头格上下各留一段，加上 14px 正文的行盒，
+ * 表头实测 46.45px —— 规范写的是 32px，而 32 那个数从来没有生效过，只是没人量。
+ * 归零之后由 `block-size` 一个人说了算，内容靠 `vertical-align: middle` 居中。
+ *
+ * 可排序表头的内容在一个撑满表头格的 `<button>` 里，它自己也带上下内边距，
+ * 所以两处都要归零，否则可排序的表头比不可排序的高一截。
+ */
+.dbs-datagrid .dbs-datagrid__table thead th,
+.dbs-datagrid .dbs-datagrid__table thead th .cds--table-sort {
+  padding-block: 0;
+}
+
+.dbs-datagrid .dbs-datagrid__table thead th .cds--table-sort {
+  block-size: 100%;
+  min-block-size: 0;
+}
+
 /* 不可排序的表头把内容包了一层 div，省略号得跟到那一层上。 */
 .dbs-datagrid .dbs-datagrid__table thead th .cds--table-header-label {
   overflow: hidden;
@@ -98,6 +117,26 @@
 
 .dbs-datagrid .dbs-datagrid__table tbody tr:hover {
   background-color: var(--cds-layer-01);
+}
+
+/*
+ * 降调的行（`rowMuted`）：已经不烧了的告警、评估通过的规则。灰底 + 次要文字色，
+ * 一屏里正在烧的那两行才是黑字白底，扫视时先看见的就是它们。
+ *
+ * 内容一个字不少 —— 这是「退到背景里」，不是「藏起来」。
+ * 悬停仍然要有反馈，所以降调行的悬停底色再深一档，而不是与常态行撞成同一个灰。
+ */
+.dbs-datagrid .dbs-datagrid__table tbody tr[data-muted] {
+  background-color: var(--cds-layer-01);
+  color: var(--cds-text-secondary);
+}
+
+.dbs-datagrid .dbs-datagrid__table tbody tr[data-muted] .dbs-datagrid__td {
+  color: var(--cds-text-secondary);
+}
+
+.dbs-datagrid .dbs-datagrid__table tbody tr[data-muted]:hover {
+  background-color: var(--cds-layer-hover-01);
 }
 
 /*

@@ -1,7 +1,6 @@
-import { Accordion, AccordionItem, Button, TextInput, Toggle } from '@carbon/react'
+import { Accordion, AccordionItem, Button, TextInput } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useState } from 'react'
-import type { ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import { pollingIntervals } from '../../api/polling'
@@ -11,12 +10,14 @@ import type { DataGridColumn } from '../../primitives/DataGrid'
 import { DataGrid } from '../../primitives/DataGrid'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import { KeyValueList } from '../../primitives/KeyValueList'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { NumberInput } from '../../primitives/NumberInput'
 import { Panel } from '../../primitives/Panel'
 import { SkeletonBlock } from '../../primitives/SkeletonBlock'
 import type { StatusTone } from '../../primitives/StatusBadge'
 import { StatusDot } from '../../primitives/StatusDot'
+import { Toggle } from '../../primitives/Toggle'
 import { TruncatedText } from '../../primitives/TruncatedText'
 import { rootRoute } from '../root'
 import { defaultTimeRange } from './timeRange'
@@ -343,9 +344,7 @@ function MetricStatus({ tasks }: { tasks: CollectionTask[] }) {
       header: '指标 ID',
       minWidth: 220,
       grow: 1.2,
-      // 待办里的「影响哪些指标」链接指向这里。行的外壳归 DataGrid，锚点只能挂在
-      // 单元格内容上 —— 这个 id 是 `#metric-<id>` 的落点，不是装饰。
-      cell: (row) => <TruncatedText className="dbs-numeric" id={`metric-${row.metricID}`}>{row.metricID}</TruncatedText>,
+      cell: (row) => <TruncatedText className="dbs-numeric">{row.metricID}</TruncatedText>,
     },
     {
       key: 'collected',
@@ -381,6 +380,9 @@ function MetricStatus({ tasks }: { tasks: CollectionTask[] }) {
       columns={columns}
       rows={metricRows}
       rowKey={(row) => row.metricID}
+      // 待办里的「影响哪些指标」链接指向这里（`#metric-<指标 ID>`）。锚点落在行上而不是
+      // 某个单元格里的元素上，跳过去看见的才是整行。
+      rowId={(row) => `metric-${row.metricID}`}
       rowTestId="metric-row"
       empty={{ title: '暂无指标', description: '采集任务还没有声明任何指标。' }}
     />
@@ -534,20 +536,6 @@ export function CollectionConfiguration({
       </div>
     </div>
   </Panel>
-}
-
-/// 键值清单。原来是 AntD 的 `Descriptions`，这里是一个语义定义列表：
-/// 标签与值成对，读屏按对播报，宽屏两栏、窄屏一栏。
-function KeyValueList({ label, items }: {
-  label: string
-  items: { key: string; label: string; value: ReactNode }[]
-}) {
-  return <dl className="collection-kv" aria-label={label}>
-    {items.map((item) => <div className="collection-kv__item" key={item.key}>
-      <dt className="dbs-caption">{item.label}</dt>
-      <dd className="dbs-body">{item.value}</dd>
-    </div>)}
-  </dl>
 }
 
 function affectedMetrics(capabilityID: Capability['capability_id'], tasks: CollectionTask[]): string[] {

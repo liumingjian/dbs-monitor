@@ -11,7 +11,6 @@ import {
   TabList,
   Tabs,
   TextInput,
-  Toggle,
 } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
@@ -35,6 +34,7 @@ import { Pagination } from '../../../primitives/Pagination'
 import { Panel } from '../../../primitives/Panel'
 import { StatusBadge } from '../../../primitives/StatusBadge'
 import type { StatusTone } from '../../../primitives/StatusBadge'
+import { Toggle } from '../../../primitives/Toggle'
 import { TruncatedText } from '../../../primitives/TruncatedText'
 import { rootRoute } from '../../root'
 import { browserStorage } from '../../root/navCollapse'
@@ -888,11 +888,11 @@ function TemplateModal({ open, templates, loading, canWrite, disabledReason, act
  * 表格
  * ------------------------------------------------------------------ */
 
-/// 列定义。**只给 `minWidth` 与 `grow`，页面不设任何 `overflow-x`** —— 1280px 不横向滚动、
-/// 不丢列由 `primitives/DataGrid` 结构性地保证，页面只负责说明每列值多少像素、谁优先，
-/// 以及 —— 这一页真正的功课 —— **每一格到底写什么**。
+/// 列定义。**只给 `minWidth`，页面不设任何 `overflow-x`** —— 1280px 不横向滚动、不丢列
+/// 由 `primitives/DataGrid` 结构性地保证，页面只负责说明每列值多少像素，以及 —— 这一页真正的
+/// 功课 —— **每一格到底写什么**。
 ///
-/// 迁移前这张表声明了 2100px 的列宽，1280px 下大约只有 976px 可用。光调最小宽度关不上
+/// 迁移前这张表声明了 2100px 的列宽，1280px 下大约只有 974px 可用。光调最小宽度关不上
 /// 2.1 倍的差，所以内容本身做了三件事：
 ///
 ///  1. **多行格拆成列。**「名称 + 内置规则」拆成「名称」与「类型」，「条件」的触发行与恢复行
@@ -906,18 +906,18 @@ function TemplateModal({ open, templates, loading, canWrite, disabledReason, act
 ///
 /// 内容做完这三件事之后仍然差一大截，因为差的不是内容而是结构：15 列 × 组件库 16px/侧的
 /// 单元格内边距 = 480px，占掉 974px 表宽的一半。表格因此开了 `cellPadding="compact"`
-/// （8px/侧），拿回 240px；下面的 `minWidth` / `grow` 就是把这 240px 分给饿着的正文列。
+/// （8px/侧），拿回 240px。
 ///
-/// 两个旋钮分工不同，别把它们当成一个：
-///  - `minWidth` 是这一列**自然需要**多少像素（字形自然宽 + 16px 内边距），它只在窄于
-///    1280px 时当横向滚动的下限用。这里的合计是 1336px，那就是这张表真正需要的宽度。
-///  - `grow` 是 1280px 及以上的**优先级**：列宽按 `minWidth × grow` 的比例分。宽度固定的
-///    格子（徽章、开关、图标按钮、等宽计数）给 1.2–1.35，把它们买回接近自然宽度 —— 压
-///    到自然宽以下不是省略号而是控件被切掉；长文本列给 0.38–0.8，多出来的那一截交给省略号
-///    和悬停提示。
+/// 剩下的宽度按 web/CLAUDE.md 的列宽契约分（在浏览器里量出来的，不是估的）：
+/// 每列 `minWidth` = max(表头自然宽, 这一格里压不动的内容宽) + 16px 内边距，各列一律
+/// `grow: 1`。**`grow` 不再当优先级旋钮用** —— 一旦各列 `grow` 不等，分到的宽度就可能低于
+/// 自己的 `minWidth`，先被截掉的是表头，而「恢复...」「通知...」这样的表头比截断的值更难恢复。
+/// 合计 965 ≤ 974，所以 1280px 下每列都不低于自己的下限。
 ///
-/// 结果是 974px 下没有一列低于它内容的最小可读宽度，除了通知策略与名称这两列长文本，它们
-/// 本来就注定要截断（策略名 176px、规则名 156px，两列加起来就超过表宽三分之一）。
+/// **仍然装不下的部分，这里说清楚，不用省略号盖过去：** 15 列平摊到 974px 是每列 65px，
+/// 减去内边距只剩约 49px 字形，也就是四个汉字。名称（约 50px 字形）、指标（43px）、
+/// 通知策略（53px）三列长文本因此只显示前三到四个字，全文在悬停提示与详情抽屉里。
+/// 这不是靠内边距或列宽再调能改回来的：15 列与 974px 这两个数放在一起就得出这个结果。
 function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, capabilities, onEdit, onCopy, onDelete, onEnabledChange, actionPending }: {
   canWrite: boolean
   disabledReason: string | undefined
@@ -935,57 +935,49 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
       key: 'name',
       header: '名称',
       // 规则名是这一行的身份，截断它等于让读者认不出这是谁：富余宽度优先给它。
-      minWidth: 172,
-      grow: 0.71,
+      minWidth: 66,
       cell: (rule) => <TruncatedText className="alert-rules-table__name">{rule.name}</TruncatedText>,
     },
     {
       key: 'kind',
       header: '类型',
-      minWidth: 64,
-      grow: 1.19,
+      minWidth: 59,
       cell: (rule) => (rule.is_builtin ? '内置' : '自定义'),
     },
     {
       key: 'scope',
       header: '范围',
-      minWidth: 80,
-      grow: 1.02,
+      minWidth: 58,
       cell: (rule) => <TruncatedText>{scopeLabel(rule.scope, rule.instance_ids.length)}</TruncatedText>,
     },
     {
       key: 'metric',
       header: '指标',
-      minWidth: 112,
-      grow: 0.81,
+      minWidth: 59,
       cell: (rule) => <TruncatedText title={`${metricName(rule.metric_id)}（${rule.metric_id}）`}>{metricName(rule.metric_id)}</TruncatedText>,
     },
     {
       key: 'trigger',
       header: '触发条件',
-      minWidth: 140,
-      grow: 0.94,
+      minWidth: 70,
       cell: (rule) => <TruncatedText>{`${aggregationLabel(rule.aggregation)} ${rule.operator} ${rule.threshold}`}</TruncatedText>,
     },
     {
       key: 'recovery',
       header: '恢复条件',
-      minWidth: 70,
-      grow: 0.9,
+      minWidth: 69,
       cell: (rule) => <TruncatedText>{`${rule.recovery_operator} ${rule.recovery_threshold}`}</TruncatedText>,
     },
     {
       key: 'window',
       header: '窗口',
-      minWidth: 54,
-      grow: 1.13,
+      minWidth: 48,
       cell: (rule) => <TruncatedText>{formatRuleDuration(rule.window_seconds)}</TruncatedText>,
     },
     {
       key: 'cadence',
       header: '触发节奏',
-      minWidth: 84,
-      grow: 1,
+      minWidth: 68,
       cell: (rule) => <TruncatedText title={consecutiveDurationLabel(rule.consecutive_count, rule.evaluation_interval_seconds)}>
         {compactCadenceLabel(rule.consecutive_count, rule.evaluation_interval_seconds)}
       </TruncatedText>,
@@ -993,15 +985,13 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
     {
       key: 'severity',
       header: '级别',
-      minWidth: 58,
-      grow: 1.27,
+      minWidth: 57,
       cell: (rule) => <SeverityBadge severity={rule.severity} />,
     },
     {
       key: 'enabled',
       header: '启停',
-      minWidth: 82,
-      grow: 1.15,
+      minWidth: 75,
       cell: (rule) => {
         // 内置规则停不掉（服务端会 409），所以这里根本不给开关 —— 点了才报错是最差的读法。
         if (rule.is_builtin) return <StatusBadge tone="normal">不可停用</StatusBadge>
@@ -1024,15 +1014,13 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
     {
       key: 'policy',
       header: '通知策略',
-      minWidth: 160,
-      grow: 0.35,
+      minWidth: 69,
       cell: (rule) => <TruncatedText>{rule.effective_notification_policy_name}</TruncatedText>,
     },
     {
       key: 'lastTriggered',
       header: '最近触发',
-      minWidth: 78,
-      grow: 0.98,
+      minWidth: 69,
       cell: (rule) => <TruncatedText title={absoluteTimeLabel(rule.last_triggered_at)}>
         {lastTriggeredLabel(rule.last_triggered_at, Date.now())}
       </TruncatedText>,
@@ -1040,23 +1028,20 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
     {
       key: 'alertCount',
       header: '告警数',
-      minWidth: 40,
-      grow: 1.21,
+      minWidth: 57,
       numeric: true,
       cell: (rule) => String(rule.current_alert_count),
     },
     {
       key: 'capability',
       header: '能力',
-      minWidth: 58,
-      grow: 1.27,
+      minWidth: 57,
       cell: (rule) => <CapabilityFitBadge fit={capabilityFit(rule.metric_id, tasks, capabilities, currentInstance)} />,
     },
     {
       key: 'actions',
       header: '操作',
       minWidth: 84,
-      grow: 1.27,
       align: 'end',
       // 编辑留在行里（抽屉是这一页的主路径），复制与删除收进溢出菜单：三个图标要 112px，
       // 而这一页每一列都在抢宽度。删除在菜单里是 Carbon 的删除样式，执行前还有二次确认。

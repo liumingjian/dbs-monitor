@@ -73,21 +73,3 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
-
-/* 键值清单：窄屏一列，宽到放得下时按 data-columns 分栏，与原来的 Descriptions 一致。 */
-.performance-event-detail__list.performance-event-detail__list .cds--structured-list-tbody {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@media (min-width: 42rem) {
-  .performance-event-detail__list.performance-event-detail__list .cds--structured-list-tbody {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 66rem) {
-  .performance-event-detail__list[data-columns='3'].performance-event-detail__list .cds--structured-list-tbody {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}

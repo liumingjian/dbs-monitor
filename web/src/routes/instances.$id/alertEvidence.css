@@ -15,14 +15,3 @@
   gap: var(--dbs-spacing-md);
 }
 
-/* 键值清单：窄屏一列，宽到放得下时两列，与原来的 Descriptions 一致。 */
-.alert-evidence-list[data-columns='2'] .cds--structured-list-tbody {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@media (min-width: 42rem) {
-  .alert-evidence-list[data-columns='2'] .cds--structured-list-tbody {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}

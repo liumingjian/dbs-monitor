@@ -1,4 +1,4 @@
-import { Button, Checkbox, ContentSwitcher, Dropdown, Switch, TextInput } from '@carbon/react'
+import { Button, Checkbox, ContentSwitcher, Switch, TextInput } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -15,6 +15,7 @@ import { SuppressionTags } from '../../domain/SuppressionTags'
 import { zodResolver } from '../../forms/zodResolver'
 import type { DataGridColumn } from '../../primitives/DataGrid'
 import { DataGrid } from '../../primitives/DataGrid'
+import { Dropdown } from '../../primitives/Dropdown'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
 import { Modal } from '../../primitives/Modal'
@@ -320,9 +321,6 @@ function InstanceFilterBar({ filters, onChange, freshness }: {
         className="instances-filters__control"
         titleText="至少一条该级告警"
         label="不限"
-        // 展开箭头的可访问名，组件库默认是 `Open menu` / `Close menu`。全站只有这一个单选
-        // 下拉，所以就地给；多一个就该像 `primitives/MultiSelect` 那样收进展示层。
-        translateWithId={(messageId) => (messageId === 'close.menu' ? '收起选项' : '展开选项')}
         items={alertSeverityOptions}
         itemToString={(item) => item?.label ?? ''}
         // 「不限」是清单里的一项而不是一个清除按钮：单选下拉没有可控的「空选中项」，
@@ -448,17 +446,20 @@ function countTone(severity: AlertSeverity, count: number): StatusTone {
 /// 每一格都是**一行**内容：40px 的标准行高放不下两行，所以迁移前挤在「实例健康」一格里的
 /// 名称 / 归因 / 计数 / 标记被拆成四列 —— 一格一个事实，列与列之间扫视时对得齐。
 ///
-/// 十列的最小宽度加起来比 1280px 下的可用宽度（约 976px）大，所以每列都会被按比例压一点。
-/// **`grow` 是优先级旋钮**：宽度固定的格子（状态点 + 两三个字、徽章、图标）给 >1，让它们
-/// 拿回接近自己最小宽度的空间；长文本列留 1，压不下的那一截由省略号截断，全文在悬停提示里
-/// —— 规范要的正是这个次序，而不是把某一列藏掉。
+/// 宽度按 web/CLAUDE.md 的列宽契约给（在浏览器里量出来的，不是估的）：每列 `minWidth`
+/// = max(表头自然宽, 这一格里压不动的内容宽) + 组件库的 32px 内边距，各列一律 `grow: 1`。
+/// **`grow` 不再当优先级旋钮用** —— 各列 `grow` 一旦不等，分到的宽度就可能低于自己的
+/// `minWidth`，先被截掉的是表头（「采集新鲜度」原本就差 2px 被截成「采集新鲜...」）。
+/// 合计 955 ≤ 974，因此 1280px 下每列都不低于自己的下限，富余按下限比例分给长文本列。
+///
+/// 压不动的：健康状态点、C/W/I 计数、Agent 状态点、趋势缩略图、行内图标操作。
+/// 压得动的：实例名、告警归因、地址、采集新鲜度 —— 截断并带悬停全文。
 function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
   const columns: DataGridColumn<Instance>[] = [
     {
       key: 'health',
       header: '健康',
-      minWidth: 96,
-      grow: 1.4,
+      minWidth: 90,
       // 健康状态整块交给 domain/HealthStatus：文案、档位、暂停时长都在那里定义一次，
       // 实例总览读的是同一个组件（也是同一个 data-testid），两处因此不可能各说各的。
       cell: (instance) => (
@@ -468,16 +469,14 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
     {
       key: 'name',
       header: '实例',
-      minWidth: 160,
+      minWidth: 127,
       // 实例名是这一行的身份，截断它等于让读者认不出这是谁：富余宽度优先给它。
-      grow: 1.7,
       cell: (instance) => <TruncatedText className="instances-table__name">{instance.name}</TruncatedText>,
     },
     {
       key: 'counts',
       header: '告警',
-      minWidth: 100,
-      grow: 1.7,
+      minWidth: 90,
       align: 'end',
       // 计数写成带状态色的等宽数字，而不是三个徽章：规范里「越界的数值用状态色」说的就是
       // 这种数字，徽章那圈底色乘以三会在 40px 的行里变成一片色块，也吃掉一列的宽度。
@@ -492,28 +491,25 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
     {
       key: 'attribution',
       header: '告警归因',
-      minWidth: 136,
-      grow: 1.15,
+      minWidth: 92,
       cell: (instance) => <TruncatedText data-testid="instance-attribution">{attributionLabel(instance)}</TruncatedText>,
     },
     {
       key: 'markers',
       header: '标记',
-      minWidth: 96,
+      minWidth: 92,
       cell: (instance) => <SuppressionTags className="instances-table__markers" flags={instance.health.flags} />,
     },
     {
       key: 'address',
       header: '地址',
-      minWidth: 132,
-      grow: 1.45,
+      minWidth: 117,
       cell: (instance) => <TruncatedText className="dbs-numeric">{`${instance.host}:${instance.port}`}</TruncatedText>,
     },
     {
       key: 'agent',
       header: 'Agent',
-      minWidth: 84,
-      grow: 1.45,
+      minWidth: 76,
       cell: (instance) => (
         <StatusDot tone={agentStatusTone(instance.agent_status)}>{agentStatusLabel(instance.agent_status)}</StatusDot>
       ),
@@ -521,8 +517,7 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
     {
       key: 'collected',
       header: '采集新鲜度',
-      minWidth: 148,
-      grow: 0.95,
+      minWidth: 127,
       // 数值列：右对齐 + 等宽表格数字，行与行之间小数点和冒号都对得齐。
       numeric: true,
       // 采集时刻与新鲜度是同一件事的两种读法（「多久以前」与「什么时候」），并成一格
@@ -544,8 +539,7 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
     columns.push({
       key: 'trend',
       header: '趋势',
-      minWidth: 80,
-      grow: 1.1,
+      minWidth: 72,
       cell: (instance) => <InstanceTrend instanceID={instance.id} instanceName={instance.name} />,
     })
   }
@@ -557,7 +551,6 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
     key: 'actions',
     header: '操作',
     minWidth: 72,
-    grow: 1.7,
     align: 'end',
     cell: (instance) => (
       <span className="instances-table__actions">

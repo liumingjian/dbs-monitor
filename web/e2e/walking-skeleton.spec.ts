@@ -124,9 +124,11 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
 
   await page.getByLabel('图表列数').getByText('3 列').click()
   await expect(page).toHaveURL((url) => url.searchParams.get('columns') === '3')
-  // 点标签而不是点开关本体：开关的 `<button>` 被它自己的外观层盖着（组件库如此），
-  // 而标签是真正的 `<label for>`，点它就是用户实际的操作方式。
-  await page.getByText('光标联动').click()
+  // 直接点这个开关本体。原来这里点的是标签文字，因为组件库把真正的
+  // `<button role="switch">` 做成 1px 的隐藏元素、可见的滑块画在标签里 —— 指针够不着控件。
+  // `primitives/Toggle` 把 button 铺回控件自己的位置之后，「按角色与可访问名找到它再点」
+  // 就是可行的，这也正是这条断言该证明的事。
+  await page.getByRole('switch', { name: '光标联动' }).click()
   await expect(page).toHaveURL((url) => url.searchParams.get('connect') === 'false')
 
   const start = new Date(Date.now() - 30 * 60 * 1000)

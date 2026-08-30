@@ -29,43 +29,6 @@
   color: var(--cds-text-secondary);
 }
 
-/* ---- 键值清单 ---- */
-
-.settings-kv {
-  display: grid;
-  gap: var(--dbs-spacing-sm) var(--dbs-spacing-md);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: 0;
-}
-
-@media (max-width: 66rem) {
-  .settings-kv {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 42rem) {
-  .settings-kv {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.settings-kv__item {
-  display: grid;
-  gap: var(--dbs-spacing-xxs);
-  min-inline-size: 0;
-}
-
-.settings-kv dt {
-  color: var(--cds-text-secondary);
-}
-
-.settings-kv dd {
-  margin: 0;
-  min-inline-size: 0;
-  overflow-wrap: anywhere;
-}
-
 /* ---- 表单 ---- */
 
 .settings-form {
