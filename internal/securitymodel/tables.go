@@ -55,6 +55,9 @@ var PageAuthorizations = []PageAuthorization{
 	{Path: "/alert-settings/policies", Sources: []string{"web/src/routes/alert-settings/policies.tsx"}, Visible: allRoles},
 	{Path: "/alert-settings/maintenance-windows", Sources: []string{"web/src/routes/alert-settings/maintenance.tsx"}, Visible: allRoles},
 	{Path: "/alert-settings/maintenance-windows/new", Sources: []string{"web/src/routes/alert-settings/maintenance.tsx"}, Visible: allRoles},
+	// Scaffold page for the Carbon token layer. It reads no data and writes nothing;
+	// it goes away with the route when the component baseline lands.
+	{Path: "/design-scaffold", Sources: []string{"web/src/routes/design-scaffold.tsx"}, Visible: allRoles},
 }
 
 // PageWrites is the write-capability half of A10.

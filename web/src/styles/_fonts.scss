@@ -1,0 +1,74 @@
+@use 'sass:string';
+
+//
+// 自托管 IBM Plex（Latin 子集 woff2）。
+//
+// Carbon 自带的 @font-face 发射在 `index.scss` 里被 `$css--font-face: false` 关掉：
+// 它指向 `@ibm/plex` 包或 IBM 的 Akamai CDN，前者会拖进用不上的字重与衬线体，
+// 后者在无外网的私有化部署里会静默降级为系统字体。
+//
+// 字体文件在 `web/public/fonts/`，Vite 原样拷进 `web/dist/`，
+// 再由 `web/embed_dist.go` 的 `//go:embed dist` 随二进制发布。
+// 来源：npm 包 `@fontsource/ibm-plex-sans@5.3.0` / `@fontsource/ibm-plex-mono@5.3.0`
+// 的 `files/*-latin-<weight>-normal.woff2`，逐字节复制，未做再处理。
+// 许可：SIL Open Font License 1.1，全文随字体一起发布在 `web/public/fonts/LICENSE-OFL.txt`
+// （OFL 要求随字体分发）。增删字重时这里与 DESIGN.md 的字体档位必须同步。
+//
+// 这个文件不得 @use 任何 Carbon 模块：它在 Carbon 被配置之前加载。
+//
+
+@mixin -plex($family, $weight, $file) {
+  @font-face {
+    font-family: $family;
+    font-style: normal;
+    font-weight: $weight;
+    font-display: swap;
+    src: url('/fonts/#{$file}.woff2') format('woff2');
+    // fontsource 的 latin 子集范围，与文件实际覆盖一致。
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+      U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+      U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+}
+
+// DESIGN.md：无衬线三档 300 / 400 / 600，等宽两档 400 / 500。
+@include -plex('IBM Plex Sans', 300, 'ibm-plex-sans-latin-300-normal');
+@include -plex('IBM Plex Sans', 400, 'ibm-plex-sans-latin-400-normal');
+@include -plex('IBM Plex Sans', 600, 'ibm-plex-sans-latin-600-normal');
+@include -plex('IBM Plex Mono', 400, 'ibm-plex-mono-latin-400-normal');
+@include -plex('IBM Plex Mono', 500, 'ibm-plex-mono-latin-500-normal');
+
+// Plex 没有 CJK 覆盖，中文回退栈完全自理（DESIGN.md「Typography with Chinese」）。
+// 拉丁字形与数字走 Plex，汉字落到平台字面。
+//
+// 用 `string.unquote` 而不是插值：插值会剥掉引号，把 'IBM Plex Sans' 拆成三个族名。
+// Carbon 自己也是这么写这张表的。
+
+/// `@carbon/type` 的 `$font-families` 覆盖值。
+/// Sass 的 `with (...)` 是**替换**不是合并，所以 11 个键必须全部重新给出。
+$families: (
+  'mono':
+    string.unquote(
+      "'IBM Plex Mono', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', ui-monospace, SFMono-Regular, monospace"
+    ),
+  'sans':
+    string.unquote(
+      "'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', system-ui, -apple-system, sans-serif"
+    ),
+  'sans-condensed':
+    string.unquote(
+      "'IBM Plex Sans Condensed', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif"
+    ),
+  'sans-arabic':
+    string.unquote("'IBM Plex Sans Arabic', system-ui, sans-serif"),
+  'sans-devanagari':
+    string.unquote("'IBM Plex Sans Devanagari', system-ui, sans-serif"),
+  'sans-hebrew': string.unquote("'IBM Plex Sans Hebrew', system-ui, sans-serif"),
+  'sans-jp': string.unquote("'IBM Plex Sans JP', system-ui, sans-serif"),
+  'sans-kr': string.unquote("'IBM Plex Sans KR', system-ui, sans-serif"),
+  'sans-thai-looped':
+    string.unquote("'IBM Plex Sans Thai Looped', system-ui, sans-serif"),
+  'sans-thai': string.unquote("'IBM Plex Sans Thai', system-ui, sans-serif"),
+  'serif':
+    string.unquote("'IBM Plex Serif', 'Songti SC', 'SimSun', Georgia, serif"),
+);

@@ -20,10 +20,14 @@ import { instanceSettingsRoute } from './routes/instances.$id/settings'
 import { longQuerySamplesRoute } from './routes/instances.$id/longQuerySamples'
 import { queryStatisticsRoute } from './routes/instances.$id/queryStatisticsPage'
 import { sessionsRoute } from './routes/instances.$id/sessions'
+import { designScaffoldRoute } from './routes/design-scaffold'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { rootRoute } from './routes/root'
 import { usersRoute } from './routes/users'
+// Carbon 令牌层。全应用唯一的 Sass 入口，必须只 import 一次；见 styles/index.scss 顶部。
+// 排在 styles.css 之前：迁移期间旧页面仍由 styles.css 决定外观。
+import './styles/index.scss'
 import './styles.css'
 
 // `/` matched nothing, so the entry URL rendered a bare English "Not Found".
@@ -51,6 +55,7 @@ const routeTree = rootRoute.addChildren([
   longQuerySamplesRoute,
   queryStatisticsRoute,
   usersRoute,
+  designScaffoldRoute,
   notificationSettingsRoute,
   contactSettingsRoute,
   policySettingsRoute,

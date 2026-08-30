@@ -1,0 +1,70 @@
+//
+// 全应用唯一的 Sass 入口。只在 `web/src/main.tsx` 里 import 一次。
+//
+// **组件级 .scss 不得直接 @use Carbon。** Sass 只允许一个模块在整次编译里被
+// `with (...)` 配置一次，而且必须是它的**首次**加载；`@carbon/styles` 内部又会
+// 无配置地加载 `@carbon/type`。任何一个组件样式表先一步 @use 到 Carbon，
+// 这里的字体族与主题覆盖就会以
+// `This module was already loaded, so it can't be configured using "with"`
+// 报错，而且报错位置读起来跟真正的原因毫无关系。
+//
+// 下面 @use 的顺序是有意义的，不要重排：
+//   1. 本地纯粹模块（不碰 Carbon）
+//   2. Carbon config —— 必须最先，因为 type / theme 都会无配置地加载它
+//   3. Carbon type —— 必须早于 themes，因为 @carbon/themes 会加载 @carbon/type
+//   4. 本地 themes（此时加载 @carbon/themes 才安全）
+//   5. Carbon theme
+//   6. Carbon 本体
+//
+
+@use 'fonts';
+
+// 关掉 Carbon 自带的 @font-face 发射：它指向 `@ibm/plex` 包或 IBM 的 Akamai CDN。
+// 私有化部署没有外网，CDN 那条路会静默降级成系统字体。字体改为自托管，见 `_fonts.scss`。
+// `$use-akamai-cdn` 本来就默认 false，这里显式写出来，让「运行时不请求外部域名」
+// 这件事一次 grep 就能查到。
+@use '@carbon/react/scss/config' with (
+  $css--font-face: false,
+  $use-akamai-cdn: false
+);
+
+// 中文回退栈追加在 Plex 之后。Carbon 不提供任何 CJK 字面。
+@use '@carbon/react/scss/type' with ($font-families: fonts.$families);
+
+@use 'themes' as product-themes;
+
+// `$theme` 决定 Carbon 在编译期内联进 `var(--cds-x, <fallback>)` 的那个 fallback，
+// `$fallback` 决定没在主题里出现的令牌取什么值 —— 两个都要给，否则一部分用法会
+// 悄悄拿回 Carbon 的默认色。
+@use '@carbon/react/scss/theme' as theme with (
+  $theme: product-themes.$light,
+  $fallback: product-themes.$light
+);
+@use '@carbon/react/scss/zone' with ($zones: product-themes.$zones);
+
+@use 'product-tokens';
+
+// 整包引入 Carbon。这会发射全部组件的 CSS，不只我们用到的那些。
+// 现在这么做是因为九个页面迁移都还没落地，收窄这里等于给每个迁移设路障；
+// 需要收窄时把这一行换成逐个 `@use '@carbon/react/scss/components/<name>'`，
+// 只改这个文件。真实体积见 #207 的实测。
+@use '@carbon/react';
+
+// 字体档位工具类。必须在 Carbon 之后，才能压过 Carbon 的组件默认排版。
+@use 'type-classes';
+
+:root {
+  // Carbon 自己不发射 :root 的令牌块 —— 它靠 `var(--cds-x, <编译期 fallback>)` 兜底，
+  // 而有一部分用法（theme 模块导出的 $token 变量）是不带 fallback 的 `var(--cds-x)`。
+  // 显式发一遍，令牌才真正是运行时可覆盖的一层，深色主题也才只是换一个 map。
+  @include theme.theme(product-themes.$light);
+  @include product-tokens.theme-tokens(product-themes.$light);
+  @include product-tokens.structure-tokens;
+}
+
+// 加深色主题时，这里加一个块：
+//   [data-dbs-theme='dark'] {
+//     @include theme.theme(product-themes.$dark);
+//     @include product-tokens.theme-tokens(product-themes.$dark);
+//   }
+// 组件侧不需要任何改动 —— 令牌层存在的意义就是这个。

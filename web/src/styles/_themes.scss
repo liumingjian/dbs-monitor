@@ -1,0 +1,47 @@
+//
+// Carbon 主题映射的覆盖层。不 fork 上游：把 DESIGN.md 与 Carbon 冲突的令牌
+// 合并进 Carbon 自己的主题 map，其余全部沿用 Carbon 默认。
+//
+// 深色主题本次不做。加它时**只需要在本文件加一个 map，在 index.scss 加一个选择器块**，
+// 不需要改动任何组件或令牌引用 —— 这是这层存在的理由。见文件末尾的注释。
+//
+// 注意：这个文件会加载 `@carbon/themes`，而 `@carbon/themes` 会 @use `@carbon/type`。
+// 所以它必须在 `index.scss` 里排在 `@carbon/react/scss/type` 的配置**之后**。
+//
+
+@use 'sass:map';
+// compat/themes 而不是 themes：Carbon 的 `$theme` 默认值就是 compat（v10 ∪ v11）版本，
+// 用 v11 版本合并会悄悄丢掉 v10 兼容令牌。
+@use '@carbon/react/scss/compat/themes' as carbon;
+@use 'palette';
+
+/// 浅色（默认）主题相对 Carbon `white` 的差异。
+///
+/// 只列真正冲突的令牌。DESIGN.md 的其余部分（0px 圆角、单一蓝、1px 细线、
+/// 4px 间距网格、110ms/240ms 动效）已经是 Carbon 的默认值，覆盖它们只会制造噪音。
+$light-overrides: (
+  // 警告色：Carbon 默认 yellow-30 #f1c21b（白底 1.68:1，Carbon 自己当背景色用）。
+  // DESIGN.md 取 #c14200（5.19:1），因为监控产品要把它当前景使。
+  support-warning: palette.$status-warning,
+  // 次级文字：Carbon white 主题的 text-secondary 是 #525252，text-helper 已经是 #6f6f6f。
+  // DESIGN.md 的产品面次级文字统一为 ink-secondary #6f6f6f（5.02:1），
+  // 两个令牌都钉到这个值，避免同一档文字出现两种灰。
+  text-secondary: palette.$ink-secondary,
+  text-helper: palette.$ink-secondary
+);
+
+/// 默认主题。Carbon 的 white + 上面的覆盖。
+$light: map.merge(carbon.$white, $light-overrides);
+
+/// Carbon 的四个 zone（`.cds--white` / `.cds--g10` / `.cds--g90` / `.cds--g100`，
+/// 也是 `<Theme theme="...">` 落地的类）。浅色的两个跟着覆盖走，
+/// 否则页面上套一个 `<Theme theme="white">` 就会拿回 Carbon 的黄色警告。
+///
+/// 深色两个**故意保持 Carbon 原样**：#c14200 与 #6f6f6f 是按白底对比度选的，
+/// 搬到炭黑底上不成立。深色主题是单独的工单，届时在这里加两个 `$dark-overrides` 即可。
+$zones: (
+  white: $light,
+  g10: map.merge(carbon.$g10, $light-overrides),
+  g90: carbon.$g90,
+  g100: carbon.$g100,
+);

@@ -9,6 +9,13 @@ export PGHOST PGPORT PGUSER PGDATABASE PGPASSWORD
 DATABASE_URL ?= postgres://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$(PGDATABASE)?sslmode=disable
 export DATABASE_URL
 
+# Carbon 依赖链在**依赖安装阶段**上报遥测：`@carbon/react` / `@carbon/charts-react`
+# 的 package.json 带 `"postinstall": "ibmtelemetry ..."`。官方唯一的关闭方式就是这个
+# 环境变量（没有配置文件开关，.npmrc 也设不了环境变量）。默认它只在 CI 环境触发，
+# 而 IBM 自己的文档把容器算作 CI —— 本仓库的 docker 流程正好命中，所以显式关掉。
+IBM_TELEMETRY_DISABLED := true
+export IBM_TELEMETRY_DISABLED
+
 OAPI_CODEGEN := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.0
 REDOCLY := npx --yes @redocly/cli@2.20.3
 OPENAPI_TYPESCRIPT := npx --yes openapi-typescript@7.13.0
@@ -22,7 +29,7 @@ BUILD_LDFLAGS := -X main.version=$(BUILD_VERSION) -X main.commitSHA=$(CANDIDATE_
 # Keep tag-derived values out of shell source; the shell reads them as environment data.
 export BUILD_LDFLAGS
 
-.PHONY: gen dev-up dev-down build check check-full _check-full acceptance release-evidence check-vulnerabilities check-pg-matrix check-snapshot-matrix check-sqlc-vet
+.PHONY: gen web-install dev-up dev-down build check check-full _check-full acceptance release-evidence check-vulnerabilities check-pg-matrix check-snapshot-matrix check-sqlc-vet
 
 gen:
 	$(REDOCLY) bundle api/openapi.yaml --output api/openapi.bundled.yaml
@@ -30,6 +37,11 @@ gen:
 	$(OAPI_CODEGEN) --config api/oapi-client.yaml api/openapi.bundled.yaml
 	$(OPENAPI_TYPESCRIPT) api/openapi.bundled.yaml -o web/src/api/schema.d.ts
 	$(SQLC) generate
+
+# 前端依赖安装的入口。直接敲 `npm ci` 也可以，但要自己带上遥测开关；
+# 走这个目标就不会忘。
+web-install:
+	cd web && IBM_TELEMETRY_DISABLED=true npm ci
 
 dev-up:
 	@if [ -n "$${PGHOST_EXTERNAL:-}" ]; then \

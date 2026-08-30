@@ -1,0 +1,87 @@
+/* 脚手架页的样式。**临时件，随基线组件落地一起删除。**
+ *
+ * 写法是这一层的示范：纯 CSS，颜色 / 间距 / 圆角一律 var() 引用令牌层，
+ * 字体档位用 `.dbs-*` 类。不引 Sass —— 组件级 .scss 会拿到一份没配过的 Carbon。
+ * 全文件没有任何字面量色值。 */
+
+.scaffold {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xl);
+  padding: var(--dbs-page-padding);
+  background: var(--cds-background);
+  color: var(--cds-text-primary);
+}
+
+.scaffold-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-md);
+}
+
+.scaffold-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-sm);
+  align-items: center;
+}
+
+.scaffold-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--dbs-spacing-xs);
+}
+
+.scaffold-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xxs);
+  padding: var(--dbs-spacing-sm);
+  /* 1px 细线而不是投影，0px 圆角 —— 规范里这两条是同一条。 */
+  border: 1px solid var(--cds-border-subtle-00);
+  border-radius: var(--dbs-radius-none);
+  background: var(--cds-layer);
+}
+
+.scaffold-chip {
+  block-size: var(--dbs-spacing-lg);
+  border-radius: var(--dbs-radius-none);
+}
+
+.scaffold-chip[data-token='support-warning'] { background: var(--cds-support-warning); }
+.scaffold-chip[data-token='support-error'] { background: var(--cds-support-error); }
+.scaffold-chip[data-token='support-success'] { background: var(--cds-support-success); }
+.scaffold-chip[data-token='text-secondary'] { background: var(--cds-text-secondary); }
+.scaffold-chip[data-token='interactive'] { background: var(--cds-interactive); }
+.scaffold-chip[data-token='viz-1'] { background: var(--dbs-viz-1); }
+.scaffold-chip[data-token='viz-2'] { background: var(--dbs-viz-2); }
+.scaffold-chip[data-token='viz-3'] { background: var(--dbs-viz-3); }
+.scaffold-chip[data-token='viz-4'] { background: var(--dbs-viz-4); }
+.scaffold-chip[data-token='viz-5'] { background: var(--dbs-viz-5); }
+.scaffold-chip[data-token='viz-6'] { background: var(--dbs-viz-6); }
+
+.scaffold-caption {
+  color: var(--cds-text-secondary);
+}
+
+.scaffold-rows {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 var(--dbs-spacing-md);
+  border-block-start: 1px solid var(--cds-border-subtle-00);
+}
+
+.scaffold-row-pair {
+  display: contents;
+}
+
+.scaffold-cell {
+  display: flex;
+  align-items: center;
+  block-size: var(--dbs-table-row-height);
+  border-block-end: 1px solid var(--cds-border-subtle-00);
+}
+
+.scaffold-cell[data-align='end'] {
+  justify-content: flex-end;
+}

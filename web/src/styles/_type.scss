@@ -1,0 +1,72 @@
+//
+// DESIGN.md 的字体档位，落到 Carbon 的 type 模块上。
+//
+// 只在 Carbon 的 type-style 与 DESIGN.md 冲突、或者 Carbon 没有对应档位时才写规则。
+//
+
+@use '@carbon/react/scss/type' as type;
+
+/// 表内数值。DESIGN.md `{typography.numeric}`。
+///
+/// 关键差异：Carbon 的等宽档位 `$code-01` / `$code-02` 带 `letter-spacing: 0.32px`
+/// （已核对 @carbon/type 11.66.0 的 `scss/_styles.scss`）。字距叠在等宽数字上会
+/// 让每列的宽度不再等于「字符数 × 字宽」，列对齐就断了。DESIGN.md 明确要求
+/// 正文字距只施加于拉丁文本、不施加于等宽数值，所以这里把它清零。
+@mixin numeric {
+  @include type.font-family('mono');
+
+  font-size: 0.875rem; // 14px
+  font-weight: type.font-weight('regular');
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+  line-height: 1.43;
+}
+
+/// KPI 大数。DESIGN.md `{typography.numeric-display}`。
+@mixin numeric-display {
+  @include type.font-family('mono');
+
+  font-size: 1.75rem; // 28px
+  font-weight: type.font-weight('regular');
+  font-variant-numeric: tabular-nums;
+  letter-spacing: normal;
+  line-height: 1.2;
+}
+
+/// 页标题。DESIGN.md `{typography.page-title}`：28px / 300。
+///
+/// 300 只用在这里。DESIGN.md：中文正文一律 400，细体只留给 28px 及以上的标题，
+/// 14px 的细体中文会糊掉。产品面上没有比 28px 更大的字，所以整个应用里
+/// 出现 `font-weight: 300` 的地方只应该是这一个 mixin。
+@mixin page-title {
+  @include type.font-family('sans');
+
+  font-size: 1.75rem; // 28px
+  font-weight: type.font-weight('light');
+  letter-spacing: 0;
+  line-height: 1.25;
+}
+
+/// 面板标题。DESIGN.md `{typography.panel-title}`：14px / 600。
+@mixin panel-title {
+  @include type.type-style('heading-compact-01');
+}
+
+/// 表头。DESIGN.md `{typography.table-header}`：12px / 600 / 0.32px。
+@mixin table-header {
+  @include type.font-family('sans');
+
+  font-size: 0.75rem; // 12px
+  font-weight: type.font-weight('semibold');
+  letter-spacing: 0.32px;
+  line-height: 1.33;
+}
+
+/// 正文。DESIGN.md `{typography.body-sm}`：14px / 400 / 0.16px —— 与 Carbon 的
+/// `body-01` 逐字相同，所以直接用 Carbon 的档位，不另立一套。
+///
+/// 中文正文一律 400。不要在这里或任何 14px 档位上用 `light`。
+@mixin body {
+  @include type.font-family('sans');
+  @include type.type-style('body-01');
+}
