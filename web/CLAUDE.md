@@ -115,6 +115,21 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 回填与聚焦、重置、字段联动四件都在里面）。
 应用外框（炭黑页头 + 可折叠侧栏）：`web/src/routes/root/index.tsx`；
 折叠状态是纯模块 `web/src/routes/root/navCollapse.ts`，不要在组件里再写一份存储读写。
+页面版式与列表页样板：`web/src/routes/instances/index.tsx`。
+
+### 列表页的三段版式与密度切换
+
+列表页一律三段：**页头**（`h1` + 该页唯一的主操作）、**工具条**（筛选控件 + 数据新鲜度）、
+**一个 `flush` 的 `Panel` 包住 `DataGrid`，分页放进 `Panel` 的 footer**。面板标题栏右侧只放
+「作用于这张表的视图开关」，主操作不放那里。列只给 `minWidth`；40px 的行放不下两行，
+所以一格只写一个事实，别把四件事挤进一格。
+
+**密度切换是产品级偏好，不是某张表的局部状态。** 读写只有一个去处：纯模块
+`web/src/routes/root/tableDensity.ts`（`readTableDensity` / `writeTableDensity`，落 localStorage，
+存储不可用就降级成不记忆）。页面拿它初始化 `useState`，在 `onChange` 里同时 set + write，
+控件是一个两档的 Carbon `ContentSwitcher`（分段单选，不是开关）。样板在实例列表里，照抄十行，
+不要各自再发明一套键名。**密集档（32px）不渲染趋势缩略图那一列** —— 规范是「丢掉缩略图而不是
+压扁它」，留一列空格子只是白占宽度。
 
 ### 页签条是导航，不是受控状态
 

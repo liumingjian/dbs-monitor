@@ -1,0 +1,28 @@
+/*
+ * 登录页版式。它在应用外框之外，所以这里自己负责居中与留白。
+ */
+
+.login-page {
+  display: flex;
+  justify-content: center;
+  padding-block-start: 12vh;
+  padding-inline: var(--dbs-spacing-md);
+}
+
+.login-panel {
+  inline-size: 100%;
+  max-inline-size: 24rem;
+}
+
+.login-form {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 按钮跟着表单占满一行：登录页只有这一个去处，没有第二个动作要与它并排。 */
+  justify-items: stretch;
+}
+
+.login-form .cds--btn {
+  inline-size: 100%;
+  max-inline-size: none;
+  justify-content: center;
+}
