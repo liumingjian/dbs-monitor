@@ -1,0 +1,167 @@
+/*
+ * 告警设置合并页的版式。纯 CSS（组件级样式表不得是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距 / 圆角一律走令牌，字体档位走 `.dbs-*` 类，不写字面量色值。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定。
+ */
+
+.alert-settings-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.alert-settings-header {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+}
+
+.alert-settings-header h1 {
+  margin: 0;
+}
+
+.alert-settings-header__lede {
+  margin: 0 0 var(--dbs-spacing-xs);
+  color: var(--cds-text-secondary);
+}
+
+/* 页签上的失败角标：6px 状态色圆点。颜色不是唯一信号 —— 它带 title，
+   而页签文案本身也没有被替换掉。 */
+.alert-settings-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+}
+
+.alert-settings-tab-label__dot {
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--dbs-radius-none);
+  background-color: var(--dbs-status-critical);
+}
+
+/* 标签内容：面板之间一档间距。 */
+.alert-settings-stack {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* ---- 表单 ---- */
+
+.alert-settings-form {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+  max-inline-size: 44rem;
+}
+
+.alert-settings-form--inline {
+  margin-block-start: var(--dbs-spacing-lg);
+}
+
+.alert-settings-form h3 {
+  margin: 0;
+}
+
+.alert-settings-form__row {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.alert-settings-form__row--bottom {
+  align-items: end;
+}
+
+.alert-settings-actions {
+  display: flex;
+  gap: var(--dbs-spacing-xs);
+}
+
+/* ---- 起止时间：日期与时刻是四个独立控件，组合值回显在下方 ---- */
+
+.alert-settings-datetime {
+  display: grid;
+  gap: var(--dbs-spacing-sm);
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: var(--dbs-spacing-sm);
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: var(--dbs-radius-none);
+}
+
+.alert-settings-datetime__legend {
+  padding-inline: var(--dbs-spacing-xxs);
+  color: var(--cds-text-secondary);
+}
+
+/* 组合出来的值必须看得见：四个数字读起来容易对错。 */
+.alert-settings-datetime__echo {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+/* Carbon 的 range 型日期选择器默认把两个定宽输入框并排；让它们各占一半，与时刻那一行对齐。
+   选择器刻意写到三个类：组件级样式表是被路由模块 import 进来的，在打包顺序上排在
+   `styles/index.scss` **之前**，同特指度下 Carbon 会赢，必须比它高一档才生效。 */
+.alert-settings-datetime .cds--date-picker.cds--date-picker--range {
+  display: grid;
+  inline-size: 100%;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.alert-settings-datetime .cds--date-picker.cds--date-picker--range .cds--date-picker-container,
+.alert-settings-datetime .cds--date-picker.cds--date-picker--range .cds--date-picker__input {
+  inline-size: 100%;
+  max-inline-size: none;
+}
+
+/* ---- 表格内容 ---- */
+
+.alert-settings-strong {
+  font-weight: 600;
+}
+
+.alert-settings-muted {
+  color: var(--cds-text-secondary);
+}
+
+.alert-settings-cell-link {
+  display: inline-block;
+  max-inline-size: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}
+
+/* 行内操作：一格一行，装不下交给单元格自己的省略号，不换行把行撑高。 */
+.alert-settings-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ---- 通知失败明细 ---- */
+
+.alert-settings-failures {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  justify-items: start;
+  margin-block-start: var(--dbs-spacing-lg);
+}
+
+.alert-settings-failures__records {
+  inline-size: 100%;
+  margin-block-start: var(--dbs-spacing-xs);
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+
+/* 维护窗口的状态页签条在面板内部，紧贴表格上方。 */
+.alert-settings-stack .cds--tab-content {
+  padding: 0;
+}
