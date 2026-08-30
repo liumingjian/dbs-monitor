@@ -276,7 +276,7 @@ function ChartCanvas({ label, series, step, loading, connectionGroup, thresholds
   })))
 
   return (
-    <figure className="metric-figure" data-loading={loading} aria-label={`${label}趋势`}>
+    <figure className="metric-figure" data-testid="metric-chart" data-loading={loading} aria-label={`${label}趋势`}>
       <div ref={ref} className="metric-chart-canvas" />
       <figcaption>实际粒度：{step}</figcaption>
       <details className="metric-data-table">

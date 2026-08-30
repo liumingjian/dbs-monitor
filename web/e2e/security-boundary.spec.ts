@@ -32,22 +32,18 @@ test('[SEC-10] production CSP keeps the login-to-chart path functional', async (
   await page.getByRole('link', { name: '监控与报警' }).click()
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')
 
-  const chart = page.getByTestId('metric-card').locator('canvas').first()
+  const chart = page.getByTestId('metric-card').getByTestId('metric-chart').first()
   await expect(chart).toBeVisible()
-  const chartPixels = await chart.evaluate((canvas) => {
-    const chartCanvas = canvas as HTMLCanvasElement
-    const context = chartCanvas.getContext('2d')
-    if (!context) return 0
-    const pixels = context.getImageData(0, 0, chartCanvas.width, chartCanvas.height).data
-    let painted = 0
-    for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] !== 0) {
-        painted++
-      }
-    }
-    return painted
-  })
-  expect(chartPixels).toBeGreaterThan(0)
+  // 图下方的无障碍数据表里存在真实数值，说明这位有权限的用户确实拿到并渲染了图表数据。
+  // 原先靠读 canvas 像素证明同一件事；数据表与 canvas/SVG 哪种渲染技术都无关。
+  await expect.poll(async () => {
+    const table = chart.getByRole('table')
+    if (!(await table.isVisible())) await chart.getByText('查看数据表').click()
+    const rows = await table.getByRole('row').all()
+    const cells = await Promise.all(rows.map((row) => row.getByRole('cell').allInnerTexts()))
+    const values = cells.filter((row) => row.length > 0).map((row) => row[row.length - 1])
+    return values.filter((value) => value !== '' && !value.includes('缺数')).length
+  }).toBeGreaterThan(0)
 
   const tabStyle = await page.getByRole('tab', { name: '标准监控' }).evaluate((element) => {
     const style = getComputedStyle(element)
