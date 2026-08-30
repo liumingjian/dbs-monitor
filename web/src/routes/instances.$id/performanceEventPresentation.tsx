@@ -1,5 +1,5 @@
-import { Tag } from 'antd'
 import type { components } from '../../api/schema'
+import { StatusBadge, type StatusTone } from '../../primitives/StatusBadge'
 
 type AlertDisposition = components['schemas']['AlertDisposition']
 type AlertSeverity = components['schemas']['AlertSeverity']
@@ -22,12 +22,15 @@ export function performanceEventTypeLabel(eventType: PerformanceEventType): stri
 }
 
 export function PerformanceEventSeverityTag({ severity }: { severity: AlertSeverity }) {
-  const presentation = performanceEventSeverityPresentation(severity)
-  return <Tag color={presentation.color}>{presentation.label}</Tag>
+  return <StatusBadge tone={performanceEventSeverityTone(severity)}>
+    {performanceEventSeverityPresentation(severity).label}
+  </StatusBadge>
 }
 
+/// 「维护中」是归因，不是严重度：维护窗口里触发的事件不该和真正的告警抢注意力，
+/// 所以走中性档。迁移前它用的是组件库的 processing 蓝，而蓝色只表示可交互。
 export function PerformanceEventMaintenanceTag({ inMaintenance }: { inMaintenance: boolean }) {
-  return inMaintenance ? <Tag color="processing">维护中</Tag> : null
+  return inMaintenance ? <StatusBadge tone="unknown">维护中</StatusBadge> : null
 }
 
 export function performanceEventSeverityPresentation(severity: AlertSeverity): SeverityPresentation {
@@ -35,6 +38,18 @@ export function performanceEventSeverityPresentation(severity: AlertSeverity): S
     case 'critical': return { label: '严重', color: 'error' }
     case 'warning': return { label: '警告', color: 'warning' }
     case 'info': return { label: 'Info', color: 'processing' }
+    default: return assertNever(severity)
+  }
+}
+
+/// 严重度 → 展示档位。刻意与上面的 `color` 分开写，而不是把 `color` 翻译一道：
+/// `color` 是行为基线用例锁住的旧取值（其中 `processing` 是一支蓝），
+/// 档位则是展示层那四档状态语汇 —— `info` 落在中性档，因为状态从不用蓝色表示。
+function performanceEventSeverityTone(severity: AlertSeverity): StatusTone {
+  switch (severity) {
+    case 'critical': return 'critical'
+    case 'warning': return 'warning'
+    case 'info': return 'unknown'
     default: return assertNever(severity)
   }
 }

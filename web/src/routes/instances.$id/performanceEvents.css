@@ -1,0 +1,42 @@
+/*
+ * 性能事件列表的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定。
+ */
+
+.performance-events-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，表格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.performance-events-page__heading h2 {
+  margin: 0;
+}
+
+.performance-events-page__heading p {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+/* 工具条：筛选控件在左，数据新鲜度推到右端。 */
+.performance-events-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--dbs-spacing-sm);
+}
+
+.performance-events-toolbar__freshness {
+  margin-inline-start: auto;
+  padding-block-end: var(--dbs-spacing-xs);
+  color: var(--cds-text-secondary);
+}
+
+/* 分页条在面板 footer 里，去掉 Carbon 自带的上边框：footer 上面已经有一条发丝线了。 */
+.performance-events-pagination {
+  border-block-start: none;
+  inline-size: 100%;
+}
