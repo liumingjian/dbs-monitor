@@ -1,0 +1,182 @@
+/*
+ * 实例总览的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距一律走令牌，字体档位走 `.dbs-*` 类，没有一个字面量色值。
+ *
+ * 碰到 Carbon 单类名规则（`.cds--link` / 结构化列表）的地方，选择器写成重复类名把
+ * 优先级抬高一档 —— 只写一遍就得靠样式表注入顺序去压它，而那个顺序由打包器的模块图
+ * 决定，边距会静默算成 0（先例见 primitives/NotificationBar.css）。
+ */
+
+.overview-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，面板才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.overview-page__reset {
+  justify-self: start;
+}
+
+/* ---- 健康状态带 ---- */
+
+/* 上下发丝线把「这台实例现在怎么样」从页签与模块之间划出来，不用底色也不用投影。 */
+.overview-page__status {
+  display: grid;
+  gap: var(--dbs-spacing-xs);
+  padding-block: var(--dbs-spacing-md);
+  border-block: 1px solid var(--cds-border-subtle-01);
+}
+
+.overview-page__status-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-sm);
+  min-inline-size: 0;
+}
+
+.overview-page__attribution {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.overview-page__endpoint {
+  color: var(--cds-text-secondary);
+}
+
+/* C / W / I 三个计数。字母前缀本身就说明了级别，颜色只是让非零的那一档先跳出来。 */
+.overview-page__counts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-page__counts span[data-tone='critical'] { color: var(--dbs-status-critical); }
+.overview-page__counts span[data-tone='warning'] { color: var(--dbs-status-warning); }
+.overview-page__counts span[data-tone='unknown'] { color: var(--cds-text-secondary); }
+
+.overview-page__freshness {
+  display: flex;
+  justify-content: flex-end;
+  color: var(--cds-text-secondary);
+}
+
+/* ---- 模块网格 ---- */
+
+.overview-page__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--dbs-spacing-md);
+  align-items: stretch;
+}
+
+/* 快速排障入口是一排按钮，横着铺满比缩在半栏里好读。 */
+.overview-page__panel[data-overview-module='troubleshooting'] {
+  grid-column: 1 / -1;
+}
+
+/* 面板内容之间的间隔归面板自己管，省得每个子块各写一份 margin。 */
+.overview-page__panel .dbs-panel__body {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  align-content: start;
+}
+
+.overview-page__panel-link.overview-page__panel-link {
+  justify-self: start;
+}
+
+/* ---- 指标事实 ---- */
+
+.overview-page__facts {
+  display: grid;
+  gap: var(--dbs-spacing-sm);
+  min-inline-size: 0;
+}
+
+/* 取不到值的那一格：标题、原因、去处三行，紧凑但不省略任何一件。 */
+.overview-page__missing {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  justify-items: start;
+  min-inline-size: 0;
+}
+
+/* ---- 键值清单 ---- */
+
+/* Carbon 给结构化列表留了一段很大的下边距，面板里的间距由上面的 grid 统一管。 */
+.overview-page__list.overview-page__list {
+  margin-block: 0;
+}
+
+/* ---- 近期性能事件 ---- */
+
+.overview-page__events {
+  display: grid;
+  gap: var(--dbs-spacing-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-page__event {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.overview-page__event + .overview-page__event {
+  padding-block-start: var(--dbs-spacing-sm);
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+
+.overview-page__event-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+}
+
+.overview-page__event-head .dbs-caption,
+.overview-page__event p {
+  color: var(--cds-text-secondary);
+}
+
+.overview-page__event p {
+  margin: 0;
+}
+
+.overview-page__empty {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  justify-items: start;
+}
+
+.overview-page__empty .dbs-caption {
+  color: var(--cds-text-secondary);
+}
+
+/* ---- 快速排障入口 ---- */
+
+.overview-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+}
+
+/* 窄屏：模块改成一列，排障入口跟着回到普通格子。 */
+@media (max-width: 42rem) {
+  .overview-page__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-page__panel[data-overview-module='troubleshooting'] {
+    grid-column: auto;
+  }
+
+  .overview-page__actions > * {
+    inline-size: 100%;
+  }
+}

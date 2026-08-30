@@ -111,15 +111,19 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
     const url = new URL(request.url())
     return url.pathname.endsWith('/metrics/series') && url.searchParams.get('step') === '1m'
   })
-  await page.getByLabel('数据粒度').click()
-  await page.getByText('1 分钟', { exact: true }).click()
+  // 角色 + 可访问名，不走 getByLabel：下拉的按钮与它展开的列表框指向同一个 <label>，
+  // 两个元素因此都「被这个标签标注」，getByLabel 一次会命中两个。
+  await page.getByRole('combobox', { name: '数据粒度' }).click()
+  await page.getByRole('option', { name: '1 分钟' }).click()
   await stepRequest
   await expect(page).toHaveURL((url) => url.searchParams.get('step') === '1m')
   await expect(tpsChart.getByText('实际粒度：1m')).toBeVisible()
 
   await page.getByLabel('图表列数').getByText('3 列').click()
   await expect(page).toHaveURL((url) => url.searchParams.get('columns') === '3')
-  await page.getByLabel('光标联动').click()
+  // 点标签而不是点开关本体：开关的 `<button>` 被它自己的外观层盖着（组件库如此），
+  // 而标签是真正的 `<label for>`，点它就是用户实际的操作方式。
+  await page.getByText('光标联动').click()
   await expect(page).toHaveURL((url) => url.searchParams.get('connect') === 'false')
 
   const start = new Date(Date.now() - 30 * 60 * 1000)
