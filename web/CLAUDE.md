@@ -135,6 +135,8 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 应用外框（炭黑页头 + 可折叠侧栏）：`web/src/routes/root/index.tsx`；
 折叠状态是纯模块 `web/src/routes/root/navCollapse.ts`，不要在组件里再写一份存储读写。
 页面版式与列表页样板：`web/src/routes/instances/index.tsx`。
+变化高亮（刷新后确实变了的数值闪一次，400ms，尊重 `prefers-reduced-motion`）：
+`web/src/routes/instances.$id/changedValueFlash.tsx`。轮询页面照它引一次，别各写一套。
 
 ### 列表页的三段版式与密度切换
 
