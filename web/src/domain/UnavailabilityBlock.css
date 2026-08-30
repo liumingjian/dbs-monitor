@@ -1,0 +1,32 @@
+/*
+ * 不可用说明块：一条通知 + 一个去处链接，竖排。
+ * 色值全部走令牌，本文件不出现任何字面量色值。
+ */
+
+.dbs-unavailability {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--dbs-spacing-xs);
+  min-inline-size: 0;
+}
+
+/* 原因与页面补充说明各占一行：两句话连排会读成一句。 */
+.dbs-unavailability__line {
+  display: block;
+}
+
+.dbs-unavailability__line + .dbs-unavailability__line {
+  margin-block-start: var(--dbs-spacing-xxs);
+}
+
+/*
+ * 链接缩进到与通知正文同一条竖线上，读起来是这条通知的下一步而不是页面的另一件事。
+ *
+ * 选择器重复类名（与 primitives/NotificationBar.css 同一手法）：Carbon 的 `.cds--link`
+ * 也是单类名，只写一遍就得靠样式表注入顺序压过它，而那个顺序由打包器的模块图决定 ——
+ * 实测这条规则会输，缩进静默变成 0。重复一次把优先级抬高一档，顺序就不再重要。
+ */
+.dbs-unavailability__action.dbs-unavailability__action {
+  margin-inline-start: var(--dbs-spacing-md);
+}
