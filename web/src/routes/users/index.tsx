@@ -2,8 +2,6 @@ import {
   Button,
   ContentSwitcher,
   CopyButton,
-  Modal,
-  Pagination,
   Select,
   SelectItem,
   Switch,
@@ -22,7 +20,9 @@ import type { DataGridColumn } from '../../primitives/DataGrid'
 import { DataGrid } from '../../primitives/DataGrid'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
 import { NotificationBar } from '../../primitives/NotificationBar'
+import { Pagination } from '../../primitives/Pagination'
 import { Panel } from '../../primitives/Panel'
 import { StatusDot } from '../../primitives/StatusDot'
 import { TruncatedText } from '../../primitives/TruncatedText'
@@ -136,12 +136,6 @@ function UsersPage() {
           pageSize={pageSize}
           pageSizes={[10, 25, 50]}
           totalItems={users.length}
-          backwardText="上一页"
-          forwardText="下一页"
-          itemsPerPageText="每页条数"
-          itemRangeText={(min, max, total) => `第 ${min}–${max} 条，共 ${total} 条`}
-          pageRangeText={(_current, total) => `共 ${total} 页`}
-          pageNumberText="页码"
           onChange={({ page: nextPage, pageSize: nextPageSize }) => {
             setPage(nextPage)
             setPageSize(nextPageSize)

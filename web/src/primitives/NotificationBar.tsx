@@ -30,6 +30,23 @@ function assertNever(value: never): never {
   throw new Error(`unhandled notification tone: ${String(value)}`)
 }
 
+/// 状态图标的可访问描述。组件库不给就用 `` `${kind} icon` `` —— `error icon`、`warning icon`，
+/// 全是英文，而且只有读屏用户会撞见，所以这里必须显式给。
+function statusDescription(tone: NotificationTone) {
+  switch (tone) {
+    case 'critical':
+      return '严重'
+    case 'warning':
+      return '警告'
+    case 'normal':
+      return '正常'
+    case 'info':
+      return '说明'
+    default:
+      return assertNever(tone)
+  }
+}
+
 function carbonKind(tone: NotificationTone) {
   switch (tone) {
     case 'critical':
@@ -61,6 +78,9 @@ export function NotificationBar({
     lowContrast: true,
     title,
     children,
+    statusIconDescription: statusDescription(tone),
+    // 关闭按钮的 `aria-label` 与 `title`，组件库默认是 `close notification`。
+    'aria-label': '关闭通知',
     hideCloseButton: onClose === undefined,
     onClose: onClose === undefined ? undefined : () => onClose(),
     className: ['dbs-notification', className].filter(Boolean).join(' '),

@@ -40,7 +40,10 @@ describe('one-time password dialog', () => {
 
     render(<Harness />)
     expect(screen.getByDisplayValue(password)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /关.*闭/ }))
+    // 名字写死成「关闭」而不是 /关.*闭/：对话框右上角的关闭按钮现在也叫「关闭对话框」
+    // （组件库的默认名 `Close` 是英文，已在 `primitives/Modal` 里统一换掉），模糊匹配会同时
+    // 命中两个按钮。点哪一个都能关，这里定位的是页脚那颗主按钮。
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
     expect(screen.queryByDisplayValue(password)).toBeNull()
   })
 })

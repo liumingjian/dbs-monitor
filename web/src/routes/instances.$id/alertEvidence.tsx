@@ -1,6 +1,5 @@
 import {
   Button,
-  Modal,
   Select,
   SelectItem,
   StructuredListBody,
@@ -22,6 +21,7 @@ import { DataGrid } from '../../primitives/DataGrid'
 import type { DataGridColumn } from '../../primitives/DataGrid'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { Panel } from '../../primitives/Panel'
 import { SkeletonBlock } from '../../primitives/SkeletonBlock'

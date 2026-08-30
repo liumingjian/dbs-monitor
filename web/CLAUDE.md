@@ -68,14 +68,33 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 一件一文件，只导出组件；不放工具函数——`primitives/` 不是新的 `utils/`。
 
 基线清单（页面从这里取件，不要自己再拼一套）：
-`DataGrid`（数据表格外壳） / `Drawer` / `FormField` / `Icon` / `MetricBar` / `NotificationBar` /
-`Panel` / `SkeletonBlock` / `Sparkline`（行内趋势缩略图，手写 SVG） / `StatusBadge` / `StatusDot` /
-`TruncatedText`。
+`DataGrid`（数据表格外壳） / `Drawer` / `FormField` / `Icon` / `MetricBar` / `Modal` /
+`MultiSelect` / `NotificationBar` / `NumberInput` / `Pagination` / `Panel` / `SkeletonBlock` /
+`Sparkline`（行内趋势缩略图，手写 SVG） / `StatusBadge` / `StatusDot` / `TruncatedText`。
 页面组**不得修改**这一层；缺件写进结题报告，由协调者派活，不要在别人脚下改共享件。
+
+`Modal` / `MultiSelect` / `NumberInput` / `Pagination` 是**中文默认值外壳**：Carbon 的默认文案
+全是英文，而且不给就静默生效 —— `Modal` 的关闭按钮叫 `Close`（`aria-label` 与 `title` 两处），
+`Pagination` 的页码下拉叫 `Page of 3 pages`，`MultiSelect` 的清除按钮悬停显示
+`Clear selected items`，`NumberInput` 的加减按钮叫 `Increment number`。
+**这四个组件一律从 `primitives/` 引入，不要再直接从 Carbon 包里拿它们**，
+否则英文又漏回界面里。同名 props 照常覆盖默认值。其余控件的英文默认值请就地显式给中文
+（`OverflowMenu` 的 `aria-label`、`PasswordInput` 的 `showPasswordLabel` /
+`hidePasswordLabel`、`CopyButton` 的 `iconDescription` / `feedback`、`DatePicker` 的
+`locale="zh"`）—— 判断标准是「读屏用户会不会听见英文」，可访问名也算界面文案。
 
 表格的三条硬规则写在 `DataGrid.tsx` 顶部：1280px 及以上不横向滚动也不丢列（fixed 布局 +
 按列最小宽度分配的百分比列宽 + 省略号悬停提示），粘性表头与横向滚动容器不是同一个元素，
 行高显式给死（标准 40px / 密集 32px）。页面只需给每列 `minWidth`，不要自己设 `overflow-x`。
+
+**行高是量出来的，不是算出来的。** `block-size` 是下限不是上限：格子里放一个 32px 的
+`Button size="sm"`，加上组件库的单元格上下内边距就能把「40px 的行」撑到 46px，不报错也不越界。
+`DataGrid.css` 因此把单元格上下内边距归零、密集档把行内按钮收到 24px。改那几条之前先在浏览器里
+量一遍行高。
+
+`cellPadding="compact"` 是**给列多到装不下的表用的选项**：组件库的单元格左右各 16px，15 列的表
+在 1280px 下光内边距就吃掉 974px 里的 480px。紧凑档压到 8px/侧，换回 240px 字形宽度，代价是列间
+留白减半。已经调好的表不要打开它 —— 打开就得连 `minWidth` / `grow` 一起重调。
 
 @floating-ui/react 是 `Drawer` 的焦点陷阱用的直接依赖（它本来就在 Carbon 的依赖树里，
 这里只是显式声明）。除抽屉外没有第二处用它，页面组也不得因此认为可以新增依赖。
