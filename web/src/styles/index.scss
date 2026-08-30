@@ -47,6 +47,15 @@
 // Carbon 的全局重置。整包引入时它是被顺带带进来的，逐组件引入就得自己写出来。
 @use '@carbon/react/scss/reset';
 
+// 布局令牌（`--cds-layout-size-height-*` / `--cds-layout-density-padding-inline-*`）。
+// 和 reset 一样，是整包引入时顺带进来、逐组件引入必须自己写的一行，而且**不写就坏**：
+// 输入框一类组件的高度是 `block-size: var(--cds-layout-size-height-local)`，
+// 而这个 local 值是一串引用上面那些令牌的 `clamp()`。令牌没定义 ⇒ 整条声明在计算值阶段
+// 失效 ⇒ 高度退回 auto，40px 的输入框缩成 19px 的一条。表现上只是「有点矮」，
+// 不报错也不显眼，所以这里写清楚：它不是可选项。（栅格 `scss/grid` 与 `scss/layer`
+// 仍然刻意不引入，那两个是版式工具类，与这一行无关。）
+@use '@carbon/react/scss/layout';
+
 // ---------------------------------------------------------------------------
 // Carbon 组件子集。
 //
