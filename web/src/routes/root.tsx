@@ -89,7 +89,11 @@ function AuthenticatedHeader() {
 export function NotificationSettingsLabel({ hasFailures }: { hasFailures: boolean }) {
   return (
     <Badge dot={hasFailures} status="error" offset={[5, 0]}>
-      <span className="header-link-label" title={hasFailures ? '通知渠道存在未清除失败' : undefined}>告警设置</span>
+      <span
+        className="header-link-label"
+        data-testid={hasFailures ? 'notification-failure-badge' : undefined}
+        title={hasFailures ? '通知渠道存在未清除失败' : undefined}
+      >告警设置</span>
     </Badge>
   )
 }

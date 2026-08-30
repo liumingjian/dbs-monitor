@@ -32,7 +32,7 @@ test('[SEC-10] production CSP keeps the login-to-chart path functional', async (
   await page.getByRole('link', { name: '监控与报警' }).click()
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')
 
-  const chart = page.locator('.metric-card canvas').first()
+  const chart = page.getByTestId('metric-card').locator('canvas').first()
   await expect(chart).toBeVisible()
   const chartPixels = await chart.evaluate((canvas) => {
     const chartCanvas = canvas as HTMLCanvasElement

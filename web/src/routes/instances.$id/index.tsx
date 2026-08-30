@@ -98,7 +98,7 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
   return <Space direction="vertical" size="large" style={{ width: '100%' }}>
     <WorkbenchHeader id={id} instanceName={instance.name} activeKey="overview" search={search} />
 
-    <section className="overview-status" aria-labelledby="instance-health-heading">
+    <section className="overview-status" data-testid="overview-status" aria-labelledby="instance-health-heading">
       <Space direction="vertical" size="small" style={{ width: '100%' }}>
         <Space wrap>
           <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
@@ -206,7 +206,7 @@ function OverviewCard({ module, title, icon, loading = false, children }: {
     className="overview-card"
     style={{ '--card-index': OVERVIEW_MODULES.indexOf(module) } as CSSProperties}
     data-overview-module={module}
-    title={<Space>{icon}<span>{title}</span></Space>}
+    title={<Space>{icon}<span data-testid="overview-module-title">{title}</span></Space>}
     loading={loading}
   >
     {children}

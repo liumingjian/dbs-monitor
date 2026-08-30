@@ -35,7 +35,10 @@ export function AlertSettingsHeader({ active }: { active: AlertSettingsPage }) {
 export function NotificationChannelsLabel({ hasFailures }: { hasFailures: boolean }) {
   return (
     <Badge dot={hasFailures} status="error" offset={[5, 0]}>
-      <span title={hasFailures ? '通知渠道存在未清除失败' : undefined}>通知渠道</span>
+      <span
+        data-testid={hasFailures ? 'notification-failure-badge' : undefined}
+        title={hasFailures ? '通知渠道存在未清除失败' : undefined}
+      >通知渠道</span>
     </Badge>
   )
 }

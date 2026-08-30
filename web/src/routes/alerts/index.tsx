@@ -2,6 +2,7 @@ import { BellOutlined } from '@ant-design/icons'
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Empty, Space, Switch, Table, Tabs, Tag, Typography } from 'antd'
 import type { TableColumnsType } from 'antd'
+import type { HTMLAttributes } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import { pollingIntervals } from '../../api/polling'
@@ -107,6 +108,7 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
             />}
             <Table<AlertObservation>
               rowKey="id"
+              onRow={() => ({ 'data-testid': 'alert-row' }) as HTMLAttributes<HTMLTableRowElement>}
               loading={current.isPending}
               dataSource={[...(current.data?.items ?? [])].sort(compareAlertUrgency)}
               rowClassName={(alert) => isUnresolved(alert.status) ? '' : 'alert-row-resolved'}
@@ -130,6 +132,7 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
             {history.error && <Alert type="error" showIcon title={apiErrorMessage(history.error, '告警历史加载失败')} />}
             <Table<AlertObservation>
               rowKey="id"
+              onRow={() => ({ 'data-testid': 'alert-history-row' }) as HTMLAttributes<HTMLTableRowElement>}
               loading={history.isPending}
               dataSource={history.data?.items ?? []}
               locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无告警历史" /> }}

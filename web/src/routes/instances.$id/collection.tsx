@@ -333,6 +333,7 @@ export function CollectionConfiguration({
           title: '修改周期',
           render: (_, task) => <Space.Compact>
             <InputNumber
+              role="spinbutton"
               aria-label={`${task.task_id} 采样周期`}
               min={5}
               suffix="秒"

@@ -11,6 +11,12 @@ function assertNever(value: never): never {
 }
 
 export function HealthStatus({ status, pausedAt }: { status: HealthStatusValue; pausedAt?: string }) {
+  // data-testid 是本仓库唯一的稳定测试标识约定（见 web/CLAUDE.md）。
+  // 健康状态的呈现形态会随视图层替换而变，标识挂在外层包裹元素上，不依赖标签组件的类名。
+  return <span data-testid="health-status">{healthStatusTag(status, pausedAt)}</span>
+}
+
+function healthStatusTag(status: HealthStatusValue, pausedAt: string | undefined) {
   switch (status) {
     case 'CRITICAL':
       return <Tag color="error">严重</Tag>

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Locator } from '@playwright/test'
 
 import { EMPTY_STORAGE_STATE } from './auth'
 
@@ -15,8 +15,8 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await expect(page).toHaveURL(/\/instances$/)
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
   const instanceRow = page.getByRole('row', { name: new RegExp(instanceName) })
-  const listHealthText = await instanceRow.locator('.ant-tag').first().innerText()
-  const listAttributionText = await instanceRow.locator('td').first().locator('.ant-typography-secondary').innerText()
+  const listHealthText = await instanceRow.getByTestId('health-status').innerText()
+  const listAttributionText = await instanceRow.getByTestId('instance-attribution').innerText()
   const listSeverityCounts = await Promise.all(
     ['C', 'W', 'I'].map((severity) =>
       instanceRow.getByText(new RegExp(`^${severity}\\d+$`)).innerText(),
@@ -25,15 +25,15 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await instanceRow.getByRole('link', { name: '总览' }).click()
 
   await expect(page.getByRole('tab', { name: '实例总览' })).toHaveAttribute('aria-selected', 'true')
-  const overviewStatusSection = page.locator('.overview-status')
-  await expect(overviewStatusSection.locator('.ant-tag').first()).toHaveText(listHealthText)
+  const overviewStatusSection = page.getByTestId('overview-status')
+  await expect(overviewStatusSection.getByTestId('health-status')).toHaveText(listHealthText)
   await expect(overviewStatusSection.getByRole('heading')).toHaveText(listAttributionText)
   for (const count of listSeverityCounts) {
     await expect(overviewStatusSection.getByText(count, { exact: true })).toBeVisible()
   }
 
   await expect(page.locator('[data-overview-module]')).toHaveCount(7)
-  await expect(page.locator('[data-overview-module] .ant-card-head-title')).toHaveText([
+  await expect(page.getByTestId('overview-module-title')).toHaveText([
     '可用性与采集状态',
     '当前告警摘要',
     '核心资源',
@@ -44,10 +44,10 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   ])
   await expect(page.getByText('近期没有性能事件')).toBeVisible()
 
-  const getLinkURL = async (accessibleName: string) => {
-    // 四个入口按钮都带 AntD 图标，图标 aria-label 以前缀混入可访问名（如「dashboard 标准监控」）；
-    // 要求前缀存在，同时排除页签导航里的同名纯文本链接
-    const href = await page.getByRole('link', { name: new RegExp(`^\\S+ ${accessibleName}$`) }).getAttribute('href')
+  // 「快速排障入口」卡片与页签导航里有同名链接，按所属区域定位而不是靠图标混入的可访问名前缀
+  const troubleshootingCard = page.locator('[data-overview-module="troubleshooting"]')
+  const getLinkURL = async (scope: Locator, accessibleName: string) => {
+    const href = await scope.getByRole('link', { name: accessibleName }).getAttribute('href')
     if (href === null) {
       throw new Error(`${accessibleName} link is missing an href`)
     }
@@ -55,19 +55,19 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   }
 
   const overviewURL = new URL(page.url())
-  const monitoringURL = await getLinkURL('标准监控')
+  const monitoringURL = await getLinkURL(troubleshootingCard, '标准监控')
   expect(monitoringURL.searchParams.get('from')).toBe(overviewURL.searchParams.get('from'))
   expect(monitoringURL.searchParams.get('to')).toBe(overviewURL.searchParams.get('to'))
 
-  const sessionsURL = await getLinkURL('会话与阻塞')
+  const sessionsURL = await getLinkURL(troubleshootingCard, '会话与阻塞')
   expect(sessionsURL.searchParams.get('from')).toBe(overviewURL.searchParams.get('from'))
   expect(sessionsURL.searchParams.get('to')).toBe(overviewURL.searchParams.get('to'))
   expect(sessionsURL.searchParams.get('filter')).toBe('lock_wait')
 
-  const collectionURL = await getLinkURL('采集状态')
+  const collectionURL = await getLinkURL(troubleshootingCard, '采集状态')
   expect(collectionURL.searchParams.get('metric')).toBeNull()
 
-  const maintenanceURL = await getLinkURL('新建维护窗口')
+  const maintenanceURL = await getLinkURL(overviewStatusSection, '新建维护窗口')
   expect(maintenanceURL.searchParams.get('instance_id')).toBe(overviewURL.pathname.split('/').at(-1))
 
   await page.setViewportSize({ width: 390, height: 844 })
@@ -76,12 +76,12 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await page.getByRole('link', { name: '监控与报警' }).click()
 
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.locator('.metric-card')).toHaveCount(22)
-  await expect(page.getByRole('region', { name: '资源指标' }).locator('.metric-card')).toHaveCount(5)
-  await expect(page.getByRole('region', { name: '数据库指标' }).locator('.metric-card')).toHaveCount(12)
-  await expect(page.getByRole('region', { name: '复制指标' }).locator('.metric-card')).toHaveCount(5)
+  await expect(page.getByTestId('metric-card')).toHaveCount(22)
+  await expect(page.getByRole('region', { name: '资源指标' }).getByTestId('metric-card')).toHaveCount(5)
+  await expect(page.getByRole('region', { name: '数据库指标' }).getByTestId('metric-card')).toHaveCount(12)
+  await expect(page.getByRole('region', { name: '复制指标' }).getByTestId('metric-card')).toHaveCount(5)
 
-  const tpsCard = page.locator('.metric-card').filter({ has: page.getByText('TPS', { exact: true }) })
+  const tpsCard = page.getByTestId('metric-card').filter({ has: page.getByText('TPS', { exact: true }) })
   const tpsChart = tpsCard.getByRole('figure', { name: 'TPS趋势' })
   await expect(tpsChart).toBeVisible()
   await tpsChart.getByText('查看数据表').click()
@@ -90,19 +90,19 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   // check-e2e 不注册也不启动 monitor-agent（agent_expected=false），后端把 host.* 指标
   // 归为 NOT_APPLICABLE_ROLE（handler.go agentMetricUnavailability）；
   // 有数据的图表交互由上面的 TPS 卡（真实 SQL 采集路径）覆盖
-  const cpuCard = page.locator('.metric-card').filter({ has: page.getByText('CPU', { exact: true }) })
+  const cpuCard = page.getByTestId('metric-card').filter({ has: page.getByText('CPU', { exact: true }) })
   await expect(cpuCard.getByText('当前角色不适用')).toBeVisible()
 
   await cpuCard.getByRole('button', { name: /指标详情/ }).click()
   await expect(page.getByRole('dialog', { name: 'CPU' })).toContainText('host.cpu.usage_percent')
-  await page.getByRole('button', { name: 'Close' }).click()
+  await page.getByRole('button', { name: '关闭指标详情' }).click()
 
-  const memoryCard = page.locator('.metric-card').filter({ has: page.getByText('内存', { exact: true }) })
+  const memoryCard = page.getByTestId('metric-card').filter({ has: page.getByText('内存', { exact: true }) })
   await expect(memoryCard.getByText('当前角色不适用')).toBeVisible()
   await expect(memoryCard.getByRole('link', { name: '查看实例角色' })).toHaveAttribute('href', /\/collection\?metric=host\.memory\.usage_percent/)
   await expect(memoryCard).not.toContainText('0')
 
-  const slowQueryCard = page.locator('.metric-card').filter({ has: page.getByText('长查询数量', { exact: true }) })
+  const slowQueryCard = page.getByTestId('metric-card').filter({ has: page.getByText('长查询数量', { exact: true }) })
   const drilldown = slowQueryCard.getByRole('link', { name: /查看采样记录/ })
   await expect(drilldown).toHaveAttribute('href', /\/sessions\/long-query-samples\?/)
   await expect(drilldown).toHaveAttribute('href', /metric=pg.query.long_running_count/)

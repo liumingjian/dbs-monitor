@@ -179,7 +179,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
     {metricsQuery.isPending ? <Spin size="large" /> : standardMonitoringGroups.map((group) => (
       <section key={group.key} aria-labelledby={`${group.key}-heading`}>
         <Typography.Title id={`${group.key}-heading`} level={3}>{group.title}</Typography.Title>
-        <div className="metric-grid" data-columns={columns}>
+        <div className="metric-grid" data-testid="metric-grid" data-columns={columns}>
           {group.charts.map((chart, chartIndex) => {
             const view = buildChartView(chart, metricsQuery.data?.metrics)
             const primaryMetric = chart.metrics[0]
@@ -187,6 +187,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
               <Card
                 key={chart.key}
                 className="metric-card"
+                data-testid="metric-card"
                 style={{ '--card-index': chartIndex } as CSSProperties}
                 title={chart.title}
                 extra={<Space size="small">
@@ -292,7 +293,7 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
 
       return <section key={group.key} aria-labelledby={`enhanced-${group.key}-heading`}>
         <Typography.Title id={`enhanced-${group.key}-heading`} level={3}>{group.title}</Typography.Title>
-        <div className="metric-grid" data-columns={preferences.columns}>
+        <div className="metric-grid" data-testid="metric-grid" data-columns={preferences.columns}>
           {selectedMetrics.map((metricID) => {
             const option = metricOption(metricID)
             const view = buildEnhancedChartView(metricID, metricsQuery.data?.metrics, preferences.aggregation, bucketSeconds)
@@ -300,6 +301,7 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
             return <Card
               key={metricID}
               className="metric-card enhanced-metric-card"
+              data-testid="enhanced-metric-card"
               style={{ '--card-index': selectedMetrics.indexOf(metricID) } as CSSProperties}
               title={option.label}
               extra={<Space size="small">
@@ -455,7 +457,7 @@ function MetricDetails({ chart, metrics, onClose }: {
   metrics: ResponseMetric[] | undefined
   onClose: () => void
 }) {
-  return <Modal title={chart?.title ?? '指标详情'} open={chart !== undefined} footer={null} onCancel={onClose}>
+  return <Modal title={chart?.title ?? '指标详情'} open={chart !== undefined} footer={null} closable={{ 'aria-label': '关闭指标详情' }} onCancel={onClose}>
     {chart && <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Typography.Paragraph>{chart.description}</Typography.Paragraph>
       <Descriptions column={1} size="small" bordered items={chart.metrics.map((metric) => {
@@ -475,7 +477,7 @@ function EnhancedMetricDetails({ metric, response, onClose }: {
   response: ResponseMetric | undefined
   onClose: () => void
 }) {
-  return <Modal title={metric ? metricOption(metric).label : '指标详情'} open={metric !== undefined} footer={null} onCancel={onClose}>
+  return <Modal title={metric ? metricOption(metric).label : '指标详情'} open={metric !== undefined} footer={null} closable={{ 'aria-label': '关闭指标详情' }} onCancel={onClose}>
     {metric && <Space direction="vertical" size="middle" style={{ width: '100%' }}>
       <Typography.Paragraph>{enhancedMetricDescription(metric)}</Typography.Paragraph>
       <Descriptions column={1} size="small" bordered items={[

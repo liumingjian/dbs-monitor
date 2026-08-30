@@ -62,7 +62,7 @@ test('enhanced monitoring opens raw curves and isolates protected collection gap
   await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&monitoring=enhanced&step=raw`)
 
   await expect(page.getByRole('tab', { name: '增强监控' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.locator('.enhanced-metric-card')).toHaveCount(27)
+  await expect(page.getByTestId('enhanced-metric-card')).toHaveCount(27)
   await expect(page.getByRole('figure', { name: 'CPU 使用率趋势' })).toBeVisible()
   await expect(page.getByText('实际粒度：raw')).toBeVisible()
   await expect(page.getByText(/平台自我保护：最近一次采集因背压被跳过/)).toBeVisible()
