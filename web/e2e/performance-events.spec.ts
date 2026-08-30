@@ -208,3 +208,83 @@ test('alert-derived event writes disposition back and preserves trigger evidence
   await expect(page.getByRole('heading', { name: '触发现场快照' })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath('performance-event-alert-detail-mobile.png'), fullPage: true })
 })
+
+// #197 的表单层验收：客户端校验、字段联动、服务端字段错误回填与聚焦、重置。
+// 处置表单是唯一四件齐全的表单，所以整条链在这里证明一次。
+test('disposition form validates, links fields, and lands server field errors on the offending input', async ({ page }) => {
+  let dispositionFailure: { field: string; message: string } | null = null
+  let submitted: unknown
+
+  await page.route('**/api/v1/me', (route) => route.fulfill({ json: { username: 'alert-admin', role: 'ALERT_ADMIN' } }))
+  await page.route('**/api/v1/notification-channels/failures', (route) => route.fulfill({ json: { has_failures: false, channels: [] } }))
+  await page.route(`**/api/v1/instances/${instanceID}`, (route) => route.fulfill({ json: instance() }))
+  await page.route(`**/api/v1/performance-events/${eventID}`, (route) => route.fulfill({ json: performanceEvent() }))
+  await page.route('**/api/v1/instances/*/metrics/series*', (route) => route.fulfill({ json: {
+    from: eventRange.from,
+    to: eventRange.to,
+    step: '1m',
+    metrics: [{ metric: 'pg.lock.waiting_count', unit: 'count', unavailability: null, series: [{ labels: {}, points: [[1786443300, 12]] }] }],
+  } }))
+  await page.route(`**/api/v1/alert-instances/${alertID}/trigger-snapshot`, (route) => route.fulfill({ json: {
+    result: 'NOT_APPLICABLE',
+    metric_id: 'pg.replication.wal_lag_bytes',
+    original_match_count: 0,
+    truncated: false,
+    sessions: [],
+  } }))
+  await page.route(`**/api/v1/alert-instances/${alertID}/disposition`, (route) => {
+    if (route.request().method() === 'PUT') {
+      submitted = route.request().postDataJSON()
+      if (dispositionFailure) {
+        return route.fulfill({
+          status: 400,
+          json: { error: { code: 'VALIDATION_FAILED', message: 'alert disposition validation failed', field_errors: [dispositionFailure] } },
+        })
+      }
+    }
+    return route.fulfill({ json: {
+      alert_instance_id: alertID,
+      disposition: 'NONE',
+      stops_repeat_notifications: false,
+      excluded_from_health_rollup: false,
+      history: [],
+    } })
+  })
+
+  const search = `from=${encodeURIComponent(eventRange.from)}&to=${encodeURIComponent(eventRange.to)}&tab=firing&disposition=ACKED&page=1`
+  await page.goto(`/instances/${instanceID}/performance-events/${eventID}?${search}`)
+  await page.getByRole('button', { name: '忽略' }).click()
+
+  // 客户端校验：错误出现在字段下方，不是页面顶部的汇总条。
+  await page.getByRole('button', { name: /提\s*交/ }).click()
+  await expect(page.getByText('请选择忽略原因')).toBeVisible()
+  expect(submitted).toBeUndefined()
+
+  // 字段联动：只有「其他」才要求补充说明，字段本身也只在这时出现。
+  await expect(page.getByLabel('补充说明')).toHaveCount(0)
+  await page.getByLabel(/忽略原因/).selectOption('OTHER')
+  await expect(page.getByLabel(/补充说明/)).toBeVisible()
+  await page.getByRole('button', { name: /提\s*交/ }).click()
+  await expect(page.getByText('请输入补充说明')).toBeVisible()
+  expect(submitted).toBeUndefined()
+
+  // 服务端字段错误：落到对应输入框，并把焦点放上去。
+  dispositionFailure = { field: 'ignore_reason_detail', message: '补充说明与已有记录冲突' }
+  await page.getByLabel(/补充说明/).fill('等待业务方确认')
+  await page.getByRole('button', { name: /提\s*交/ }).click()
+  await expect.poll(() => submitted).toEqual({
+    disposition: 'IGNORED',
+    ignore_reason_code: 'OTHER',
+    ignore_reason_detail: '等待业务方确认',
+  })
+  await expect(page.getByText('补充说明与已有记录冲突')).toBeVisible()
+  await expect(page.getByLabel(/补充说明/)).toBeFocused()
+
+  // 重置：关掉再打开，值、联动出来的字段与错误全部回到初始状态。
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '忽略' }).click()
+  await expect(page.getByText('补充说明与已有记录冲突')).toHaveCount(0)
+  await expect(page.getByText('请输入补充说明')).toHaveCount(0)
+  await expect(page.getByLabel(/补充说明/)).toHaveCount(0)
+  await expect(page.getByLabel(/忽略原因/)).toHaveValue('')
+})

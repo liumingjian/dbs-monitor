@@ -1,10 +1,16 @@
 import { CheckOutlined, StopOutlined } from '@ant-design/icons'
-import { Alert, Button, Descriptions, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag, Tooltip, Typography } from 'antd'
+import { Select, SelectItem, TextArea } from '@carbon/react'
+import { Alert, Button, Descriptions, Empty, Modal, Space, Spin, Table, Tag, Tooltip, Typography } from 'antd'
 import type { TableColumnsType } from 'antd'
 import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import type { FieldPath } from 'react-hook-form'
+import { z } from 'zod'
 import { $api } from '../../api/client'
-import { apiErrorMessage } from '../../api/errors'
+import { apiErrorMessage, applyApiFieldErrors } from '../../api/errors'
 import type { components } from '../../api/schema'
+import { zodResolver } from '../../forms/zodResolver'
+import { FormField } from '../../primitives/FormField'
 
 type AlertDisposition = components['schemas']['AlertDisposition']
 type AlertDispositionDetail = components['schemas']['AlertDispositionDetail']
@@ -19,10 +25,70 @@ type TriggerSnapshotPresentation = {
   kind: 'success' | 'error' | 'not-applicable'
 }
 
-type DispositionFormValues = {
-  note?: string
-  ignore_reason_code?: IgnoreReasonCode
-  ignore_reason_detail?: string
+const dispositionTargets = ['ACKED', 'IGNORED'] as const satisfies readonly DispositionTarget[]
+
+const ignoreReasonCodes = [
+  'KNOWN_ISSUE',
+  'FALSE_POSITIVE',
+  'DUPLICATE',
+  'IMPACT_ACCEPTABLE',
+  'OTHER',
+] as const satisfies readonly IgnoreReasonCode[]
+
+/// 处置表单的校验规则。
+///
+/// 与接口生成的类型对齐靠三处，都会在漂移时编译失败：字段取值的两张清单
+/// `as const satisfies readonly ...[]` 锚在生成的联合类型上；`satisfies z.ZodType<...>`
+/// 要求 schema 的出参是生成的请求体类型的子集；`dispositionBody` 再把出参真的当请求体用。
+///
+/// 联动规则照抄服务端 `internal/httpapi/alert_dispositions.go` 的那段 switch：同一条规则
+/// 客户端先讲一遍，服务端仍然是权威，两边说的是同一件事。
+const dispositionFormSchema = z.object({
+  disposition: z.enum(dispositionTargets),
+  note: z.string().max(500, '备注最多 500 字').optional(),
+  ignore_reason_code: z.enum(ignoreReasonCodes, { error: '请选择忽略原因' }).optional(),
+  ignore_reason_detail: z.string().max(500, '补充说明最多 500 字').optional(),
+}).superRefine((values, context) => {
+  if (values.disposition === 'ACKED') {
+    if (values.ignore_reason_code !== undefined) {
+      context.addIssue({ code: 'custom', path: ['ignore_reason_code'], message: '确认告警不能带忽略原因' })
+    }
+    if (values.ignore_reason_detail !== undefined) {
+      context.addIssue({ code: 'custom', path: ['ignore_reason_detail'], message: '确认告警不能带补充说明' })
+    }
+    return
+  }
+  if (values.note !== undefined) {
+    context.addIssue({ code: 'custom', path: ['note'], message: '忽略告警不能带备注' })
+  }
+  if (values.ignore_reason_code === undefined) {
+    context.addIssue({ code: 'custom', path: ['ignore_reason_code'], message: '请选择忽略原因' })
+    return
+  }
+  if (values.ignore_reason_code === 'OTHER' && optionalTrimmed(values.ignore_reason_detail) === undefined) {
+    context.addIssue({ code: 'custom', path: ['ignore_reason_detail'], message: '请输入补充说明' })
+  }
+}) satisfies z.ZodType<AlertDispositionInput>
+
+type DispositionFormValues = z.infer<typeof dispositionFormSchema>
+
+/// 服务端字段错误只接受这三个 —— 它们各自有输入框可以聚焦。
+/// 服务端还会对 `disposition` 报错，那个字段没有输入框，落回整表单的错误条。
+const dispositionFieldNames = [
+  'note',
+  'ignore_reason_code',
+  'ignore_reason_detail',
+] as const satisfies readonly FieldPath<DispositionFormValues>[]
+
+function dispositionBody(values: DispositionFormValues): AlertDispositionInput {
+  if (values.disposition === 'ACKED') {
+    return { disposition: 'ACKED', note: optionalTrimmed(values.note) }
+  }
+  return {
+    disposition: 'IGNORED',
+    ignore_reason_code: values.ignore_reason_code,
+    ignore_reason_detail: optionalTrimmed(values.ignore_reason_detail),
+  }
 }
 
 export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
@@ -35,46 +101,42 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
   })
   const currentUser = $api.useQuery('get', '/api/v1/me')
   const updateDisposition = $api.useMutation('put', '/api/v1/alert-instances/{id}/disposition')
-  const [form] = Form.useForm<DispositionFormValues>()
-  const ignoreReason = Form.useWatch('ignore_reason_code', form)
+  const { formState, handleSubmit, register, reset, setError, watch } = useForm<DispositionFormValues>({
+    resolver: zodResolver(dispositionFormSchema),
+    defaultValues: { disposition: 'ACKED' },
+  })
+  const ignoreReason = watch('ignore_reason_code')
   const [target, setTarget] = useState<DispositionTarget | null>(null)
   const [failure, setFailure] = useState('')
   const canManage = currentUser.data?.role === 'ALERT_ADMIN' || currentUser.data?.role === 'PLATFORM_ADMIN'
   const disabledReason = dispositionDisabledReason(recovered, canManage)
 
   function open(next: DispositionTarget) {
-    form.resetFields()
+    reset({ disposition: next })
     setFailure('')
     setTarget(next)
   }
 
-  function submit(values: DispositionFormValues) {
-    if (!target) return
-
-    let body: AlertDispositionInput
-    if (target === 'ACKED') {
-      body = { disposition: target, note: optionalTrimmed(values.note) }
-    } else {
-      body = {
-        disposition: target,
-        ignore_reason_code: values.ignore_reason_code,
-        ignore_reason_detail: optionalTrimmed(values.ignore_reason_detail),
-      }
-    }
-
+  const submit = handleSubmit((values) => {
     setFailure('')
     updateDisposition.mutate(
-      { params: { path: { id: alertInstanceID } }, body },
+      { params: { path: { id: alertInstanceID } }, body: dispositionBody(values) },
       {
         onSuccess: () => {
           setTarget(null)
+          reset({ disposition: values.disposition })
           void disposition.refetch()
           onChanged?.()
         },
-        onError: (error) => setFailure(apiErrorMessage(error, '更新处置状态失败')),
+        onError: (error) => {
+          // 字段级错误落到对应输入框并聚焦第一个；一条都落不下时才退回整表单的错误条。
+          if (applyApiFieldErrors<DispositionFormValues>(error, dispositionFieldNames, setError).length === 0) {
+            setFailure(apiErrorMessage(error, '更新处置状态失败'))
+          }
+        },
       },
     )
-  }
+  })
 
   return <section className="alert-detail-section" aria-labelledby="disposition-heading">
     <Space align="center" wrap style={{ width: '100%', justifyContent: 'space-between' }}>
@@ -98,25 +160,49 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
       destroyOnHidden
       onCancel={() => setTarget(null)}
     >
-      <Form form={form} layout="vertical" onFinish={submit}>
-        {target === 'ACKED' && <Form.Item name="note" label="备注">
-          <Input.TextArea rows={3} maxLength={500} />
-        </Form.Item>}
+      <form onSubmit={submit} noValidate>
+        {target === 'ACKED' && <FormField label="备注" errorText={formState.errors.note?.message}>
+          {({ id, describedBy, invalid }) => <TextArea
+            id={id}
+            labelText=""
+            hideLabel
+            rows={3}
+            maxLength={500}
+            invalid={invalid}
+            aria-describedby={describedBy}
+            {...register('note')}
+          />}
+        </FormField>}
         {target === 'IGNORED' && <>
-          <Form.Item name="ignore_reason_code" label="忽略原因" rules={[{ required: true, message: '请选择忽略原因' }]}>
-            <Select options={ignoreReasonOptions} />
-          </Form.Item>
-          {ignoreReason === 'OTHER' && <Form.Item
-            name="ignore_reason_detail"
-            label="补充说明"
-            rules={[{ required: true, whitespace: true, message: '请输入补充说明' }]}
-          >
-            <Input.TextArea rows={3} maxLength={500} />
-          </Form.Item>}
+          <FormField label="忽略原因" required errorText={formState.errors.ignore_reason_code?.message}>
+            {({ id, describedBy, invalid }) => <Select
+              id={id}
+              labelText=""
+              noLabel
+              invalid={invalid}
+              aria-describedby={describedBy}
+              {...register('ignore_reason_code', { setValueAs: (value: string) => value === '' ? undefined : value })}
+            >
+              <SelectItem value="" text="请选择" />
+              {ignoreReasonCodes.map((code) => <SelectItem key={code} value={code} text={ignoreReasonLabel(code)} />)}
+            </Select>}
+          </FormField>
+          {ignoreReason === 'OTHER' && <FormField label="补充说明" required errorText={formState.errors.ignore_reason_detail?.message}>
+            {({ id, describedBy, invalid }) => <TextArea
+              id={id}
+              labelText=""
+              hideLabel
+              rows={3}
+              maxLength={500}
+              invalid={invalid}
+              aria-describedby={describedBy}
+              {...register('ignore_reason_detail')}
+            />}
+          </FormField>}
         </>}
         {failure && <Alert type="error" showIcon title={failure} style={{ marginBottom: 16 }} />}
         <Button type="primary" htmlType="submit" loading={updateDisposition.isPending}>提交</Button>
-      </Form>
+      </form>
     </Modal>
   </section>
 }
@@ -211,19 +297,6 @@ export function triggerSnapshotPresentation(result: AlertTriggerSnapshotResult):
     default: return assertNever(result)
   }
 }
-
-const ignoreReasonCodes = [
-  'KNOWN_ISSUE',
-  'FALSE_POSITIVE',
-  'DUPLICATE',
-  'IMPACT_ACCEPTABLE',
-  'OTHER',
-] as const satisfies readonly IgnoreReasonCode[]
-
-const ignoreReasonOptions = ignoreReasonCodes.map((code) => ({
-  value: code,
-  label: ignoreReasonLabel(code),
-}))
 
 const dispositionHistoryColumns: TableColumnsType<AlertDispositionEvent> = [
   { title: '动作', width: 90, render: (_, event) => dispositionEventLabel(event.kind) },

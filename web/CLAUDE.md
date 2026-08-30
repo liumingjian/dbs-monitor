@@ -79,6 +79,30 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 @floating-ui/react 是 `Drawer` 的焦点陷阱用的直接依赖（它本来就在 Carbon 的依赖树里，
 这里只是显式声明）。除抽屉外没有第二处用它，页面组也不得因此认为可以新增依赖。
 
+### `forms/`
+
+表单基础设施层，和 `api/` / `styles/` 一样是层而不是第三类共享件：**不放组件**，
+不认识任何业务概念，只放把 zod 接到 react-hook-form 上的适配件（当前只有 `zodResolver.ts`）。
+服务端字段错误的映射不在这里，在 API 层的 `web/src/api/errors.ts`（`applyApiFieldErrors`）。
+
+表单的写法是定死的，页面不要各写一套：
+
+- 表单状态与校验一律 react-hook-form + zod；不用组件库的表单 API（Carbon 只有字段级的
+  `invalid` / `invalidText`，没有表单级 API），也不用受控 `useState` 手搓校验。
+- schema 与 `web/src/api/schema.d.ts` 生成的类型对齐：字段取值清单写
+  `as const satisfies readonly <生成的联合类型>[]`，schema 写
+  `satisfies z.ZodType<生成的请求体类型>`，再由一个返回该请求体类型的函数把出参真的用出去。
+  漂了就编译不过，这是相对旧的 `rules` 数组的净改进，别把它退化成注释。
+- schema 里**不写** `transform` / `default`（`zodResolver` 的类型也不收）：表单值就是提交值，
+  trim、空串转 undefined 这类归一化放在提交处。
+- 校验错误一律显示在对应字段下方，用 `web/src/primitives/FormField.tsx` 的 `errorText`，
+  **不做页面顶部的错误汇总**。整表单级的失败（没有字段信息的那种）才用错误条。
+- 服务端字段错误用 `applyApiFieldErrors`；它返回空数组才退回整表单的错误条，两边不要都显示。
+- 控件的 `labelText` 留空并 `hideLabel` / `noLabel`，标签由 `FormField` 出——两边都给会读两遍。
+  已知缺口：Carbon 的 `TextArea` 与 `Select` 在自己算完 `aria-describedby` 后才落笔，会盖掉
+  `FormField` 交过来的那个（`TextInput` 不会，它的 `...rest` 在最后）。照样把 `describedBy` 接上去，
+  不要为此改 `primitives/`，也不要改用控件自带的 `invalidText` 去绕——错误文案只有一个出口。
+
 ## 先例
 
 路由定义：`web/src/main.tsx`。
@@ -86,6 +110,8 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 跨页继承 search params：`web/src/routes/instances/index.tsx`。
 领域图表组件：`web/src/domain/MetricChart.tsx`。
 展示组件基线：`web/src/primitives/`（面板 `Panel.tsx`、表格外壳 `DataGrid.tsx`、抽屉 `Drawer.tsx`）。
+表单：`web/src/routes/instances.$id/alertEvidence.tsx` 的处置表单（客户端校验、服务端字段错误
+回填与聚焦、重置、字段联动四件都在里面）。
 
 ## 测试定位
 

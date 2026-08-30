@@ -591,9 +591,12 @@ function ruleInput(rule: AlertRule): AlertRuleInput {
   }
 }
 
+// AntD 的 `form.setFields()` 要的是 `{ name, errors: string[] }`。#197 之后
+// `apiFieldErrors` 返回线上的 `{ field, message }` 原形，这里就地转一次；
+// 本页迁到 react-hook-form 时（#202）改用 `applyApiFieldErrors`，这个函数一起删。
 function alertRuleFieldErrors(failure: unknown): { name: keyof AlertRuleInput; errors: string[] }[] {
   return apiFieldErrors(failure).flatMap((item) => (
-    isAlertRuleField(item.name) ? [{ name: item.name, errors: item.errors }] : []
+    isAlertRuleField(item.field) ? [{ name: item.field, errors: [item.message] }] : []
   ))
 }
 
