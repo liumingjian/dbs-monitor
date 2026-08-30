@@ -2,6 +2,7 @@ import { ClearOutlined, DashboardOutlined, PlusOutlined, SettingOutlined } from 
 import { Link, createRoute } from '@tanstack/react-router'
 import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Select, Space, Table, Tooltip, Typography } from 'antd'
 import type { TableColumnsType } from 'antd'
+import type { HTMLAttributes } from 'react'
 import { useState } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
@@ -163,6 +164,9 @@ function InstancesPage() {
           value={filters.statuses ? [...filters.statuses] : undefined}
           style={{ minWidth: 220 }}
           options={healthStatusOptions}
+          // 下拉浮层里带 role="option" 的节点是组件库给读屏器用的离屏镜像，点不动；
+          // 真正可点的选项行没有角色可用，只能挂稳定测试标识。
+          optionRender={(option) => <span data-testid={`health-status-option-${String(option.value)}`}>{option.label}</span>}
           onChange={(statuses) => setFilters((current) => ({ ...current, statuses }))}
         />
         <Select
@@ -200,6 +204,7 @@ function InstancesPage() {
       <Table<Instance>
         loading={instancesQuery.isPending}
         rowKey="id"
+        onRow={() => ({ 'data-testid': 'instance-row' }) as HTMLAttributes<HTMLTableRowElement>}
         dataSource={visibleInstances}
         pagination={{ pageSize: 50, showSizeChanger: false }}
         scroll={{ x: 1180 }}
@@ -292,7 +297,7 @@ const instanceColumns: TableColumnsType<Instance> = [
           <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
           <Typography.Text strong>{instance.name}</Typography.Text>
         </Space>
-        <Typography.Text type="secondary">{attributionLabel(instance)}</Typography.Text>
+        <Typography.Text type="secondary" data-testid="instance-attribution">{attributionLabel(instance)}</Typography.Text>
         <Space size={4} wrap>
           <Typography.Text code>C{instance.health.counts.critical}</Typography.Text>
           <Typography.Text code>W{instance.health.counts.warning}</Typography.Text>

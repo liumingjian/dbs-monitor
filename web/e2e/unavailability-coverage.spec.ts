@@ -60,7 +60,7 @@ test('all 13 backend codes render copy and canonical destinations without blank 
 
   for (const [index, item] of unavailabilityCases.entries()) {
     const chart = charts[index]
-    const card = page.locator('.metric-card').filter({ has: page.getByText(chart.title, { exact: true }) })
+    const card = page.getByTestId('metric-card').filter({ has: page.getByText(chart.title, { exact: true }) })
     await expect(card.getByText(item.title, { exact: true })).toBeVisible()
     const link = card.getByRole('link', { name: item.action })
     const expected = item.destination === 'current'

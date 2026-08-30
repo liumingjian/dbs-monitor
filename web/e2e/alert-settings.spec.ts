@@ -55,7 +55,7 @@ test('[AC-04-S3] keeps all four alert settings pages reachable and read-only con
 
   await page.goto('/alert-settings/notifications')
   await expect(page.getByRole('tab', { name: '通知渠道' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('tab', { name: '通知渠道' }).locator('.ant-badge-dot')).toBeVisible()
+  await expect(page.getByRole('tab', { name: '通知渠道' }).getByTestId('notification-failure-badge')).toBeVisible()
   await expect(page.getByText('需要告警管理员角色才能修改配置或发送测试通知')).toBeVisible()
   await expect(page.getByRole('button', { name: '保存' })).toBeDisabled()
   await expect(page.getByRole('button', { name: '新建目标' })).toBeDisabled()

@@ -38,7 +38,7 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
 
   await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&step=auto&columns=3&connect=true`)
 
-  await expect(page.locator('.metric-card')).toHaveCount(22)
+  await expect(page.getByTestId('metric-card')).toHaveCount(22)
   await expect(page.getByRole('figure')).toHaveCount(22)
   await expect(page.getByText('实际粒度：30s')).toHaveCount(22)
   await expect(page.locator('canvas')).toHaveCount(22)
@@ -55,7 +55,7 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
   await page.screenshot({ path: '/tmp/issue-85-standard-monitoring-desktop.png', fullPage: true })
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await expect(page.locator('.metric-grid').first()).toHaveCSS('grid-template-columns', /\d+px/)
+  await expect(page.getByTestId('metric-grid').first()).toHaveCSS('grid-template-columns', /\d+px/)
   await expect.poll(() => hasPageOverflow(page)).toBe(false)
   await page.screenshot({ path: '/tmp/issue-85-standard-monitoring-mobile.png', fullPage: true })
   expect(await pageOverflowElements(page)).toEqual([])

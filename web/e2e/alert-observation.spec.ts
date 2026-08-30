@@ -79,13 +79,13 @@ test('global alert lists reuse detail and preserve trigger context into monitori
 
   await page.goto('/alerts')
   await expect(page.getByRole('heading', { name: '全局告警' })).toBeVisible()
-  await expect(page.locator('tbody tr[data-row-key]')).toHaveCount(1)
+  await expect(page.getByTestId('alert-row')).toHaveCount(1)
   await expect(page.getByText('Paused connection pressure')).toHaveCount(0)
   await page.screenshot({ path: test.info().outputPath('global-alerts-desktop.png'), fullPage: true })
 
   await page.getByLabel('包含已暂停冻结告警').click()
   await expect(page).toHaveURL((url) => url.searchParams.get('include_paused') === 'true')
-  await expect(page.locator('tbody tr[data-row-key]')).toHaveCount(2)
+  await expect(page.getByTestId('alert-row')).toHaveCount(2)
   await expect(page.getByText('Paused connection pressure')).toBeVisible()
 
   await page.getByRole('row', { name: /Connection pressure/ }).getByRole('link', { name: '详情' }).click()

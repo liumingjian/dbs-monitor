@@ -80,18 +80,18 @@ describe('Webhook notification settings', () => {
 
   it('shows and clears the navigation failure badge', () => {
     const view = render(<NotificationSettingsLabel hasFailures={false} />)
-    expect(view.container.querySelector('.ant-badge-dot')).toBeNull()
+    expect(screen.queryByTestId('notification-failure-badge')).toBeNull()
 
     view.rerender(<NotificationSettingsLabel hasFailures />)
-    expect(view.container.querySelector('.ant-badge-dot')).toBeTruthy()
+    expect(screen.getByTestId('notification-failure-badge')).toBeTruthy()
   })
 
   it('shows and clears the failure badge on the notification channels tab label', () => {
     const view = render(<NotificationChannelsLabel hasFailures={false} />)
     expect(screen.getByText('通知渠道')).toBeTruthy()
-    expect(view.container.querySelector('.ant-badge-dot')).toBeNull()
+    expect(screen.queryByTestId('notification-failure-badge')).toBeNull()
 
     view.rerender(<NotificationChannelsLabel hasFailures />)
-    expect(view.container.querySelector('.ant-badge-dot')).toBeTruthy()
+    expect(screen.getByTestId('notification-failure-badge')).toBeTruthy()
   })
 })
