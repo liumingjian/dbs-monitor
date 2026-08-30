@@ -34,6 +34,12 @@
   --dbs-status-normal-bg: #{palette.$status-normal-bg};
   --dbs-surface-selected: #{palette.$surface-selected};
 
+  // 状态徽章的文字色。状态色本身压在同色系浅底上普遍不到 4.5:1，
+  // 所以徽章文字取深一档，见 `_palette.scss` 里的对比度说明。
+  --dbs-status-critical-text: #{palette.$status-critical-text};
+  --dbs-status-warning-text: #{palette.$status-warning-text};
+  --dbs-status-normal-text: #{palette.$status-normal-text};
+
   // 数据可视化色板。Carbon v11 的主题 map 里没有 data-vis-* 令牌（v10 有，v11 移除了），
   // 所以这六色只能由这里发布。刻意排除 red-50，避免数据系列与 status-critical 混淆。
   --dbs-viz-1: #{palette.$viz-1};

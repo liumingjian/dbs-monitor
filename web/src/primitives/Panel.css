@@ -1,0 +1,70 @@
+/*
+ * 面板容器。
+ * 直角、发丝线、无投影 —— 这三条是本设计系统的骨架，不要在别处放宽。
+ */
+
+.dbs-panel {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: var(--dbs-radius-none);
+  background-color: var(--cds-layer-01);
+  color: var(--cds-text-primary);
+}
+
+/* 默认面板坐在白底上；`raised` 用一档浅灰底，做嵌套面板与次级区块。 */
+.dbs-panel[data-surface='canvas'] {
+  background-color: var(--cds-background);
+}
+
+.dbs-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+  padding: var(--dbs-spacing-sm) var(--dbs-spacing-md);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.dbs-panel__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.dbs-panel__title {
+  margin: 0;
+}
+
+.dbs-panel__description {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.dbs-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  flex: none;
+}
+
+.dbs-panel__body {
+  padding: var(--dbs-spacing-md);
+  min-inline-size: 0;
+}
+
+.dbs-panel__body[data-flush='true'] {
+  padding: 0;
+}
+
+/* 内容区去了内边距时，骨架自己补回来，否则加载态会贴边。 */
+.dbs-panel__body[data-flush='true'] > .dbs-skeleton {
+  padding: var(--dbs-spacing-md);
+}
+
+.dbs-panel__footer {
+  padding: var(--dbs-spacing-sm) var(--dbs-spacing-md);
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}

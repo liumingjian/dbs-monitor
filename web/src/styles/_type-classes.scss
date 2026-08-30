@@ -23,6 +23,10 @@
   @include type.panel-title;
 }
 
+.dbs-caption {
+  @include type.caption;
+}
+
 .dbs-table-header {
   @include type.table-header;
 }

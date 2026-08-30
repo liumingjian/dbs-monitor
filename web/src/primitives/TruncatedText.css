@@ -1,0 +1,9 @@
+/* 过长内容一律截断，不折行 —— 等宽 SQL 从中间折行比截断更难读。 */
+
+.dbs-truncate {
+  display: block;
+  max-inline-size: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

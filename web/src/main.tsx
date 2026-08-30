@@ -20,7 +20,6 @@ import { instanceSettingsRoute } from './routes/instances.$id/settings'
 import { longQuerySamplesRoute } from './routes/instances.$id/longQuerySamples'
 import { queryStatisticsRoute } from './routes/instances.$id/queryStatisticsPage'
 import { sessionsRoute } from './routes/instances.$id/sessions'
-import { designScaffoldRoute } from './routes/design-scaffold'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { rootRoute } from './routes/root'
@@ -55,7 +54,6 @@ const routeTree = rootRoute.addChildren([
   longQuerySamplesRoute,
   queryStatisticsRoute,
   usersRoute,
-  designScaffoldRoute,
   notificationSettingsRoute,
   contactSettingsRoute,
   policySettingsRoute,

@@ -1,0 +1,37 @@
+/* 状态点。8px 圆点是本规范里唯一允许非直角的图元 —— 它是符号，不是容器。 */
+
+.dbs-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  min-inline-size: 0;
+}
+
+.dbs-status-dot__mark {
+  flex: none;
+  inline-size: 0.5rem; /* 8px */
+  block-size: 0.5rem;
+  border-radius: 50%;
+}
+
+.dbs-status-dot__label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dbs-status-dot[data-tone='critical'] .dbs-status-dot__mark {
+  background-color: var(--dbs-status-critical);
+}
+
+.dbs-status-dot[data-tone='warning'] .dbs-status-dot__mark {
+  background-color: var(--dbs-status-warning);
+}
+
+.dbs-status-dot[data-tone='normal'] .dbs-status-dot__mark {
+  background-color: var(--dbs-status-normal);
+}
+
+.dbs-status-dot[data-tone='unknown'] .dbs-status-dot__mark {
+  background-color: var(--dbs-status-unknown);
+}

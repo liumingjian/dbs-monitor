@@ -16,6 +16,14 @@ TS + React + Vite 纯 SPA，AntD 6 + ECharts 6，TanStack Router + openapi-react
 唯一的例外是 `web/src/styles/_palette.scss`，那里是 DESIGN.md 令牌表的落地点。
 JS 需要色值时走 `web/src/styles/tokens.ts`，不要在 TS 里写 hex。
 
+### Carbon 组件子集
+
+`index.scss` 里逐个 `@use '@carbon/react/scss/components/<name>'` 的那张清单**就是**本应用的
+Carbon 组件面。整包引入（`@use` 整个 @carbon/react 包）会发射全部约 70 个组件的 CSS（实测 100 kB gzip，
+规格估算的两倍），已经收窄掉。**用清单外的 Carbon 组件，它会渲染成没有样式的裸元素**——
+不报错，只是难看。需要新组件就在 `index.scss` 加一行并注明哪个页面要它。
+Carbon 的 16 栅格没有引入：版式用组件样式表里的原生 CSS grid，不要用 `<Grid>` / `<Column>`。
+
 前端依赖装在 `make web-install` 下（或自带 `IBM_TELEMETRY_DISABLED=true`）：
 Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着。
 
@@ -59,12 +67,25 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 不写 `invalidateQueries`；不认识路由（无 `Link` / `useNavigate` / 无 search params）。
 一件一文件，只导出组件；不放工具函数——`primitives/` 不是新的 `utils/`。
 
+基线清单（页面从这里取件，不要自己再拼一套）：
+`DataGrid`（数据表格外壳） / `Drawer` / `FormField` / `Icon` / `MetricBar` / `NotificationBar` /
+`Panel` / `SkeletonBlock` / `StatusBadge` / `StatusDot` / `TruncatedText`。
+页面组**不得修改**这一层；缺件写进结题报告，由协调者派活，不要在别人脚下改共享件。
+
+表格的三条硬规则写在 `DataGrid.tsx` 顶部：1280px 及以上不横向滚动也不丢列（fixed 布局 +
+按列最小宽度分配的百分比列宽 + 省略号悬停提示），粘性表头与横向滚动容器不是同一个元素，
+行高显式给死（标准 40px / 密集 32px）。页面只需给每列 `minWidth`，不要自己设 `overflow-x`。
+
+@floating-ui/react 是 `Drawer` 的焦点陷阱用的直接依赖（它本来就在 Carbon 的依赖树里，
+这里只是显式声明）。除抽屉外没有第二处用它，页面组也不得因此认为可以新增依赖。
+
 ## 先例
 
 路由定义：`web/src/main.tsx`。
 `validateSearch`：`web/src/routes/instances.$id/index.tsx`。
 跨页继承 search params：`web/src/routes/instances/index.tsx`。
 领域图表组件：`web/src/domain/MetricChart.tsx`。
+展示组件基线：`web/src/primitives/`（面板 `Panel.tsx`、表格外壳 `DataGrid.tsx`、抽屉 `Drawer.tsx`）。
 
 ## 测试定位
 

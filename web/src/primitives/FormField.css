@@ -1,0 +1,38 @@
+/* 表单字段外壳。错误文案在字段下方，不在页面顶部。 */
+
+.dbs-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.dbs-form-field__label {
+  color: var(--cds-text-secondary);
+}
+
+.dbs-form-field__control {
+  min-inline-size: 0;
+}
+
+.dbs-form-field__helper {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.dbs-form-field__error {
+  margin: 0;
+  color: var(--cds-text-error);
+}
+
+/* 只给读屏的文本。视觉上不占位，但留在无障碍树里。 */
+.dbs-form-field__sr {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

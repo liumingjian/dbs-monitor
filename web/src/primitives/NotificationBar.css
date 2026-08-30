@@ -1,0 +1,15 @@
+/*
+ * 通知条对 Carbon 默认形态的三处修正。
+ *
+ * 选择器故意写成重复类名（`.dbs-notification.dbs-notification`）：Carbon 的规则是
+ * 单类名，若只写一遍就得靠样式表的先后顺序压过它，而组件 CSS 的注入顺序由打包器
+ * 的模块图决定，不该被依赖。重复类名把优先级抬高一档，顺序就不再重要。
+ */
+
+.dbs-notification.dbs-notification {
+  /* Carbon 给通知设了固定的最大宽度；面板里的通知应当占满面板。 */
+  inline-size: 100%;
+  max-inline-size: 100%;
+  border-radius: var(--dbs-radius-none);
+  box-shadow: none;
+}
