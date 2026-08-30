@@ -1,0 +1,174 @@
+/*
+ * 数据表格外壳。
+ *
+ * 这张表的三条硬规则，改之前先读 `DataGrid.tsx` 顶部那段说明：
+ *   1. 1280px 及以上不横向滚动、不丢列 —— 靠 fixed 布局 + 百分比列宽 + 省略号；
+ *   2. 粘性表头与横向滚动容器不是同一个元素；
+ *   3. 行高显式给死：标准 40px / 密集 32px，不吃组件库的 48px 默认值。
+ *
+ * 选择器多处带 `.dbs-datagrid` 前缀，是为了压过 Carbon 的 `.cds--data-table td`
+ * 这类「一个类 + 一个元素」的规则，而不依赖样式表的注入顺序。
+ */
+
+.dbs-datagrid {
+  inline-size: 100%;
+  min-inline-size: 0;
+  /* 1280px 及以上：**不是**滚动容器。表头因此贴的是页头而不是这个盒子。 */
+  overflow: visible;
+}
+
+/* Carbon 在 <table> 外面自带一层 `overflow-x: auto` 的包裹元素 ——
+   它正是规范警告的那个坑（滚动容器成为粘性定位的参照系，表头落进表格里）。 */
+.dbs-datagrid .cds--data-table-content {
+  overflow: visible;
+}
+
+.dbs-datagrid .dbs-datagrid__table {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border-radius: var(--dbs-radius-none);
+}
+
+/* ---- 表头 ----
+   表头样式挂在元素上而不是自定义类上：组件库在可排序表头里把同一个 className
+   同时给了 <th> 和它内部的 <button>，挂类名会让粘性定位与底色在按钮上再来一遍。 */
+
+.dbs-datagrid .dbs-datagrid__table thead th {
+  position: sticky;
+  top: var(--dbs-datagrid-sticky-top, var(--dbs-header-height));
+  z-index: 2;
+  background-color: var(--cds-layer-01);
+  color: var(--cds-text-primary);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dbs-datagrid .dbs-datagrid__table thead tr {
+  block-size: var(--dbs-table-header-height);
+}
+
+/* 不可排序的表头把内容包了一层 div，省略号得跟到那一层上。 */
+.dbs-datagrid .dbs-datagrid__table thead th .cds--table-header-label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 可排序表头是个按钮，让它占满表头格，点击区域才与视觉一致。 */
+.dbs-datagrid .dbs-datagrid__table thead th .cds--table-sort {
+  background-color: transparent;
+  inline-size: 100%;
+  max-inline-size: 100%;
+}
+
+.dbs-datagrid .dbs-datagrid__table thead th.dbs-datagrid__th--end {
+  text-align: end;
+}
+
+.dbs-datagrid .dbs-datagrid__table thead th.dbs-datagrid__th--end .cds--table-sort {
+  justify-content: flex-end;
+}
+
+/* ---- 行与单元格 ---- */
+
+.dbs-datagrid .dbs-datagrid__table tbody tr {
+  block-size: var(--dbs-table-row-height);
+  background-color: var(--cds-background);
+  transition: background-color var(--dbs-duration-fast) var(--dbs-easing);
+}
+
+.dbs-datagrid[data-density='dense'] .dbs-datagrid__table tbody tr {
+  block-size: var(--dbs-table-row-height-dense);
+}
+
+.dbs-datagrid .dbs-datagrid__table tbody tr:hover {
+  background-color: var(--cds-layer-01);
+}
+
+.dbs-datagrid .dbs-datagrid__td {
+  position: relative;
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+  color: var(--cds-text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dbs-datagrid .dbs-datagrid__td[data-align='end'] {
+  text-align: end;
+}
+
+/* ---- 行首 3px 严重度色条 ----
+   画在第一格的 ::before 上而不是 border-left：边框会把整行内容推 3px，
+   与相邻的无色条行对不齐。 */
+.dbs-datagrid .dbs-datagrid__row[data-tone] .dbs-datagrid__td:first-child::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+}
+
+.dbs-datagrid .dbs-datagrid__row[data-tone='critical'] .dbs-datagrid__td:first-child::before {
+  background-color: var(--dbs-status-critical);
+}
+
+.dbs-datagrid .dbs-datagrid__row[data-tone='warning'] .dbs-datagrid__td:first-child::before {
+  background-color: var(--dbs-status-warning);
+}
+
+.dbs-datagrid .dbs-datagrid__row[data-tone='normal'] .dbs-datagrid__td:first-child::before {
+  background-color: var(--dbs-status-normal);
+}
+
+.dbs-datagrid .dbs-datagrid__row[data-tone='unknown'] .dbs-datagrid__td:first-child::before {
+  background-color: var(--dbs-status-unknown);
+}
+
+/* ---- 空态 ---- */
+
+.dbs-datagrid .dbs-datagrid__empty {
+  padding: var(--dbs-spacing-xl) var(--dbs-spacing-md);
+  text-align: center;
+  white-space: normal;
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.dbs-datagrid .dbs-datagrid__empty-title {
+  margin: 0;
+  color: var(--cds-text-primary);
+}
+
+.dbs-datagrid .dbs-datagrid__empty-description {
+  margin: var(--dbs-spacing-xxs) 0 0;
+  color: var(--cds-text-secondary);
+}
+
+.dbs-datagrid .dbs-datagrid__empty-action {
+  margin-block-start: var(--dbs-spacing-sm);
+}
+
+/* ---- 低于最小支持宽度：滚动条回来，表头改贴容器 ---- */
+
+@media (max-width: 1279px) {
+  .dbs-datagrid {
+    overflow-x: auto;
+  }
+
+  .dbs-datagrid .dbs-datagrid__table {
+    min-inline-size: var(--dbs-datagrid-min-width);
+  }
+
+  .dbs-datagrid .dbs-datagrid__table thead th {
+    top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbs-datagrid .dbs-datagrid__table tbody tr {
+    transition: none;
+  }
+}

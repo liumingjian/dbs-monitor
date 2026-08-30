@@ -16,6 +16,7 @@
     "@carbon/charts-react": "^1.27.18",
     "@carbon/icons-react": "^11.87.0",
     "@carbon/react": "^1.115.0",
+    "@floating-ui/react": "^0.27.4",
     "@tanstack/react-query": "^5.90.0",
     "@tanstack/react-router": "^1.131.0",
     "antd": "6.5.3",

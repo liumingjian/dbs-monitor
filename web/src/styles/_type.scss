@@ -52,6 +52,17 @@
   @include type.type-style('heading-compact-01');
 }
 
+/// 说明文字。DESIGN.md `{typography.caption}`：12px / 400 / 0.32px。
+/// 徽章、帮助文字、指标注解都用它。与表头同尺寸，差在字重。
+@mixin caption {
+  @include type.font-family('sans');
+
+  font-size: 0.75rem; // 12px
+  font-weight: type.font-weight('regular');
+  letter-spacing: 0.32px;
+  line-height: 1.33;
+}
+
 /// 表头。DESIGN.md `{typography.table-header}`：12px / 600 / 0.32px。
 @mixin table-header {
   @include type.font-family('sans');

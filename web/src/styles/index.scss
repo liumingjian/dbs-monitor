@@ -44,11 +44,64 @@
 
 @use 'product-tokens';
 
-// 整包引入 Carbon。这会发射全部组件的 CSS，不只我们用到的那些。
-// 现在这么做是因为九个页面迁移都还没落地，收窄这里等于给每个迁移设路障；
-// 需要收窄时把这一行换成逐个 `@use '@carbon/react/scss/components/<name>'`，
-// 只改这个文件。真实体积见 #207 的实测。
-@use '@carbon/react';
+// Carbon 的全局重置。整包引入时它是被顺带带进来的，逐组件引入就得自己写出来。
+@use '@carbon/react/scss/reset';
+
+// ---------------------------------------------------------------------------
+// Carbon 组件子集。
+//
+// **不要写 `@use '@carbon/react'`。** 那一行发射全部 ~70 个组件的 CSS，其中
+// 三分之二这个产品永远不会用（fluid-* 系列、AI 标签、教学浮层、文件上传、树视图
+// 等等），实测 100.08 kB gzip，是规格估算 35–55 kB 的两倍。
+//
+// 这张清单就是本应用的 Carbon 组件面。**用了清单外的 Carbon 组件，它会渲染成
+// 没有样式的裸元素** —— 不报错，只是难看。要用新组件就在这里加一行，并说明是哪个
+// 页面需要它。反过来，一个组件从代码里彻底消失时，这里也应该跟着删。
+//
+// 依赖会自己跟来：组件的 Sass 分片各自 @use 它依赖的分片（tooltip 会带上 popover，
+// combo-box 会带上 list-box），所以清单只需要列直接使用的那些。
+//
+// 刻意**不**引入的两块：
+//   - `scss/grid`：Carbon 的 16 栅格（css-grid 与 flexbox 两套）。本应用的版式一直是
+//     组件样式表里的原生 CSS grid，没有理由为此多背一份栅格 CSS。
+//     不要用 `<Grid>` / `<Column>`，用 CSS grid。
+//   - `scss/layer`：`.cds--layer-*` 工具类。层级由令牌与发丝线表达，不套层级容器。
+// ---------------------------------------------------------------------------
+
+@use '@carbon/react/scss/components/accordion'; // 可折叠的长说明
+@use '@carbon/react/scss/components/button';
+@use '@carbon/react/scss/components/checkbox';
+@use '@carbon/react/scss/components/combo-box';
+@use '@carbon/react/scss/components/content-switcher'; // 分段切换（视图切换、粒度切换）
+@use '@carbon/react/scss/components/copy-button'; // 连接串、SQL 指纹的一键复制
+@use '@carbon/react/scss/components/data-table'; // primitives/DataGrid
+@use '@carbon/react/scss/components/date-picker'; // 维护窗口的日期选择
+@use '@carbon/react/scss/components/dropdown';
+@use '@carbon/react/scss/components/form'; // 标签、必填标记、字段级错误文案的基座
+@use '@carbon/react/scss/components/inline-loading'; // 按钮里的进行中状态
+@use '@carbon/react/scss/components/link';
+@use '@carbon/react/scss/components/list';
+@use '@carbon/react/scss/components/loading';
+@use '@carbon/react/scss/components/menu'; // OverflowMenu 的菜单面
+@use '@carbon/react/scss/components/modal'; // 二次确认
+@use '@carbon/react/scss/components/multiselect';
+@use '@carbon/react/scss/components/notification'; // primitives/NotificationBar
+@use '@carbon/react/scss/components/number-input';
+@use '@carbon/react/scss/components/overflow-menu'; // 行内次要操作
+@use '@carbon/react/scss/components/pagination';
+@use '@carbon/react/scss/components/radio-button';
+@use '@carbon/react/scss/components/search';
+@use '@carbon/react/scss/components/select';
+@use '@carbon/react/scss/components/skeleton-styles'; // Carbon 自己的骨架件
+@use '@carbon/react/scss/components/structured-list'; // 键值清单（原 Descriptions）
+@use '@carbon/react/scss/components/tabs';
+@use '@carbon/react/scss/components/tag';
+@use '@carbon/react/scss/components/text-area';
+@use '@carbon/react/scss/components/text-input';
+@use '@carbon/react/scss/components/time-picker'; // 维护窗口的时刻选择
+@use '@carbon/react/scss/components/toggle';
+@use '@carbon/react/scss/components/tooltip';
+@use '@carbon/react/scss/components/ui-shell'; // 炭黑页头 + 侧栏
 
 // 字体档位工具类。必须在 Carbon 之后，才能压过 Carbon 的组件默认排版。
 @use 'type-classes';
