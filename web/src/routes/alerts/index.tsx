@@ -1,8 +1,7 @@
-import { BellOutlined } from '@ant-design/icons'
+import { ContentSwitcher, Pagination, Switch, Tab, TabList, Tabs, Toggle } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
-import { Alert, Button, Empty, Space, Switch, Table, Tabs, Tag, Typography } from 'antd'
-import type { TableColumnsType } from 'antd'
-import type { HTMLAttributes } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import { pollingIntervals } from '../../api/polling'
@@ -11,13 +10,32 @@ import { AlertStatus } from '../../domain/AlertStatus'
 import { Freshness, elapsedLabel } from '../../domain/Freshness'
 import { AlertSuppressionTags } from '../../domain/SuppressionTags'
 import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
+import { DataGrid } from '../../primitives/DataGrid'
+import type { DataGridColumn } from '../../primitives/DataGrid'
+import { Icon } from '../../primitives/Icon'
+import { NotificationBar } from '../../primitives/NotificationBar'
+import { Panel } from '../../primitives/Panel'
+import { SkeletonBlock } from '../../primitives/SkeletonBlock'
+import type { StatusTone } from '../../primitives/StatusBadge'
+import { StatusBadge } from '../../primitives/StatusBadge'
+import { TruncatedText } from '../../primitives/TruncatedText'
 import { rootRoute } from '../root'
+import { browserStorage } from '../root/navCollapse'
+import type { TableDensity } from '../root/tableDensity'
+import { densityLabel, readTableDensity, writeTableDensity } from '../root/tableDensity'
 import { parseAlertListSearch, type AlertListSearch } from './search'
+import './alerts.css'
 
 type AlertObservation = components['schemas']['AlertObservation']
 type AlertSeverity = components['schemas']['AlertSeverity']
 
 const alertPageSize = 50
+
+/// 告警流收成单列的宽度。**这是本产品唯一一个为手机存在的断点**（DESIGN.md：
+/// 「the one exception below that is the alert stream, which collapses to a single column at 768px」）。
+/// 672px 以下应用外框还会把侧栏整个撤掉，所以这条断点必须比它宽 —— 单列版式要在
+/// 「侧栏还在的窄屏」与「只剩页头的手机」两种情况下都成立。
+const singleColumnQuery = '(max-width: 48rem)'
 
 export const alertsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -29,28 +47,64 @@ export const alertsRoute = createRoute({
 function AlertsPage() {
   const search = alertsRoute.useSearch()
   const navigate = alertsRoute.useNavigate()
+  const includePaused = 'error' in search ? false : search.include_paused
+
+  // `as` 槽只收组件，不能顺带把路由属性交出去，所以每个去处包成一个「已经知道自己去哪儿」
+  // 的组件，并用 useMemo 固定身份 —— 身份一变锚点重挂，键盘焦点会被甩掉（web/CLAUDE.md 先例）。
+  const tabLinks = useMemo(() => ({
+    current: (props: object) => <Link {...props} to="/alerts" search={{ tab: 'current' as const, include_paused: includePaused, page: 1 }} />,
+    history: (props: object) => <Link {...props} to="/alerts" search={{ tab: 'history' as const, include_paused: includePaused, page: 1 }} />,
+  }), [includePaused])
+
   if ('error' in search) {
-    return <Alert
-      type="error"
-      showIcon
-      title={search.error}
-      action={<Link to="/alerts" search={{ tab: 'current', include_paused: false }}><Button>使用默认筛选</Button></Link>}
+    return <InvalidAlertSearch
+      message={search.error}
+      reset={<Link className="cds--link" to="/alerts" search={{ tab: 'current', include_paused: false }}>使用默认筛选</Link>}
     />
   }
   return <AlertObservationLists
     search={search}
     onSearchChange={(next) => void navigate({ search: next })}
+    tabLinks={tabLinks}
     heading="全局告警"
+    lede="跨实例查看触发、恢复与处置事实"
   />
 }
 
-export function AlertObservationLists({ search, onSearchChange, heading }: {
+/// 筛选链接解析不了时的出口。链接另起一行放在通知条外面 ——
+/// 通知条的正文区被组件库限定为非交互内容（primitives/NotificationBar）。
+export function InvalidAlertSearch({ message, reset }: { message: string; reset: ReactNode }) {
+  return <div className="alert-stream">
+    <NotificationBar tone="critical" title={message}>
+      链接里的筛选参数无法解析，因此没有取数。
+    </NotificationBar>
+    <span className="alert-stream__reset">{reset}</span>
+  </div>
+}
+
+export type AlertTabLinks = {
+  current: ComponentType<object>
+  history: ComponentType<object>
+}
+
+/// 告警流。**全产品唯一一个必须在手机上可用的页面**，所以它有两套呈现：
+/// 宽屏是一张表，768px 及以下换成一列卡片。两套不同时存在于 DOM 里 ——
+/// 用 `display: none` 藏一套会让 `alert-row` 的计数翻倍，而那个标识的计数就等于数据行数。
+///
+/// 版式仍然是列表页的三段（web/CLAUDE.md 先例）：页头 → 工具条 → 一个 `flush` 的
+/// `Panel` 包住表格、分页放进 footer。窄屏只把最后一段的内容换成卡片，三段本身不动。
+export function AlertObservationLists({ search, onSearchChange, tabLinks, heading, lede, action }: {
   search: AlertListSearch
   onSearchChange: (search: AlertListSearch) => void
+  tabLinks: AlertTabLinks
   heading?: string
+  lede?: string
+  action?: ReactNode
 }) {
   const page = search.page ?? 1
   const offset = (page - 1) * alertPageSize
+  const singleColumn = useSingleColumn()
+  const [density, setDensity] = useState<TableDensity>(() => readTableDensity(browserStorage))
   const current = $api.useQuery('get', '/api/v1/alerts/current', {
     params: {
       query: {
@@ -71,86 +125,220 @@ export function AlertObservationLists({ search, onSearchChange, heading }: {
     },
   }, { refetchInterval: pollingIntervals.history })
 
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
-    {heading && <Space className="workbench-heading" wrap>
-      <div>
-        <Typography.Title level={2} style={{ margin: 0 }}>{heading}</Typography.Title>
-        <Typography.Text type="secondary">跨实例查看触发、恢复与处置事实</Typography.Text>
+  function changeDensity(next: TableDensity) {
+    setDensity(next)
+    writeTableDensity(browserStorage, next)
+  }
+
+  const currentRows = [...(current.data?.items ?? [])].sort(compareAlertUrgency)
+  const historyRows = history.data?.items ?? []
+  const showingCurrent = search.tab === 'current'
+  const rows = showingCurrent ? currentRows : historyRows
+  const query = showingCurrent ? current : history
+  const emptyTitle = showingCurrent ? '没有符合筛选的当前告警' : '暂无告警历史'
+  // 总条数还没回来的时候不出分页条：写一个 0 进去会先闪一句「共 0 条」，那不是真的。
+  const total = query.data?.total
+  const rowTestId = showingCurrent ? 'alert-row' : 'alert-history-row'
+
+  return <div className="alert-stream">
+    {(heading !== undefined || action !== undefined) && <header className="alert-stream__header">
+      {heading !== undefined && <div className="alert-stream__heading">
+        <h1 className="dbs-page-title">{heading}</h1>
+        {lede !== undefined && <p className="dbs-caption alert-stream__lede">{lede}</p>}
+      </div>}
+      {action}
+    </header>}
+
+    <Tabs selectedIndex={showingCurrent ? 0 : 1}>
+      <TabList aria-label="告警流" activation="manual">
+        <Tab as={tabLinks.current}><TabLabel label="当前告警" count={current.data?.total} /></Tab>
+        <Tab as={tabLinks.history}><TabLabel label="告警历史" count={history.data?.total} /></Tab>
+      </TabList>
+    </Tabs>
+
+    <div className="alert-stream__toolbar" role="group" aria-label="告警筛选">
+      {showingCurrent && <Toggle
+        className="alert-stream__toggle"
+        id="alert-filter-include-paused"
+        size="sm"
+        labelText="包含已暂停冻结告警"
+        hideLabel
+        toggled={search.include_paused}
+        onToggle={(includePaused) => onSearchChange({ ...search, include_paused: includePaused, page: 1 })}
+      />}
+      {/* 告警历史不轮询（`pollingIntervals.history` 是 false），没有「多久没更新」可讲，
+          所以新鲜度只出现在当前告警上 —— 和迁移前一致。 */}
+      {showingCurrent && current.dataUpdatedAt > 0 && <span className="alert-stream__freshness">
+        <Freshness dataUpdatedAt={current.dataUpdatedAt} collectionInterval={pollingIntervals.currentAlerts} />
+      </span>}
+    </div>
+
+    {query.error && <NotificationBar
+      tone="critical"
+      title={apiErrorMessage(query.error, showingCurrent ? '当前告警加载失败' : '告警历史加载失败')}
+    />}
+    {showingCurrent && !sortCoversEveryRow(current.data?.total) && <NotificationBar
+      tone="warning"
+      title={`排序只覆盖本页 ${alertPageSize} 条`}
+    >接口不支持按状态筛选，正在告警的规则可能落在其他页。</NotificationBar>}
+
+    <Panel
+      flush
+      title={showingCurrent ? '当前告警' : '告警历史'}
+      // 面板标题栏右侧只放「作用于这张表的视图开关」。卡片没有行高档位，所以窄屏不出这个开关。
+      actions={singleColumn ? undefined : <DensitySwitcher density={density} onChange={changeDensity} />}
+      footer={total === undefined ? undefined : <Pagination
+        className="alert-stream__pagination"
+        size="md"
+        page={page}
+        pageSize={alertPageSize}
+        pageSizes={[alertPageSize]}
+        totalItems={total}
+        backwardText="上一页"
+        forwardText="下一页"
+        itemsPerPageText="每页条数"
+        itemRangeText={(min, max, total) => `第 ${min}–${max} 条，共 ${total} 条`}
+        pageRangeText={(_current, total) => `共 ${total} 页`}
+        pageNumberText="页码"
+        onChange={({ page: nextPage }) => onSearchChange({ ...search, page: nextPage })}
+      />}
+    >
+      {singleColumn
+        ? <AlertCardList
+            rows={rows}
+            loading={query.isPending}
+            emptyTitle={emptyTitle}
+            testId={rowTestId}
+            recovery={!showingCurrent}
+          />
+        : <DataGrid<AlertObservation>
+            label={showingCurrent ? '当前告警列表' : '告警历史列表'}
+            density={density}
+            loading={query.isPending}
+            skeletonRows={8}
+            rows={rows}
+            rowKey={(alert) => alert.id}
+            rowTestId={rowTestId}
+            rowTone={severityBarTone}
+            columns={showingCurrent ? currentColumns : historyColumns}
+            empty={{
+              title: emptyTitle,
+              description: showingCurrent ? '调整筛选条件，或确认这些实例当前确实没有触发中的规则。' : undefined,
+            }}
+          />}
+    </Panel>
+  </div>
+}
+
+function TabLabel({ label, count }: { label: string; count: number | undefined }) {
+  return <span className="alert-stream__tab">
+    {label}
+    {count !== undefined && <span className="alert-stream__tab-count dbs-numeric">{count}</span>}
+  </span>
+}
+
+/// 密度切换。产品级偏好，读写只有 `routes/root/tableDensity.ts` 一个去处（web/CLAUDE.md）。
+function DensitySwitcher({ density, onChange }: { density: TableDensity; onChange: (density: TableDensity) => void }) {
+  const densities = ['standard', 'dense'] as const satisfies readonly TableDensity[]
+  return (
+    <ContentSwitcher
+      className="alert-stream__density"
+      size="sm"
+      selectedIndex={densities.indexOf(density)}
+      onChange={({ index }) => {
+        // 组件库把选中下标标成可选；拿不到下标就是没换档，什么都不做，别兜底成第一档。
+        const next = index === undefined ? undefined : densities[index]
+        if (next !== undefined) onChange(next)
+      }}
+    >
+      {densities.map((value) => <Switch key={value} name={value} text={densityLabel(value)} />)}
+    </ContentSwitcher>
+  )
+}
+
+/// 窄屏判定。**只有这一页需要它**：其余页面都假设读者面前有一张桌子。
+function useSingleColumn(): boolean {
+  const [singleColumn, setSingleColumn] = useState(() => matchMedia(singleColumnQuery).matches)
+  useEffect(() => {
+    const query = matchMedia(singleColumnQuery)
+    const update = () => setSingleColumn(query.matches)
+    // 订阅之前先对一次：首帧到订阅之间视口可能已经变了（旋转屏幕、恢复窗口）。
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+  return singleColumn
+}
+
+/// 手机上的告警流：一条告警一张卡片。
+///
+/// 十一列在 390px 上没有出路 —— 平均分下来一列 35px，或者退化成一根横向滚动的长条，
+/// 而这正是有人被叫醒之后先打开的那块屏幕。卡片把同一份事实竖着排：先是状态与级别，
+/// 再是规则与实例，然后是数值与时间；处置与维护窗口由标记条表达，与表格里的「标记」列同源。
+/// 唯一不出现在卡片上的是「通知结果」——那一列在接口产出投递记录之前恒为「—」。
+function AlertCardList({ rows, loading, emptyTitle, testId, recovery }: {
+  rows: AlertObservation[]
+  loading: boolean
+  emptyTitle: string
+  testId: string
+  recovery: boolean
+}) {
+  if (loading) {
+    return <ul className="alert-cards" aria-busy="true" aria-label="告警加载中">
+      {Array.from({ length: 5 }, (_, index) => <li className="alert-card" key={index}>
+        <SkeletonBlock lines={3} decorative />
+      </li>)}
+    </ul>
+  }
+  if (rows.length === 0) {
+    return <p className="alert-cards__empty dbs-body">{emptyTitle}</p>
+  }
+  return <ul className="alert-cards">
+    {rows.map((alert) => <li className="alert-card" key={alert.id} data-testid={testId} data-tone={severityBarTone(alert)}>
+      <div className="alert-card__status">
+        <AlertStatus status={alert.status} />
+        <SeverityBadge severity={alert.severity} status={alert.status} />
+        <span className="alert-card__duration dbs-numeric">{durationLabel(alert.duration_ms)}</span>
       </div>
-      <BellOutlined className="page-heading-icon" />
-    </Space>}
-    <Tabs
-      activeKey={search.tab}
-      onChange={(tab) => onSearchChange({ ...search, tab: tab as AlertListSearch['tab'], page: 1 })}
-      items={[
-        {
-          key: 'current',
-          label: `当前告警 ${current.data?.total ?? ''}`,
-          children: <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <Space wrap>
-              <Switch
-                aria-label="包含已暂停冻结告警"
-                checked={search.include_paused}
-                onChange={(includePaused) => onSearchChange({ ...search, include_paused: includePaused, page: 1 })}
-              />
-              <Typography.Text>包含已暂停冻结告警</Typography.Text>
-              {current.dataUpdatedAt > 0 && <Freshness
-                dataUpdatedAt={current.dataUpdatedAt}
-                collectionInterval={pollingIntervals.currentAlerts}
-              />}
-            </Space>
-            {current.error && <Alert type="error" showIcon title={apiErrorMessage(current.error, '当前告警加载失败')} />}
-            {!sortCoversEveryRow(current.data?.total) && <Alert
-              type="warning"
-              showIcon
-              title={`排序只覆盖本页 ${alertPageSize} 条`}
-              description="接口不支持按状态筛选，正在告警的规则可能落在其他页。"
-            />}
-            <Table<AlertObservation>
-              rowKey="id"
-              onRow={() => ({ 'data-testid': 'alert-row' }) as HTMLAttributes<HTMLTableRowElement>}
-              loading={current.isPending}
-              dataSource={[...(current.data?.items ?? [])].sort(compareAlertUrgency)}
-              rowClassName={(alert) => isUnresolved(alert.status) ? '' : 'alert-row-resolved'}
-              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有符合筛选的当前告警" /> }}
-              pagination={{
-                current: page,
-                pageSize: alertPageSize,
-                total: current.data?.total,
-                showSizeChanger: false,
-                onChange: (nextPage) => onSearchChange({ ...search, page: nextPage }),
-              }}
-              scroll={{ x: 1320 }}
-              columns={currentColumns}
-            />
-          </Space>,
-        },
-        {
-          key: 'history',
-          label: `告警历史 ${history.data?.total ?? ''}`,
-          children: <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            {history.error && <Alert type="error" showIcon title={apiErrorMessage(history.error, '告警历史加载失败')} />}
-            <Table<AlertObservation>
-              rowKey="id"
-              onRow={() => ({ 'data-testid': 'alert-history-row' }) as HTMLAttributes<HTMLTableRowElement>}
-              loading={history.isPending}
-              dataSource={history.data?.items ?? []}
-              locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无告警历史" /> }}
-              pagination={{
-                current: page,
-                pageSize: alertPageSize,
-                total: history.data?.total,
-                showSizeChanger: false,
-                onChange: (nextPage) => onSearchChange({ ...search, page: nextPage }),
-              }}
-              scroll={{ x: 1620 }}
-              columns={historyColumns}
-            />
-          </Space>,
-        },
-      ]}
-    />
-  </Space>
+      <p className="alert-card__rule"><TruncatedText>{alert.rule_name}</TruncatedText></p>
+      <p className="alert-card__subject dbs-caption">
+        <TruncatedText>{`${alert.instance_name} · ${alert.metric_id}`}</TruncatedText>
+      </p>
+      <dl className="alert-card__facts">
+        <div>
+          <dt className="dbs-caption">触发值 / 阈值</dt>
+          <dd className="dbs-numeric">{valueAgainstThreshold(alert)}</dd>
+        </div>
+        <div>
+          <dt className="dbs-caption">首次触发</dt>
+          <dd className="dbs-numeric"><TimeCell value={alert.first_triggered_at} /></dd>
+        </div>
+        {recovery && <div>
+          <dt className="dbs-caption">恢复时间</dt>
+          <dd className="dbs-numeric"><TimeCell value={alert.recovered_at} /></dd>
+        </div>}
+        {recovery && <div>
+          <dt className="dbs-caption">规则版本</dt>
+          <dd className="dbs-numeric">{`版本 ${alert.rule_version}`}</dd>
+        </div>}
+      </dl>
+      <AlertSuppressionTags
+        className="alert-card__markers"
+        inMaintenance={alert.in_maintenance}
+        disposition={alert.disposition}
+        paused={alert.paused}
+        pausedAt={alert.paused_at}
+      />
+      {alert.unavailability !== undefined && <div className="alert-card__reason">
+        <AlertUnavailabilityReason alert={alert} />
+      </div>}
+      <Link
+        className="cds--link alert-card__detail"
+        to="/instances/$id/alerts/$alertId"
+        params={{ id: alert.instance_id, alertId: alert.id }}
+      >详情</Link>
+    </li>)}
+  </ul>
 }
 
 function statusRank(status: components['schemas']['AlertStatus']): number {
@@ -204,45 +392,145 @@ export function compareAlertUrgency(left: AlertObservation, right: AlertObservat
   return right.duration_ms - left.duration_ms
 }
 
-const currentColumns: TableColumnsType<AlertObservation> = [
+export function severityLabel(severity: AlertSeverity): string {
+  switch (severity) {
+    case 'critical': return '严重'
+    case 'warning': return '警告'
+    case 'info': return 'Info'
+    default: return assertNever(severity)
+  }
+}
+
+/// 级别的视觉档位。**文字永远在**，颜色只是让扫视时先看见那一行。
+///
+/// 已经不烧了的行（OK / 已恢复）走中性档，而不是干脆不显示级别：级别是规则的属性，
+/// 藏掉它就要在两个地方解释「这一行为什么没有级别」；可是把一屏评估通过的规则涂成一片红，
+/// 又会把真正在烧的那两行淹掉。所以是同一个字、换一档颜色。
+function severityTone(severity: AlertSeverity, status: components['schemas']['AlertStatus']): StatusTone {
+  if (!isUnresolved(status)) return 'unknown'
+  switch (severity) {
+    case 'critical': return 'critical'
+    case 'warning': return 'warning'
+    case 'info': return 'unknown'
+    default: return assertNever(severity)
+  }
+}
+
+function SeverityBadge({ severity, status }: { severity: AlertSeverity; status: components['schemas']['AlertStatus'] }) {
+  return <StatusBadge tone={severityTone(severity, status)}>{severityLabel(severity)}</StatusBadge>
+}
+
+/// 行首 3px 色条：只画「正在烧、而且够严重」的行。每一行都上色等于没有色条。
+/// 它重复的是同一行「状态」「级别」两列已经写着的字，不是唯一信号。
+function severityBarTone(alert: AlertObservation): StatusTone | undefined {
+  if (!isUnresolved(alert.status)) return undefined
+  switch (alert.severity) {
+    case 'critical': return 'critical'
+    case 'warning': return 'warning'
+    case 'info': return undefined
+    default: return assertNever(alert.severity)
+  }
+}
+
+/**
+ * 列定义。**只给 `minWidth`，页面不设任何 `overflow-x`** —— 横向行为整个由
+ * `primitives/DataGrid` 决定（web/CLAUDE.md）。
+ *
+ * 迁移前「状态与标记」一格里塞着状态、级别、抑制标记三件事，40px 的行放不下；
+ * 拆成三列之后一格只写一个事实，列与列之间扫视时对得齐。
+ * 触发值与阈值反过来并成一格：读它们的方式本来就是比大小，`96 / 80` 是一个事实而不是两个。
+ */
+const currentColumns: DataGridColumn<AlertObservation>[] = [
+  { key: 'status', header: '状态', minWidth: 96, grow: 1.21, cell: (alert) => <AlertStatus status={alert.status} /> },
+  { key: 'severity', header: '级别', minWidth: 80, grow: 1.25, cell: (alert) => <SeverityBadge severity={alert.severity} status={alert.status} /> },
+  { key: 'instance', header: '实例', minWidth: 140, grow: 0.83, cell: (alert) => <TruncatedText>{alert.instance_name}</TruncatedText> },
+  // 规则名是这一行的身份，截断它等于让读者认不出这是什么告警：文本列里富余宽度优先给它。
+  { key: 'rule', header: '规则', minWidth: 170, grow: 0.81, cell: (alert) => <TruncatedText className="alert-stream__rule">{alert.rule_name}</TruncatedText> },
+  // 指标 ID 是等宽的点分标识：装不下就省略号 + 悬停全文，绝不从中间折行。
+  { key: 'metric', header: '指标', minWidth: 150, grow: 0.68, cell: (alert) => <TruncatedText className="dbs-numeric">{alert.metric_id}</TruncatedText> },
+  { key: 'value', header: '触发值 / 阈值', minWidth: 122, grow: 1.35, numeric: true, cell: (alert) => <TruncatedText className="dbs-numeric">{valueAgainstThreshold(alert)}</TruncatedText> },
+  { key: 'duration', header: '持续时间', minWidth: 88, grow: 1.35, numeric: true, cell: (alert) => durationLabel(alert.duration_ms) },
+  { key: 'first-triggered', header: '首次触发', minWidth: 131, grow: 1.35, numeric: true, cell: (alert) => <TimeCell value={alert.first_triggered_at} /> },
   {
-    title: '状态与标记',
-    width: 260,
-    render: (_, alert) => <Space direction="vertical" size={4}>
-      <Space><AlertStatus status={alert.status} />{isUnresolved(alert.status) && severityTag(alert.severity)}</Space>
-      <AlertSuppressionTags
-        inMaintenance={alert.in_maintenance}
-        disposition={alert.disposition}
-        paused={alert.paused}
-        pausedAt={alert.paused_at}
-      />
-    </Space>,
+    key: 'markers',
+    header: '标记',
+    minWidth: 120,
+    grow: 0.96,
+    cell: (alert) => <AlertSuppressionTags
+      className="alert-stream__markers"
+      inMaintenance={alert.in_maintenance}
+      disposition={alert.disposition}
+      paused={alert.paused}
+      pausedAt={alert.paused_at}
+    />,
   },
-  { title: '实例', width: 170, dataIndex: 'instance_name' },
-  { title: '规则', width: 220, dataIndex: 'rule_name' },
-  { title: '指标', width: 230, dataIndex: 'metric_id' },
-  { title: '触发值', width: 100, render: (_, alert) => optionalNumber(alert.current_value) },
-  { title: '阈值', width: 100, render: (_, alert) => optionalNumber(alert.threshold) },
-  { title: '首次触发', width: 190, render: (_, alert) => optionalTime(alert.first_triggered_at) },
-  { title: '持续时间', width: 120, render: (_, alert) => durationLabel(alert.duration_ms) },
-  { title: 'No Data 原因', width: 210, render: (_, alert) => <AlertUnavailabilityReason alert={alert} /> },
+  { key: 'unavailability', header: 'No Data 原因', minWidth: 115, grow: 0.89, cell: (alert) => <AlertUnavailabilityReason alert={alert} iconAction /> },
   {
-    title: '操作',
-    fixed: 'right',
-    width: 90,
-    render: (_, alert) => <Link
+    key: 'actions',
+    header: '操作',
+    minWidth: 48,
+    grow: 1.35,
+    align: 'end',
+    // 行内操作是图标链接（与实例列表同一做法）：可访问名由 `aria-label` 显式给出、
+    // 悬停提示是同一句话。写成「详情」两个字要 71px，而这个去处每一行都一样，
+    // 那 23px 花在「这一行到底怎么了」的列上更值。
+    cell: (alert) => <Link
+      className="cds--link alert-stream__detail"
       to="/instances/$id/alerts/$alertId"
       params={{ id: alert.instance_id, alertId: alert.id }}
-    >详情</Link>,
+      aria-label="详情"
+      title="详情"
+    ><Icon name="view" /></Link>,
+  },
+]
+
+const historyColumns: DataGridColumn<AlertObservation>[] = [
+  { key: 'status', header: '状态', minWidth: 96, grow: 1.22, cell: (alert) => <AlertStatus status={alert.status} /> },
+  { key: 'severity', header: '级别', minWidth: 80, grow: 1.24, cell: (alert) => <SeverityBadge severity={alert.severity} status={alert.status} /> },
+  { key: 'instance', header: '实例', minWidth: 140, grow: 0.75, cell: (alert) => <TruncatedText>{alert.instance_name}</TruncatedText> },
+  { key: 'rule', header: '规则', minWidth: 170, grow: 0.67, cell: (alert) => <TruncatedText className="alert-stream__rule">{alert.rule_name}</TruncatedText> },
+  { key: 'triggered', header: '触发时间', minWidth: 131, grow: 1.09, numeric: true, cell: (alert) => <TimeCell value={alert.first_triggered_at} /> },
+  { key: 'recovered', header: '恢复时间', minWidth: 131, grow: 1.09, numeric: true, cell: (alert) => <TimeCell value={alert.recovered_at} /> },
+  { key: 'duration', header: '持续时间', minWidth: 88, grow: 1.50, numeric: true, cell: (alert) => durationLabel(alert.duration_ms) },
+  { key: 'value', header: '触发值 / 阈值', minWidth: 122, grow: 1.35, numeric: true, cell: (alert) => <TruncatedText className="dbs-numeric">{valueAgainstThreshold(alert)}</TruncatedText> },
+  { key: 'version', header: '规则版本', minWidth: 80, grow: 1.35, numeric: true, cell: (alert) => `版本 ${alert.rule_version}` },
+  // 通知投递记录接口尚未产出（schema 上恒为空数组），这一列如实写「—」，不编一个状态出来。
+  { key: 'notification', header: '通知结果', minWidth: 60, grow: 1.30, cell: () => '—' },
+  { key: 'disposition', header: '处置记录', minWidth: 78, grow: 1.35, cell: (alert) => dispositionLabel(alert.disposition) },
+  { key: 'maintenance', header: '维护窗口', minWidth: 56, grow: 1.34, cell: (alert) => maintenanceWindowLabel(alert.in_maintenance) },
+  {
+    key: 'actions',
+    header: '操作',
+    minWidth: 48,
+    grow: 1.63,
+    align: 'end',
+    // 行内操作是图标链接（与实例列表同一做法）：可访问名由 `aria-label` 显式给出、
+    // 悬停提示是同一句话。写成「详情」两个字要 71px，而这个去处每一行都一样，
+    // 那 23px 花在「这一行到底怎么了」的列上更值。
+    cell: (alert) => <Link
+      className="cds--link alert-stream__detail"
+      to="/instances/$id/alerts/$alertId"
+      params={{ id: alert.instance_id, alertId: alert.id }}
+      aria-label="详情"
+      title="详情"
+    ><Icon name="view" /></Link>,
   },
 ]
 
 type AlertUnavailabilityReasonProps = {
   alert: Pick<AlertObservation, 'instance_id' | 'metric_id' | 'unavailability'> &
     Partial<Pick<AlertObservation, 'id'>>
+  /**
+   * 表格里用图标链接代替文字链接。40px 的行给这一格只有八十几个像素，
+   * 「补齐监控权限」六个字会把原因本身挤没；图标的可访问名与悬停提示仍然是那句话，
+   * 与实例列表的行内图标操作是同一个做法。宽松版式（手机卡片）保持文字。
+   */
+  iconAction?: boolean
 }
 
-export function AlertUnavailabilityReason({ alert }: AlertUnavailabilityReasonProps) {
+/// 「这一格为什么没有数字」。原因与去处写在同一行：40px 的行放不下两行，
+/// 而只写原因、不给去处，读者还得自己想下一步该点哪里。
+export function AlertUnavailabilityReason({ alert, iconAction = false }: AlertUnavailabilityReasonProps) {
   if (!alert.unavailability) return '—'
   const copy = unavailabilityCopy(alert.unavailability)
   const href = unavailabilityHref(alert.unavailability, {
@@ -251,43 +539,15 @@ export function AlertUnavailabilityReason({ alert }: AlertUnavailabilityReasonPr
       : `/instances/${encodeURIComponent(alert.instance_id)}/alerts`,
     collection: `/instances/${encodeURIComponent(alert.instance_id)}/collection?metric=${encodeURIComponent(alert.metric_id)}`,
   })
-  return <Space orientation="vertical" size={0}>
-    <Typography.Text>{copy.title}</Typography.Text>
-    <a href={href}>{copy.action}</a>
-  </Space>
-}
-
-const historyColumns: TableColumnsType<AlertObservation> = [
-  { title: '状态', width: 100, render: (_, alert) => <AlertStatus status={alert.status} /> },
-  { title: '实例', width: 160, dataIndex: 'instance_name' },
-  { title: '规则', width: 210, dataIndex: 'rule_name' },
-  { title: '触发时间', width: 190, render: (_, alert) => optionalTime(alert.first_triggered_at) },
-  { title: '恢复时间', width: 190, render: (_, alert) => optionalTime(alert.recovered_at) },
-  { title: '持续时间', width: 120, render: (_, alert) => durationLabel(alert.duration_ms) },
-  { title: '触发值', width: 90, render: (_, alert) => optionalNumber(alert.current_value) },
-  { title: '阈值', width: 90, render: (_, alert) => optionalNumber(alert.threshold) },
-  { title: '规则快照 / 版本', width: 150, render: (_, alert) => `版本 ${alert.rule_version}` },
-  { title: '通知结果', width: 110, render: () => '—' },
-  { title: '处置记录', width: 110, render: (_, alert) => dispositionLabel(alert.disposition) },
-  { title: '维护窗口', width: 110, render: (_, alert) => maintenanceWindowLabel(alert.in_maintenance) },
-  {
-    title: '操作',
-    fixed: 'right',
-    width: 90,
-    render: (_, alert) => <Link
-      to="/instances/$id/alerts/$alertId"
-      params={{ id: alert.instance_id, alertId: alert.id }}
-    >详情</Link>,
-  },
-]
-
-function severityTag(severity: AlertSeverity) {
-  switch (severity) {
-    case 'critical': return <Tag color="error">严重</Tag>
-    case 'warning': return <Tag color="warning">警告</Tag>
-    case 'info': return <Tag color="processing">Info</Tag>
-    default: return assertNever(severity)
-  }
+  return <span className="alert-reason" data-icon-action={iconAction ? 'true' : undefined}>
+    <span className="alert-reason__title" title={copy.title}>{copy.title}</span>
+    <a
+      className="cds--link alert-reason__action"
+      href={href}
+      aria-label={iconAction ? copy.action : undefined}
+      title={copy.action}
+    >{iconAction ? <Icon name="arrowRight" /> : copy.action}</a>
+  </span>
 }
 
 function dispositionLabel(disposition: components['schemas']['AlertDisposition']): string {
@@ -312,8 +572,24 @@ export function optionalNumber(value: number | undefined): string {
   return value === undefined ? '—' : alertNumber.format(value)
 }
 
-function optionalTime(value: string | undefined): string {
-  return value === undefined ? '—' : new Date(value).toLocaleString()
+function valueAgainstThreshold(alert: Pick<AlertObservation, 'current_value' | 'threshold'>): string {
+  return `${optionalNumber(alert.current_value)} / ${optionalNumber(alert.threshold)}`
+}
+
+/// 表格里的时刻。**短格式 + 悬停全文**：完整的本地化时间戳要 170px，一屏十一列给不出来，
+/// 而扫视时读的是「哪一天几点」，年份与秒都不参与判断。全文在 `title` 里，一个悬停就有。
+const shortTimeFormat = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+function TimeCell({ value }: { value: string | undefined }) {
+  if (value === undefined) return '—'
+  const at = new Date(value)
+  return <TruncatedText className="dbs-numeric" title={at.toLocaleString()}>{shortTimeFormat.format(at)}</TruncatedText>
 }
 
 export function durationLabel(milliseconds: number): string {

@@ -51,8 +51,6 @@ figcaption { color: #52514e; font-size: 13px; }
 .collection-todo-item summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
 .collection-todo-item p { margin: 12px 0 8px; }
 .instance-filter-bar { width: 100%; }
-/* Evaluated-but-OK rows are context, not the reason anyone opened this page. */
-.alert-row-resolved > td { color: #6b6a65; background: #fbfbf9; }
 .time-quick-label { color: #52514e; font-size: 13px; }
 .time-quick-ranges .ant-btn { padding-inline: 9px; }
 .freshness { color: #52514e; font-size: 13px; white-space: nowrap; }
@@ -65,9 +63,6 @@ figcaption { color: #52514e; font-size: 13px; }
 .page-heading-icon { color: #1677ff; font-size: 28px; }
 .alert-detail-section { min-width: 0; padding-top: 8px; border-top: 1px solid #e1e0d9; }
 .alert-detail-section > h3 { font-size: 18px; margin-top: 8px; }
-.alert-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
-.rule-snapshot-layout { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr); gap: 20px; align-items: start; }
-.rule-snapshot-json { max-height: 360px; overflow: auto; margin: 0; padding: 14px; border: 1px solid #e1e0d9; border-radius: 6px; background: #fff; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .event-guidance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding-block: 18px; border-block: 1px solid #e1e0d9; }
 .event-guidance h3 { font-size: 18px; margin-top: 0; }
 .settings-section { border-top: 1px solid #e1e0d9; padding-top: 20px; }
@@ -88,7 +83,7 @@ figcaption { color: #52514e; font-size: 13px; }
   .enhanced-monitoring-controls .ant-select { min-width: 0 !important; width: 100%; }
   .overview-grid { grid-template-columns: minmax(0, 1fr); }
   .overview-card[data-overview-module="troubleshooting"] { grid-column: auto; }
-  .alert-detail-grid, .rule-snapshot-layout, .event-guidance { grid-template-columns: minmax(0, 1fr); }
+  .event-guidance { grid-template-columns: minmax(0, 1fr); }
   .workbench-heading .ant-space-item { min-width: 0; }
   .monitoring-controls { gap: 10px; }
   .monitoring-controls > .ant-space { width: 100%; }
