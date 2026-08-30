@@ -1,99 +1,32 @@
+/*
+ * 全局元素层。
+ *
+ * 这个文件是旧组件库时代留下的最后一块样式，#207 把其中已经没有任何元素能匹配的
+ * 规则全部删掉了（旧库的 `.ant-*` 钩子、以及九个页面迁移后不再渲染的那些类名）。
+ * 剩下的只有两类：真正的全局元素样式，和还没有自己样式表的两处组件样式。
+ * 颜色一律走语义令牌，不写字面值。
+ */
+
 :root {
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --press: 140ms;
-  --enter: 200ms;
 }
 *, *::before, *::after { box-sizing: border-box; }
-html, body, #root { margin: 0; min-height: 100%; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-body { background: #f9f9f7; color: #0b0b0b; }
+html, body, #root { margin: 0; min-height: 100%; }
 table { border-collapse: collapse; width: 100%; margin-top: 12px; }
-th, td { border-bottom: 1px solid #e1e0d9; padding: 8px; text-align: left; }
-figcaption { color: #52514e; font-size: 13px; }
-.workbench-heading { width: 100%; justify-content: space-between; }
-.monitoring-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 24px; padding: 12px 0 18px; border-bottom: 1px solid #e1e0d9; }
-.enhanced-monitoring-controls .ant-select { flex: 1; }
-.snapshot-meta { width: 100%; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e1e0d9; }
-.metric-grid { display: grid; gap: 16px; }
-.metric-grid[data-columns="1"] { grid-template-columns: minmax(0, 1fr); }
-.metric-grid[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.metric-grid[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.metric-card { min-width: 0; border-radius: 6px; }
-.metric-card .ant-card-head-title { font-size: 15px; }
-.metric-card .ant-card-extra { min-width: 0; }
-.metric-chart-canvas { height: 250px; width: 100%; }
-.metric-figure { margin: 0; transition: opacity 160ms var(--ease-out); }
+th, td { border-bottom: 1px solid var(--cds-border-subtle-01); padding: 8px; text-align: left; }
+figcaption { color: var(--cds-text-secondary); font-size: 13px; }
+
+/* 指标图：取数刷新时整块图轻微压暗，其余外观见 domain/MetricChart.css。 */
+.metric-figure { transition: opacity 160ms var(--ease-out); }
 .metric-figure[data-loading="true"] { opacity: 0.75; }
-.metric-data-table > summary { cursor: pointer; color: #52514e; font-size: 13px; padding-top: 4px; }
+.metric-data-table > summary { cursor: pointer; color: var(--cds-text-secondary); font-size: 13px; padding-top: 4px; }
 .metric-data-table[open] > summary { margin-bottom: 4px; }
-.metric-threshold-note { color: #52514e; font-size: 13px; }
 
-/* Entry: cards fade up once, staggered, so 18 charts don't land as one slab. */
-@media (prefers-reduced-motion: no-preference) {
-  .metric-grid > .metric-card, .overview-grid > .overview-card {
-    animation: card-enter var(--enter) var(--ease-out) both;
-    animation-delay: calc(var(--card-index, 0) * 40ms);
-  }
-}
-@keyframes card-enter {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
+.freshness { color: var(--cds-text-secondary); font-size: 13px; white-space: nowrap; }
+.freshness[data-fresh="false"] { color: var(--dbs-status-warning); font-weight: 600; }
 
-/* Press feedback: the interface should visibly hear the click. */
-@media (hover: hover) and (pointer: fine) {
-  .ant-btn, .metric-card .ant-card-head-title { transition: transform var(--press) var(--ease-out), color var(--press) ease; }
-  .ant-btn:active { transform: scale(0.97); }
-}
-.settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; max-width: 760px; }
-.rule-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
-.collection-todo-item { border: 1px solid #e1e0d9; border-radius: 6px; padding: 12px 16px; background: #fff; }
-.collection-todo-item summary { cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; }
-.collection-todo-item p { margin: 12px 0 8px; }
-.instance-filter-bar { width: 100%; }
-.time-quick-label { color: #52514e; font-size: 13px; }
-.time-quick-ranges .ant-btn { padding-inline: 9px; }
-.freshness { color: #52514e; font-size: 13px; white-space: nowrap; }
-.freshness[data-fresh="false"] { color: #ad4e00; font-weight: 600; }
-.overview-status { border-block: 1px solid #d9d8d1; padding: 18px 0; }
-.overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
-.overview-card { min-width: 0; border-radius: 6px; }
-.overview-card .ant-card-head-title { font-size: 15px; }
-.overview-card[data-overview-module="troubleshooting"] { grid-column: 1 / -1; }
-.page-heading-icon { color: #1677ff; font-size: 28px; }
-.alert-detail-section { min-width: 0; padding-top: 8px; border-top: 1px solid #e1e0d9; }
+.alert-detail-section { min-width: 0; padding-top: 8px; border-top: 1px solid var(--cds-border-subtle-01); }
 .alert-detail-section > h3 { font-size: 18px; margin-top: 8px; }
-.event-guidance { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding-block: 18px; border-block: 1px solid #e1e0d9; }
-.event-guidance h3 { font-size: 18px; margin-top: 0; }
-.settings-section { border-top: 1px solid #e1e0d9; padding-top: 20px; }
-.settings-section-heading { width: 100%; justify-content: space-between; margin-bottom: 16px; }
-@media (max-width: 640px) {
-  .settings-form-grid { grid-template-columns: minmax(0, 1fr); }
-  .rule-editor-grid { grid-template-columns: minmax(0, 1fr); }
-  .collection-todo-item summary { align-items: flex-start; flex-direction: column; }
-  .instance-filter-bar { display: grid !important; grid-template-columns: minmax(0, 1fr); }
-  .instance-filter-bar > .ant-space-item { min-width: 0; width: 100%; }
-  .instance-filter-bar .ant-select { min-width: 0 !important; width: 100% !important; }
-  .workbench-heading { align-items: flex-start; }
-  .metric-grid[data-columns] { grid-template-columns: minmax(0, 1fr); }
-  .metric-card .ant-card-head { align-items: flex-start; }
-  .metric-card .ant-card-head-wrapper { align-items: flex-start; flex-direction: column; padding-block: 10px; }
-  .metric-card .ant-card-extra { margin-inline-start: 0; }
-  .enhanced-monitoring-controls > .ant-space { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
-  .enhanced-monitoring-controls .ant-select { min-width: 0 !important; width: 100%; }
-  .overview-grid { grid-template-columns: minmax(0, 1fr); }
-  .overview-card[data-overview-module="troubleshooting"] { grid-column: auto; }
-  .event-guidance { grid-template-columns: minmax(0, 1fr); }
-  .workbench-heading .ant-space-item { min-width: 0; }
-  .monitoring-controls { gap: 10px; }
-  .monitoring-controls > .ant-space { width: 100%; }
-  .time-quick-ranges .ant-btn { padding-inline: 5px; font-size: 12px; }
-  .monitoring-controls input[type="datetime-local"] { min-width: 0; max-width: 150px; }
-}
-
-@media (min-width: 641px) and (max-width: 980px) {
-  .metric-grid[data-columns="3"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
