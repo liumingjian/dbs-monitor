@@ -1,0 +1,40 @@
+/*
+ * 兜底页（未匹配路由、路由级错误、整应用错误边界）的版式。
+ *
+ * 它可能渲染在应用外框之内，也可能渲染在外框之外（外框自己抛的时候），所以这里
+ * 只管「把一块窄面板放在可用宽度的中间」，不假设外面还有什么。
+ */
+
+.dbs-status-page {
+  display: flex;
+  justify-content: center;
+  padding-block-start: 10vh;
+  padding-inline: var(--dbs-page-padding);
+}
+
+.dbs-status-page__panel {
+  inline-size: 100%;
+  max-inline-size: 32rem;
+}
+
+.dbs-status-page__description {
+  margin: 0;
+}
+
+/* 异常消息：等宽、次要文字色，和正文分得开。它是给管理员抄走的一句话，不是读物。 */
+.dbs-status-page__detail {
+  margin-block: var(--dbs-spacing-sm) 0;
+  padding: var(--dbs-spacing-xs) var(--dbs-spacing-sm);
+  background: var(--cds-layer-01);
+  color: var(--cds-text-secondary);
+  font-family: var(--dbs-font-mono);
+  /* 长消息换行而不是撑出横向滚动条。 */
+  overflow-wrap: anywhere;
+}
+
+.dbs-status-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+  margin-block-start: var(--dbs-spacing-lg);
+}

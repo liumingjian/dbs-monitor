@@ -1,0 +1,86 @@
+/*
+ * 用户管理的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色与间距一律走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定；
+ * 在表格附近再加一个滚动容器，粘性表头就会掉进表格里。
+ */
+
+.users-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，表格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.users-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.users-page__header h1 {
+  margin: 0;
+}
+
+/* 分页条在面板 footer 里，去掉 Carbon 自带的上边框：footer 上面已经有一条发丝线了。 */
+.users-pagination {
+  border-block-start: none;
+  inline-size: 100%;
+}
+
+/* ---- 表格内容 ---- */
+
+.users-table__name {
+  font-weight: 600;
+}
+
+/* 一格一行：三个行内按钮排成一行，装不下交给单元格自己的省略号，不换行把行撑高。 */
+.users-table__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--dbs-spacing-xxs);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* 行内的幽灵按钮压到行高之内：40px 的标准行放不下 Carbon 默认的按钮高度，
+   密集档 32px 更放不下。左右内边距也收一点，三个按钮才排得进那一列。 */
+.users-table__actions .cds--btn {
+  min-block-size: auto;
+  block-size: auto;
+  padding-block: 0;
+  padding-inline: var(--dbs-spacing-xs);
+}
+
+/* ---- 对话框里的表单 ---- */
+
+.users-form {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+
+.users-password {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+
+/* 口令与复制按钮同一行：输入框吃掉剩下的宽度，复制按钮保持自己的尺寸。 */
+.users-password__row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--dbs-spacing-xxs);
+}
+
+.users-password__value {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* 口令是一串要一个字符一个字符核对的东西：等宽字体，0 和 O 才分得开。
+   Carbon 的 `className` 落在输入框外面那层，所以字体得往里点一层。 */
+.users-password__value .cds--text-input {
+  font-family: var(--dbs-font-mono);
+}
