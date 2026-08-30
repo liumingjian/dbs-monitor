@@ -1,8 +1,16 @@
-import { CheckOutlined, StopOutlined } from '@ant-design/icons'
-import { Select, SelectItem, TextArea } from '@carbon/react'
-import { Alert, Button, Descriptions, Empty, Modal, Space, Spin, Table, Tag, Tooltip, Typography } from 'antd'
-import type { TableColumnsType } from 'antd'
+import {
+  Button,
+  Modal,
+  Select,
+  SelectItem,
+  StructuredListBody,
+  StructuredListCell,
+  StructuredListRow,
+  StructuredListWrapper,
+  TextArea,
+} from '@carbon/react'
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import type { FieldPath } from 'react-hook-form'
 import { z } from 'zod'
@@ -10,7 +18,17 @@ import { $api } from '../../api/client'
 import { apiErrorMessage, applyApiFieldErrors } from '../../api/errors'
 import type { components } from '../../api/schema'
 import { zodResolver } from '../../forms/zodResolver'
+import { DataGrid } from '../../primitives/DataGrid'
+import type { DataGridColumn } from '../../primitives/DataGrid'
 import { FormField } from '../../primitives/FormField'
+import { Icon } from '../../primitives/Icon'
+import { NotificationBar } from '../../primitives/NotificationBar'
+import { Panel } from '../../primitives/Panel'
+import { SkeletonBlock } from '../../primitives/SkeletonBlock'
+import { StatusBadge } from '../../primitives/StatusBadge'
+import type { StatusTone } from '../../primitives/StatusBadge'
+import { TruncatedText } from '../../primitives/TruncatedText'
+import './alertEvidence.css'
 
 type AlertDisposition = components['schemas']['AlertDisposition']
 type AlertDispositionDetail = components['schemas']['AlertDispositionDetail']
@@ -117,6 +135,10 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
     setTarget(next)
   }
 
+  function close() {
+    setTarget(null)
+  }
+
   const submit = handleSubmit((values) => {
     setFailure('')
     updateDisposition.mutate(
@@ -138,49 +160,56 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
     )
   })
 
-  return <section className="alert-detail-section" aria-labelledby="disposition-heading">
-    <Space align="center" wrap style={{ width: '100%', justifyContent: 'space-between' }}>
-      <Typography.Title id="disposition-heading" level={3}>处置记录</Typography.Title>
-      <Space wrap>
-        <Tooltip title={disabledReason}><span>
-          <Button icon={<CheckOutlined />} disabled={disabledReason !== undefined} onClick={() => open('ACKED')}>确认</Button>
-        </span></Tooltip>
-        <Tooltip title={disabledReason}><span>
-          <Button icon={<StopOutlined />} disabled={disabledReason !== undefined} onClick={() => open('IGNORED')}>忽略</Button>
-        </span></Tooltip>
-      </Space>
-    </Space>
-    {disposition.isPending && <Spin />}
-    {disposition.error && <Alert type="error" showIcon title={apiErrorMessage(disposition.error, '处置记录加载失败')} />}
+  return <Panel
+    className="alert-detail-section"
+    title="处置记录"
+    headingLevel={3}
+    actions={<div className="alert-evidence-actions">
+      <span title={disabledReason}>
+        <Button kind="tertiary" size="md" disabled={disabledReason !== undefined} renderIcon={ConfirmIcon} onClick={() => open('ACKED')}>确认</Button>
+      </span>
+      <span title={disabledReason}>
+        <Button kind="tertiary" size="md" disabled={disabledReason !== undefined} renderIcon={IgnoreIcon} onClick={() => open('IGNORED')}>忽略</Button>
+      </span>
+    </div>}
+  >
+    {disposition.isPending && <SkeletonBlock lines={4} label="处置记录加载中" />}
+    {disposition.error && <NotificationBar tone="critical" title={apiErrorMessage(disposition.error, '处置记录加载失败')} />}
     {disposition.data && <DispositionContent detail={disposition.data} />}
     <Modal
-      title={target === 'ACKED' ? '确认告警' : '忽略告警'}
       open={target !== null}
-      footer={null}
-      destroyOnHidden
-      onCancel={() => setTarget(null)}
+      modalHeading={target === 'ACKED' ? '确认告警' : '忽略告警'}
+      primaryButtonText="提交"
+      secondaryButtonText="取消"
+      primaryButtonDisabled={updateDisposition.isPending}
+      onRequestSubmit={() => void submit()}
+      onRequestClose={close}
+      onSecondarySubmit={close}
     >
-      <form onSubmit={submit} noValidate>
+      {/* Modal 的主按钮在 children 之外，提交走 `onRequestSubmit`；这里仍然是 form，
+          是为了回车提交与原生表单语义都落在同一个 `handleSubmit` 上。 */}
+      <form className="alert-evidence-form" onSubmit={submit} noValidate>
+        {failure !== '' && <NotificationBar tone="critical" title={failure} />}
         {target === 'ACKED' && <FormField label="备注" errorText={formState.errors.note?.message}>
-          {({ id, describedBy, invalid }) => <TextArea
-            id={id}
+          {(control) => <TextArea
+            id={control.id}
             labelText=""
             hideLabel
             rows={3}
             maxLength={500}
-            invalid={invalid}
-            aria-describedby={describedBy}
+            invalid={control.invalid}
+            aria-describedby={control.describedBy}
             {...register('note')}
           />}
         </FormField>}
         {target === 'IGNORED' && <>
           <FormField label="忽略原因" required errorText={formState.errors.ignore_reason_code?.message}>
-            {({ id, describedBy, invalid }) => <Select
-              id={id}
+            {(control) => <Select
+              id={control.id}
               labelText=""
               noLabel
-              invalid={invalid}
-              aria-describedby={describedBy}
+              invalid={control.invalid}
+              aria-describedby={control.describedBy}
               {...register('ignore_reason_code', { setValueAs: (value: string) => value === '' ? undefined : value })}
             >
               <SelectItem value="" text="请选择" />
@@ -188,45 +217,42 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
             </Select>}
           </FormField>
           {ignoreReason === 'OTHER' && <FormField label="补充说明" required errorText={formState.errors.ignore_reason_detail?.message}>
-            {({ id, describedBy, invalid }) => <TextArea
-              id={id}
+            {(control) => <TextArea
+              id={control.id}
               labelText=""
               hideLabel
               rows={3}
               maxLength={500}
-              invalid={invalid}
-              aria-describedby={describedBy}
+              invalid={control.invalid}
+              aria-describedby={control.describedBy}
               {...register('ignore_reason_detail')}
             />}
           </FormField>}
         </>}
-        {failure && <Alert type="error" showIcon title={failure} style={{ marginBottom: 16 }} />}
-        <Button type="primary" htmlType="submit" loading={updateDisposition.isPending}>提交</Button>
       </form>
     </Modal>
-  </section>
+  </Panel>
 }
 
 function DispositionContent({ detail }: { detail: AlertDispositionDetail }) {
-  return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-    <Descriptions size="small" bordered column={{ xs: 1, sm: 2 }} items={[
-      { key: 'status', label: '当前状态', children: <DispositionTag disposition={detail.disposition} /> },
-      { key: 'at', label: '最近处置时间', children: optionalTime(detail.disposition_at) },
-      { key: 'actor', label: '处置人', children: detail.disposition_by ?? '—' },
-      { key: 'detail', label: '备注 / 原因', children: dispositionDetail(detail) },
-      { key: 'notifications', label: '停止重复通知', children: detail.stops_repeat_notifications ? '是' : '否' },
-      { key: 'health', label: '退出健康归并', children: detail.excluded_from_health_rollup ? '是' : '否' },
+  return <div className="alert-evidence-stack">
+    <KeyValueList label="处置概览" items={[
+      { key: 'status', label: '当前状态', value: <DispositionTag disposition={detail.disposition} /> },
+      { key: 'at', label: '最近处置时间', value: optionalTime(detail.disposition_at) },
+      { key: 'actor', label: '处置人', value: detail.disposition_by ?? '—' },
+      { key: 'detail', label: '备注 / 原因', value: dispositionDetail(detail) },
+      { key: 'notifications', label: '停止重复通知', value: detail.stops_repeat_notifications ? '是' : '否' },
+      { key: 'health', label: '退出健康归并', value: detail.excluded_from_health_rollup ? '是' : '否' },
     ]} />
-    <Table<AlertDispositionEvent>
-      rowKey={(record) => `${record.acted_at}-${record.actor_id}`}
-      size="small"
-      pagination={false}
-      dataSource={detail.history}
+    <DataGrid<AlertDispositionEvent>
+      label="处置历史"
+      density="dense"
+      rows={detail.history}
+      rowKey={(event) => `${event.acted_at}-${event.actor_id}`}
       columns={dispositionHistoryColumns}
-      scroll={{ x: 980 }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无处置历史" /> }}
+      empty={{ title: '暂无处置历史' }}
     />
-  </Space>
+  </div>
 }
 
 export function TriggerSnapshotSection({ alertInstanceID, eventEvidence = false }: {
@@ -238,55 +264,70 @@ export function TriggerSnapshotSection({ alertInstanceID, eventEvidence = false 
   })
   const heading = eventEvidence ? '告警触发时现场' : '触发现场快照'
 
-  return <section className="alert-detail-section" aria-labelledby="trigger-snapshot-heading">
-    <Typography.Title id="trigger-snapshot-heading" level={3}>{heading}</Typography.Title>
-    {eventEvidence && <Alert
-      type="info"
-      showIcon
-      title="以下证据捕获于关联告警触发时，不代表当前状态"
-      style={{ marginBottom: 16 }}
-    />}
-    {snapshot.isPending && <Spin />}
-    {snapshot.error && <Alert type="error" showIcon title={apiErrorMessage(snapshot.error, '触发现场快照加载失败')} />}
-    {snapshot.data && <TriggerSnapshotContent snapshot={snapshot.data} />}
-  </section>
+  return <Panel className="alert-detail-section" title={heading} headingLevel={3}>
+    <div className="alert-evidence-stack">
+      {eventEvidence && <NotificationBar tone="info" title="以下证据捕获于关联告警触发时，不代表当前状态" />}
+      {snapshot.isPending && <SkeletonBlock lines={4} label="触发现场快照加载中" />}
+      {snapshot.error && <NotificationBar tone="critical" title={apiErrorMessage(snapshot.error, '触发现场快照加载失败')} />}
+      {snapshot.data && <TriggerSnapshotContent snapshot={snapshot.data} />}
+    </div>
+  </Panel>
 }
 
 function TriggerSnapshotContent({ snapshot }: { snapshot: components['schemas']['AlertTriggerSnapshot'] }) {
   const presentation = triggerSnapshotPresentation(snapshot.result)
-  const summary = <Descriptions size="small" bordered column={{ xs: 1, sm: 2, lg: 4 }} items={[
-    { key: 'result', label: '采集结果', children: <Tag color={triggerSnapshotTagColor(presentation.kind)}>{presentation.label}</Tag> },
-    { key: 'metric', label: '适用类型 / 指标', children: snapshot.metric_id },
-    { key: 'captured', label: '捕获时间', children: optionalTime(snapshot.captured_at) },
-    { key: 'matches', label: '原始匹配数', children: String(snapshot.original_match_count) },
-    { key: 'truncated', label: '截断状态', children: snapshot.truncated ? '已截断' : '未截断' },
+  const summary = <KeyValueList label="快照概览" columns={2} items={[
+    { key: 'result', label: '采集结果', value: <StatusBadge tone={triggerSnapshotTone(presentation.kind)}>{presentation.label}</StatusBadge> },
+    { key: 'metric', label: '适用类型 / 指标', value: snapshot.metric_id },
+    { key: 'captured', label: '捕获时间', value: optionalTime(snapshot.captured_at) },
+    { key: 'matches', label: '原始匹配数', value: String(snapshot.original_match_count) },
+    { key: 'truncated', label: '截断状态', value: snapshot.truncated ? '已截断' : '未截断' },
   ]} />
 
   switch (snapshot.result) {
     case 'NOT_APPLICABLE':
-      return <Alert type="info" showIcon title={presentation.label} description={`指标 ${snapshot.metric_id}`} />
+      return <NotificationBar tone="info" title={presentation.label}>{`指标 ${snapshot.metric_id}`}</NotificationBar>
     case 'FAILED':
-      return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      return <div className="alert-evidence-stack">
         {summary}
-        <Alert type="error" showIcon title="现场快照采集失败" description={snapshot.failure_reason ?? '未记录失败原因'} />
-      </Space>
+        <NotificationBar tone="critical" title="现场快照采集失败">{snapshot.failure_reason ?? '未记录失败原因'}</NotificationBar>
+      </div>
     case 'SUCCESS':
-      return <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      return <div className="alert-evidence-stack">
         {summary}
-        {snapshot.truncated && <Alert type="warning" showIcon title="快照已截断" description={`原始匹配 ${snapshot.original_match_count} 条，当前保留 ${snapshot.sessions.length} 条。`} />}
-        <Table<AlertTriggerSnapshotSession>
-          rowKey="pid"
-          size="small"
-          pagination={false}
-          dataSource={snapshot.sessions}
+        {snapshot.truncated && <NotificationBar tone="warning" title="快照已截断">
+          {`原始匹配 ${snapshot.original_match_count} 条，当前保留 ${snapshot.sessions.length} 条。`}
+        </NotificationBar>}
+        <DataGrid<AlertTriggerSnapshotSession>
+          label="触发时会话"
+          density="dense"
+          rows={snapshot.sessions}
+          rowKey={(session) => String(session.pid)}
           columns={snapshotSessionColumns}
-          scroll={{ x: 1380 }}
-          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="触发时未捕获会话条目" /> }}
+          empty={{ title: '触发时未捕获会话条目' }}
         />
-      </Space>
+      </div>
     default:
       return assertNever(snapshot.result)
   }
+}
+
+/// 键值清单。原来是 AntD 的 `Descriptions`，这里用 Carbon 的结构化列表表达同一件事。
+function KeyValueList({ label, items, columns = 1 }: {
+  label: string
+  items: { key: string; label: string; value: ReactNode }[]
+  columns?: 1 | 2
+}) {
+  return <StructuredListWrapper aria-label={label} isCondensed className="alert-evidence-list" data-columns={columns}>
+    <StructuredListBody>
+      {items.map((item) => (
+        <StructuredListRow key={item.key}>
+          <StructuredListCell noWrap>{item.label}</StructuredListCell>
+          <StructuredListCell>{item.value}</StructuredListCell>
+        </StructuredListRow>
+      ))}
+    </StructuredListBody>
+  </StructuredListWrapper>
 }
 
 export function triggerSnapshotPresentation(result: AlertTriggerSnapshotResult): TriggerSnapshotPresentation {
@@ -298,36 +339,49 @@ export function triggerSnapshotPresentation(result: AlertTriggerSnapshotResult):
   }
 }
 
-const dispositionHistoryColumns: TableColumnsType<AlertDispositionEvent> = [
-  { title: '动作', width: 90, render: (_, event) => dispositionEventLabel(event.kind) },
-  { title: '状态变化', width: 150, render: (_, event) => `${dispositionLabel(event.from_disposition)} → ${dispositionLabel(event.to_disposition)}` },
-  { title: '处置人', width: 300, dataIndex: 'actor_id' },
-  { title: '处置时间', width: 190, render: (_, event) => optionalTime(event.acted_at) },
-  { title: '备注 / 原因', width: 230, render: (_, event) => dispositionDetail(event) },
-  { title: '规则版本', width: 100, dataIndex: 'rule_version' },
-  { title: '评估值', width: 100, render: (_, event) => optionalNumber(event.current_value) },
-  { title: '评估时间', width: 190, render: (_, event) => optionalTime(event.evaluated_at) },
+const dispositionHistoryColumns: DataGridColumn<AlertDispositionEvent>[] = [
+  { key: 'kind', header: '动作', minWidth: 90, cell: (event) => dispositionEventLabel(event.kind) },
+  { key: 'change', header: '状态变化', minWidth: 150, cell: (event) => `${dispositionLabel(event.from_disposition)} → ${dispositionLabel(event.to_disposition)}` },
+  { key: 'actor', header: '处置人', minWidth: 200, cell: (event) => <TruncatedText>{event.actor_id}</TruncatedText> },
+  { key: 'acted', header: '处置时间', minWidth: 170, cell: (event) => optionalTime(event.acted_at) },
+  { key: 'detail', header: '备注 / 原因', minWidth: 200, grow: 2, cell: (event) => <TruncatedText>{dispositionDetail(event)}</TruncatedText> },
+  { key: 'version', header: '规则版本', minWidth: 90, numeric: true, cell: (event) => String(event.rule_version) },
+  { key: 'value', header: '评估值', minWidth: 90, numeric: true, cell: (event) => optionalNumber(event.current_value) },
+  { key: 'evaluated', header: '评估时间', minWidth: 170, cell: (event) => optionalTime(event.evaluated_at) },
 ]
 
-const snapshotSessionColumns: TableColumnsType<AlertTriggerSnapshotSession> = [
-  { title: 'PID', width: 90, dataIndex: 'pid', fixed: 'left' },
-  { title: '用户', width: 130, render: (_, session) => optionalText(session.username) },
-  { title: '数据库', width: 130, render: (_, session) => optionalText(session.database_name) },
-  { title: '客户端', width: 150, render: (_, session) => optionalText(session.client_address) },
-  { title: '状态', width: 140, render: (_, session) => optionalText(session.state) },
-  { title: '查询开始', width: 190, render: (_, session) => optionalTime(session.query_started_at) },
-  { title: '事务开始', width: 190, render: (_, session) => optionalTime(session.transaction_started_at) },
-  { title: '查询时长', width: 120, render: (_, session) => durationLabel(session.query_duration_ms) },
-  { title: '事务时长', width: 120, render: (_, session) => durationLabel(session.transaction_duration_ms) },
-  { title: '等待事件', width: 190, render: (_, session) => [session.wait_event_type, session.wait_event].filter(Boolean).join(' / ') || '—' },
-  { title: '阻塞关系', width: 170, render: (_, session) => session.blocking_pids.length === 0 ? '无' : `被 PID ${session.blocking_pids.join(', ')} 阻塞` },
+const snapshotSessionColumns: DataGridColumn<AlertTriggerSnapshotSession>[] = [
+  { key: 'pid', header: 'PID', minWidth: 80, numeric: true, cell: (session) => String(session.pid) },
+  { key: 'username', header: '用户', minWidth: 110, cell: (session) => optionalText(session.username) },
+  { key: 'database', header: '数据库', minWidth: 110, cell: (session) => optionalText(session.database_name) },
+  { key: 'client', header: '客户端', minWidth: 130, cell: (session) => optionalText(session.client_address) },
+  { key: 'state', header: '状态', minWidth: 110, cell: (session) => optionalText(session.state) },
+  { key: 'query-start', header: '查询开始', minWidth: 170, cell: (session) => optionalTime(session.query_started_at) },
+  { key: 'transaction-start', header: '事务开始', minWidth: 170, cell: (session) => optionalTime(session.transaction_started_at) },
+  { key: 'query-duration', header: '查询时长', minWidth: 100, numeric: true, cell: (session) => durationLabel(session.query_duration_ms) },
+  { key: 'transaction-duration', header: '事务时长', minWidth: 100, numeric: true, cell: (session) => durationLabel(session.transaction_duration_ms) },
+  { key: 'wait', header: '等待事件', minWidth: 160, cell: (session) => [session.wait_event_type, session.wait_event].filter(Boolean).join(' / ') || '—' },
+  { key: 'blocking', header: '阻塞关系', minWidth: 160, cell: (session) => session.blocking_pids.length === 0 ? '无' : `被 PID ${session.blocking_pids.join(', ')} 阻塞` },
 ]
+
+function ConfirmIcon() {
+  return <Icon name="checkmark" />
+}
+
+function IgnoreIcon() {
+  return <Icon name="stop" />
+}
 
 function DispositionTag({ disposition }: { disposition: AlertDisposition }) {
+  return <StatusBadge tone={dispositionTone(disposition)}>{dispositionLabel(disposition)}</StatusBadge>
+}
+
+/// 处置状态的视觉档位。蓝色表示「可交互」，所以「已确认」不能是蓝的。
+function dispositionTone(disposition: AlertDisposition): StatusTone {
   switch (disposition) {
-    case 'NONE': return <Tag>未处置</Tag>
-    case 'ACKED': return <Tag color="processing">已确认</Tag>
-    case 'IGNORED': return <Tag color="default">已忽略</Tag>
+    case 'NONE': return 'warning'
+    case 'ACKED': return 'normal'
+    case 'IGNORED': return 'unknown'
     default: return assertNever(disposition)
   }
 }
@@ -375,11 +429,11 @@ function dispositionDisabledReason(recovered: boolean, canManage: boolean): stri
   return undefined
 }
 
-function triggerSnapshotTagColor(kind: TriggerSnapshotPresentation['kind']): 'success' | 'error' | 'default' {
+function triggerSnapshotTone(kind: TriggerSnapshotPresentation['kind']): StatusTone {
   switch (kind) {
-    case 'success': return 'success'
-    case 'error': return 'error'
-    case 'not-applicable': return 'default'
+    case 'success': return 'normal'
+    case 'error': return 'critical'
+    case 'not-applicable': return 'unknown'
     default: return assertNever(kind)
   }
 }

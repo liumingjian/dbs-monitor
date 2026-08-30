@@ -19,6 +19,18 @@
   inline-size: 100%;
 }
 
+/*
+ * 图只画在自己的画布里。
+ *
+ * 图表库量字宽的办法是留一组 `opacity: 0` 的刻度文本在 DOM 里（`g.ticks.invisible`），
+ * 量完不删；它没有像素，却有几何，而且是从未平移的轴原点排起，轴标签越宽伸得越左。
+ * 实测在 390px 视口上能伸到卡片左侧之外、直至视口外 4px —— 看不见，却是货真价实的溢出。
+ * 把绘制裁到画布上，可见的轴、网格与曲线本来就在画布内，裁剪碰不到它们。
+ */
+.metric-figure svg.layout-svg-wrapper {
+  overflow: hidden;
+}
+
 /* 轴标签：等宽 + DESIGN.md 的次级文字色（Carbon 默认的那档在白底上不够 4.5:1）。 */
 .metric-figure .cds--chart-holder {
   /* 轴刻度走等宽；图例与轴标题走带中文回退栈的正文族（库的预编译 CSS 里只有 Plex）。 */

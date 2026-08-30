@@ -29,7 +29,7 @@ test('[SEC-10] production CSP keeps the login-to-chart path functional', async (
   await expect(row).toBeVisible()
   await row.getByRole('link', { name: '总览' }).click()
   await expect(page.getByRole('tab', { name: '实例总览' })).toHaveAttribute('aria-selected', 'true')
-  await page.getByRole('link', { name: '监控与报警' }).click()
+  await page.getByRole('tab', { name: '监控与报警' }).click()
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')
 
   const chart = page.getByTestId('metric-card').getByTestId('metric-chart').first()

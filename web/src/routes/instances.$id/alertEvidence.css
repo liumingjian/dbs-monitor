@@ -1,0 +1,28 @@
+/* 告警证据区（处置记录 / 触发现场快照）。两处都是「概览 + 明细表」的同一种版式。 */
+
+.alert-evidence-stack {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+
+.alert-evidence-actions {
+  display: flex;
+  gap: var(--dbs-spacing-xs);
+}
+
+.alert-evidence-form {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+
+/* 键值清单：窄屏一列，宽到放得下时两列，与原来的 Descriptions 一致。 */
+.alert-evidence-list[data-columns='2'] .cds--structured-list-tbody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 42rem) {
+  .alert-evidence-list[data-columns='2'] .cds--structured-list-tbody {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
