@@ -74,6 +74,13 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 `Sparkline`（行内趋势缩略图，手写 SVG） / `StatusBadge` / `StatusDot` / `Toggle` / `TruncatedText`。
 页面组**不得修改**这一层；缺件写进结题报告，由协调者派活，不要在别人脚下改共享件。
 
+**`renderIcon` 一律直接给字形：`renderIcon={Icon.glyph.save}`。** Carbon 会给这个槽里的组件传
+`className="cds--btn__icon"`，按钮里图标的间距与靠右对齐全挂在它上面；中间隔一个
+`function SaveIcon() { return <Icon name="save" /> }` 就把它默默丢了 —— 不报错、不失败，
+typecheck / lint / 用例全绿，只有看图才发现每个带图标的按钮都少一道间距（曾经 30 处如此）。
+`Icon.glyph` 与 `Icon` 是同一张名字清单，页面照旧不直接 import @carbon/icons-react 包。
+确实需要包装件时（例如折叠侧栏那个带角标的图标）**必须透传 props**。
+
 `Dropdown` / `Modal` / `MultiSelect` / `NumberInput` / `Pagination` / `Toggle` 是**中文默认值外壳**：
 Carbon 的默认文案全是英文，而且不给就静默生效 —— `Modal` 的关闭按钮叫 `Close`（`aria-label`
 与 `title` 两处），`Pagination` 的页码下拉叫 `Page of 3 pages`，`MultiSelect` 与 `Dropdown` 的

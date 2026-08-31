@@ -11,6 +11,7 @@ import type { components } from '../../api/schema'
 import { zodResolver } from '../../forms/zodResolver'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
+import type { Glyph } from '../../primitives/Icon'
 import { KeyValueList } from '../../primitives/KeyValueList'
 import { Modal } from '../../primitives/Modal'
 import { NotificationBar } from '../../primitives/NotificationBar'
@@ -160,7 +161,7 @@ function InstanceSettingsPage() {
           <Button
             kind="tertiary"
             size="md"
-            renderIcon={CredentialIcon}
+            renderIcon={Icon.glyph.password}
             disabled={!isPlatformAdmin || instance === undefined}
             onClick={() => setCredentialModalOpen(true)}
           >更新凭据</Button>
@@ -218,30 +219,6 @@ function InstanceSettingsPage() {
       <AgentTokenModal issued={issuedAgentToken} onClose={closeIssuedAgentToken} />
     </div>
   )
-}
-
-function CredentialIcon() {
-  return <Icon name="password" />
-}
-
-function RegisterIcon() {
-  return <Icon name="plug" />
-}
-
-function RotateIcon() {
-  return <Icon name="renew" />
-}
-
-function RevokeIcon() {
-  return <Icon name="stop" />
-}
-
-function DisableIcon() {
-  return <Icon name="power" />
-}
-
-function RemoveIcon() {
-  return <Icon name="trashCan" />
 }
 
 /// 元数据表单的校验规则。与生成的请求体类型对齐靠两处，漂了就编译不过：
@@ -374,17 +351,13 @@ function InstanceMetadataSection({ instance, canEdit, onSaved }: {
           <Button
             type="submit"
             size="md"
-            renderIcon={SaveIcon}
+            renderIcon={Icon.glyph.save}
             disabled={!canEdit || updateMetadata.isPending}
           >保存元数据</Button>
         </span>
       </div>
     </form>
   )
-}
-
-function SaveIcon() {
-  return <Icon name="save" />
 }
 
 /// 连接地址。一串要粘到别处去的长文本，所以它是只读输入框加一个复制按钮，
@@ -539,7 +512,7 @@ export function InstanceRemovalPanel({ instanceName, canRemove, actionPending, o
           <Button
             kind="danger"
             size="md"
-            renderIcon={RemoveIcon}
+            renderIcon={Icon.glyph.trashCan}
             disabled={!canRemove || instanceName === ''}
             onClick={() => setOpen(true)}
           >移除实例</Button>
@@ -624,7 +597,7 @@ export function AgentRegistrationPanel({
       actions = <span title={disabledReason}>
         <Button
           size="md"
-          renderIcon={RegisterIcon}
+          renderIcon={Icon.glyph.plug}
           disabled={!canManage || actionPending}
           onClick={onRegister}
         >登记 Agent</Button>
@@ -634,7 +607,7 @@ export function AgentRegistrationPanel({
       actions = <>
         <ConfirmedAgentAction
           label="轮换令牌"
-          icon={RotateIcon}
+          icon={Icon.glyph.renew}
           heading="轮换 Agent 令牌"
           description="签发一枚新令牌，当前令牌立即失效。接入登记不变，但在新令牌装到主机上之前，这个 Agent 会表现为掉线。新令牌只显示一次。"
           confirmLabel="轮换并签发新令牌"
@@ -644,7 +617,7 @@ export function AgentRegistrationPanel({
         />
         <ConfirmedAgentAction
           label="吊销令牌"
-          icon={RevokeIcon}
+          icon={Icon.glyph.stop}
           destructive
           heading="吊销 Agent 令牌"
           description="令牌立即失效，Agent 无法再上报。接入登记保留——平台仍然期待这个 Agent 在线，所以在装上新令牌之前，实例会一直显示为 Agent 掉线。已采集的数据不受影响。"
@@ -655,7 +628,7 @@ export function AgentRegistrationPanel({
         />
         <ConfirmedAgentAction
           label="停用 Agent"
-          icon={DisableIcon}
+          icon={Icon.glyph.power}
           destructive
           heading="停用 Agent"
           description="结束这个实例的 Agent 接入登记：平台不再期待它在线，只由 Agent 采集的指标与规则变为结构性不适用。已采集的主机样本保留不删。要重新接入需要重新登记并签发新令牌。"
@@ -669,7 +642,7 @@ export function AgentRegistrationPanel({
     case 'REVOKED':
       actions = <ConfirmedAgentAction
         label="停用 Agent"
-        icon={DisableIcon}
+        icon={Icon.glyph.power}
         destructive
         heading="停用 Agent"
         description="令牌已经吊销，但接入登记还在，实例仍按「应有 Agent」计算。停用会结束登记：只由 Agent 采集的指标与规则变为结构性不适用，已采集的主机样本保留不删。"
@@ -683,7 +656,7 @@ export function AgentRegistrationPanel({
       actions = <span title={disabledReason}>
         <Button
           size="md"
-          renderIcon={RegisterIcon}
+          renderIcon={Icon.glyph.plug}
           disabled={!canManage || actionPending}
           onClick={onRegister}
         >重新启用 Agent</Button>
@@ -757,7 +730,7 @@ function ConfirmedAgentAction({
   onConfirm,
 }: {
   label: string
-  icon: () => ReactNode
+  icon: Glyph
   destructive?: boolean
   heading: string
   description: string

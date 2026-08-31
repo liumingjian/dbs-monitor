@@ -12,6 +12,7 @@ import {
   SideNavItems,
   SideNavLink,
   TextInput,
+  Theme,
 } from '@carbon/react'
 import { Link, Outlet, createRootRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
@@ -61,6 +62,9 @@ function RootLayout() {
   const location = useLocation()
   const inShell = location.pathname !== '/login'
   const [collapsed, setCollapsed] = useState(() => readNavCollapsed(browserStorage))
+  // 口令弹窗由外框持有，而不是由页头里的用户菜单持有：它必须落在 `g100` zone 之外，
+  // 落在里面会跟着页头一起变成深色底。
+  const [passwordOpen, setPasswordOpen] = useState(false)
 
   function toggleNav() {
     const next = !collapsed
@@ -70,23 +74,32 @@ function RootLayout() {
 
   return (
     <div className="dbs-shell" data-nav={inShell ? (collapsed ? 'rail' : 'expanded') : 'none'}>
-      <Header aria-label="DBS Monitor">
-        {inShell && (
-          <HeaderMenuButton
-            aria-label={navToggleLabel(collapsed)}
-            aria-expanded={!collapsed}
-            isCollapsible
-            isActive={!collapsed}
-            onClick={toggleNav}
-          />
-        )}
-        <HeaderName as={Link} to="/instances" prefix="">DBS Monitor</HeaderName>
-        {inShell && <ShellGlobalBar />}
-      </Header>
+      {/* 炭黑页头是 DESIGN.md 里产品唯一一处刻意偏离白色版式的地方（`components.shell-header`
+          = `colors.inverse-canvas`）。Carbon 的 ui-shell 自己不带颜色，它取的是**环境主题**的
+          `$background` —— 页头落在浅色 `:root` 下就是白的。所以这里显式套一层 `g100` zone，
+          页头连同它的菜单、浮层与图标按钮一起换到深色令牌上。
+          zone 只包住 `<Header>`：侧栏按 DESIGN.md 是 `colors.canvas` 白底，口令弹窗也是白底，
+          两者都在这层之外。 */}
+      <Theme theme="g100">
+        <Header aria-label="DBS Monitor">
+          {inShell && (
+            <HeaderMenuButton
+              aria-label={navToggleLabel(collapsed)}
+              aria-expanded={!collapsed}
+              isCollapsible
+              isActive={!collapsed}
+              onClick={toggleNav}
+            />
+          )}
+          <HeaderName as={Link} to="/instances" prefix="">DBS Monitor</HeaderName>
+          {inShell && <ShellGlobalBar onOpenPassword={() => setPasswordOpen(true)} />}
+        </Header>
+      </Theme>
       {inShell && <ShellSideNav collapsed={collapsed} />}
       <main className="dbs-shell__content">
         <Outlet />
       </main>
+      {inShell && <PasswordChangeGate open={passwordOpen} onClose={() => setPasswordOpen(false)} />}
     </div>
   )
 }
@@ -95,7 +108,10 @@ function RootLayout() {
 ///
 /// 全局操作只有一个：告警设置，带通知渠道失败指示。它是快捷方式而不是唯一入口 ——
 /// 同一个去处在侧栏「管理」组里是一条真链接，所以这里用按钮不丢任何能力。
-function ShellGlobalBar() {
+///
+/// 用户菜单挂在 `HeaderNavigation` 上；Carbon 在 1056px 以下把整条 `.cds--header__nav`
+/// 藏起来，所以窄屏下的可见性由 `shell.css` 里的一条覆盖负责，见那里的说明。
+function ShellGlobalBar({ onOpenPassword }: { onOpenPassword: () => void }) {
   const navigate = useNavigate()
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
   const failureQuery = $api.useQuery(
@@ -104,51 +120,56 @@ function ShellGlobalBar() {
     {},
     { refetchInterval: 15_000 },
   )
-  const changePasswordMutation = $api.useMutation('put', '/api/v1/password')
-  const [passwordOpen, setPasswordOpen] = useState(false)
-  const [error, setError] = useState('')
   const hasFailures = failureQuery.data?.has_failures === true
+
+  return (
+    <HeaderGlobalBar>
+      <HeaderGlobalAction
+        aria-label={hasFailures ? '告警设置，通知渠道存在未清除失败' : '告警设置'}
+        tooltipAlignment="end"
+        onClick={() => void navigate({ to: '/alert-settings/notifications' })}
+      >
+        <span className="dbs-shell-badge-host">
+          <Icon name="settings" size={20} />
+          <NotificationSettingsLabel hasFailures={hasFailures} />
+        </span>
+      </HeaderGlobalAction>
+      <HeaderNavigation aria-label="当前用户" className="dbs-shell-user">
+        <HeaderMenu aria-label="用户菜单" menuLinkName={currentUserQuery.data?.username ?? '当前用户'}>
+          <HeaderMenuItem onClick={onOpenPassword}>修改口令</HeaderMenuItem>
+        </HeaderMenu>
+      </HeaderNavigation>
+    </HeaderGlobalBar>
+  )
+}
+
+/// 口令修改。弹窗与它的请求一起住在这里，位置在页头的 `g100` zone 之外 ——
+/// 落在 zone 里面它会跟着页头一起变成深色底。
+function PasswordChangeGate({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const changePasswordMutation = $api.useMutation('put', '/api/v1/password')
+  const [error, setError] = useState('')
 
   function changeOwnPassword(values: PasswordChangeInput) {
     setError('')
     changePasswordMutation.mutate({ body: values }, {
-      onSuccess: () => setPasswordOpen(false),
+      onSuccess: () => onClose(),
       onError: (failure) => setError(apiErrorMessage(failure, '修改口令失败，请重试')),
     })
   }
 
-  function closePasswordModal() {
-    setPasswordOpen(false)
+  function close() {
     setError('')
+    onClose()
   }
 
   return (
-    <>
-      <HeaderGlobalBar>
-        <HeaderGlobalAction
-          aria-label={hasFailures ? '告警设置，通知渠道存在未清除失败' : '告警设置'}
-          tooltipAlignment="end"
-          onClick={() => void navigate({ to: '/alert-settings/notifications' })}
-        >
-          <span className="dbs-shell-badge-host">
-            <Icon name="settings" size={20} />
-            <NotificationSettingsLabel hasFailures={hasFailures} />
-          </span>
-        </HeaderGlobalAction>
-        <HeaderNavigation aria-label="当前用户">
-          <HeaderMenu aria-label="用户菜单" menuLinkName={currentUserQuery.data?.username ?? '当前用户'}>
-            <HeaderMenuItem onClick={() => setPasswordOpen(true)}>修改口令</HeaderMenuItem>
-          </HeaderMenu>
-        </HeaderNavigation>
-      </HeaderGlobalBar>
-      <PasswordChangeModal
-        open={passwordOpen}
-        pending={changePasswordMutation.isPending}
-        error={error}
-        onClose={closePasswordModal}
-        onSubmit={changeOwnPassword}
-      />
-    </>
+    <PasswordChangeModal
+      open={open}
+      pending={changePasswordMutation.isPending}
+      error={error}
+      onClose={close}
+      onSubmit={changeOwnPassword}
+    />
   )
 }
 
@@ -244,8 +265,12 @@ function navLinkProps({ label, icon, collapsed, active, count }: {
 }) {
   const badge = unreadBadgeText(count)
   const accessibleName = navItemLabel(label, count)
-  const NavIcon: ComponentType = () => (
-    <span className="dbs-shell-badge-host">
+  // 这是 `renderIcon` 槽里**唯一**一个还留着的包装件（其余一律直接给 `Icon.glyph.*`，
+  // 见 `primitives/Icon.tsx`）：折叠态的未处置计数要压在图标角上，字形本身塞不下它。
+  // 既然是包装件，就必须把组件库交过来的 props 原样透传 —— Carbon 正是靠这个
+  // className 给图标定位的，丢了不报错，只是位置不对。
+  const NavIcon: ComponentType<{ className?: string }> = ({ className }) => (
+    <span className={['dbs-shell-badge-host', className].filter(Boolean).join(' ')}>
       <Icon name={icon} size={16} />
       {collapsed && badge !== '' && <span className="dbs-shell-badge" aria-hidden="true">{badge}</span>}
     </span>

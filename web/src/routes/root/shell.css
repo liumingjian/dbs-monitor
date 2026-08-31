@@ -1,7 +1,9 @@
 /*
- * 应用外框的版式。颜色一律走令牌：炭黑页头、侧栏底色与发丝线都由 Carbon 的 ui-shell
- * 样式给，这里只补规范里 Carbon 没有的三件事 —— 选中项的 3px 前导色条、分组标题、
- * 以及折叠状态下的角标。
+ * 应用外框的版式。颜色一律走令牌：侧栏底色与发丝线由 Carbon 的 ui-shell 样式给，
+ * 炭黑页头由 `routes/root/index.tsx` 里套在 `<Header>` 外的 `g100` zone 给
+ * （ui-shell 自己不带颜色，它取的是环境主题的背景色）。这里只补规范里 Carbon
+ * 没有的几件事 —— 选中项的 3px 前导色条、分组标题、折叠状态下的角标，
+ * 以及窄屏下把用户菜单找回来。
  */
 
 .dbs-shell {
@@ -140,4 +142,27 @@
   .dbs-shell .dbs-shell-nav,
   .dbs-shell .cds--header__menu-toggle { display: none; }
   .dbs-shell__content { padding: var(--dbs-spacing-md); }
+}
+
+/* 用户菜单在窄屏上的可见性。
+ *
+ * Carbon 在 66rem（1056px）以下把整条 `.cds--header__nav` 设成 `display: none` ——
+ * 它假设那里挂的是一排主导航，窄屏改走汉堡菜单。本应用挂在那里的是用户菜单，而
+ * 672px 以下侧栏又整个退出，两条一叠的结果是：规范里唯一要求手机可用的告警流页面上，
+ * 「修改口令」没有任何入口。这条 nav 只有一项、贴在页头右端，窄屏照样放得下，
+ * 所以把它恢复出来，而不是在小屏上另起一个重复的入口。 */
+@media (max-width: 65.9375rem) {
+  .dbs-shell .dbs-shell-user {
+    position: relative;
+    display: block;
+    block-size: 100%;
+  }
+}
+
+/* 用户名是接口回来的自由文本，窄屏上不许它把页头挤到换行。 */
+.dbs-shell-user .cds--header__menu-title {
+  max-inline-size: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

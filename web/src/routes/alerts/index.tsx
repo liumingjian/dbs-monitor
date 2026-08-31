@@ -94,13 +94,22 @@ export type AlertTabLinks = {
 ///
 /// 版式仍然是列表页的三段（web/CLAUDE.md 先例）：页头 → 工具条 → 一个 `flush` 的
 /// `Panel` 包住表格、分页放进 footer。窄屏只把最后一段的内容换成卡片，三段本身不动。
-export function AlertObservationLists({ search, onSearchChange, tabLinks, heading, lede, action }: {
+export function AlertObservationLists({ search, onSearchChange, tabLinks, heading, lede, action, scopedToInstance = false }: {
   search: AlertListSearch
   onSearchChange: (search: AlertListSearch) => void
   tabLinks: AlertTabLinks
   heading?: string
   lede?: string
   action?: ReactNode
+  /**
+   * 这张表已经限定在一台实例上（实例工作台里的告警页签）。
+   *
+   * 这时「实例」列每一行都是同一个值，而那台实例的名字就写在上方的工作台页头里 ——
+   * 一列不承载信息却要占掉约 90px，剩下的列于是各少一截，实例名自己反而被截成
+   * `QA target p…`。所以这一列在实例范围下不渲染。**这不是「窄屏丢列」**
+   * （那在任何宽度下都禁止）：全局告警页照常有这一列，两处宽度行为都不随视口改变。
+   */
+  scopedToInstance?: boolean
 }) {
   const page = search.page ?? 1
   const offset = (page - 1) * alertPageSize
@@ -140,6 +149,8 @@ export function AlertObservationLists({ search, onSearchChange, tabLinks, headin
   // 总条数还没回来的时候不出分页条：写一个 0 进去会先闪一句「共 0 条」，那不是真的。
   const total = query.data?.total
   const rowTestId = showingCurrent ? 'alert-row' : 'alert-history-row'
+  const columns = (showingCurrent ? currentColumns : historyColumns)
+    .filter((column) => !(scopedToInstance && column.key === 'instance'))
 
   return <div className="alert-stream">
     {(heading !== undefined || action !== undefined) && <header className="alert-stream__header">
@@ -224,7 +235,7 @@ export function AlertObservationLists({ search, onSearchChange, tabLinks, headin
             rowTestId={rowTestId}
             rowTone={severityBarTone}
             rowMuted={(alert) => !isUnresolved(alert.status)}
-            columns={showingCurrent ? currentColumns : historyColumns}
+            columns={columns}
             empty={{
               title: emptyTitle,
               description: showingCurrent ? '调整筛选条件，或确认这些实例当前确实没有触发中的规则。' : undefined,

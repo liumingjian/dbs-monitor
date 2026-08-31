@@ -68,7 +68,7 @@ function QueryStatisticsContent({ id, search, response, dataUpdatedAt, density, 
     })
     return <div className="sessions-unavailable">
       <NotificationBar tone="warning" title={view.title}>{view.description}</NotificationBar>
-      <Link href={href} renderIcon={ActionIcon}>{unavailabilityCopy(view.code).action}</Link>
+      <Link href={href} renderIcon={Icon.glyph.arrowRight}>{unavailabilityCopy(view.code).action}</Link>
     </div>
   }
 
@@ -96,10 +96,6 @@ function QueryStatisticsContent({ id, search, response, dataUpdatedAt, density, 
       />
     </Panel>
   </>
-}
-
-function ActionIcon() {
-  return <Icon name="arrowRight" />
 }
 
 /// 五列合计 770px，装得进 1280px 下实测的 976px 可用宽度。

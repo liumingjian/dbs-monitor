@@ -279,13 +279,13 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
                   {chart.drilldown && <Button
                     kind="ghost"
                     size="sm"
-                    renderIcon={SamplesIcon}
+                    renderIcon={Icon.glyph.listBulleted}
                     href={longQuerySamplesHref(id, search)}
                   >查看采样记录</Button>}
                   <Button
                     kind="ghost"
                     size="sm"
-                    renderIcon={DetailsIcon}
+                    renderIcon={Icon.glyph.information}
                     onClick={() => updateSearch({ metric: primaryMetric })}
                   >指标详情</Button>
                 </>}
@@ -393,13 +393,13 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
                 {metricID === 'pg.query.long_running_count' && <Button
                   kind="ghost"
                   size="sm"
-                  renderIcon={SamplesIcon}
+                  renderIcon={Icon.glyph.listBulleted}
                   href={longQuerySamplesHref(id, search)}
                 >查看采样记录</Button>}
                 <Button
                   kind="ghost"
                   size="sm"
-                  renderIcon={DetailsIcon}
+                  renderIcon={Icon.glyph.information}
                   onClick={() => updateSearch({ metric: metricID })}
                 >指标详情</Button>
               </>}
@@ -522,14 +522,6 @@ function ColumnSwitcher({ name, label, columns, onChange }: {
       {columnOptions.map((value) => <Switch key={value} name={String(value)} text={`${value} 列`} />)}
     </ContentSwitcher>
   </div>
-}
-
-function SamplesIcon() {
-  return <Icon name="listBulleted" />
-}
-
-function DetailsIcon() {
-  return <Icon name="information" />
 }
 
 function buildChartView(

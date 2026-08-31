@@ -47,11 +47,9 @@ function InstanceAlertsPage() {
       search={{ ...search, instance_id: id }}
       onSearchChange={(next) => void navigate({ search: { ...next, instance_id: undefined } })}
       tabLinks={links}
-      action={<Button as={links.rules} kind="tertiary" size="md" renderIcon={RulesIcon}>告警规则</Button>}
+      scopedToInstance
+      action={<Button as={links.rules} kind="tertiary" size="md" renderIcon={Icon.glyph.settings}>告警规则</Button>}
     />
   </div>
 }
 
-function RulesIcon() {
-  return <Icon name="settings" />
-}

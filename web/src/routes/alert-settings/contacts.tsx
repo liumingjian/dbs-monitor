@@ -55,10 +55,6 @@ export function contactGroupBody(values: GroupValues): ContactGroupInput {
   return { name: values.name.trim(), contact_ids: values.contact_ids }
 }
 
-function AddIcon() {
-  return <Icon name="add" />
-}
-
 /// 「联系人」标签：联系人与联系人组两张表。
 export function ContactsPanel({ canManage }: { canManage: boolean }) {
   const contactsQuery = $api.useQuery('get', '/api/v1/notification-contacts')
@@ -112,7 +108,7 @@ export function ContactsPanel({ canManage }: { canManage: boolean }) {
         flush
         title={`联系人（${contacts.length}）`}
         actions={<span title={canManage ? undefined : readOnlyReason.contacts}>
-          <Button size="sm" renderIcon={AddIcon} disabled={!canManage} onClick={() => setContactEditor({ contact: null })}>
+          <Button size="sm" renderIcon={Icon.glyph.add} disabled={!canManage} onClick={() => setContactEditor({ contact: null })}>
             新建联系人
           </Button>
         </span>}
@@ -165,7 +161,7 @@ export function ContactsPanel({ canManage }: { canManage: boolean }) {
         flush
         title={`联系人组（${groups.length}）`}
         actions={<span title={canManage ? undefined : readOnlyReason.contacts}>
-          <Button size="sm" renderIcon={AddIcon} disabled={!canManage} onClick={() => setGroupEditor({ group: null })}>
+          <Button size="sm" renderIcon={Icon.glyph.add} disabled={!canManage} onClick={() => setGroupEditor({ group: null })}>
             新建联系人组
           </Button>
         </span>}

@@ -140,10 +140,6 @@ const policyFields = [
   'webhook_target_ids',
 ] as const satisfies readonly FieldPath<PolicyValues>[]
 
-function AddIcon() {
-  return <Icon name="add" />
-}
-
 // ---------------------------------------------------------------------------
 // 标签页
 // ---------------------------------------------------------------------------
@@ -190,7 +186,7 @@ export function PoliciesPanel({ canManage }: { canManage: boolean }) {
         flush
         title={`通知策略（${policies.length}）`}
         actions={<span title={canManagePolicies ? undefined : policySettingsReason}>
-          <Button size="sm" renderIcon={AddIcon} disabled={!canManagePolicies} onClick={() => setEditor({ policy: null })}>
+          <Button size="sm" renderIcon={Icon.glyph.add} disabled={!canManagePolicies} onClick={() => setEditor({ policy: null })}>
             新建策略
           </Button>
         </span>}

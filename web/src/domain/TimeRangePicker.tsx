@@ -86,15 +86,11 @@ export function TimeRangePicker({ from, to, onChange }: TimeRangePickerProps) {
           defaultValue={toLocalInput(to)}
         />
       </div>
-      <Button size="md" kind="tertiary" aria-label="应用时间范围" renderIcon={ApplyRangeIcon} onClick={applyRange}>
+      <Button size="md" kind="tertiary" aria-label="应用时间范围" renderIcon={Icon.glyph.time} onClick={applyRange}>
         应用时间范围
       </Button>
     </div>
   )
-}
-
-function ApplyRangeIcon() {
-  return <Icon name="time" />
 }
 
 function toLocalInput(value: string): string {

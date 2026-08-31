@@ -112,7 +112,7 @@ function UsersPage() {
       <header className="users-page__header">
         <h1 className="dbs-page-title">用户管理</h1>
         <span title={manageDisabledReason}>
-          <Button size="md" renderIcon={CreateIcon} disabled={!canManageUsers} onClick={() => setCreateOpen(true)}>
+          <Button size="md" renderIcon={Icon.glyph.add} disabled={!canManageUsers} onClick={() => setCreateOpen(true)}>
             创建用户
           </Button>
         </span>
@@ -188,10 +188,6 @@ function UsersPage() {
       <OneTimePasswordModal issued={issuedPassword} onClose={() => setIssuedPassword(null)} />
     </div>
   )
-}
-
-function CreateIcon() {
-  return <Icon name="add" />
 }
 
 /// 密度切换。产品级偏好，读写只有 `routes/root/tableDensity.ts` 一个去处（web/CLAUDE.md）。

@@ -179,9 +179,9 @@ function AlertRulesPage() {
     <header className="alert-rules-page__header">
       <h2 className="dbs-panel-title">告警规则</h2>
       <div className="alert-rules-page__actions">
-        <Button kind="tertiary" size="md" renderIcon={TemplateIcon} onClick={() => setTemplateOpen(true)}>规则模板</Button>
+        <Button kind="tertiary" size="md" renderIcon={Icon.glyph.template} onClick={() => setTemplateOpen(true)}>规则模板</Button>
         <span title={disabledReason}>
-          <Button size="md" renderIcon={AddIcon} disabled={!canWrite} onClick={openCreate}>新建规则</Button>
+          <Button size="md" renderIcon={Icon.glyph.add} disabled={!canWrite} onClick={openCreate}>新建规则</Button>
         </span>
       </div>
     </header>
@@ -281,14 +281,6 @@ function AlertRulesPage() {
       </p>}
     </Modal>
   </div>
-}
-
-function AddIcon() {
-  return <Icon name="add" />
-}
-
-function TemplateIcon() {
-  return <Icon name="template" />
 }
 
 /// 告警区的二级页签条。页签就是地址，所以按 `web/CLAUDE.md` 的先例写成 `<Tab as={链接组件}>`：
@@ -1057,7 +1049,7 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
             hasIconOnly
             iconDescription="编辑"
             tooltipPosition="left"
-            renderIcon={EditIcon}
+            renderIcon={Icon.glyph.edit}
             disabled={!canWrite}
             onClick={() => onEdit(rule)}
           />
@@ -1081,10 +1073,6 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
       </span>,
     },
   ]
-}
-
-function EditIcon() {
-  return <Icon name="edit" />
 }
 
 /// 行首 3px 色条只画严重与警告两档，且只画给「此刻真的有未恢复告警」的规则 ——

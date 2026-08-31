@@ -120,8 +120,8 @@ function AlertDetailContent({ detail, routeInstanceID, onDispositionChanged }: {
         </p>
       </div>
       <div className="alert-detail__actions">
-        {links.monitoring && <Button as={links.monitoring} size="md" renderIcon={ChartIcon}>查看标准监控</Button>}
-        <Button as={links.collection} kind="tertiary" size="md" renderIcon={CollectionIcon}>查看采集状态</Button>
+        {links.monitoring && <Button as={links.monitoring} size="md" renderIcon={Icon.glyph.chartLine}>查看标准监控</Button>}
+        <Button as={links.collection} kind="tertiary" size="md" renderIcon={Icon.glyph.database}>查看采集状态</Button>
       </div>
     </header>
 
@@ -316,14 +316,6 @@ const ruleVersionColumns: DataGridColumn<RuleVersionRecord>[] = [
   { key: 'version', header: '版本', minWidth: 80, numeric: true, cell: (record) => String(record.version) },
   { key: 'evaluated', header: '生效评估时间', minWidth: 180, cell: (record) => <TruncatedText className="dbs-numeric">{optionalTime(record.evaluated_at)}</TruncatedText> },
 ]
-
-function ChartIcon() {
-  return <Icon name="chartLine" />
-}
-
-function CollectionIcon() {
-  return <Icon name="database" />
-}
 
 function collectionPauseStatus(instance: Instance | undefined): ReactNode {
   if (!instance) return '—'

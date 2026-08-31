@@ -54,10 +54,6 @@ function InstancesLink(props: object) {
   return <Link {...props} to="/instances" />
 }
 
-function RetryIcon() {
-  return <Icon name="renew" />
-}
-
 /// 未匹配路由。地址打错、链接过期，或者收藏的是一个已经不存在的页面。
 export function NotFoundPage() {
   return (
@@ -80,7 +76,7 @@ export function RouteErrorPage({ error, reset }: ErrorComponentProps) {
       detail={failureDetail(error)}
       actions={
         <>
-          <Button size="md" renderIcon={RetryIcon} onClick={reset}>重试</Button>
+          <Button size="md" renderIcon={Icon.glyph.renew} onClick={reset}>重试</Button>
           <Button kind="tertiary" size="md" as={InstancesLink}>返回实例列表</Button>
         </>
       }
@@ -119,7 +115,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, AppErro
         detail={this.state.detail}
         actions={
           <>
-            <Button size="md" renderIcon={RetryIcon} onClick={() => window.location.reload()}>刷新页面</Button>
+            <Button size="md" renderIcon={Icon.glyph.renew} onClick={() => window.location.reload()}>刷新页面</Button>
             {/* 原生 `<a>` 而不是路由链接：这一层要在路由器本身坏掉时也能把人送出去。 */}
             <Button kind="tertiary" size="md" href="/instances">返回实例列表</Button>
           </>
