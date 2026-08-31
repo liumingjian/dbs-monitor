@@ -5,12 +5,18 @@
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-project=dbs-monitor-qa
+# 项目名与端口都可覆盖：同一台机器上会同时跑好几个问答栈，
+# 各自占一段私有端口和一个私有 compose 项目，互相不抢容器也不抢端口。
+project="${QA_PROJECT:-dbs-monitor-qa}"
+platform_port="${QA_PLATFORM_PORT:-55442}"
+target_port="${QA_TARGET_PORT:-55447}"
+export QA_PLATFORM_PORT="$platform_port" QA_TARGET_PORT="$target_port"
 # Outside the repo on purpose: an rsync/--delete of the working tree must not
 # take the master key, TLS material, or the running pids with it.
 state="${QA_STATE_DIR:-$HOME/.dbs-monitor-qa}"
 tls_dir="${QA_TLS_HOME:-$HOME/.dbs-monitor-acceptance-tls}"
 admin_password="${QA_ADMIN_PASSWORD:-qa-admin-password}"
+instance_name="${QA_INSTANCE_NAME:-QA target pg17}"
 listen_port="${QA_PORT:-18443}"
 base_url="https://127.0.0.1:$listen_port"
 
@@ -63,7 +69,7 @@ echo "build ok"
 
 # --- server config ---
 cat > "$state/config.yaml" <<EOF
-platform_database_url: "postgres://dbs_monitor:dbs_monitor@127.0.0.1:55442/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt"
+platform_database_url: "postgres://dbs_monitor:dbs_monitor@127.0.0.1:$platform_port/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$tls_dir/ca.crt"
 master_key_path: "$state/credentials"
 agent_binary_dir: "$state"
 local_disk_path: "$root"
@@ -103,14 +109,14 @@ curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -c "$cookie" \
   --data "{\"username\":\"admin\",\"password\":\"$admin_password\"}" >/dev/null
 
 existing=$(curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -b "$cookie" "$base_url/api/v1/instances" \
-  | node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b)||[]).find(x=>x.name==="QA target pg17");process.stdout.write(i?i.id:"")})')
+  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b)||[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
 if [ -z "$existing" ]; then
   curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -b "$cookie" \
     -H 'Content-Type: application/json' -X POST "$base_url/api/v1/instances" \
-    --data '{"name":"QA target pg17","host":"127.0.0.1","port":55447,"database":"monitored","username":"monitored","password":"monitored"}' >/dev/null
-  echo "registered instance: QA target pg17"
+    --data "{\"name\":\"$instance_name\",\"host\":\"127.0.0.1\",\"port\":$target_port,\"database\":\"monitored\",\"username\":\"monitored\",\"password\":\"monitored\"}" >/dev/null
+  echo "registered instance: $instance_name"
 else
-  echo "instance already registered: QA target pg17"
+  echo "instance already registered: $instance_name"
 fi
 
 cat <<EOF
@@ -119,5 +125,5 @@ cat <<EOF
   login     admin / $admin_password
   CA cert   $state/server-tls/ca.crt   (self-signed: accept the browser warning)
   logs      $state/server.log
-  stop      sh scripts/qa-down.sh
+  stop      QA_PROJECT=$project sh scripts/qa-down.sh
 EOF

@@ -8,7 +8,7 @@ state="${QA_STATE_DIR:-$HOME/.dbs-monitor-qa}"
 base_url="https://127.0.0.1:${QA_PORT:-18443}"
 ca="$state/server-tls/ca.crt"
 cookie="$state/cookie.txt"
-target=dbs-monitor-qa-acceptance-target-1
+target="${QA_PROJECT:-dbs-monitor-qa}-acceptance-target-1"
 instance_name="${QA_INSTANCE_NAME:-QA target pg17}"
 
 api() { curl --noproxy '*' -s --cacert "$ca" -b "$cookie" "$@"; }

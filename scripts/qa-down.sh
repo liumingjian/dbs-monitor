@@ -11,5 +11,5 @@ for name in agent server; do
     rm -f "$state/$name.pid"
   fi
 done
-docker compose -p dbs-monitor-qa --profile acceptance down --volumes --remove-orphans >/dev/null 2>&1 || true
+docker compose -p "${QA_PROJECT:-dbs-monitor-qa}" --profile acceptance down --volumes --remove-orphans >/dev/null 2>&1 || true
 echo "qa stack down"
