@@ -126,9 +126,34 @@
   color: inherit;
 }
 
+/* 用户菜单里的两项是真按钮（见 `index.tsx` 里 `as="button"` 的理由）。Carbon 的
+   `.cds--header__menu-item` 是照锚点写的，按钮自带的浏览器默认值要在这里抹掉，
+   否则菜单项会变成一颗居中、带边框、字号不对的灰按钮。 */
+.dbs-shell-user .cds--header__menu-item {
+  inline-size: 100%;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.dbs-shell-user .cds--header__menu-item:disabled {
+  cursor: not-allowed;
+}
+
 .dbs-shell-password-form {
   display: grid;
   gap: var(--dbs-spacing-md);
+}
+
+/* 「其他设备会被登出」是服务端的副作用，不是校验提示：它常驻在表单顶部，
+   与任何一个字段都不绑定，所以不走 FormField 的 helperText。 */
+.dbs-shell-password-form__note {
+  margin: 0;
+  color: var(--cds-text-secondary);
 }
 
 /* 672px 以下：侧栏与它的开关一起退出，页面回到「只有页头 + 内容」。

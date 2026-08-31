@@ -27,7 +27,8 @@ test('[SEC-10] production CSP keeps the login-to-chart path functional', async (
   const instanceName = process.env.SECURITY_E2E_INSTANCE ?? 'SEC-10 browser target'
   const row = page.getByRole('row', { name: new RegExp(instanceName) })
   await expect(row).toBeVisible()
-  await row.getByRole('link', { name: '总览' }).click()
+  // 列表里进详情的入口就是实例名这一列（行内不再另有图标操作列）。
+  await row.getByRole('link', { name: instanceName }).click()
   await expect(page.getByRole('tab', { name: '实例总览' })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: '监控与报警' }).click()
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')

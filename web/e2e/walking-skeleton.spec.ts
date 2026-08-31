@@ -22,7 +22,8 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
       instanceRow.getByText(new RegExp(`^${severity}\\d+$`)).innerText(),
     ),
   )
-  await instanceRow.getByRole('link', { name: '总览' }).click()
+  // 列表里进详情的入口就是实例名这一列（行内不再另有图标操作列）。
+  await instanceRow.getByRole('link', { name: instanceName }).click()
 
   await expect(page.getByRole('tab', { name: '实例总览' })).toHaveAttribute('aria-selected', 'true')
   const overviewStatusSection = page.getByTestId('overview-status')

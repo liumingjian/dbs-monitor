@@ -442,12 +442,35 @@ function countTone(severity: AlertSeverity, count: number): StatusTone {
 /// = max(表头自然宽, 这一格里压不动的内容宽) + 组件库的 32px 内边距，各列一律 `grow: 1`。
 /// **`grow` 不再当优先级旋钮用** —— 各列 `grow` 一旦不等，分到的宽度就可能低于自己的
 /// `minWidth`，先被截掉的是表头（「采集新鲜度」原本就差 2px 被截成「采集新鲜...」）。
-/// 合计 955 ≤ 974，因此 1280px 下每列都不低于自己的下限，富余按下限比例分给长文本列。
+/// 合计 883 ≤ 974，因此 1280px 下每列都不低于自己的下限，富余按下限比例分给长文本列。
 ///
-/// 压不动的：健康状态点、C/W/I 计数、Agent 状态点、趋势缩略图、行内图标操作。
+/// 压不动的：健康状态点、C/W/I 计数、Agent 状态点、趋势缩略图。
 /// 压得动的：实例名、告警归因、地址、采集新鲜度 —— 截断并带悬停全文。
+///
+/// **实例名是第一列，也是这一行的去处。** 行内不再另有一列图标操作：两个去处
+/// （总览、接入设置）在工作台页头上都还在，而每一行重复同样的两颗图标既占 72px，
+/// 又让「点哪儿进去」有两个答案。列表里点名字进详情是读者本来就会做的事。
 function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
   const columns: DataGridColumn<Instance>[] = [
+    {
+      key: 'name',
+      header: '实例',
+      minWidth: 127,
+      // 实例名是这一行的身份，也是它的入口：截断它等于让读者认不出这是谁，
+      // 所以富余宽度优先给它，装不下的那一截由省略号截断、全文进悬停提示。
+      // 蓝色在这里表示「可交互」，与状态色互不借用；加粗撤掉了 —— 链接色已经把
+      // 「这是这一行的标题」说清楚，再加一道字重会让 50 行的表整片发黑。
+      cell: (instance) => (
+        <Link
+          className="instances-table__name cds--link"
+          to="/instances/$id"
+          params={{ id: instance.id }}
+          search={defaultTimeRange()}
+        >
+          <TruncatedText>{instance.name}</TruncatedText>
+        </Link>
+      ),
+    },
     {
       key: 'health',
       header: '健康',
@@ -457,13 +480,6 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
       cell: (instance) => (
         <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
       ),
-    },
-    {
-      key: 'name',
-      header: '实例',
-      minWidth: 127,
-      // 实例名是这一行的身份，截断它等于让读者认不出这是谁：富余宽度优先给它。
-      cell: (instance) => <TruncatedText className="instances-table__name">{instance.name}</TruncatedText>,
     },
     {
       key: 'counts',
@@ -535,35 +551,6 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
       cell: (instance) => <InstanceTrend instanceID={instance.id} instanceName={instance.name} />,
     })
   }
-
-  // 行内操作是图标链接：可访问名由 `aria-label` 显式给出（图标本身 aria-hidden），
-  // 悬停提示是同一句话。写成文字要 112px，而这两个去处在每一行都一样，
-  // 那 112px 花在「这一行到底怎么了」的列上更值。
-  columns.push({
-    key: 'actions',
-    header: '操作',
-    minWidth: 72,
-    align: 'end',
-    cell: (instance) => (
-      <span className="instances-table__actions">
-        <Link
-          className="instances-table__action"
-          to="/instances/$id"
-          params={{ id: instance.id }}
-          search={defaultTimeRange()}
-          aria-label="总览"
-          title="总览"
-        ><Icon name="dashboard" /></Link>
-        <Link
-          className="instances-table__action"
-          to="/instances/$id/settings"
-          params={{ id: instance.id }}
-          aria-label="接入设置"
-          title="接入设置"
-        ><Icon name="settings" /></Link>
-      </span>
-    ),
-  })
 
   return columns
 }

@@ -58,13 +58,16 @@
 
 /* ---- 表格内容 ---- */
 
+/* 实例名这一列既是行的标题也是行的入口。链接本身要占满格子并成为截断的参照，
+   否则内层的 `.dbs-truncate`（`max-inline-size: 100%`）量的是行内锚点的收缩宽度，
+   长名字会把这一列撑开而不是打省略号。 */
 .instances-table__name {
-  font-weight: 600;
+  display: block;
+  max-inline-size: 100%;
 }
 
 .instances-table__counts,
-.instances-table__markers,
-.instances-table__actions {
+.instances-table__markers {
   display: inline-flex;
   align-items: center;
   gap: var(--dbs-spacing-xxs);
@@ -91,27 +94,6 @@
 .instances-table__counts > span[data-tone='critical'] { color: var(--dbs-status-critical); }
 .instances-table__counts > span[data-tone='warning'] { color: var(--dbs-status-warning); }
 .instances-table__counts > span[data-tone='unknown'] { color: var(--cds-text-secondary); }
-
-.instances-table__actions {
-  gap: var(--dbs-spacing-xs);
-  justify-content: flex-end;
-}
-
-/* 行内图标链接。蓝色在这里表示「可交互」，与状态色互不借用。 */
-.instances-table__action {
-  display: inline-flex;
-  align-items: center;
-  color: var(--cds-link-primary);
-}
-
-.instances-table__action:hover {
-  color: var(--cds-link-primary-hover);
-}
-
-.instances-table__action:focus-visible {
-  outline: 2px solid var(--cds-focus);
-  outline-offset: 1px;
-}
 
 /* 密集档位下这一列不渲染（规范：32px 行丢掉缩略图），所以这里只管标准档位的高度。 */
 .instances-page .dbs-sparkline {
