@@ -21,7 +21,7 @@ for (const i of instances) {
 id=$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"))[0].id)' "$state/instances.json")
 from=$(node -e 'process.stdout.write(new Date(Date.now() - 600000).toISOString().replace(/\.\d+Z$/, "Z"))')
 to=$(node -e 'process.stdout.write(new Date(Date.now() + 60000).toISOString().replace(/\.\d+Z$/, "Z"))')
-for metric in pg.tps pg.connections host.cpu.usage_percent host.memory.usage_percent host.disk.usage_percent; do
+for metric in pg.tps pg.connection.total host.cpu.usage_percent host.memory.usage_percent host.disk.usage_percent; do
   curl --noproxy '*' -sf --cacert "$ca" -b "$cookie" --get \
     --data-urlencode "metric=$metric" --data-urlencode "from=$from" \
     --data-urlencode "to=$to" --data-urlencode 'step=raw' \
