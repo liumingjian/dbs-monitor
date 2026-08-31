@@ -135,8 +135,8 @@ function PerformanceEventDetailContent({ event, instanceName, search, onDisposit
         <p className="dbs-caption">{instanceName ?? event.instance_id} · {event.metric_id}</p>
       </div>
       <div className="performance-event-detail__actions">
-        {links.monitoring && <Button as={links.monitoring} size="md" renderIcon={MonitoringIcon}>查看标准监控</Button>}
-        <Button as={links.alert} kind="tertiary" size="md" renderIcon={AlertIcon}>查看告警详情</Button>
+        {links.monitoring && <Button as={links.monitoring} size="md" renderIcon={Icon.glyph.chartLine}>查看标准监控</Button>}
+        <Button as={links.alert} kind="tertiary" size="md" renderIcon={Icon.glyph.notification}>查看告警详情</Button>
       </div>
     </header>
 
@@ -176,14 +176,6 @@ function PerformanceEventDetailContent({ event, instanceName, search, onDisposit
     />
     <TriggerSnapshotSection alertInstanceID={event.alert_instance_id} eventEvidence />
   </div>
-}
-
-function MonitoringIcon() {
-  return <Icon name="chartLine" />
-}
-
-function AlertIcon() {
-  return <Icon name="notification" />
 }
 
 function EventMetricChart({ event, monitoringSearch }: {

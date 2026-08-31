@@ -299,12 +299,14 @@ function CapabilityModule({ title, capabilities, rowTestId }: {
   capabilities: Capability[]
   rowTestId: string
 }) {
+  // 列宽契约（web/CLAUDE.md）：各列一律默认的 `grow: 1`。`grow` 不等时，低的那几列
+  // 分到的宽度会掉到自己的 `minWidth` 以下，被截掉的先是格子里压不动的那部分 ——
+  // 「不适用」这四个字就是这么被截成「不…」的。合计 668 ≤ 974，全等即可。
   const columns: DataGridColumn<Capability>[] = [
     {
       key: 'capability',
       header: '能力',
       minWidth: 200,
-      grow: 1.2,
       cell: (item) => <TruncatedText>{capabilityLabel(item.capability_id)}</TruncatedText>,
     },
     { key: 'status', header: '状态', minWidth: 200, cell: (item) => capabilityStatus(item) },
@@ -312,7 +314,6 @@ function CapabilityModule({ title, capabilities, rowTestId }: {
       key: 'observed',
       header: '最近检查',
       minWidth: 172,
-      grow: 1.2,
       cell: (item) => <TruncatedText>{formatOptionalTime(item.observed_at)}</TruncatedText>,
     },
     {
@@ -338,22 +339,23 @@ function CapabilityModule({ title, capabilities, rowTestId }: {
 
 function MetricStatus({ tasks }: { tasks: CollectionTask[] }) {
   const metricRows: MetricRow[] = tasks.flatMap((task) => task.metric_ids.map((metricID) => ({ metricID, task })))
+  // 列宽契约（web/CLAUDE.md）：各列一律默认的 `grow: 1`，合计 964 ≤ 974。
+  // `grow` 一旦不等，`grow` 低的列分到的宽度就低于自己的 `minWidth`，而它没有省略号可退 ——
+  // 「所需能力」正是这样越出表格右沿、在面板边界上直接断掉的。
   const columns: DataGridColumn<MetricRow>[] = [
     {
       key: 'metric',
       header: '指标 ID',
       minWidth: 220,
-      grow: 1.2,
       cell: (row) => <TruncatedText className="dbs-numeric">{row.metricID}</TruncatedText>,
     },
     {
       key: 'collected',
       header: '最近采集时间',
       minWidth: 172,
-      grow: 1.2,
       cell: (row) => <TruncatedText>{formatOptionalTime(row.task.last_success_at)}</TruncatedText>,
     },
-    { key: 'result', header: '当前状态', minWidth: 132, grow: 1.4, cell: (row) => taskResultDot(row.task.last_result) },
+    { key: 'result', header: '当前状态', minWidth: 132, cell: (row) => taskResultDot(row.task.last_result) },
     {
       key: 'error',
       header: '失败原因',
@@ -361,16 +363,14 @@ function MetricStatus({ tasks }: { tasks: CollectionTask[] }) {
       cell: (row) => <TruncatedText>{row.task.last_error_message ?? '—'}</TruncatedText>,
     },
     {
+      // 一格一行，装不下就省略号加悬停全文（列宽契约第 3 条）。能力 ID 之间用顿号断开，
+      // 原来的换行排法在 40px 的行里只显示得下第一行，第二行是被行高裁掉的，不是省略掉的。
       key: 'capabilities',
       header: '所需能力',
       minWidth: 200,
       cell: (row) => row.task.required_capabilities.length === 0
         ? '无'
-        : <span className="collection-metrics__capabilities">
-          {row.task.required_capabilities.map((item) => (
-            <span className="dbs-caption dbs-numeric" key={item}>{item}</span>
-          ))}
-        </span>,
+        : <TruncatedText className="dbs-caption dbs-numeric">{row.task.required_capabilities.join('、')}</TruncatedText>,
     },
   ]
 

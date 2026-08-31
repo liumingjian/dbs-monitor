@@ -331,7 +331,7 @@ function SMTPSection({ canManage }: { canManage: boolean }) {
         )}
         <div className="alert-settings-actions">
           <span title={canManage ? undefined : readOnlyReason.channels}>
-            <Button type="submit" size="md" renderIcon={SaveIcon} disabled={!canManage || updateMutation.isPending}>
+            <Button type="submit" size="md" renderIcon={Icon.glyph.save} disabled={!canManage || updateMutation.isPending}>
               保存
             </Button>
           </span>
@@ -387,7 +387,7 @@ function SMTPTestForm({ canManage, defaultTarget }: { canManage: boolean; defaul
           />}
         </FormField>
         <span title={canManage ? undefined : readOnlyReason.channels}>
-          <Button type="submit" size="md" kind="tertiary" renderIcon={SendIcon} disabled={!canManage || testMutation.isPending}>
+          <Button type="submit" size="md" kind="tertiary" renderIcon={Icon.glyph.send} disabled={!canManage || testMutation.isPending}>
             发送测试
           </Button>
         </span>
@@ -774,18 +774,6 @@ function formatTime(value: string): string {
   return new Date(value).toLocaleString()
 }
 
-function SaveIcon() {
-  return <Icon name="save" />
-}
-
-function SendIcon() {
-  return <Icon name="send" />
-}
-
-function AddIcon() {
-  return <Icon name="add" />
-}
-
 // ---------------------------------------------------------------------------
 // 标签页
 // ---------------------------------------------------------------------------
@@ -838,7 +826,7 @@ export function NotificationChannelsPanel({ canManage }: { canManage: boolean })
         flush
         title="Webhook"
         actions={<span title={canManage ? undefined : readOnlyReason.channels}>
-          <Button size="sm" renderIcon={AddIcon} disabled={!canManage} onClick={() => openEditor(null)}>
+          <Button size="sm" renderIcon={Icon.glyph.add} disabled={!canManage} onClick={() => openEditor(null)}>
             新建目标
           </Button>
         </span>}

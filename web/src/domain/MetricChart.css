@@ -26,9 +26,28 @@
  * 量完不删；它没有像素，却有几何，而且是从未平移的轴原点排起，轴标签越宽伸得越左。
  * 实测在 390px 视口上能伸到卡片左侧之外、直至视口外 4px —— 看不见，却是货真价实的溢出。
  * 把绘制裁到画布上，可见的轴、网格与曲线本来就在画布内，裁剪碰不到它们。
+ *
+ * 上沿是唯一的例外，所以裁剪写成 `clip-path` 而不是 `overflow: hidden`：y 轴最顶上的
+ * 那个刻度是**以画布上沿为中心**排的，横平竖直地裁到边就会把它切掉一半（告警详情的
+ * 「触发指标」图上那个 `16` 就是这么少了半行）。左右仍然裁死 —— 溢出在那两边。
  */
 .metric-figure svg.layout-svg-wrapper {
-  overflow: hidden;
+  overflow: visible;
+  clip-path: inset(-0.5rem 0 0);
+}
+
+/*
+ * 首尾两个 x 轴刻度。d3 的刻度文字以刻度线为中心排，而首尾两根刻度线就落在画布左右沿上，
+ * 于是两个刻度各有一半在画布外，被上面那条裁剪切掉。库自己只处理旋转态（旋转时它会给
+ * `text` 挂上 `transform` 与 `text-anchor` 两个属性），不旋转的那几张图没人管。
+ * 这里只接管不旋转的那一档（`:not([transform])`），把首尾两个刻度改成向内对齐。
+ */
+.metric-figure .cds--cc--axes g.axis.bottom g.ticks g.tick:first-of-type text:not([transform]) {
+  text-anchor: start;
+}
+
+.metric-figure .cds--cc--axes g.axis.bottom g.ticks g.tick:last-of-type text:not([transform]) {
+  text-anchor: end;
 }
 
 /* 轴标签：等宽 + DESIGN.md 的次级文字色（Carbon 默认的那档在白底上不够 4.5:1）。 */

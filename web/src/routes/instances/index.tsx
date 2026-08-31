@@ -182,7 +182,7 @@ function InstancesPage() {
       <header className="instances-page__header">
         <h1 className="dbs-page-title">PostgreSQL 实例</h1>
         <span title={createDisabledReason}>
-          <Button size="md" renderIcon={CreateIcon} disabled={!canCreate} onClick={() => setCreateOpen(true)}>
+          <Button size="md" renderIcon={Icon.glyph.add} disabled={!canCreate} onClick={() => setCreateOpen(true)}>
             新建实例
           </Button>
         </span>
@@ -244,14 +244,6 @@ function InstancesPage() {
       />
     </div>
   )
-}
-
-function CreateIcon() {
-  return <Icon name="add" />
-}
-
-function ClearFiltersIcon() {
-  return <Icon name="filterRemove" />
 }
 
 /// 密集模式切换。
@@ -345,7 +337,7 @@ function InstanceFilterBar({ filters, onChange, freshness }: {
           onChange={(_event, { checked }) => onChange((current) => ({ ...current, hasConfigurationMissing: checked }))}
         />
       </div>
-      <Button kind="ghost" size="md" renderIcon={ClearFiltersIcon} onClick={() => onChange(() => ({}))}>清除筛选</Button>
+      <Button kind="ghost" size="md" renderIcon={Icon.glyph.filterRemove} onClick={() => onChange(() => ({}))}>清除筛选</Button>
       {freshness !== undefined && <span className="instances-filters__freshness">{freshness}</span>}
     </div>
   )

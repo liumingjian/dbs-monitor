@@ -27,7 +27,12 @@
   padding-inline: var(--dbs-spacing-sm);
 }
 
-/* Carbon 的表单项默认铺满可用宽度；这里两个输入框只要装得下一个时刻。 */
+/* Carbon 的表单项默认铺满可用宽度；这里两个输入框只要装得下一个时刻。
+ *
+ * 宽度是量出来的：原生 `datetime-local` 自己排的是 `MM/DD/YYYY, hh:mm:ss AM` 再加一个
+ * 日历按钮，13.5rem（216px）装不下，被切掉的正好是末尾的 AM/PM —— 上午和下午于是长得
+ * 一模一样，而这是一个时间范围控件。16.5rem（264px）容得下整串值加按钮，仍然比
+ * 「铺满可用宽度」窄得多，工具条的其余控件不动位置。 */
 .dbs-time-range__field {
   flex: 0 0 auto;
   min-inline-size: 0;
@@ -35,7 +40,7 @@
 
 .dbs-time-range__field .cds--form-item {
   flex: 0 0 auto;
-  inline-size: 13.5rem;
+  inline-size: 16.5rem;
 }
 
 @media (max-width: 671px) {

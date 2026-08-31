@@ -57,8 +57,8 @@ export function WorkbenchHeader({ id, instanceName, activeKey, search }: Workben
         <p className="dbs-caption">实例工作台</p>
       </div>
       <div className="workbench-header__actions">
-        <Button as={links.collection} kind="tertiary" size="md" renderIcon={CollectionIcon}>采集管理</Button>
-        <Button as={links.settings} kind="tertiary" size="md" renderIcon={SettingsIcon}>接入设置</Button>
+        <Button as={links.collection} kind="tertiary" size="md" renderIcon={Icon.glyph.database}>采集管理</Button>
+        <Button as={links.settings} kind="tertiary" size="md" renderIcon={Icon.glyph.settings}>接入设置</Button>
       </div>
     </div>
     <Tabs selectedIndex={tabOrder.indexOf(activeKey)}>
@@ -73,10 +73,3 @@ export function WorkbenchHeader({ id, instanceName, activeKey, search }: Workben
   </div>
 }
 
-function CollectionIcon() {
-  return <Icon name="database" />
-}
-
-function SettingsIcon() {
-  return <Icon name="settings" />
-}

@@ -157,10 +157,10 @@ export function DispositionSection({ alertInstanceID, recovered, onChanged }: {
     headingLevel={3}
     actions={<div className="alert-evidence-actions">
       <span title={disabledReason}>
-        <Button kind="tertiary" size="md" disabled={disabledReason !== undefined} renderIcon={ConfirmIcon} onClick={() => open('ACKED')}>确认</Button>
+        <Button kind="tertiary" size="md" disabled={disabledReason !== undefined} renderIcon={Icon.glyph.checkmark} onClick={() => open('ACKED')}>确认</Button>
       </span>
       <span title={disabledReason}>
-        <Button kind="tertiary" size="md" disabled={disabledReason !== undefined} renderIcon={IgnoreIcon} onClick={() => open('IGNORED')}>忽略</Button>
+        <Button kind="tertiary" size="md" disabled={disabledReason !== undefined} renderIcon={Icon.glyph.stop} onClick={() => open('IGNORED')}>忽略</Button>
       </span>
     </div>}
   >
@@ -345,14 +345,6 @@ const snapshotSessionColumns: DataGridColumn<AlertTriggerSnapshotSession>[] = [
   { key: 'wait', header: '等待事件', minWidth: 78, cell: (session) => [session.wait_event_type, session.wait_event].filter(Boolean).join(' / ') || '—' },
   { key: 'blocking', header: '阻塞关系', minWidth: 78, cell: (session) => session.blocking_pids.length === 0 ? '无' : `被 PID ${session.blocking_pids.join(', ')} 阻塞` },
 ]
-
-function ConfirmIcon() {
-  return <Icon name="checkmark" />
-}
-
-function IgnoreIcon() {
-  return <Icon name="stop" />
-}
 
 function DispositionTag({ disposition }: { disposition: AlertDisposition }) {
   return <StatusBadge tone={dispositionTone(disposition)}>{dispositionLabel(disposition)}</StatusBadge>

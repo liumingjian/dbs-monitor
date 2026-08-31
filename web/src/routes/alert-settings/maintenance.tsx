@@ -107,10 +107,6 @@ function formatTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN', { hour12: false })
 }
 
-function AddIcon() {
-  return <Icon name="add" />
-}
-
 // ---------------------------------------------------------------------------
 // 表单
 // ---------------------------------------------------------------------------
@@ -257,7 +253,7 @@ export function MaintenancePanel({ canManage, initialInstanceID, openInitially, 
         title="维护窗口"
         description="窗口生效期间，覆盖到的实例不再派发通知。"
         actions={<span title={canManage ? undefined : readOnlyReason.maintenance}>
-          <Button size="sm" renderIcon={AddIcon} disabled={!canManage} onClick={() => setEditor({ maintenanceWindow: null })}>
+          <Button size="sm" renderIcon={Icon.glyph.add} disabled={!canManage} onClick={() => setEditor({ maintenanceWindow: null })}>
             新建维护窗口
           </Button>
         </span>}

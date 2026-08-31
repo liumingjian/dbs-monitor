@@ -70,12 +70,8 @@ export function UnavailabilityBlock({ code, href, detail }: UnavailabilityBlockP
       <span className="dbs-unavailability__line">{copy.description}</span>
       {detail && <span className="dbs-unavailability__line">{detail}</span>}
     </NotificationBar>
-    <Link className="dbs-unavailability__action" href={href} renderIcon={UnavailabilityActionIcon}>{copy.action}</Link>
+    <Link className="dbs-unavailability__action" href={href} renderIcon={Icon.glyph.arrowRight}>{copy.action}</Link>
   </div>
-}
-
-function UnavailabilityActionIcon() {
-  return <Icon name="arrowRight" />
 }
 
 function assertNever(value: never): never {

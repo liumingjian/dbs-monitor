@@ -336,6 +336,26 @@ function chartOptions(
     // 两处都给会让同一张图在无障碍树里出现两个同名节点。
     animations: false,
     resizable: true,
+    // 时间刻度的写法。库的默认值是英文的 `MMM d, hh a`（首个刻度）与 `hh a`：
+    // 「Aug 31, 10:28 AM」在一张 470px 宽的图里要 120px，五个刻度就开始互相压字，
+    // 首尾两个还各有一半落在画布之外被裁掉。缩到 24 小时制之后一个刻度约 35px，
+    // 既不叠也不需要库自作主张地旋转 45°（旋转本身又会让首个刻度往左伸出画布）。
+    //
+    // 分钟档与秒档不写日期：那个窗口最长两小时，日期是常数，而它就写在上方的时间范围里；
+    // 完整时刻仍然在悬停提示和「查看数据表」里。小时档及以上会跨天，日期由首刻度带出。
+    timeScale: {
+      timeIntervalFormats: {
+        '15seconds': { primary: 'HH:mm:ss', secondary: 'HH:mm:ss' },
+        minute: { primary: 'HH:mm', secondary: 'HH:mm' },
+        '30minutes': { primary: 'HH:mm', secondary: 'HH:mm' },
+        hourly: { primary: 'MM-dd HH:mm', secondary: 'HH:mm' },
+        daily: { primary: 'MM-dd', secondary: 'MM-dd' },
+        weekly: { primary: 'MM-dd', secondary: 'MM-dd' },
+        monthly: { primary: 'yyyy-MM', secondary: 'yyyy-MM' },
+        quarterly: { primary: 'yyyy-MM', secondary: 'yyyy-MM' },
+        yearly: { primary: 'yyyy', secondary: 'yyyy' },
+      },
+    },
     height: '100%',
     toolbar: { enabled: false },
     points: { enabled: false },
@@ -349,7 +369,11 @@ function chartOptions(
     tooltip: { valueFormatter: tooltipValueFormatter(series) },
     ...(Object.keys(scale).length > 0 ? { color: { scale } } : {}),
     axes: {
-      bottom: { mapsTo: 'date', scaleType: ScaleTypes.TIME },
+      // 刻度上限。库对横轴不算「放得下几个」（那套只用在纵轴上），默认按一个固定值取，
+      // 于是一小时的窗口能排出十几个刻度、彼此贴着。六个刻度在 1280px 下的最窄一张图
+      // （约 300px 画布）里也是每个 50px，读得开。这是上限不是定数：d3 仍然会取整到
+      // 一个好看的时间间隔上，实际画出来是四到七个。
+      bottom: { mapsTo: 'date', scaleType: ScaleTypes.TIME, ticks: { number: 6 } },
       left: axisOptions(units[0], series, thresholds),
       ...(units.length > 1
         ? {

@@ -44,8 +44,6 @@ export function ConfirmedAction({
   onConfirm,
 }: ConfirmedActionProps) {
   const [open, setOpen] = useState(false)
-  const ActionIcon = () => <Icon name={icon} />
-
   return (
     <>
       <span title={disabled ? disabledReason : name}>
@@ -53,7 +51,7 @@ export function ConfirmedAction({
           kind={destructive ? 'danger--ghost' : 'ghost'}
           size="sm"
           hasIconOnly
-          renderIcon={ActionIcon}
+          renderIcon={Icon.glyph[icon]}
           iconDescription={name}
           aria-label={name}
           disabled={disabled}
@@ -91,14 +89,13 @@ export function InlineAction({ name, icon, disabled = false, disabledReason, onC
   disabledReason?: string
   onClick: () => void
 }) {
-  const ActionIcon = () => <Icon name={icon} />
   return (
     <span title={disabled ? disabledReason : name}>
       <Button
         kind="ghost"
         size="sm"
         hasIconOnly
-        renderIcon={ActionIcon}
+        renderIcon={Icon.glyph[icon]}
         iconDescription={name}
         aria-label={name}
         disabled={disabled}

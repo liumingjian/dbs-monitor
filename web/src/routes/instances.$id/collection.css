@@ -101,6 +101,13 @@
   min-inline-size: 0;
 }
 
+/* 状态词本身压不动：它是这一格要回答的问题，说明只是补充。不给它 `flex: 0 0 auto`，
+   flex 会先压最左边的那一段，「不适用」就被截成「不…」，而下一行同样是不适用、没被截，
+   读起来像两种状态。 */
+.collection-capability__na > :first-child {
+  flex: 0 0 auto;
+}
+
 .collection-capability__na span:last-child {
   color: var(--cds-text-secondary);
   overflow: hidden;
@@ -108,13 +115,6 @@
   white-space: nowrap;
 }
 
-.collection-metrics__capabilities {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--dbs-spacing-xxs) var(--dbs-spacing-xs);
-  min-inline-size: 0;
-  color: var(--cds-text-secondary);
-}
 
 /* ---- 采集配置 ---- */
 

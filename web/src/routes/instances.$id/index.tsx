@@ -169,7 +169,7 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
           className="cds--link"
           to="/alert-settings/maintenance-windows"
         >查看维护窗口</Link>}
-        <Button as={links.maintenance} kind="tertiary" size="md" renderIcon={CalendarIcon}>新建维护窗口</Button>
+        <Button as={links.maintenance} kind="tertiary" size="md" renderIcon={Icon.glyph.calendar}>新建维护窗口</Button>
       </div>
     </section>
 
@@ -230,34 +230,14 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
 
       <OverviewPanel module="troubleshooting" title="快速排障入口">
         <div className="overview-page__actions">
-          <Button as={links.monitoring} size="md" renderIcon={MonitoringIcon}>标准监控</Button>
-          <Button as={links.sessions} kind="tertiary" size="md" renderIcon={SessionsIcon}>会话与阻塞</Button>
-          <Button as={links.alerts} kind="tertiary" size="md" renderIcon={AlertsIcon}>当前告警</Button>
-          <Button as={links.collection} kind="tertiary" size="md" renderIcon={CollectionIcon}>采集状态</Button>
+          <Button as={links.monitoring} size="md" renderIcon={Icon.glyph.chartLine}>标准监控</Button>
+          <Button as={links.sessions} kind="tertiary" size="md" renderIcon={Icon.glyph.database}>会话与阻塞</Button>
+          <Button as={links.alerts} kind="tertiary" size="md" renderIcon={Icon.glyph.notification}>当前告警</Button>
+          <Button as={links.collection} kind="tertiary" size="md" renderIcon={Icon.glyph.plug}>采集状态</Button>
         </div>
       </OverviewPanel>
     </div>
   </div>
-}
-
-function CalendarIcon() {
-  return <Icon name="calendar" />
-}
-
-function MonitoringIcon() {
-  return <Icon name="chartLine" />
-}
-
-function SessionsIcon() {
-  return <Icon name="database" />
-}
-
-function AlertsIcon() {
-  return <Icon name="notification" />
-}
-
-function CollectionIcon() {
-  return <Icon name="plug" />
 }
 
 /// 总览模块面板。`data-overview-module` 承载的是领域取值（这是哪一个模块），
