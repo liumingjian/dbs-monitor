@@ -36,6 +36,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFleetOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances": {
         parameters: {
             query?: never;
@@ -1161,10 +1177,10 @@ export interface components {
          */
         InstanceEngine: "POSTGRESQL";
         /**
-         * @description Orthogonal marker on an instance's health rollup, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced.
+         * @description Orthogonal marker on an instance's health rollup or on its collection, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced. STALE_DATA and AGENT_OFFLINE describe collection itself rather than the alert rollup. They exist because the fleet overview's collection self-monitoring counts have to drill down into this same list, and a number that cannot be clicked through is a dead end.
          * @enum {string}
          */
-        InstanceFlag: "NO_DATA" | "MAINTENANCE" | "RECENTLY_RECOVERED" | "IGNORED" | "CONFIGURATION_MISSING";
+        InstanceFlag: "NO_DATA" | "MAINTENANCE" | "RECENTLY_RECOVERED" | "IGNORED" | "CONFIGURATION_MISSING" | "STALE_DATA" | "AGENT_OFFLINE";
         /**
          * @description Instance list ordering. health puts the rows that need handling first; stalest puts the instances whose collection is furthest behind first. Ties always fall back to name then id, so paging through the list never repeats or skips a row.
          * @enum {string}
@@ -1640,6 +1656,44 @@ export interface components {
             items: components["schemas"]["Instance"][];
             /** @description Number of instances matching the filters, before paging. */
             total: number;
+        };
+        /** @description The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, and which disks are filling up. */
+        FleetOverview: {
+            /** @description Number of monitored instances. */
+            total: number;
+            health: components["schemas"]["FleetHealthCounts"];
+            collection: components["schemas"]["FleetCollectionHealth"];
+            /** @description The instances that need handling first, ordered by health tier then alert severity. Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy and paused instances never appear here. */
+            attention: components["schemas"]["Instance"][];
+            /** @description The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty. */
+            storage: components["schemas"]["StorageWatermarkEntry"][];
+        };
+        /** @description How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size. */
+        FleetHealthCounts: {
+            critical: number;
+            warning: number;
+            unknown: number;
+            healthy: number;
+            paused: number;
+        };
+        /** @description Collection self-monitoring. These three overlap with the health tiers on purpose: an instance whose collection rotted silently is usually still HEALTHY, because no rule can fire on data that never arrived. */
+        FleetCollectionHealth: {
+            /** @description Instances whose collection is behind, or that were never collected at all. Paused instances are excluded: a paused instance is not rotting, it is switched off. Same predicate as the STALE_DATA instance-list flag. */
+            stale_data: number;
+            /** @description Instances whose Agent is expected but has stopped reporting. */
+            agent_offline: number;
+            /** @description Instances whose collection is paused. */
+            paused: number;
+        };
+        /** @description One instance's highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing. */
+        StorageWatermarkEntry: {
+            /** Format: uuid */
+            instance_id: string;
+            instance_name: string;
+            /** Format: double */
+            usage_percent: number;
+            /** Format: date-time */
+            sampled_at: string;
         };
         InstanceHealth: {
             status: components["schemas"]["HealthStatus"];
@@ -2210,6 +2264,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getFleetOverview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fleet-wide aggregates for the overview page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FleetOverview"];
+                };
             };
         };
     };

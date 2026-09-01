@@ -167,9 +167,31 @@ func instanceHasFlag(item api.Instance, flag api.InstanceFlag) bool {
 		return item.Health.Flags.Ignored > 0
 	case api.InstanceFlagConfigurationMissing:
 		return item.Health.Flags.ConfigurationMissing > 0
+	case api.InstanceFlagStaleData:
+		return instanceDataIsStale(item)
+	case api.InstanceFlagAgentOffline:
+		return item.AgentStatus == api.InstanceAgentOffline
 	default:
 		return false
 	}
+}
+
+// staleDataAfterSeconds 是「采集落后到该有人管了」的界。十分钟：本轮最慢的常规采集任务
+// 是分钟级的，连着漏十次才到这里，不会把一次抖动叫成烂掉。
+const staleDataAfterSeconds = 600
+
+// instanceDataIsStale 是总览「数据不新鲜」与列表 STALE_DATA 筛选共用的那一个判定。
+//
+// 从来没采到过也算不新鲜——它连一个基准都还没有，比落后一小时更该被看见。
+// 已暂停的不算：暂停是有人按下的开关，不是悄悄烂掉，它由「采集暂停数」单独计。
+func instanceDataIsStale(item api.Instance) bool {
+	if item.Health.Status == api.HealthPaused {
+		return false
+	}
+	if item.DataFreshnessSeconds == nil {
+		return true
+	}
+	return *item.DataFreshnessSeconds > staleDataAfterSeconds
 }
 
 func instanceHasSeverity(item api.Instance, severity api.AlertSeverity) bool {

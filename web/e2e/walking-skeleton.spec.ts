@@ -12,6 +12,9 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await page.getByLabel('密码').fill('t11-playwright-password')
   await page.getByRole('button', { name: /登\s*录/ }).click()
 
+  // 落地页是机群总览；实例列表从侧栏进（「登录落地到总览」这条动线由 fleet-overview.spec 覆盖）。
+  await expect(page.getByRole('heading', { name: '机群总览' })).toBeVisible()
+  await page.getByRole('link', { name: '实例列表' }).click()
   await expect(page).toHaveURL(/\/instances$/)
   await expect(page.getByRole('heading', { name: 'PostgreSQL 实例' })).toBeVisible()
   const instanceRow = page.getByRole('row', { name: new RegExp(instanceName) })

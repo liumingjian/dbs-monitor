@@ -29,7 +29,7 @@ export type InstanceListSearch = {
 
 export const INSTANCE_ENGINES = ['POSTGRESQL'] as const satisfies readonly InstanceEngine[]
 export const INSTANCE_HEALTH_STATUSES = ['CRITICAL', 'WARNING', 'UNKNOWN', 'HEALTHY', 'PAUSED'] as const satisfies readonly HealthStatusValue[]
-export const INSTANCE_FLAGS = ['NO_DATA', 'MAINTENANCE', 'RECENTLY_RECOVERED', 'IGNORED', 'CONFIGURATION_MISSING'] as const satisfies readonly InstanceFlag[]
+export const INSTANCE_FLAGS = ['NO_DATA', 'MAINTENANCE', 'RECENTLY_RECOVERED', 'IGNORED', 'CONFIGURATION_MISSING', 'STALE_DATA', 'AGENT_OFFLINE'] as const satisfies readonly InstanceFlag[]
 export const INSTANCE_ALERT_SEVERITIES = ['critical', 'warning', 'info'] as const satisfies readonly AlertSeverity[]
 export const INSTANCE_LIST_SORTS = ['health', 'name', '-name', 'stalest'] as const satisfies readonly InstanceListSort[]
 

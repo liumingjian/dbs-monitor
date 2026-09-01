@@ -39,16 +39,21 @@ InstanceEngine:
 InstanceFlag:
   type: string
   description: >-
-    Orthogonal marker on an instance's health rollup, as used by the instance list filter.
-    These are not health statuses: an instance carries any combination of them alongside
-    whatever status the alert counting produced.
-  enum: [NO_DATA, MAINTENANCE, RECENTLY_RECOVERED, IGNORED, CONFIGURATION_MISSING]
+    Orthogonal marker on an instance's health rollup or on its collection, as used by the
+    instance list filter. These are not health statuses: an instance carries any combination
+    of them alongside whatever status the alert counting produced.
+    STALE_DATA and AGENT_OFFLINE describe collection itself rather than the alert rollup.
+    They exist because the fleet overview's collection self-monitoring counts have to drill
+    down into this same list, and a number that cannot be clicked through is a dead end.
+  enum: [NO_DATA, MAINTENANCE, RECENTLY_RECOVERED, IGNORED, CONFIGURATION_MISSING, STALE_DATA, AGENT_OFFLINE]
   x-enum-varnames:
     - InstanceFlagNoData
     - InstanceFlagMaintenance
     - InstanceFlagRecentlyRecovered
     - InstanceFlagIgnored
     - InstanceFlagConfigurationMissing
+    - InstanceFlagStaleData
+    - InstanceFlagAgentOffline
 InstanceListSort:
   type: string
   description: >-

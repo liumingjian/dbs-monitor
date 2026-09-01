@@ -57,3 +57,16 @@ ON CONFLICT (instance_id, task_id)
 DO UPDATE SET interval_seconds = EXCLUDED.interval_seconds,
               updated_by = EXCLUDED.updated_by,
               updated_at = EXCLUDED.updated_at;
+
+-- name: LatestSamplePerSeriesForMetric :many
+-- 一个指标在全机群的最新读数，每条序列一行（磁盘按挂载点分序列，实例级的取值由调用方
+-- 在 Go 里收敛）。窗口是必需的：没有下限就会把几个月前停止上报的实例算成「当前水位」。
+SELECT DISTINCT ON (series.series_id)
+       series.instance_id,
+       series.series_id,
+       sample.ts,
+       sample.value
+FROM metric_series series
+JOIN metric_sample sample ON sample.series_id = series.series_id
+WHERE series.metric_id = sqlc.arg(metric_id) AND sample.ts >= sqlc.arg(since)
+ORDER BY series.series_id, sample.ts DESC;

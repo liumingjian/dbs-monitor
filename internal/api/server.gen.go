@@ -235,11 +235,13 @@ const (
 
 // Defines values for InstanceFlag.
 const (
+	InstanceFlagAgentOffline         InstanceFlag = "AGENT_OFFLINE"
 	InstanceFlagConfigurationMissing InstanceFlag = "CONFIGURATION_MISSING"
 	InstanceFlagIgnored              InstanceFlag = "IGNORED"
 	InstanceFlagMaintenance          InstanceFlag = "MAINTENANCE"
 	InstanceFlagNoData               InstanceFlag = "NO_DATA"
 	InstanceFlagRecentlyRecovered    InstanceFlag = "RECENTLY_RECOVERED"
+	InstanceFlagStaleData            InstanceFlag = "STALE_DATA"
 )
 
 // Defines values for InstanceListSort.
@@ -943,6 +945,45 @@ type Error struct {
 // ErrorErrorCode defines model for Error.Error.Code.
 type ErrorErrorCode string
 
+// FleetCollectionHealth Collection self-monitoring. These three overlap with the health tiers on purpose: an instance whose collection rotted silently is usually still HEALTHY, because no rule can fire on data that never arrived.
+type FleetCollectionHealth struct {
+	// AgentOffline Instances whose Agent is expected but has stopped reporting.
+	AgentOffline int `json:"agent_offline"`
+
+	// Paused Instances whose collection is paused.
+	Paused int `json:"paused"`
+
+	// StaleData Instances whose collection is behind, or that were never collected at all. Paused instances are excluded: a paused instance is not rotting, it is switched off. Same predicate as the STALE_DATA instance-list flag.
+	StaleData int `json:"stale_data"`
+}
+
+// FleetHealthCounts How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size.
+type FleetHealthCounts struct {
+	Critical int `json:"critical"`
+	Healthy  int `json:"healthy"`
+	Paused   int `json:"paused"`
+	Unknown  int `json:"unknown"`
+	Warning  int `json:"warning"`
+}
+
+// FleetOverview The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, and which disks are filling up.
+type FleetOverview struct {
+	// Attention The instances that need handling first, ordered by health tier then alert severity. Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy and paused instances never appear here.
+	Attention []Instance `json:"attention"`
+
+	// Collection Collection self-monitoring. These three overlap with the health tiers on purpose: an instance whose collection rotted silently is usually still HEALTHY, because no rule can fire on data that never arrived.
+	Collection FleetCollectionHealth `json:"collection"`
+
+	// Health How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size.
+	Health FleetHealthCounts `json:"health"`
+
+	// Storage The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty.
+	Storage []StorageWatermarkEntry `json:"storage"`
+
+	// Total Number of monitored instances.
+	Total int `json:"total"`
+}
+
 // HealthAlertCounts defines model for HealthAlertCounts.
 type HealthAlertCounts struct {
 	Critical int `json:"critical"`
@@ -1033,7 +1074,7 @@ type InstanceCredentialUpdated struct {
 // InstanceEngine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
 type InstanceEngine string
 
-// InstanceFlag Orthogonal marker on an instance's health rollup, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced.
+// InstanceFlag Orthogonal marker on an instance's health rollup or on its collection, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced. STALE_DATA and AGENT_OFFLINE describe collection itself rather than the alert rollup. They exist because the fleet overview's collection self-monitoring counts have to drill down into this same list, and a number that cannot be clicked through is a dead end.
 type InstanceFlag string
 
 // InstanceHealth defines model for InstanceHealth.
@@ -1495,6 +1536,14 @@ type SessionSnapshotEntry struct {
 	Username              *string    `json:"username,omitempty"`
 	WaitEvent             *string    `json:"wait_event,omitempty"`
 	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
+
+// StorageWatermarkEntry One instance's highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing.
+type StorageWatermarkEntry struct {
+	InstanceId   openapi_types.UUID `json:"instance_id"`
+	InstanceName string             `json:"instance_name"`
+	SampledAt    time.Time          `json:"sampled_at"`
+	UsagePercent float64            `json:"usage_percent"`
 }
 
 // Unavailability defines model for Unavailability.
@@ -1993,6 +2042,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/notification-policy-settings)
 	GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/overview)
+	GetFleetOverview(w http.ResponseWriter, r *http.Request)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
@@ -4063,6 +4115,20 @@ func (siw *ServerInterfaceWrapper) GetNotificationPolicySettings(w http.Response
 	handler.ServeHTTP(w, r)
 }
 
+// GetFleetOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetFleetOverview(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFleetOverview(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangeOwnPassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
@@ -4418,6 +4484,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.DeleteNotificationPolicy)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.UpdateNotificationPolicy)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-policy-settings", wrapper.GetNotificationPolicySettings)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/overview", wrapper.GetFleetOverview)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/platform-events", wrapper.ListPlatformEvents)
@@ -6388,6 +6455,22 @@ func (response GetNotificationPolicySettings200JSONResponse) VisitGetNotificatio
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetFleetOverviewRequestObject struct {
+}
+
+type GetFleetOverviewResponseObject interface {
+	VisitGetFleetOverviewResponse(w http.ResponseWriter) error
+}
+
+type GetFleetOverview200JSONResponse FleetOverview
+
+func (response GetFleetOverview200JSONResponse) VisitGetFleetOverviewResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ChangeOwnPasswordRequestObject struct {
 	Body *ChangeOwnPasswordJSONRequestBody
 }
@@ -6852,6 +6935,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/notification-policy-settings)
 	GetNotificationPolicySettings(ctx context.Context, request GetNotificationPolicySettingsRequestObject) (GetNotificationPolicySettingsResponseObject, error)
+
+	// (GET /api/v1/overview)
+	GetFleetOverview(ctx context.Context, request GetFleetOverviewRequestObject) (GetFleetOverviewResponseObject, error)
 
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
@@ -9080,6 +9166,30 @@ func (sh *strictHandler) GetNotificationPolicySettings(w http.ResponseWriter, r 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetNotificationPolicySettingsResponseObject); ok {
 		if err := validResponse.VisitGetNotificationPolicySettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFleetOverview operation middleware
+func (sh *strictHandler) GetFleetOverview(w http.ResponseWriter, r *http.Request) {
+	var request GetFleetOverviewRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFleetOverview(ctx, request.(GetFleetOverviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFleetOverview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFleetOverviewResponseObject); ok {
+		if err := validResponse.VisitGetFleetOverviewResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

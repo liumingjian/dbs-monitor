@@ -1,0 +1,13 @@
+/api/v1/overview:
+  get:
+    tags: [overview]
+    operationId: getFleetOverview
+    x-required-role: READONLY
+    # 机群总览的四块聚合在一个请求里回来。四块各自成一个端点会让首屏发四个往返，
+    # 而它们读的是同一份实例级投影——分开取还会让四块看到不同时刻的机群。
+    responses:
+      '200':
+        description: Fleet-wide aggregates for the overview page
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/overview.yaml#/FleetOverview }
