@@ -13,6 +13,7 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
       name: '生产库 primary',
       host: '10.20.1.15',
       port: 5432,
+      engine: 'POSTGRESQL',
       database: 'orders',
       username: 'monitor',
       alert_status: 'OK',

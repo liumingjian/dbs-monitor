@@ -1542,9 +1542,11 @@ export interface components {
         };
         InstanceCreateInput: {
             name: string;
+            engine?: components["schemas"]["InstanceEngine"];
             host: string;
             port: number;
-            database: string;
+            /** @description Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept. */
+            database?: string;
             username: string;
             password: string;
         };
@@ -1552,7 +1554,8 @@ export interface components {
             name: string;
             host: string;
             port: number;
-            database: string;
+            /** @description Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept. */
+            database?: string;
         };
         InstanceCredentialInput: {
             username: string;
@@ -1565,9 +1568,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            engine: components["schemas"]["InstanceEngine"];
             host: string;
             port: number;
-            database: string;
+            /** @description Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept. */
+            database?: string;
             username: string;
             /** @description Version reported by the Agent, when one has reported. */
             agent_version?: string;
@@ -1862,6 +1867,11 @@ export interface components {
                 }[];
             };
         };
+        /**
+         * @description Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards.
+         * @enum {string}
+         */
+        InstanceEngine: "POSTGRESQL";
         /** @enum {string} */
         CollectionTaskResult: "SUCCESS" | "FAILED" | "TIMED_OUT" | "SKIPPED_BACKPRESSURE" | "BACKOFF";
         SessionSnapshotEntry: {

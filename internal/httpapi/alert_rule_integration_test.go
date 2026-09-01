@@ -807,7 +807,8 @@ func createAlertTestInstance(t *testing.T, ctx context.Context, pool *pgxpool.Po
 	}
 	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: name, Host: "localhost", Port: 5432,
-		DatabaseName: "postgres", Username: "postgres", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+		Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn("postgres"), Username: "postgres", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create instance %q: %v", name, err)
 	}

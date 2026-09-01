@@ -11,6 +11,7 @@ import { formatMetricNumber } from '../../domain/MetricChart'
 import { HealthStatus } from '../../domain/HealthStatus'
 import { SuppressionTags } from '../../domain/SuppressionTags'
 import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
+import { instanceEngineLabel } from '../../domain/instanceEngine'
 import { Icon } from '../../primitives/Icon'
 import { MetricBar } from '../../primitives/MetricBar'
 import { NotificationBar } from '../../primitives/NotificationBar'
@@ -157,8 +158,11 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
         <SuppressionTags flags={instance.health.flags} />
       </div>
       <div className="overview-page__status-line">
+        {/* 端点这一行答的是「这台实例是什么、连到哪儿」：引擎 · 端点 ·
+            建连接用的库。库名不是监控范围 —— 这条连接下的所有库都归这台实例。 */}
         <span className="dbs-caption overview-page__endpoint">
-          {instance.host}:{instance.port} · {instance.database}
+          {instanceEngineLabel(instance.engine)} · {instance.host}:{instance.port}
+          {instance.database !== undefined && ` · 连接库 ${instance.database}`}
         </span>
         {instance.collection_pause.paused && <Link
           className="cds--link"

@@ -49,6 +49,7 @@ test('global alert lists reuse detail and preserve trigger context into monitori
       name: 'payments-primary',
       host: '127.0.0.1',
       port: 5432,
+      engine: 'POSTGRESQL',
       database: 'payments',
       username: 'monitor',
       agent_metrics_enabled: true,

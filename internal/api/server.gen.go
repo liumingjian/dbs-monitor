@@ -226,6 +226,11 @@ const (
 	InstanceAgentPermissionDenied InstanceAgentStatus = "permission_denied"
 )
 
+// Defines values for InstanceEngine.
+const (
+	InstanceEnginePostgreSQL InstanceEngine = "POSTGRESQL"
+)
+
 // Defines values for MaintenanceWindowStatus.
 const (
 	MaintenanceActive    MaintenanceWindowStatus = "ACTIVE"
@@ -916,14 +921,19 @@ type Instance struct {
 	AlertStatus          AlertStatus           `json:"alert_status"`
 	CollectionPause      CollectionPauseStatus `json:"collection_pause"`
 	DataFreshnessSeconds *int                  `json:"data_freshness_seconds,omitempty"`
-	Database             string                `json:"database"`
-	Health               InstanceHealth        `json:"health"`
-	Host                 string                `json:"host"`
-	Id                   openapi_types.UUID    `json:"id"`
-	LastCollectedAt      *time.Time            `json:"last_collected_at,omitempty"`
-	Name                 string                `json:"name"`
-	Port                 int                   `json:"port"`
-	Username             string                `json:"username"`
+
+	// Database Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept.
+	Database string `json:"database,omitempty"`
+
+	// Engine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards.
+	Engine          InstanceEngine     `json:"engine"`
+	Health          InstanceHealth     `json:"health"`
+	Host            string             `json:"host"`
+	Id              openapi_types.UUID `json:"id"`
+	LastCollectedAt *time.Time         `json:"last_collected_at,omitempty"`
+	Name            string             `json:"name"`
+	Port            int                `json:"port"`
+	Username        string             `json:"username"`
 }
 
 // InstanceAgentStatus defines model for InstanceAgentStatus.
@@ -931,12 +941,16 @@ type InstanceAgentStatus string
 
 // InstanceCreateInput defines model for InstanceCreateInput.
 type InstanceCreateInput struct {
-	Database string `json:"database"`
-	Host     string `json:"host"`
-	Name     string `json:"name"`
-	Password string `json:"password"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
+	// Database Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept.
+	Database string `json:"database,omitempty"`
+
+	// Engine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards.
+	Engine   *InstanceEngine `json:"engine,omitempty"`
+	Host     string          `json:"host"`
+	Name     string          `json:"name"`
+	Password string          `json:"password"`
+	Port     int             `json:"port"`
+	Username string          `json:"username"`
 }
 
 // InstanceCreated defines model for InstanceCreated.
@@ -955,6 +969,9 @@ type InstanceCredentialUpdated struct {
 	Username string `json:"username"`
 }
 
+// InstanceEngine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards.
+type InstanceEngine string
+
 // InstanceHealth defines model for InstanceHealth.
 type InstanceHealth struct {
 	Attribution *HealthAttribution `json:"attribution,omitempty"`
@@ -965,7 +982,8 @@ type InstanceHealth struct {
 
 // InstanceMetadataInput defines model for InstanceMetadataInput.
 type InstanceMetadataInput struct {
-	Database string `json:"database"`
+	// Database Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept.
+	Database string `json:"database,omitempty"`
 	Host     string `json:"host"`
 	Name     string `json:"name"`
 	Port     int    `json:"port"`

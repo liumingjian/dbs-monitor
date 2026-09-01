@@ -333,6 +333,7 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 		response = append(response, toAPIInstance(
 			row.ID,
 			row.Name,
+			row.Engine,
 			row.Host,
 			row.Port,
 			row.DatabaseName,
@@ -350,10 +351,19 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
+	engine := instance.EnginePostgreSQL
+	if request.Body.Engine != nil {
+		engine = instance.Engine(*request.Body.Engine)
+	}
+	if !engine.Valid() {
+		return api.CreateInstance400JSONResponse(errorBody(api.VALIDATIONFAILED, "不支持的数据库引擎")), nil
+	}
+	// bootstrap database 只是建连接用的库名，留空就按引擎取默认库；它不限定被监控的范围。
+	bootstrapDatabase := instance.ResolveBootstrapDatabase(engine, request.Body.Database)
 	if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
 		host:     request.Body.Host,
 		port:     request.Body.Port,
-		database: request.Body.Database,
+		database: bootstrapDatabase,
 		username: request.Body.Username,
 		password: request.Body.Password,
 	}); err != nil {
@@ -370,9 +380,10 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	row, err := instance.New(handler.platform).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID:                 pgtype.UUID{Bytes: id, Valid: true},
 		Name:               request.Body.Name,
+		Engine:             string(engine),
 		Host:               request.Body.Host,
 		Port:               int32(request.Body.Port),
-		DatabaseName:       request.Body.Database,
+		DatabaseName:       instance.BootstrapDatabaseColumn(bootstrapDatabase),
 		Username:           request.Body.Username,
 		PasswordCiphertext: ciphertext,
 		PasswordKeyVersion: keyVersion,
@@ -385,6 +396,7 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		Instance: toAPIInstance(
 			row.ID,
 			row.Name,
+			row.Engine,
 			row.Host,
 			row.Port,
 			row.DatabaseName,
@@ -426,6 +438,7 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	return api.GetInstance200JSONResponse(toAPIInstance(
 		row.ID,
 		row.Name,
+		row.Engine,
 		row.Host,
 		row.Port,
 		row.DatabaseName,
@@ -449,9 +462,13 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		if err != nil {
 			return err
 		}
+		bootstrapDatabase := instance.ResolveBootstrapDatabase(
+			instance.Engine(storedInstance.Engine),
+			request.Body.Database,
+		)
 		connectionTargetChanged := storedInstance.Host != request.Body.Host ||
 			storedInstance.Port != int32(request.Body.Port) ||
-			storedInstance.DatabaseName != request.Body.Database
+			storedInstance.DatabaseName.String != bootstrapDatabase
 		if connectionTargetChanged {
 			password, err := handler.keyring.DecryptPassword(
 				request.Id,
@@ -464,7 +481,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 			if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
 				host:     request.Body.Host,
 				port:     request.Body.Port,
-				database: request.Body.Database,
+				database: bootstrapDatabase,
 				username: storedInstance.Username,
 				password: password,
 			}); err != nil {
@@ -476,7 +493,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 			Name:         request.Body.Name,
 			Host:         request.Body.Host,
 			Port:         int32(request.Body.Port),
-			DatabaseName: request.Body.Database,
+			DatabaseName: instance.BootstrapDatabaseColumn(bootstrapDatabase),
 		})
 		return err
 	})
@@ -504,7 +521,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		return nil, err
 	}
 	return api.UpdateInstance200JSONResponse(toAPIInstance(
-		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion,
+		row.ID, row.Name, row.Engine, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion,
 		row.AgentMetricsEnabled,
 		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 		projection,
@@ -529,7 +546,7 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
 			host:     storedInstance.Host,
 			port:     int(storedInstance.Port),
-			database: storedInstance.DatabaseName,
+			database: storedInstance.DatabaseName.String,
 			username: request.Body.Username,
 			password: request.Body.Password,
 		}); err != nil {

@@ -83,7 +83,8 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if _, err := instanceQueries.CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "pause target",
 		Host: env("PGHOST", "localhost"), Port: int32(envInt("PGPORT", 55432)),
-		DatabaseName: env("PGDATABASE", "dbs_monitor"), Username: env("PGUSER", "dbs_monitor"),
+		Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn(env("PGDATABASE", "dbs_monitor")), Username: env("PGUSER", "dbs_monitor"),
 		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create target instance: %v", err)

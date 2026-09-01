@@ -724,7 +724,8 @@ func targetConnectionConfig(target instance.ListCollectionTargetsRow, password s
 	}
 	config.Host = target.Host
 	config.Port = uint16(target.Port)
-	config.Database = target.DatabaseName
+	// bootstrap database：建连接落在这个库上，但采集的范围是整条连接，不止这个库。
+	config.Database = target.DatabaseName.String
 	config.User = target.Username
 	config.Password = password
 	config.RuntimeParams["application_name"] = "dbs-monitor"
