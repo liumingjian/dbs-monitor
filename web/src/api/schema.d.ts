@@ -1826,6 +1826,8 @@ export interface components {
         QueryStatisticsEntry: {
             /** @description Native PostgreSQL query identifier represented as a string to preserve int64 precision. */
             queryid: string;
+            /** @description Normalised statement text for this identifier, deduplicated per (instance, queryid). Literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here. Absent when no text has been captured yet for that identifier — absent is not the same as empty. */
+            query_text?: string;
             /** Format: int64 */
             database_oid: number;
             /** Format: int64 */

@@ -214,13 +214,19 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
     <WorkbenchHeader id={id} instanceName={instanceQuery.data?.name} activeKey="monitoring" search={search} />
     <MonitoringViewTabs id={id} search={search} />
 
+    {/*
+      * 控制条是**一组**而不是两排。时间范围、粒度、列数、光标联动、按库展开回答的是同一个
+      * 问题——「这一屏图按什么口径画」——把它们拆成上下两块，读者要在两处之间来回找。
+      * 一行放不下时由 flex 自己折行（`monitoring-page__control-row` 是 `flex-wrap: wrap`），
+      * 折行的位置跟着可用宽度走，而不是被写死在结构里。
+      */}
     <section id="monitoring-controls" className="monitoring-page__controls" aria-label="标准监控控制">
-      <TimeRangePicker
-        from={search.from}
-        to={search.to}
-        onChange={(range) => updateSearch(range)}
-      />
       <div className="monitoring-page__control-row">
+        <TimeRangePicker
+          from={search.from}
+          to={search.to}
+          onChange={(range) => updateSearch(range)}
+        />
         <Dropdown<StepOption>
           id="metric-step"
           className="monitoring-page__step"
@@ -446,6 +452,7 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
     </NotificationBar>
 
     <section id="monitoring-controls" className="monitoring-page__controls" aria-label="增强监控控制">
+      {/* 与标准监控同一个取舍：指标集合、时间窗口、聚合方式与布局是同一组口径，不分两排。 */}
       <div className="monitoring-page__control-row">
         <MultiSelect<MetricOption>
           id="enhanced-metrics"
@@ -477,8 +484,6 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
             {enhancedWindowOptions.map((option) => <Switch key={option.minutes} name={String(option.minutes)} text={option.label} />)}
           </ContentSwitcher>
         </div>
-      </div>
-      <div className="monitoring-page__control-row">
         <div className="monitoring-page__field">
           <span className="cds--label">聚合方式</span>
           <ContentSwitcher

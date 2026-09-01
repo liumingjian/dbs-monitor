@@ -619,10 +619,34 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if len(queryStats.Items) == 0 {
 		t.Fatal("query statistics snapshot has no entries")
 	}
-	for _, forbidden := range []string{"query", "sql", "query_text", "sql_text"} {
+	// 带真实字面量的原始语句一个字段都不许有；归一化文本（`query_text`，与
+	// `/api/v1/top-sql` 同一张 `query_statement_text` 表）则是刻意给出的 ——
+	// 少了它，工作台的排行又只剩一个没人认得的 queryid。理由与守卫的另一半见
+	// internal/api/query_statistics_test.go。
+	for _, forbidden := range []string{"query", "sql", "sql_text"} {
 		if _, exists := queryStats.Items[0][forbidden]; exists {
-			t.Fatalf("query statistics entry exposes %q", forbidden)
+			t.Fatalf("query statistics entry exposes raw SQL text field %q", forbidden)
 		}
+	}
+	// 归一化文本要真的接得上：它与排行分表存放（按 (实例, queryid) 去重），
+	// 少了那次 LEFT JOIN，接口照样 200，页面上却又只剩 queryid。
+	normalisedTexts := 0
+	for _, item := range queryStats.Items {
+		raw, exists := item["query_text"]
+		if !exists {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			t.Fatalf("decode query_text: %v", err)
+		}
+		if text == "" {
+			t.Fatal("query statistics entry carries an empty query_text; absent and empty must stay distinguishable")
+		}
+		normalisedTexts++
+	}
+	if normalisedTexts == 0 {
+		t.Fatal("no query statistics entry carries query_text; the normalised text join is not wired up")
 	}
 	assertMetricSeriesHasPoints(t, client, seriesURL)
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.prepared_xacts.count", 1))

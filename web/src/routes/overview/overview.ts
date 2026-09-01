@@ -4,7 +4,7 @@ import type { StatusTone } from '../../primitives/StatusBadge'
 import type { HealthStatusValue, InstanceListSearch } from '../../domain/instanceListSearch'
 import { INSTANCE_HEALTH_STATUSES, defaultInstanceListSearch, withInstanceFilters } from '../../domain/instanceListSearch'
 import type { TopSqlEntry } from '../../domain/topSql'
-import { elapsedLabel, statementLabel, topSqlRowKey } from '../../domain/topSql'
+import { elapsedLabel, statementSummary, topSqlRowKey } from '../../domain/topSql'
 
 export type FleetOverview = components['schemas']['FleetOverview']
 export type FleetHealthCounts = components['schemas']['FleetHealthCounts']
@@ -125,7 +125,7 @@ export function topSqlSummaries(entries: TopSqlEntry[]): TopSqlSummary[] {
   const highest = entries.reduce((most, entry) => Math.max(most, entry.total_exec_time_ms), 0)
   return entries.map((entry) => ({
     key: topSqlRowKey(entry),
-    statement: statementLabel(entry),
+    statement: statementSummary(entry),
     elapsed: elapsedLabel(entry.total_exec_time_ms),
     caption: `${entry.instance_name} · ${entry.calls} 次调用`,
     ratio: highest === 0 ? 0 : entry.total_exec_time_ms / highest,

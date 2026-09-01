@@ -9,6 +9,14 @@ export type SessionSearch = {
   metric?: MetricID
   sampled_at?: string
   filter?: SessionFilter
+  /**
+   * 查询统计排行里被打开详情的那条语句的 queryid。详情进地址栏而不是组件状态：
+   * 一条打开着 SQL 详情的链接可以直接发给同事，与监控页的「指标详情」是同一个约定。
+   *
+   * 认不出来就当没打开（不校验成错）：它只决定要不要弹一层详情，为一个坏参数把整页
+   * 会话数据也扣下来，读者失去的比得到的多。
+   */
+  queryid?: string
 }
 
 export function parseSessionSearch(search: Record<string, unknown>): SessionSearch | { error: string } {
@@ -26,6 +34,7 @@ export function parseSessionSearch(search: Record<string, unknown>): SessionSear
   if (timeRange.metric !== undefined) result.metric = timeRange.metric
   if (search.sampled_at !== undefined) result.sampled_at = search.sampled_at
   if (search.filter !== undefined) result.filter = search.filter
+  if (typeof search.queryid === 'string' && search.queryid !== '') result.queryid = search.queryid
   return result
 }
 
@@ -34,6 +43,7 @@ export function serializeSessionSearch(search: SessionSearch): Record<string, st
   if (search.metric !== undefined) result.metric = search.metric
   if (search.sampled_at !== undefined) result.sampled_at = search.sampled_at
   if (search.filter !== undefined) result.filter = search.filter
+  if (search.queryid !== undefined) result.queryid = search.queryid
   return result
 }
 

@@ -63,6 +63,7 @@ export function withSessionTab(search: SessionSearch | { error: string }, tab: S
   if (search.metric !== undefined) result.metric = search.metric
   if (search.sampled_at !== undefined) result.sampled_at = search.sampled_at
   if (search.filter !== undefined) result.filter = search.filter
+  if (search.queryid !== undefined) result.queryid = search.queryid
   return result
 }
 

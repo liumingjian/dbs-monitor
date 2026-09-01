@@ -305,11 +305,17 @@ SELECT EXISTS (
 );
 
 -- name: ListQueryStatisticsSnapshotEntries :many
-SELECT queryid, database_oid, user_oid, calls, total_exec_time_ms
-FROM query_statistics_snapshot_entry
-WHERE instance_id = sqlc.arg(instance_id)
-  AND sampled_at = sqlc.arg(sampled_at)
-ORDER BY total_exec_time_ms DESC, queryid, database_oid, user_oid;
+-- 文本走 LEFT JOIN：还没采到文本的条目照样上榜，接口回一个缺文本的行而不是把它藏起来
+-- （与 ListFleetTopSql 同一个取舍）。文本按 (实例, queryid) 存一份，所以同一条语句在
+-- 多个库 / 用户下的几行拿到的是同一段文本，不会因为连接而放大存储读取。
+SELECT entry.queryid, entry.database_oid, entry.user_oid, entry.calls, entry.total_exec_time_ms,
+       statement.query_text
+FROM query_statistics_snapshot_entry entry
+LEFT JOIN query_statement_text statement
+    ON statement.instance_id = entry.instance_id AND statement.queryid = entry.queryid
+WHERE entry.instance_id = sqlc.arg(instance_id)
+  AND entry.sampled_at = sqlc.arg(sampled_at)
+ORDER BY entry.total_exec_time_ms DESC, entry.queryid, entry.database_oid, entry.user_oid;
 
 -- name: ListFleetTopSql :many
 -- 跨实例 Top SQL：每台实例只看它最近一次快照，同一条语句在多个库/用户下的行合并成一行。

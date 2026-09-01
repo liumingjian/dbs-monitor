@@ -55,7 +55,9 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 
 ### `domain/` 仍是封闭清单
 
-`AlertStatus` / `CollectionPausedTag` / `Freshness` / `HealthStatus` / `MetricChart` / `SuppressionTags` / `TimeRangePicker` / `UnavailabilityBlock`。
+`AlertStatus` / `CollectionPausedTag` / `Freshness` / `HealthStatus` / `MetricChart` / `SqlStatement` / `SuppressionTags` / `TimeRangePicker` / `UnavailabilityBlock`。
+（`SqlStatement`：一条 SQL 的全文块——折行缩进 + 按词类着色 + 复制，缺文本时说出「还没采到」。
+SQL 洞察与实例工作台的查询统计排行两处的详情共用；两处显示同一条语句，读法只能有一套。）
 清单只增不改语义：新增项须带业务含义，且在本文件登记。通用面板、表格外壳、指标条不得进入。
 清单管的是组件（`.tsx`）。`domain/` 下的非组件模块（`.ts`）不在清单里，也不受它约束，
 但**要在这里登记**（判据同样是「多个页面共用，且带业务含义」）：
@@ -65,8 +67,10 @@ instanceProjection.ts（实例行的读法：告警归因、采集新鲜度与 A
 使用率档位、从批量趋势响应里按语义位取序列——实例列表、实例总览、机群总览三处共用）、
 instanceListSearch.ts（实例列表的地址栏契约：筛选、排序、分页的取值集合与解析，
 以及交给接口的 query——实例列表自己用，机群总览的每个可点数字下钻到它）、
-topSql.ts（Top SQL 一行的读法：归一化 SQL 文本、总耗时的量级换算、行的身份——
-SQL 洞察页与机群总览第五块共用）。
+topSql.ts（Top SQL 一行的读法：归一化 SQL 文本的摘要与全文、总耗时的量级换算、行的身份——
+SQL 洞察页、机群总览第五块与实例工作台的查询统计排行三处共用）、
+sqlText.ts（SQL 文本的三种读法：列表摘要、换行缩进的格式化、着色用的词法切分——
+`SqlStatement` 与 `topSql.ts` 用它，不引第三方格式化 / 高亮库，理由写在文件顶部）。
 
 **跨页面目录横向 import 是这条规则的另一面**：`routes/<甲>/` 不去 `routes/<乙>/` 里拿件。
 两页都要的东西按上面的判据上浮到 `domain/`；只是「点这一行去哪儿」这类去处，留在出发的

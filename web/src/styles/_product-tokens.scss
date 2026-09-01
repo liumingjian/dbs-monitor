@@ -51,6 +51,16 @@
   --dbs-viz-6: #{palette.$viz-6};
   --dbs-viz-grid: #{map.get($theme, 'border-subtle-00')};
   --dbs-viz-axis: #{map.get($theme, 'text-secondary')};
+
+  // SQL 语法着色。DESIGN.md 还没有语法色板，所以这里**不新增字面量**，只给上面那六色
+  // 起一组语法语义名：它们本来就是「白底上互相分得开、且不与 status-critical 撞车」的
+  // 分类色，而语法着色要的正是这个。刻意不用蓝：产品面里蓝色只表示可交互。
+  // 将来 DESIGN.md 真给出语法色板时，改这五行即可，组件侧一个字不动。
+  --dbs-syntax-keyword: var(--dbs-viz-2);
+  --dbs-syntax-string: var(--dbs-viz-5);
+  --dbs-syntax-number: var(--dbs-viz-3);
+  --dbs-syntax-parameter: var(--dbs-viz-4);
+  --dbs-syntax-comment: #{map.get($theme, 'text-secondary')};
 }
 
 /// 与主题无关的结构与动效令牌（DESIGN.md front matter 的 `structure:` / `motion:` 段）。

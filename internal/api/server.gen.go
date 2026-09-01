@@ -1452,6 +1452,9 @@ type QueryStatisticsEntry struct {
 	Calls       int64 `json:"calls"`
 	DatabaseOid int64 `json:"database_oid"`
 
+	// QueryText Normalised statement text for this identifier, deduplicated per (instance, queryid). Literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here. Absent when no text has been captured yet for that identifier — absent is not the same as empty.
+	QueryText *string `json:"query_text,omitempty"`
+
 	// Queryid Native PostgreSQL query identifier represented as a string to preserve int64 precision.
 	Queryid         string  `json:"queryid"`
 	TotalExecTimeMs float64 `json:"total_exec_time_ms"`

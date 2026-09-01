@@ -131,3 +131,15 @@
     transition: none;
   }
 }
+
+/* SQL 摘要格：等宽字体。占位符 $1、括号与逗号在比例字体下会挤成一团；
+   截断成一行由 TruncatedText 负责，这里只管字形（与 SQL 洞察页同一条规则）。 */
+.sessions-statement {
+  font-family: var(--dbs-font-mono);
+}
+
+.sessions-sql-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-05);
+}

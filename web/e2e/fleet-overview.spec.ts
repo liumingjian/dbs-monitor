@@ -79,9 +79,10 @@ test('侧栏的 SQL 洞察进得去，显示的是语句而不是 queryid', asyn
 
   await expect(page).toHaveURL((url) => url.pathname === '/sql-insight')
   await expect(page.getByRole('heading', { name: 'SQL 洞察' })).toBeVisible()
-  // 列名就是这一页的承诺：SQL 文本、所属实例、调用次数、总耗时。
+  // 列名就是这一页的承诺：SQL 摘要、所属实例、调用次数、总耗时。
+  // 第一列放的是压成一行的摘要，全文在点开的详情里——40px 的行装不下一条完整语句。
   const table = page.getByRole('table', { name: '跨实例 Top SQL' })
-  for (const column of ['SQL 文本', '所属实例', '调用次数', '总耗时']) {
+  for (const column of ['SQL 摘要', '所属实例', '调用次数', '总耗时']) {
     await expect(table.getByRole('columnheader', { name: column })).toBeVisible()
   }
 })

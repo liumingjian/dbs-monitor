@@ -4081,6 +4081,9 @@ components:
         queryid:
           type: string
           description: Native PostgreSQL query identifier represented as a string to preserve int64 precision.
+        query_text:
+          type: string
+          description: Normalised statement text for this identifier, deduplicated per (instance, queryid). Literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here. Absent when no text has been captured yet for that identifier — absent is not the same as empty.
         database_oid:
           type: integer
           format: int64

@@ -73,13 +73,20 @@ func (handler *Handler) GetQueryStatisticsSnapshot(
 	}
 	items := make([]api.QueryStatisticsEntry, 0, len(entries))
 	for _, entry := range entries {
-		items = append(items, api.QueryStatisticsEntry{
+		item := api.QueryStatisticsEntry{
 			Queryid:         strconv.FormatInt(entry.Queryid, 10),
 			DatabaseOid:     int64(entry.DatabaseOid.Uint32),
 			UserOid:         int64(entry.UserOid.Uint32),
 			Calls:           entry.Calls,
 			TotalExecTimeMs: entry.TotalExecTimeMs,
-		})
+		}
+		// 缺文本与空文本是两件事：字段缺席说的是「这条语句的文本还没采到」，
+		// 前端据此显示 queryid 并说明原因，而不是画一格空白。
+		if entry.QueryText.Valid {
+			text := entry.QueryText.String
+			item.QueryText = &text
+		}
+		items = append(items, item)
 	}
 	sampledAtTime := sampledAt.Time.UTC()
 	return api.GetQueryStatisticsSnapshot200JSONResponse{
