@@ -25,6 +25,14 @@ InstanceAgentStatus:
   type: string
   enum: [offline, online, not_installed, permission_denied, error]
   x-enum-varnames: [InstanceAgentOffline, InstanceAgentOnline, InstanceAgentNotInstalled, InstanceAgentPermissionDenied, InstanceAgentError]
+InstanceEngine:
+  type: string
+  description: >-
+    Database product a monitored instance runs. Decides which collection tasks apply and
+    which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and
+    fixed afterwards.
+  enum: [POSTGRESQL]
+  x-enum-varnames: [InstanceEnginePostgreSQL]
 CapabilityStatus:
   type: string
   enum: [PRESENT, MISSING, NOT_APPLICABLE, UNKNOWN]

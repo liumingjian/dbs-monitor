@@ -145,6 +145,9 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 			api.InstanceAgentOffline: "", api.InstanceAgentOnline: "", api.InstanceAgentNotInstalled: "",
 			api.InstanceAgentPermissionDenied: "", api.InstanceAgentError: "",
 		})},
+		{"InstanceEngine", mapKeys(map[api.InstanceEngine]string{
+			api.InstanceEnginePostgreSQL: "",
+		})},
 		{"CapabilityStatus", mapKeys(map[api.CapabilityStatus]string{
 			api.PRESENT: "", api.MISSING: "", api.NOTAPPLICABLE: "", api.UNKNOWN: "",
 		})},

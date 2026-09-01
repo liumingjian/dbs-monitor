@@ -15,6 +15,7 @@ const instance = {
   name: '生产库 primary',
   host: '10.20.1.15',
   port: 5432,
+  engine: 'POSTGRESQL',
   database: 'orders',
   username: 'monitor',
   agent_metrics_enabled: true,

@@ -12,16 +12,23 @@ CREATE TABLE user_session (
     expires_at timestamptz NOT NULL
 );
 
+-- 一个实例是一个数据库服务端点、一条连接，可以包含多个库；库只是指标的一个维度。
 CREATE TABLE instance (
     id uuid PRIMARY KEY,
     name text NOT NULL,
+    -- 实例运行的数据库产品。决定哪些采集任务适用、哪些指标存在，接入之后不可改。
+    engine text NOT NULL DEFAULT 'POSTGRESQL' CHECK (engine IN ('POSTGRESQL')),
     host text NOT NULL,
     port integer NOT NULL CHECK (port BETWEEN 1 AND 65535),
-    database_name text NOT NULL,
+    -- bootstrap database：建立连接用的库名，不限定被监控的范围。
+    -- PostgreSQL 必须连到某个库（留空时按 'postgres' 落库）；MySQL 没有这个概念，留空。
+    database_name text,
     username text NOT NULL,
     password text NOT NULL,
     agent_token_hash bytea,
-    created_at timestamptz NOT NULL DEFAULT now()
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT instance_bootstrap_database_required
+        CHECK (engine <> 'POSTGRESQL' OR database_name IS NOT NULL)
 );
 
 CREATE TABLE instance_collect_state (

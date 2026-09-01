@@ -1,21 +1,35 @@
 InstanceCreateInput:
   type: object
-  required: [name, host, port, database, username, password]
+  required: [name, host, port, username, password]
   properties:
     name: { type: string, minLength: 1 }
+    engine:
+      $ref: ../enums.yaml#/InstanceEngine
     host: { type: string, minLength: 1 }
     port: { type: integer, minimum: 1, maximum: 65535 }
-    database: { type: string, minLength: 1 }
+    database:
+      type: string
+      description: >-
+        Bootstrap database: the database used to open the connection. It does not delimit
+        what is monitored. Omit it to let the server pick the engine default (PostgreSQL:
+        postgres); MySQL has no such concept.
+      x-go-type-skip-optional-pointer: true
     username: { type: string, minLength: 1 }
     password: { type: string, minLength: 1 }
 InstanceMetadataInput:
   type: object
-  required: [name, host, port, database]
+  required: [name, host, port]
   properties:
     name: { type: string, minLength: 1 }
     host: { type: string, minLength: 1 }
     port: { type: integer, minimum: 1, maximum: 65535 }
-    database: { type: string, minLength: 1 }
+    database:
+      type: string
+      description: >-
+        Bootstrap database: the database used to open the connection. It does not delimit
+        what is monitored. Omit it to let the server pick the engine default (PostgreSQL:
+        postgres); MySQL has no such concept.
+      x-go-type-skip-optional-pointer: true
 InstanceCredentialInput:
   type: object
   required: [username, password]
@@ -69,13 +83,21 @@ InstanceHealth:
       $ref: '#/HealthFlags'
 Instance:
   type: object
-  required: [id, name, host, port, database, username, alert_status, health, agent_status, collection_pause, agent_metrics_enabled]
+  required: [id, name, engine, host, port, username, alert_status, health, agent_status, collection_pause, agent_metrics_enabled]
   properties:
     id: { type: string, format: uuid }
     name: { type: string }
+    engine:
+      $ref: ../enums.yaml#/InstanceEngine
     host: { type: string }
     port: { type: integer }
-    database: { type: string }
+    database:
+      type: string
+      description: >-
+        Bootstrap database: the database used to open the connection. It does not delimit
+        what is monitored. Omit it to let the server pick the engine default (PostgreSQL:
+        postgres); MySQL has no such concept.
+      x-go-type-skip-optional-pointer: true
     username: { type: string }
     agent_version:
       type: string

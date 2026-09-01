@@ -57,6 +57,9 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 
 `AlertStatus` / `CollectionPausedTag` / `Freshness` / `HealthStatus` / `MetricChart` / `SuppressionTags` / `TimeRangePicker` / `UnavailabilityBlock`。
 清单只增不改语义：新增项须带业务含义，且在本文件登记。通用面板、表格外壳、指标条不得进入。
+清单管的是组件（`.tsx`）。`domain/` 下的非组件模块（`.ts`）不在清单里，也不受它约束：
+registry.ts（清单解析）、instanceEngine.ts（引擎的展示名、接入表单的引擎清单、
+bootstrap 数据库的标签与说明——三个页面共用，页面私有件放不下）。
 
 ### `primitives/`
 

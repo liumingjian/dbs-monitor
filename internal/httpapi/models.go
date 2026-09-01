@@ -184,9 +184,10 @@ type CollectionTaskConfig struct {
 type Instance struct {
 	ID                     pgtype.UUID
 	Name                   string
+	Engine                 string
 	Host                   string
 	Port                   int32
-	DatabaseName           string
+	DatabaseName           pgtype.Text
 	Username               string
 	AgentTokenHash         []byte
 	CreatedAt              pgtype.Timestamptz

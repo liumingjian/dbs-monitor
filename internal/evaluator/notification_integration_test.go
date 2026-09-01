@@ -47,7 +47,8 @@ func TestNotificationCommitOrderingRecoveryAndDurableRetries(t *testing.T) {
 	}
 	if _, err := instance.New(platform).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "orders-primary",
-		Host: "127.0.0.1", Port: 5432, DatabaseName: "postgres", Username: "monitor",
+		Host: "127.0.0.1", Port: 5432, Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn("postgres"), Username: "monitor",
 		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create notification test instance: %v", err)
@@ -210,7 +211,8 @@ func TestNotificationRepeatAcknowledgementAndNewLifecycle(t *testing.T) {
 	}
 	if _, err := instance.New(platform).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "repeat-primary",
-		Host: "127.0.0.1", Port: 5432, DatabaseName: "postgres", Username: "monitor",
+		Host: "127.0.0.1", Port: 5432, Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn("postgres"), Username: "monitor",
 		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create repeat test instance: %v", err)
@@ -330,7 +332,8 @@ func TestMaintenanceWindowSuppressesWithoutStoppingEvaluationOrReplaying(t *test
 	}
 	if _, err := instance.New(platform).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "maintenance-primary",
-		Host: "127.0.0.1", Port: 5432, DatabaseName: "postgres", Username: "monitor",
+		Host: "127.0.0.1", Port: 5432, Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn("postgres"), Username: "monitor",
 		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatal(err)

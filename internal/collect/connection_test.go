@@ -9,7 +9,7 @@ import (
 func TestTargetConnectionConfigSetsPasswordDirectly(t *testing.T) {
 	target := instance.ListCollectionTargetsRow{
 		Host: "2001:db8::1", Port: 5432,
-		DatabaseName: "db name", Username: "user name",
+		DatabaseName: instance.BootstrapDatabaseColumn("db name"), Username: "user name",
 	}
 	config, err := targetConnectionConfig(target, `space ' quote \\ slash`)
 	if err != nil {

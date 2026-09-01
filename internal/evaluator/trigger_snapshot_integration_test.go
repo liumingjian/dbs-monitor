@@ -71,7 +71,8 @@ func TestAcceptance_AC_03_S2_TriggerSnapshotCapturesRealBlockingChainOnce(t *tes
 	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "snapshot-target",
 		Host: snapshotEnv("PGHOST", "localhost"), Port: int32(snapshotEnvInt("PGPORT", 55432)),
-		DatabaseName: databaseName, Username: snapshotEnv("PGUSER", "dbs_monitor"),
+		Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn(databaseName), Username: snapshotEnv("PGUSER", "dbs_monitor"),
 		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create target instance: %v", err)

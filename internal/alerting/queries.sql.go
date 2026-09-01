@@ -735,7 +735,7 @@ type GetEvaluationTargetRow struct {
 	InstanceID               pgtype.UUID
 	Host                     string
 	Port                     int32
-	DatabaseName             string
+	DatabaseName             pgtype.Text
 	Username                 string
 	PasswordCiphertext       []byte
 	PasswordKeyVersion       int32

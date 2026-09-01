@@ -10,6 +10,7 @@ function mockInstance(index: number) {
     name: `gate-instance-${sequence}`,
     host: `10.0.0.${index + 1}`,
     port: 5432,
+    engine: 'POSTGRESQL',
     database: 'postgres',
     username: 'monitor',
     agent_metrics_enabled: true,
@@ -131,7 +132,7 @@ test('new-instance modal validates in the browser and reports a failed connectio
   await page.getByLabel('名称').fill(unreachable)
   await page.getByLabel('主机').fill('127.0.0.1')
   await page.getByLabel('端口').fill('1')
-  await page.getByLabel('数据库').fill('postgres')
+  await page.getByLabel('Bootstrap 数据库').fill('postgres')
   await page.getByLabel('用户名').fill('monitor')
   await page.getByLabel('密码').fill('monitor')
   await expect(page.getByText('请输入实例名称')).toBeHidden()

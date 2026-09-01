@@ -4,6 +4,22 @@ This context names the domain facts shared by collection, alerting, and the oper
 
 ## Language
 
+**Monitored instance**:
+A database service endpoint watched as one unit: one connection to one server, which may hold many databases. Health, alerts, collection configuration, and Agent enrollment attach to the instance and to nothing smaller.
+_Avoid_: Monitored database, host
+
+**Engine**:
+The database product a monitored instance runs. It decides which collection tasks apply and which metrics exist for that instance. It is chosen at onboarding and does not change afterwards: changing it would mean a different instance whose history no longer holds.
+_Avoid_: Database type, driver, dialect
+
+**Bootstrap database**:
+The database named when opening the connection to a monitored instance. It does not delimit what is monitored: every database reachable through that connection belongs to the same instance. PostgreSQL needs one and defaults to `postgres`; an engine without the concept leaves it empty.
+_Avoid_: Monitored database, instance scope
+
+**Database**:
+A dimension a metric value can carry, not a monitored entity. A database has no health status, no alerts, and no collection configuration of its own; what a list or an overview shows is the instance-level value aggregated across the databases under one connection.
+_Avoid_: Sub-instance, monitored database
+
 **Collection task**:
 A declared unit of server-direct collection that produces one or more metrics for one monitored instance on its own schedule.
 _Avoid_: Metric job, collector query
@@ -41,5 +57,5 @@ An operator account that signs in to the control plane, carrying exactly one of 
 _Avoid_: Contact, member
 
 **Instance removal**:
-Deleting an instance's configuration and credentials immediately, closing all its unresolved alerts with an attributed reason, and letting its samples expire through retention. Re-onboarding the same database yields a new instance that inherits nothing.
+Deleting an instance's configuration and credentials immediately, closing all its unresolved alerts with an attributed reason, and letting its samples expire through retention. Re-onboarding the same endpoint yields a new instance that inherits nothing.
 _Avoid_: Archive instance, soft delete

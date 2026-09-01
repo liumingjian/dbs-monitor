@@ -12,6 +12,7 @@ function instance(name: string, status: Instance['health']['status'], counts = {
     name,
     host: 'localhost',
     port: 5432,
+    engine: 'POSTGRESQL',
     database: 'postgres',
     username: 'postgres',
     agent_metrics_enabled: false,

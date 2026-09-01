@@ -35,7 +35,8 @@ func TestMaintenanceWindowManagementLifecycle(t *testing.T) {
 		}
 		if _, err := instance.New(platform).CreateInstance(ctx, instance.CreateInstanceParams{
 			ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "maintenance-" + string(rune('a'+index)),
-			Host: "127.0.0.1", Port: 5432, DatabaseName: "postgres", Username: "monitor",
+			Host: "127.0.0.1", Port: 5432, Engine: string(instance.EnginePostgreSQL),
+			DatabaseName: instance.BootstrapDatabaseColumn("postgres"), Username: "monitor",
 			PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 		}); err != nil {
 			t.Fatalf("create maintenance instance: %v", err)

@@ -73,7 +73,8 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	}
 	_, err = instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgID, Name: "target", Host: env("PGHOST", "localhost"),
-		Port: int32(envInt("PGPORT", 55432)), DatabaseName: env("PGDATABASE", "dbs_monitor"),
+		Port: int32(envInt("PGPORT", 55432)), Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn(env("PGDATABASE", "dbs_monitor")),
 		Username: env("PGUSER", "dbs_monitor"), PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	})
 	if err != nil {
@@ -590,7 +591,9 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 		}
 		if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 			ID: pgtype.UUID{Bytes: id, Valid: true}, Name: host, Host: host, Port: 5432,
-			DatabaseName: "postgres", Username: "monitor", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+			Engine: string(instance.EnginePostgreSQL),
+			DatabaseName: instance.BootstrapDatabaseColumn("postgres"), Username: "monitor",
+			PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 		}); err != nil {
 			t.Fatalf("create %s instance: %v", host, err)
 		}
@@ -693,7 +696,8 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	}
 	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgID, Name: "capability-target", Host: env("PGHOST", "localhost"),
-		Port: int32(envInt("PGPORT", 55432)), DatabaseName: databaseName,
+		Port: int32(envInt("PGPORT", 55432)), Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn(databaseName),
 		Username: roleName, PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create capability target: %v", err)

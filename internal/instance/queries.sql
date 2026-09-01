@@ -4,21 +4,21 @@ WITH created_identity AS (
     VALUES ($1, $2)
     RETURNING id
 ), created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, created_by)
-    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8, $9
+    INSERT INTO instance (id, name, engine, host, port, database_name, username, password_ciphertext, password_key_version, created_by)
+    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
     FROM created_identity
-    RETURNING id, name, host, port, database_name, username, agent_version, created_at
+    RETURNING id, name, engine, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
     SELECT id FROM created
     RETURNING instance_id
 )
-SELECT created.id, created.name, created.host, created.port, created.database_name, created.username, created.agent_version, created.created_at
+SELECT created.id, created.name, created.engine, created.host, created.port, created.database_name, created.username, created.agent_version, created.created_at
 FROM created
 JOIN configured ON configured.instance_id = created.id;
 
 -- name: ListInstances :many
-SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+SELECT instance.id, instance.name, instance.engine, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
        instance.agent_expected,
        config.agent_metrics_enabled,
@@ -39,7 +39,7 @@ LEFT JOIN instance_capability_snapshot capability ON capability.instance_id = in
 ORDER BY name, id;
 
 -- name: GetInstance :one
-SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+SELECT instance.id, instance.name, instance.engine, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
        instance.agent_expected,
        config.agent_metrics_enabled,
@@ -60,7 +60,7 @@ LEFT JOIN instance_capability_snapshot capability ON capability.instance_id = in
 WHERE instance.id = $1;
 
 -- name: GetInstanceForUpdate :one
-SELECT host, port, database_name, username, password_ciphertext, password_key_version
+SELECT engine, host, port, database_name, username, password_ciphertext, password_key_version
 FROM instance
 WHERE id = $1
 FOR UPDATE;
@@ -84,12 +84,12 @@ SET name = $2,
     port = $4,
     database_name = $5,
     credential_version = credential_version + CASE
-        WHEN host <> $3 OR port <> $4 OR database_name <> $5 THEN 1
+        WHEN host <> $3 OR port <> $4 OR database_name IS DISTINCT FROM $5 THEN 1
         ELSE 0
     END
 FROM updated_identity
 WHERE instance.id = updated_identity.id
-RETURNING instance.id, instance.name, instance.host, instance.port, instance.database_name,
+RETURNING instance.id, instance.name, instance.engine, instance.host, instance.port, instance.database_name,
           instance.username, instance.agent_version;
 
 -- name: GetAgentRegistration :one

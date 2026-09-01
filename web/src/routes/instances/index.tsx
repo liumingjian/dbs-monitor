@@ -1,4 +1,4 @@
-import { Button, Checkbox, ContentSwitcher, Switch, TextInput } from '@carbon/react'
+import { Button, Checkbox, ContentSwitcher, Select, SelectItem, Switch, TextInput } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import type { ReactNode } from 'react'
@@ -11,6 +11,12 @@ import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { Freshness } from '../../domain/Freshness'
 import { HEALTH_STATUSES, HealthStatus, healthLabel } from '../../domain/HealthStatus'
+import {
+  bootstrapDatabaseHelperText,
+  bootstrapDatabaseLabel,
+  instanceEngineLabel,
+  instanceEngines,
+} from '../../domain/instanceEngine'
 import { SuppressionTags } from '../../domain/SuppressionTags'
 import { zodResolver } from '../../forms/zodResolver'
 import type { DataGridColumn } from '../../primitives/DataGrid'
@@ -606,9 +612,12 @@ function InstanceTrend({ instanceID, instanceName }: { instanceID: string; insta
 /// schema 里不写 `transform` / `default` —— 表单值就是提交值，trim 放在提交处，看得见。
 const instanceCreateSchema = z.object({
   name: z.string().refine((value) => value.trim() !== '', '请输入实例名称'),
+  engine: z.enum(instanceEngines, { error: '请选择数据库引擎' }),
   host: z.string().refine((value) => value.trim() !== '', '请输入主机地址'),
   port: z.number({ error: '请输入端口' }).int('端口必须是整数').min(1, '端口范围 1–65535').max(65535, '端口范围 1–65535'),
-  database: z.string().refine((value) => value.trim() !== '', '请输入数据库名'),
+  // bootstrap database 只是建连接用的库名，不限定监控范围，所以它可以留空：
+  // 留空时由服务端按引擎补默认库（PostgreSQL 是 postgres）。
+  database: z.string(),
   username: z.string().refine((value) => value.trim() !== '', '请输入用户名'),
   password: z.string().min(1, '请输入密码'),
 }) satisfies z.ZodType<InstanceCreateInput>
@@ -620,6 +629,7 @@ type InstanceCreateValues = z.infer<typeof instanceCreateSchema>
 /// 永远显示不出来、也永远清不掉的错误。
 const instanceCreateFields = [
   'name',
+  'engine',
   'host',
   'port',
   'database',
@@ -628,11 +638,14 @@ const instanceCreateFields = [
 ] as const satisfies readonly FieldPath<InstanceCreateValues>[]
 
 function instanceCreateBody(values: InstanceCreateValues): InstanceCreateInput {
+  const database = values.database.trim()
   return {
     name: values.name.trim(),
+    engine: values.engine,
     host: values.host.trim(),
     port: values.port,
-    database: values.database.trim(),
+    // 留空就整个字段不发：默认库由服务端按引擎决定，前端不替它挑。
+    ...(database === '' ? {} : { database }),
     username: values.username.trim(),
     password: values.password,
   }
@@ -640,6 +653,7 @@ function instanceCreateBody(values: InstanceCreateValues): InstanceCreateInput {
 
 const emptyInstanceCreateValues: InstanceCreateValues = {
   name: '',
+  engine: 'POSTGRESQL',
   host: '',
   port: 5432,
   database: '',
@@ -708,6 +722,27 @@ function CreateInstanceModal({ open, onClose, onCreated }: {
             {...register('name')}
           />}
         </FormField>
+        <FormField
+          label="引擎"
+          required
+          helperText="实例运行的数据库产品，接入后不可更改。"
+          errorText={formState.errors.engine?.message}
+        >
+          {(field) => <Select
+            id={field.id}
+            labelText=""
+            noLabel
+            invalid={field.invalid}
+            aria-describedby={field.describedBy}
+            {...register('engine')}
+          >
+            {instanceEngines.map((engine) => <SelectItem
+              key={engine}
+              value={engine}
+              text={instanceEngineLabel(engine)}
+            />)}
+          </Select>}
+        </FormField>
         <FormField label="主机" required errorText={formState.errors.host?.message}>
           {(field) => <TextInput
             id={field.id}
@@ -740,11 +775,16 @@ function CreateInstanceModal({ open, onClose, onCreated }: {
             />}
           />}
         </FormField>
-        <FormField label="数据库" required errorText={formState.errors.database?.message}>
+        <FormField
+          label={bootstrapDatabaseLabel}
+          helperText={bootstrapDatabaseHelperText}
+          errorText={formState.errors.database?.message}
+        >
           {(field) => <TextInput
             id={field.id}
             labelText=""
             hideLabel
+            placeholder="postgres"
             invalid={field.invalid}
             aria-describedby={field.describedBy}
             {...register('database')}
