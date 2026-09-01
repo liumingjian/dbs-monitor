@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseInstanceListSearch } from '../instances/instanceListSearch'
+import { parseSearch, stringifySearch } from '../searchParams'
 import { CountTiles, StorageWatermarks } from './index'
 import { collectionCountTiles, healthCountTiles } from './overview'
 
@@ -37,6 +38,9 @@ async function renderInRouter(content: ReactNode) {
   const router = createRouter({
     routeTree: testRootRoute.addChildren([pageRoute, listRoute, detailRoute]),
     history: createMemoryHistory({ initialEntries: ['/'] }),
+    // 真实应用的编解码，否则这里量到的地址不是使用者会看到的那个。
+    parseSearch,
+    stringifySearch,
   })
   // 路由器先把当前地址加载完再渲染：`RouterProvider` 在加载完成前渲染的是空的，
   // 用例会看到一个没有任何链接的页面。
@@ -51,9 +55,9 @@ function destination(name: RegExp): URL {
 
 /// 一个可重复筛选参数在地址里的取值。
 ///
-/// 路由器把清单编码成 JSON（`?status=["CRITICAL"]`），它自己解析回来的也是清单 ——
-/// 断言解码之后的取值，而不是那串编码：编码方式是路由器的实现细节，
-/// 「地址里带着 CRITICAL 这个筛选」才是外部可观察的行为。
+/// 清单在地址里是重复键（`?status=CRITICAL&status=WARNING`）；旧链接里的 JSON 写法
+/// 也仍然认。断言的是解码之后的取值，「地址里带着 CRITICAL 这个筛选」才是
+/// 外部可观察的行为。
 function filterValues(url: URL, key: string): string[] {
   return url.searchParams.getAll(key).flatMap((raw) => {
     if (!raw.startsWith('[')) return [raw]

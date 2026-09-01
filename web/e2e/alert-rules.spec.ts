@@ -60,6 +60,8 @@ const template = {
   version: 1,
   name: 'CPU 使用率过高',
   metric_id: 'host.cpu.usage_percent',
+  engine: 'AGNOSTIC',
+  semantic_slot: null,
   aggregation: 'avg',
   operator: '>',
   threshold: 80,
@@ -83,7 +85,13 @@ test('creates alert rules and keeps built-in protections visible', async ({ page
   await page.route(/\/api\/v1\/instances(\?|$)/, (route) => route.fulfill({ json: { items: [instance], total: 1 } }))
   await page.route(`**/api/v1/instances/${instanceID}/collection/tasks`, (route) => route.fulfill({ json: [] }))
   await page.route(`**/api/v1/instances/${instanceID}/collection/capabilities`, (route) => route.fulfill({ json: [] }))
-  await page.route('**/api/v1/alert-rule-templates', (route) => route.fulfill({ json: [template] }))
+  // 模板按实例引擎筛（#222），所以这个请求带着 `?engine=...`，用正则匹配；
+  // 替身也照后端的语义答复：问 PostgreSQL 才给得到这条模板，
+  // 「页面把引擎问对了」因此和「模板显示出来了」是同一个断言。
+  await page.route(/\/api\/v1\/alert-rule-templates(\?|$)/, (route) => {
+    const engine = new URL(route.request().url()).searchParams.get('engine')
+    return route.fulfill({ json: engine === 'POSTGRESQL' ? [template] : [] })
+  })
   await page.route('**/api/v1/alert-rule-templates/*/alert-rules', (route) => {
     const fromTemplate = {
       ...builtinRule,

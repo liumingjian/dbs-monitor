@@ -1,6 +1,7 @@
 import { expect, test, type Locator } from '@playwright/test'
 
 import { EMPTY_STORAGE_STATE } from './auth'
+import { standardMonitoringGroups } from '../src/routes/instances.$id/standardMonitoring'
 
 test.use({ storageState: EMPTY_STORAGE_STATE })
 
@@ -80,10 +81,13 @@ test('[AC-01-S1] [AC-05-S1] [AC-05-F5] instance overview and standard monitoring
   await page.getByRole('tab', { name: '监控与报警' }).click()
 
   await expect(page.getByRole('tab', { name: '标准监控' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByTestId('metric-card')).toHaveCount(22)
-  await expect(page.getByRole('region', { name: '资源指标' }).getByTestId('metric-card')).toHaveCount(5)
-  await expect(page.getByRole('region', { name: '数据库指标' }).getByTestId('metric-card')).toHaveCount(12)
-  await expect(page.getByRole('region', { name: '复制指标' }).getByTestId('metric-card')).toHaveCount(5)
+  // 每一组都画满：数量取自指标目录本身，增删一张图不必回来改这个用例，
+  // 但「少画了一张」当场就会被抓住。
+  const chartCount = standardMonitoringGroups.reduce((total, group) => total + group.charts.length, 0)
+  await expect(page.getByTestId('metric-card')).toHaveCount(chartCount)
+  for (const group of standardMonitoringGroups) {
+    await expect(page.getByRole('region', { name: group.title }).getByTestId('metric-card')).toHaveCount(group.charts.length)
+  }
 
   const tpsCard = page.getByTestId('metric-card').filter({ has: page.getByText('TPS', { exact: true }) })
   const tpsChart = tpsCard.getByRole('figure', { name: 'TPS趋势' })
