@@ -20,7 +20,7 @@ curl --noproxy '*' -sf --cacert "$ca" -c "$cookie" \
   --data "{\"username\":\"admin\",\"password\":\"$admin_password\"}" >/dev/null
 
 instance_id=$(api "$base_url/api/v1/instances" \
-  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b)||[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
+  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b).items??[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
 if [ -z "$instance_id" ]; then echo "instance not found: $instance_name" >&2; exit 1; fi
 
 # POST registration issues the token once; a re-run lands on 409, so rotate instead.

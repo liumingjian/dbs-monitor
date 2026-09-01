@@ -109,7 +109,7 @@ curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -c "$cookie" \
   --data "{\"username\":\"admin\",\"password\":\"$admin_password\"}" >/dev/null
 
 existing=$(curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -b "$cookie" "$base_url/api/v1/instances" \
-  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b)||[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
+  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b).items??[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
 if [ -z "$existing" ]; then
   curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -b "$cookie" \
     -H 'Content-Type: application/json' -X POST "$base_url/api/v1/instances" \
