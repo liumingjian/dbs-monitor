@@ -77,6 +77,7 @@ var PageAuthorizations = []PageAuthorization{
 // PageWrites is the write-capability half of A10.
 var PageWrites = []PageWrite{
 	{PagePath: AuthenticatedShell, Method: "PUT", APIPath: "/api/v1/password", Allowed: allRoles},
+	{PagePath: AuthenticatedShell, Method: "POST", APIPath: "/api/v1/logout", Allowed: allRoles},
 	{PagePath: "/login", Method: "POST", APIPath: "/api/v1/login", Allowed: allRoles},
 	{PagePath: "/instances", Method: "POST", APIPath: "/api/v1/instances", Allowed: platformAdmin},
 
