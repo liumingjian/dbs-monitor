@@ -26,6 +26,8 @@ const (
 	MetricConnectionTotal             MetricID = "pg.connection.total"
 	MetricConnectionActive            MetricID = "pg.connection.active"
 	MetricConnectionIdleInTransaction MetricID = "pg.connection.idle_in_transaction"
+	MetricConnectionMax               MetricID = "pg.connection.max"
+	MetricConnectionSaturationPercent MetricID = "pg.connection.saturation_percent"
 	MetricTPS                         MetricID = "pg.tps"
 	MetricXactCommitPerS              MetricID = "pg.xact.commit_per_sec"
 	MetricXactRollbackPerS            MetricID = "pg.xact.rollback_per_sec"
@@ -44,6 +46,10 @@ const (
 	MetricReplicationReplayLagMS      MetricID = "pg.replication.replay_lag_ms"
 	MetricReplicationWALLagBytes      MetricID = "pg.replication.wal_lag_bytes"
 	MetricReplicationSlotRetainedWAL  MetricID = "pg.replication_slot.retained_wal_bytes"
+	MetricCacheHitRatio               MetricID = "pg.cache.hit_ratio"
+	MetricCacheBlockAccessPerS        MetricID = "pg.cache.block_access_per_sec"
+	MetricDatabaseSizeBytes           MetricID = "pg.database.size_bytes"
+	MetricDeadlockCount               MetricID = "pg.deadlock.count"
 )
 
 type MetricType string
@@ -107,7 +113,7 @@ var Metrics = []Metric{
 	{ID: MetricAgentStatus, DisplayName: "Agent 状态", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeState, Unit: "state", Dimensions: []string{"instance", "node"}, Calculation: CalculationStateMapping, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityYes, Producer: ProducerControlPlane},
 	{ID: MetricHostCPUUsagePercent, DisplayName: "CPU 使用率", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "percent", Dimensions: []string{"instance", "node"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerAgent},
 	{ID: MetricHostMemoryUsagePercent, DisplayName: "内存使用率", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "percent", Dimensions: []string{"instance", "node"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerAgent},
-	{ID: MetricHostDiskUsagePercent, DisplayName: "磁盘使用率", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "percent", Dimensions: []string{"instance", "node", "mount"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerAgent},
+	{ID: MetricHostDiskUsagePercent, DisplayName: "磁盘使用率", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotStorageUsage, Type: MetricTypeGauge, Unit: "percent", Dimensions: []string{"instance", "node", "mount"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerAgent},
 	{ID: MetricHostDiskFreeBytes, DisplayName: "磁盘剩余空间", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "bytes", Dimensions: []string{"instance", "node", "mount"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityYes, Producer: ProducerAgent},
 	{ID: MetricHostDiskIOPS, DisplayName: "磁盘 IOPS", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeRate, Unit: "ops/s", Dimensions: []string{"instance", "node", "device"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerAgent},
 	{ID: MetricHostDiskThroughputBytesPerS, DisplayName: "磁盘吞吐", Engine: EngineAgnostic, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeRate, Unit: "bytes/s", Dimensions: []string{"instance", "node", "device"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerAgent},
@@ -115,6 +121,8 @@ var Metrics = []Metric{
 	{ID: MetricConnectionTotal, DisplayName: "总连接数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotConnections, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricConnectionActive, DisplayName: "活跃连接数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricConnectionIdleInTransaction, DisplayName: "idle in transaction 连接数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	{ID: MetricConnectionMax, DisplayName: "最大连接数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityNo, Producer: ProducerServerTask},
+	{ID: MetricConnectionSaturationPercent, DisplayName: "连接饱和度", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotConnectionSaturation, Type: MetricTypeGauge, Unit: "percent", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricTPS, DisplayName: "TPS", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotThroughput, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricXactCommitPerS, DisplayName: "提交速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
 	{ID: MetricXactRollbackPerS, DisplayName: "回滚速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotRollbackRate, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
@@ -133,6 +141,13 @@ var Metrics = []Metric{
 	{ID: MetricReplicationReplayLagMS, DisplayName: "复制回放延迟", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotReplicationLag, Type: MetricTypeGauge, Unit: "ms", Dimensions: []string{"instance", "replica"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityNo, Producer: ProducerServerTask},
 	{ID: MetricReplicationWALLagBytes, DisplayName: "WAL 延迟字节数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "bytes", Dimensions: []string{"instance", "replica"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricReplicationSlotRetainedWAL, DisplayName: "Replication slot WAL 积压", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "bytes", Dimensions: []string{"instance", "slot"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	// 缓存命中率是目录里第一个加权平均：实例级值按「这个比率覆盖了多少真实工作量」加权，
+	// 权重就是同一对计数器的增量和（pg.cache.block_access_per_sec）。算术平均会让一个
+	// 200GB 主库崩到 60% 被同实例下二十个空库的 100% 稀释成 98%。
+	{ID: MetricCacheHitRatio, DisplayName: "缓存命中率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationWeightedAverage, Weight: MetricCacheBlockAccessPerS, Slot: SlotCacheHitRatio, Type: MetricTypeGauge, Unit: "percent", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	{ID: MetricCacheBlockAccessPerS, DisplayName: "缓存块访问速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "blocks/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
+	{ID: MetricDatabaseSizeBytes, DisplayName: "数据库体积", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotStorageUsage, Type: MetricTypeGauge, Unit: "bytes", Dimensions: []string{"instance", "database"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	{ID: MetricDeadlockCount, DisplayName: "死锁速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotDeadlocks, Type: MetricTypeRate, Unit: "count/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 }
 
 func UnitFor(id MetricID) string {
@@ -163,6 +178,8 @@ const (
 	TaskReplicationSlot TaskID = "pg.replication_slot"
 	TaskPreparedXacts   TaskID = "pg.prepared_xacts"
 	TaskRole            TaskID = "pg.role"
+	TaskSettings        TaskID = "pg.settings"
+	TaskDatabaseSize    TaskID = "pg.database_size"
 	TaskQueryStatistics TaskID = "pg.stat_statements"
 )
 
@@ -213,7 +230,10 @@ var Tasks = []Task{
 	       COALESCE(sum(tup_returned + tup_fetched), 0)::double precision AS tuples_read,
 	       COALESCE(sum(tup_inserted + tup_updated + tup_deleted), 0)::double precision AS tuples_write,
 	       COALESCE(sum(temp_files), 0)::double precision AS temp_files,
-	       COALESCE(sum(temp_bytes), 0)::double precision AS temp_bytes
+	       COALESCE(sum(temp_bytes), 0)::double precision AS temp_bytes,
+	       COALESCE(sum(blks_hit), 0)::double precision AS blks_hit,
+	       COALESCE(sum(blks_read), 0)::double precision AS blks_read,
+	       COALESCE(sum(deadlocks), 0)::double precision AS deadlocks
 FROM pg_stat_database
 WHERE datname IS NOT NULL AND datname NOT IN ('template0', 'template1')
 GROUP BY datname
@@ -226,6 +246,12 @@ ORDER BY datname`,
 			{Metric: MetricTuplesWritePerS, Columns: []string{DimensionDatabase, "tuples_write"}, Dimensions: []string{DimensionDatabase}},
 			{Metric: MetricTempFilesPerS, Columns: []string{DimensionDatabase, "temp_files"}, Dimensions: []string{DimensionDatabase}},
 			{Metric: MetricTempBytesPerS, Columns: []string{DimensionDatabase, "temp_bytes"}, Dimensions: []string{DimensionDatabase}},
+			// 命中率与它的权重取自同一对计数器的增量：比率是 blks_hit / (blks_hit + blks_read)，
+			// 权重是两者之和的速率。都求差而不取累积值——累积比率在一台跑了三个月的库上
+			// 几乎不动，主库命中率崩掉的那半小时在图上看不见。
+			{Metric: MetricCacheHitRatio, Columns: []string{DimensionDatabase, "blks_hit", "blks_read"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricCacheBlockAccessPerS, Columns: []string{DimensionDatabase, "blks_hit", "blks_read"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricDeadlockCount, Columns: []string{DimensionDatabase, "deadlocks"}, Dimensions: []string{DimensionDatabase}},
 		},
 	},
 	{
@@ -254,7 +280,12 @@ ORDER BY datname`,
            COALESCE(max(transaction_duration_ms) FILTER (WHERE transaction_started_at IS NOT NULL AND NOT is_monitor), 0)::double precision / 1000 AS max_transaction_duration_sec,
            count(*) FILTER (WHERE wait_event_type = 'Lock' AND NOT is_monitor)::double precision AS lock_waiting_count,
            count(*) FILTER (WHERE cardinality(blocking_pids) > 0 AND NOT is_monitor)::double precision AS blocked_session_count,
-           count(*) FILTER (WHERE state = 'active' AND query_start IS NOT NULL AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor)::double precision AS long_running_query_count
+           count(*) FILTER (WHERE state = 'active' AND query_start IS NOT NULL AND statement_timestamp() - query_start > interval '5 seconds' AND NOT is_monitor)::double precision AS long_running_query_count,
+           -- 饱和度在这里算，因为分子（连接数）本来就是这条查询数出来的：分母 max_connections
+           -- 是一次 GUC 内存查表，不读表也不取锁。max_connections 本身作为配置项另有一条低频
+           -- 序列（pg.settings / pg.connection.max），供界面显示分母；把分母缓存到跨任务的内存里
+           -- 只会换来一份会过期的状态和重启后的一段空窗。
+           count(*)::double precision * 100 / current_setting('max_connections')::double precision AS connection_saturation_percent
     FROM activity
 ), sessions AS (
     SELECT jsonb_build_object(
@@ -310,6 +341,7 @@ FROM aggregate`,
 			{Metric: MetricLockWaitingCount, Columns: []string{"lock_waiting_count"}},
 			{Metric: MetricBlockedSessionCount, Columns: []string{"blocked_session_count"}},
 			{Metric: MetricLongRunningQueryCount, Columns: []string{"long_running_query_count"}},
+			{Metric: MetricConnectionSaturationPercent, Columns: []string{"connection_saturation_percent"}},
 		},
 	},
 	{
@@ -360,6 +392,24 @@ GROUP BY database.datname`,
     ELSE 'standalone'
 END::text AS role`,
 		Yields: []MetricYield{{Metric: MetricReplicationRole, Columns: []string{"role"}}},
+	},
+	{
+		// max_connections 是配置项，不是会动的数：低频采一次就够，界面拿它当饱和度的分母显示。
+		ID: TaskSettings, Kind: TaskKindSQL, Interval: 5 * time.Minute,
+		SQL: `SELECT current_setting('max_connections')::double precision AS max_connections`,
+		Yields: []MetricYield{{Metric: MetricConnectionMax, Columns: []string{"max_connections"}}},
+	},
+	{
+		// pg_database_size() 在库很多时的开销没有量过（规范「已知的成本」一节），所以体积走低频；
+		// 增长率不单独采，由读取侧对这条序列求差得出。仍然是同一条连接：pg_database 是集群级视图。
+		ID: TaskDatabaseSize, Kind: TaskKindSQL, Interval: 5 * time.Minute,
+		Requires: []CapabilityID{CapabilityRolePGMonitor},
+		SQL: `SELECT datname::text AS database,
+       pg_database_size(oid)::double precision AS size_bytes
+FROM pg_database
+WHERE datallowconn AND datname NOT IN ('template0', 'template1')
+ORDER BY datname`,
+		Yields: []MetricYield{{Metric: MetricDatabaseSizeBytes, Columns: []string{DimensionDatabase, "size_bytes"}, Dimensions: []string{DimensionDatabase}}},
 	},
 	{
 		ID: TaskQueryStatistics, Kind: TaskKindSQL, Interval: 5 * time.Minute,

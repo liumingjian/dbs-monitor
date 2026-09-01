@@ -19,6 +19,13 @@ func TestResolveSlotBindings(t *testing.T) {
 		{name: "probe latency", slot: metric.SlotProbeLatency, engine: metric.EnginePostgreSQL, want: metric.MetricProbeLatencyMS},
 		{name: "rollback rate", slot: metric.SlotRollbackRate, engine: metric.EnginePostgreSQL, want: metric.MetricXactRollbackPerS},
 		{name: "replication lag", slot: metric.SlotReplicationLag, engine: metric.EnginePostgreSQL, want: metric.MetricReplicationReplayLagMS},
+		{name: "connection saturation", slot: metric.SlotConnectionSaturation, engine: metric.EnginePostgreSQL, want: metric.MetricConnectionSaturationPercent},
+		{name: "cache hit ratio", slot: metric.SlotCacheHitRatio, engine: metric.EnginePostgreSQL, want: metric.MetricCacheHitRatio},
+		{name: "deadlocks", slot: metric.SlotDeadlocks, engine: metric.EnginePostgreSQL, want: metric.MetricDeadlockCount},
+		// 容量水位是规范里唯一一个「库级 + 主机」的位：PostgreSQL 侧是库的体积，
+		// 主机侧是数据目录所在文件系统的水位。两条绑定落在两个引擎上，位只有一个。
+		{name: "storage usage on PostgreSQL", slot: metric.SlotStorageUsage, engine: metric.EnginePostgreSQL, want: metric.MetricDatabaseSizeBytes},
+		{name: "storage usage on the host", slot: metric.SlotStorageUsage, engine: metric.EngineAgnostic, want: metric.MetricHostDiskUsagePercent},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			got, err := metric.ResolveSlot(testCase.slot, testCase.engine)
@@ -41,7 +48,7 @@ func TestResolveSlotReportsNotApplicable(t *testing.T) {
 		engine metric.Engine
 	}{
 		{name: "engine without a binding for a declared slot", slot: metric.SlotThroughput, engine: metric.Engine("MYSQL")},
-		{name: "slot nothing binds yet", slot: metric.SlotCacheHitRatio, engine: metric.EnginePostgreSQL},
+		{name: "slot bound on one engine only", slot: metric.SlotCacheHitRatio, engine: metric.Engine("MYSQL")},
 		{name: "engine-private slot on an engine-agnostic caller", slot: metric.SlotReplicationLag, engine: metric.EngineAgnostic},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -142,6 +149,16 @@ func TestNineSemanticSlotsAreDeclared(t *testing.T) {
 	for _, declaration := range metric.SemanticSlots {
 		if declaration.DisplayName == "" {
 			t.Errorf("semantic slot %q has no display name", declaration.ID)
+		}
+	}
+}
+
+// 九个位到此全部有 PostgreSQL 绑定——语义位是列表、总览与告警模板唯一能引用的东西，
+// 缺一个位就等于那三处各自要为 PostgreSQL 开一条特例通道。
+func TestEverySemanticSlotBindsOnPostgreSQL(t *testing.T) {
+	for _, declaration := range metric.SemanticSlots {
+		if _, err := metric.ResolveSlot(declaration.ID, metric.EnginePostgreSQL); err != nil {
+			t.Errorf("resolve slot %q on PostgreSQL: %v", declaration.ID, err)
 		}
 	}
 }

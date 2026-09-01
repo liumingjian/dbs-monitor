@@ -179,7 +179,7 @@ function MonitoringViewTabs({ id, search }: { id: string; search: MonitoringSear
   </Tabs>
 }
 
-/// 标准监控：22 张图分三组，粒度 / 列数 / 光标联动 / 时间范围都在地址里，
+/// 标准监控：26 张图分三组，粒度 / 列数 / 光标联动 / 时间范围都在地址里，
 /// 所以一张截图的链接发给同事，看到的是同一屏。
 function StandardMonitoringPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const navigate = standardMonitoringRoute.useNavigate()

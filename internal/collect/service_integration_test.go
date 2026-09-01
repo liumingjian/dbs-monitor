@@ -31,7 +31,10 @@ import (
 )
 
 func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 这条端到端用例把一整个采集 + 告警生命周期跑十来轮，每轮把所有采集任务都过一遍，
+	// 所以它的耗时随任务数线性增长——本轮新增两个任务（pg.settings、pg.database_size）之后
+	// 实测 ~37s，原来的 30s 安全网变成了偶发红。安全网抬到 60s：它防的是卡死，不是慢。
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	databaseName := fmt.Sprintf("dbs_monitor_collect_%d", os.Getpid())

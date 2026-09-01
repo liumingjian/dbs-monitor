@@ -437,23 +437,9 @@ func evaluateMetric(
 	}
 
 	window := time.Duration(target.WindowSeconds) * time.Second
-	samples, err := queries.SamplesInRuleWindow(ctx, alerting.SamplesInRuleWindowParams{
-		InstanceID:         target.InstanceID,
-		MetricID:           target.MetricID,
-		MetricDimensionKey: metricDimensionKey,
-		WindowStart:        pgtype.Timestamptz{Time: now.Add(-window), Valid: true},
-		WindowEnd:          pgtype.Timestamptz{Time: now, Valid: true},
-	})
+	points, err := ruleWindowPoints(ctx, queries, target, metricID, metricDimensionKey, now, window)
 	if err != nil {
-		return metricEvaluation{}, fmt.Errorf("read rule samples: %w", err)
-	}
-
-	points := make([]alerting.Point, 0, len(samples))
-	for _, sample := range samples {
-		points = append(points, alerting.Point{
-			Timestamp: sample.Ts.Time,
-			Value:     sample.Value,
-		})
+		return metricEvaluation{}, err
 	}
 	value, ok := alerting.AggregateWindow(points, now, window, target.Aggregation)
 	if !ok {
@@ -470,6 +456,58 @@ func evaluateMetric(
 		target.RecoveryThreshold,
 	)
 	return result, nil
+}
+
+// ruleWindowPoints 取出判定窗口里的实例级取值。
+//
+// 告警只在实例级聚合值上进行（规范 #213「告警」一节），所以一个实例下几十个库的取值
+// 在这里就要按目录里登记的聚合方式收敛成一个数：SUM 走求和，WEIGHTED_AVERAGE 走加权。
+// 比率型指标（缓存命中率）如果走求和，二十个库会给出一个 2000% 的「命中率」——
+// 一个既不会触发也不会恢复的数。
+func ruleWindowPoints(
+	ctx context.Context,
+	queries *alerting.Queries,
+	target alerting.GetEvaluationTargetRow,
+	metricID metric.MetricID,
+	metricDimensionKey string,
+	now time.Time,
+	window time.Duration,
+) ([]alerting.Point, error) {
+	windowStart := pgtype.Timestamptz{Time: now.Add(-window), Valid: true}
+	windowEnd := pgtype.Timestamptz{Time: now, Valid: true}
+	if weightMetric, hasWeight := metric.WeightMetricFor(metricID); hasWeight {
+		samples, err := queries.WeightedSamplesInRuleWindow(ctx, alerting.WeightedSamplesInRuleWindowParams{
+			InstanceID:         target.InstanceID,
+			MetricID:           target.MetricID,
+			WeightMetricID:     weightMetric.String(),
+			MetricDimensionKey: metricDimensionKey,
+			WindowStart:        windowStart,
+			WindowEnd:          windowEnd,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("read weighted rule samples: %w", err)
+		}
+		points := make([]alerting.Point, 0, len(samples))
+		for _, sample := range samples {
+			points = append(points, alerting.Point{Timestamp: sample.Ts.Time, Value: sample.Value})
+		}
+		return points, nil
+	}
+	samples, err := queries.SamplesInRuleWindow(ctx, alerting.SamplesInRuleWindowParams{
+		InstanceID:         target.InstanceID,
+		MetricID:           target.MetricID,
+		MetricDimensionKey: metricDimensionKey,
+		WindowStart:        windowStart,
+		WindowEnd:          windowEnd,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read rule samples: %w", err)
+	}
+	points := make([]alerting.Point, 0, len(samples))
+	for _, sample := range samples {
+		points = append(points, alerting.Point{Timestamp: sample.Ts.Time, Value: sample.Value})
+	}
+	return points, nil
 }
 
 func controlPlaneRuleValue(metricID metric.MetricID, projection metric.ControlPlaneProjection, now time.Time) float64 {

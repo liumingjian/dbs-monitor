@@ -437,8 +437,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("decode collection task states: %v", err)
 	}
 	tasks.Body.Close()
-	if len(taskStates) != 8 {
-		t.Fatalf("collection task state count = %d, want 8", len(taskStates))
+	if len(taskStates) != 10 {
+		t.Fatalf("collection task state count = %d, want 10", len(taskStates))
 	}
 	var activityTask *api.CollectionTaskState
 	for index := range taskStates {
@@ -457,7 +457,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("capability count = %d, want 4", len(capabilities))
 	}
 	roleCapability := capabilityByID(t, capabilities, "role.pg_monitor")
-	if roleCapability.Status != "UNKNOWN" || roleCapability.ObservedAt != nil || roleCapability.AffectedMetricCount != 19 || roleCapability.FixHint == nil {
+	if roleCapability.Status != "UNKNOWN" || roleCapability.ObservedAt != nil || roleCapability.AffectedMetricCount != 24 || roleCapability.FixHint == nil {
 		t.Fatalf("initial pg_monitor capability = %+v", roleCapability)
 	}
 	capabilityCases := []struct {

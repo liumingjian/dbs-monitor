@@ -43,7 +43,7 @@ func TestCapabilityAffectedMetricCountUsesTaskYields(t *testing.T) {
 		capability CapabilityID
 		want       int
 	}{
-		{CapabilityRolePGMonitor, 19},
+		{CapabilityRolePGMonitor, 24},
 		{CapabilityExtensionPGStatStatements, 0},
 		{CapabilityTopologyHasReplication, 3},
 		{CapabilityTopologyHasSlot, 1},

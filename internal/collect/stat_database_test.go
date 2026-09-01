@@ -37,7 +37,7 @@ func TestStatDatabaseRateState(t *testing.T) {
 			},
 			want: []statDatabaseExpectation{
 				{},
-				{sampleCount: 7, values: map[databaseMetric]float64{
+				{sampleCount: 9, values: map[databaseMetric]float64{
 					{"app", metric.MetricTPS}:              4,
 					{"app", metric.MetricXactCommitPerS}:   3,
 					{"app", metric.MetricXactRollbackPerS}: 1,
@@ -45,6 +45,31 @@ func TestStatDatabaseRateState(t *testing.T) {
 					{"app", metric.MetricTuplesWritePerS}:  5,
 					{"app", metric.MetricTempFilesPerS}:    0.2,
 					{"app", metric.MetricTempBytesPerS}:    50,
+				}},
+			},
+		},
+		{
+			// 命中率取增量之比，权重是同一对计数器增量之和的速率；一个块都没读过的那一轮
+			// 不落命中率，因为「没有访问」不等于「命中率 100%」。
+			name: "cache hit ratio comes from the block counter deltas and always ships its weight",
+			observations: []statDatabaseSnapshot{
+				{observedAt: base, databases: map[string]statDatabaseCounters{
+					"app":  counters(100, 20, 1_000, 500, 10, 1_000, 8_000, 2_000, 3),
+					"idle": counters(0, 0, 0, 0, 0, 0, 500, 0, 0),
+				}},
+				{observedAt: base.Add(10 * time.Second), databases: map[string]statDatabaseCounters{
+					"app":  counters(130, 30, 1_200, 550, 12, 1_500, 8_600, 2_400, 5),
+					"idle": counters(0, 0, 0, 0, 0, 0, 500, 0, 0),
+				}},
+			},
+			want: []statDatabaseExpectation{
+				{},
+				{sampleCount: 19, values: map[databaseMetric]float64{
+					{"app", metric.MetricCacheHitRatio}:        60,
+					{"app", metric.MetricCacheBlockAccessPerS}: 100,
+					{"app", metric.MetricDeadlockCount}:        0.2,
+					{"idle", metric.MetricCacheBlockAccessPerS}: 0,
+					{"idle", metric.MetricDeadlockCount}:        0,
 				}},
 			},
 		},
@@ -63,7 +88,7 @@ func TestStatDatabaseRateState(t *testing.T) {
 			},
 			want: []statDatabaseExpectation{
 				{},
-				{sampleCount: 14, values: map[databaseMetric]float64{
+				{sampleCount: 18, values: map[databaseMetric]float64{
 					{"app", metric.MetricTPS}:                  4,
 					{"app", metric.MetricXactCommitPerS}:       3,
 					{"reporting", metric.MetricTPS}:            1,
@@ -90,8 +115,8 @@ func TestStatDatabaseRateState(t *testing.T) {
 			},
 			want: []statDatabaseExpectation{
 				{},
-				{sampleCount: 7, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 4}},
-				{sampleCount: 14, values: map[databaseMetric]float64{
+				{sampleCount: 9, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 4}},
+				{sampleCount: 18, values: map[databaseMetric]float64{
 					{"app", metric.MetricTPS}: 4,
 					{"new", metric.MetricTPS}: 1,
 				}},
@@ -111,7 +136,7 @@ func TestStatDatabaseRateState(t *testing.T) {
 			},
 			want: []statDatabaseExpectation{
 				{},
-				{sampleCount: 7, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 4}},
+				{sampleCount: 9, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 4}},
 			},
 		},
 		{
@@ -130,7 +155,7 @@ func TestStatDatabaseRateState(t *testing.T) {
 			want: []statDatabaseExpectation{
 				{},
 				{counterReset: true},
-				{sampleCount: 7, values: map[databaseMetric]float64{
+				{sampleCount: 9, values: map[databaseMetric]float64{
 					{"app", metric.MetricTPS}:              1.2,
 					{"app", metric.MetricXactCommitPerS}:   1,
 					{"app", metric.MetricXactRollbackPerS}: 0.2,
@@ -174,9 +199,9 @@ func TestStatDatabaseRateState(t *testing.T) {
 			},
 			want: []statDatabaseExpectation{
 				{},
-				{sampleCount: 7, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 1.2}},
+				{sampleCount: 9, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 1.2}},
 				{},
-				{sampleCount: 7, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 1.2}},
+				{sampleCount: 9, values: map[databaseMetric]float64{{"app", metric.MetricTPS}: 1.2}},
 			},
 		},
 	}

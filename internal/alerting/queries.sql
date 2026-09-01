@@ -203,8 +203,8 @@ WHERE rule.id = sqlc.arg(rule_id)
 -- 告警判定只在实例级聚合值上进行（规范 #213「告警」一节，本轮不做按库告警），所以同一时刻
 -- 落在多个库上的那几条序列在这里先合成一个数：sum 就是目录里 SUM 那一档聚合。
 -- 实例级指标只有一条序列，sum 是恒等的。
--- **加权平均的指标不能走这条路**——它需要权重序列，SQL 里给不出。第一个 WEIGHTED_AVERAGE
--- 指标落地时（#218 的缓存命中率）必须在这里补一条加权路径，否则告警会拿到算术和。
+-- **加权平均的指标不走这条路**——它需要权重序列，走下面的 WeightedSamplesInRuleWindow。
+-- 调用方按目录里的聚合方式二选一（internal/evaluator/service.go）。
 SELECT sample.ts, sum(sample.value)::double precision AS value
 FROM metric_series series
 JOIN metric_sample sample ON sample.series_id = series.series_id
@@ -214,6 +214,34 @@ WHERE series.instance_id = sqlc.arg(instance_id)
   AND sample.ts > sqlc.arg(window_start)
   AND sample.ts <= sqlc.arg(window_end)
 GROUP BY sample.ts
+ORDER BY sample.ts DESC;
+
+-- name: WeightedSamplesInRuleWindow :many
+--
+-- 加权平均指标的实例级值：同一时刻的各库取值按权重指标（目录里的 aggregation_weight，
+-- 缓存命中率是 blks_hit + blks_read 的速率）加权，而不是求和也不是算术平均。
+-- 权重按「同一个库、同一个时刻」配对；配不上的库那一刻不参与——少一个库好过悄悄
+-- 退化成算术平均，那正是这条聚合规则要挡住的答案。
+-- HAVING 保证分母为正，所以除法不会碰到零：PostgreSQL 先过滤分组再算 SELECT 列表。
+SELECT sample.ts,
+       (sum(sample.value * weight_sample.value) / sum(weight_sample.value))::double precision AS value
+FROM metric_series series
+JOIN metric_sample sample ON sample.series_id = series.series_id
+JOIN metric_series weight_series
+  ON weight_series.instance_id = series.instance_id
+ AND weight_series.metric_id = sqlc.arg(weight_metric_id)
+ AND weight_series.database_name = series.database_name
+ AND weight_series.labels_key = series.labels_key
+JOIN metric_sample weight_sample
+  ON weight_sample.series_id = weight_series.series_id AND weight_sample.ts = sample.ts
+WHERE series.instance_id = sqlc.arg(instance_id)
+  AND series.metric_id = sqlc.arg(metric_id)
+  AND series.labels_key = sqlc.arg(metric_dimension_key)
+  AND sample.ts > sqlc.arg(window_start)
+  AND sample.ts <= sqlc.arg(window_end)
+  AND weight_sample.value >= 0
+GROUP BY sample.ts
+HAVING sum(weight_sample.value) > 0
 ORDER BY sample.ts DESC;
 
 -- name: SaveAlertSnapshot :one

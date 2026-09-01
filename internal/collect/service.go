@@ -41,6 +41,7 @@ var statActivityMetricIDs = [...]metric.MetricID{
 	metric.MetricLockWaitingCount,
 	metric.MetricBlockedSessionCount,
 	metric.MetricLongRunningQueryCount,
+	metric.MetricConnectionSaturationPercent,
 }
 
 type Collector interface {
@@ -319,7 +320,7 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 		var sessionsTruncated, longQuerySamplesTruncated bool
 		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
 			&values[0], &values[1], &values[2], &values[3],
-			&values[4], &values[5], &values[6], &values[7],
+			&values[4], &values[5], &values[6], &values[7], &values[8],
 			&sampledAt, &sessionsJSON, &sessionCount, &sessionsTruncated,
 			&longQuerySamplesJSON, &longQuerySampleCount, &longQuerySamplesTruncated,
 		); err != nil {
@@ -360,6 +361,9 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 				&counters[statDatabaseTuplesWriteIndex],
 				&counters[statDatabaseTempFilesIndex],
 				&counters[statDatabaseTempBytesIndex],
+				&counters[statDatabaseBlocksHitIndex],
+				&counters[statDatabaseBlocksReadIndex],
+				&counters[statDatabaseDeadlocksIndex],
 			); err != nil {
 				return collectedBatch{}, err
 			}
@@ -370,7 +374,8 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 		}
 		rows.Close()
 		return service.statDatabaseRates.observe(run.key.instanceID, observation), nil
-	case metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole:
+	case metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole,
+		metric.TaskSettings, metric.TaskDatabaseSize:
 		return collectDeclaredTask(ctx, conn, run.task)
 	case metric.TaskQueryStatistics:
 		snapshot, err := collectQueryStatistics(ctx, conn, run.task)
@@ -656,7 +661,7 @@ func scheduledTasks() []metric.Task {
 		switch task.ID {
 		case metric.TaskProbe, metric.TaskStatDatabase, metric.TaskStatActivity,
 			metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole,
-			metric.TaskQueryStatistics:
+			metric.TaskSettings, metric.TaskDatabaseSize, metric.TaskQueryStatistics:
 			tasks = append(tasks, task)
 		}
 	}

@@ -31,6 +31,7 @@ export const standardMonitoringGroups: readonly StandardMonitoringGroup[] = [
     title: '数据库指标',
     charts: [
       { key: 'connections', title: '连接数', description: '实例当前总连接数，包含监控账号连接。', metrics: ['pg.connection.total'] },
+      { key: 'connection-saturation', title: '连接饱和度', description: '连接数占该实例 max_connections 的百分比，分母同图给出。', metrics: ['pg.connection.saturation_percent', 'pg.connection.max'] },
       { key: 'active-connections', title: '活跃连接数', description: '当前处于 active 状态的业务连接数。', metrics: ['pg.connection.active'] },
       { key: 'idle-in-transaction', title: 'idle in transaction', description: '事务已开启但当前空闲的业务连接数。', metrics: ['pg.connection.idle_in_transaction'] },
       { key: 'tps', title: 'TPS', description: '实例级提交与回滚事务的合计速率。', metrics: ['pg.tps'] },
@@ -42,6 +43,9 @@ export const standardMonitoringGroups: readonly StandardMonitoringGroup[] = [
       { key: 'blocked-sessions', title: '阻塞会话', description: '当前被其他会话阻塞的业务会话数。', metrics: ['pg.session.blocked_count'] },
       { key: 'long-queries', title: '长查询数量', description: '采样时仍在执行且超过阈值的查询数量。', metrics: ['pg.query.long_running_count'], drilldown: 'long-query-samples' },
       { key: 'prepared-xacts', title: '2PC', description: '当前尚未完成的预备事务数量。', metrics: ['pg.prepared_xacts.count'] },
+      { key: 'cache-hit-ratio', title: '缓存命中率', description: '共享缓冲区命中率；实例级值按块访问速率加权，空库的满分不会稀释主库。', metrics: ['pg.cache.hit_ratio', 'pg.cache.block_access_per_sec'] },
+      { key: 'database-size', title: '数据库体积', description: '各库的体积；增长率由这条曲线求差看出，不单独采集。', metrics: ['pg.database.size_bytes'] },
+      { key: 'deadlocks', title: '死锁', description: '死锁发生速率，按库展开可定位是哪个库的并发问题。', metrics: ['pg.deadlock.count'] },
     ],
   },
   {

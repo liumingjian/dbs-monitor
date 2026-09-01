@@ -27,6 +27,8 @@
               - pg.connection.total
               - pg.connection.active
               - pg.connection.idle_in_transaction
+              - pg.connection.max
+              - pg.connection.saturation_percent
               - pg.tps
               - pg.xact.commit_per_sec
               - pg.xact.rollback_per_sec
@@ -45,6 +47,10 @@
               - pg.replication.replay_lag_ms
               - pg.replication.wal_lag_bytes
               - pg.replication_slot.retained_wal_bytes
+              - pg.cache.hit_ratio
+              - pg.cache.block_access_per_sec
+              - pg.database.size_bytes
+              - pg.deadlock.count
       - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
       - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
       - name: step

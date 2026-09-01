@@ -15,6 +15,9 @@ const (
 	statDatabaseTuplesWriteIndex
 	statDatabaseTempFilesIndex
 	statDatabaseTempBytesIndex
+	statDatabaseBlocksHitIndex
+	statDatabaseBlocksReadIndex
+	statDatabaseDeadlocksIndex
 	statDatabaseCounterCount
 )
 
@@ -45,6 +48,7 @@ var statDatabaseCounterMetrics = [statDatabaseCounterCount]metric.MetricID{
 	statDatabaseTuplesWriteIndex:  metric.MetricTuplesWritePerS,
 	statDatabaseTempFilesIndex:    metric.MetricTempFilesPerS,
 	statDatabaseTempBytesIndex:    metric.MetricTempBytesPerS,
+	statDatabaseDeadlocksIndex:    metric.MetricDeadlockCount,
 }
 
 // observe 把两次快照之间的计数差算成速率，一库一组样本。
@@ -95,7 +99,24 @@ func (state *statDatabaseRateState) observe(instanceID string, current statDatab
 			value:        rates[statDatabaseXactCommitIndex] + rates[statDatabaseXactRollbackIndex],
 		})
 		for index, metricID := range statDatabaseCounterMetrics {
+			if metricID == "" {
+				continue
+			}
 			samples = append(samples, collectedSample{metricID: metricID, databaseName: name, value: rates[index]})
+		}
+		// 命中率与它的权重成对落下去：权重（块访问速率）总是落，哪怕是 0——读取侧要靠
+		// 「同一个库、同一个时刻」配对，缺一个点那一刻就整个不参与加权。
+		access := rates[statDatabaseBlocksHitIndex] + rates[statDatabaseBlocksReadIndex]
+		samples = append(samples, collectedSample{
+			metricID: metric.MetricCacheBlockAccessPerS, databaseName: name, value: access,
+		})
+		// 这一轮一个块都没读过：命中率此刻没有意义，不编一个 100% 出来——那会在图上画出
+		// 一条「一切正常」的线，而事实是这个库这段时间没被访问。
+		if access > 0 {
+			samples = append(samples, collectedSample{
+				metricID: metric.MetricCacheHitRatio, databaseName: name,
+				value:    rates[statDatabaseBlocksHitIndex] * 100 / access,
+			})
 		}
 	}
 	return collectedBatch{samples: samples}
