@@ -430,6 +430,17 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	if queryStatisticsEntries == 0 || queryStatisticsEntries > queryStatisticsSnapshotLimit {
 		t.Fatalf("query statistics snapshot entries = %d, want 1..%d", queryStatisticsEntries, queryStatisticsSnapshotLimit)
 	}
+	// 归一化 SQL 文本与指标一起落地，而且是每个 queryid 一行：接口显示的是语句而不是
+	// queryid，全靠这一步真的从 pg_stat_statements 把文本取回来。
+	var statementTexts, distinctQueryIDs int
+	if err := pool.QueryRow(ctx, `SELECT count(*), count(DISTINCT queryid) FROM query_statement_text
+		WHERE instance_id = $1 AND query_text <> ''`, pgID).Scan(&statementTexts, &distinctQueryIDs); err != nil {
+		t.Fatalf("count normalised statement texts: %v", err)
+	}
+	if statementTexts == 0 || statementTexts != distinctQueryIDs {
+		t.Fatalf("normalised statement texts = %d rows over %d queryids, want one row per queryid",
+			statementTexts, distinctQueryIDs)
+	}
 	assertReplicationSlotSemantics(t, ctx, admin, platform, collector, targets[0], pgID, currentClock)
 }
 

@@ -14,9 +14,10 @@ import (
 
 // 机群总览的聚合。
 //
-// 四块（健康计数 / 采集自监控 / 需要关注的 Top 10 / 容量水位 Top 10）读的是**同一份**
-// 实例级投影，所以它们在一个请求里一起算完：分成四个端点会让首屏发四个往返，还会让四块
-// 看到四个不同时刻的机群——「严重 3 台」与下面列出的那几台对不上，是比慢更糟的毛病。
+// 五块（健康计数 / 采集自监控 / 需要关注的 Top 10 / 容量水位 Top 10 / Top SQL 前 5）在一个
+// 请求里一起算完：分成五个端点会让首屏发五个往返，还会让各块看到不同时刻的机群——
+// 「严重 3 台」与下面列出的那几台对不上，是比慢更糟的毛病。
+// 前三块读的是同一份实例级投影，后两块各读一次时序/快照，但仍然同一个事务窗口内取完。
 //
 // 计数与 Top 10 都是纯函数（summarizeFleet / instancesNeedingAttention），因为「哪台该
 // 排在前面」算错了不会报错，只会安静地把该看的那台压到第十一位。
@@ -44,15 +45,21 @@ func (handler *Handler) GetFleetOverview(ctx context.Context, _ api.GetFleetOver
 		return nil, err
 	}
 	overview.Storage = watermarks
+	topSQL, err := handler.topSQL(ctx, topSQLOverviewLimit)
+	if err != nil {
+		return nil, err
+	}
+	overview.TopSql = topSQL
 	return api.GetFleetOverview200JSONResponse(overview), nil
 }
 
-// summarizeFleet 把实例级投影收敛成前三块。第四块要读时序，不在这里。
+// summarizeFleet 把实例级投影收敛成前三块。第四、五块要读时序与查询统计快照，不在这里。
 func summarizeFleet(instances []api.Instance) api.FleetOverview {
 	overview := api.FleetOverview{
 		Total:      len(instances),
 		Attention:  instancesNeedingAttention(instances),
 		Storage:    []api.StorageWatermarkEntry{},
+		TopSql:     []api.TopSqlEntry{},
 		Health:     api.FleetHealthCounts{},
 		Collection: api.FleetCollectionHealth{},
 	}

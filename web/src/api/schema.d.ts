@@ -52,6 +52,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/top-sql": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTopSql"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances": {
         parameters: {
             query?: never;
@@ -1657,7 +1673,7 @@ export interface components {
             /** @description Number of instances matching the filters, before paging. */
             total: number;
         };
-        /** @description The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, and which disks are filling up. */
+        /** @description The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, which disks are filling up, and which statements cost the most. */
         FleetOverview: {
             /** @description Number of monitored instances. */
             total: number;
@@ -1667,6 +1683,8 @@ export interface components {
             attention: components["schemas"]["Instance"][];
             /** @description The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty. */
             storage: components["schemas"]["StorageWatermarkEntry"][];
+            /** @description The five statements costing the fleet the most elapsed time, highest first. The full ranking lives on the SQL insight page; five is what fits on a landing page without turning it into a second table. */
+            top_sql: components["schemas"]["TopSqlEntry"][];
         };
         /** @description How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size. */
         FleetHealthCounts: {
@@ -1694,6 +1712,23 @@ export interface components {
             usage_percent: number;
             /** Format: date-time */
             sampled_at: string;
+        };
+        /** @description One normalised statement on one instance, aggregated across databases and users from that instance's most recent query-statistics snapshot. The text is the extension's normalised form, where literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here. */
+        TopSqlEntry: {
+            /** Format: uuid */
+            instance_id: string;
+            instance_name: string;
+            /** @description Native query identifier represented as a string to preserve int64 precision. */
+            queryid: string;
+            /** @description Normalised statement text, deduplicated per (instance, queryid). Absent when no text has been captured yet for that identifier — absent is not the same as empty. */
+            query_text?: string;
+            /** Format: int64 */
+            calls: number;
+            /** Format: double */
+            total_exec_time_ms: number;
+        };
+        TopSqlList: {
+            items: components["schemas"]["TopSqlEntry"][];
         };
         InstanceHealth: {
             status: components["schemas"]["HealthStatus"];
@@ -2283,6 +2318,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FleetOverview"];
+                };
+            };
+        };
+    };
+    listTopSql: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cross-instance top statements ordered by total elapsed time */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopSqlList"];
                 };
             };
         };

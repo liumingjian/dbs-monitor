@@ -967,6 +967,67 @@ func (q *Queries) ListAlertTriggerSnapshotSessions(ctx context.Context, snapshot
 	return items, nil
 }
 
+const listFleetTopSql = `-- name: ListFleetTopSql :many
+WITH latest AS (
+    SELECT DISTINCT ON (instance_id) instance_id, sampled_at
+    FROM query_statistics_snapshot
+    ORDER BY instance_id, sampled_at DESC
+)
+SELECT entry.instance_id,
+       instance.name AS instance_name,
+       entry.queryid,
+       statement.query_text,
+       sum(entry.calls)::bigint AS calls,
+       sum(entry.total_exec_time_ms)::double precision AS total_exec_time_ms
+FROM latest
+JOIN query_statistics_snapshot_entry entry
+    ON entry.instance_id = latest.instance_id AND entry.sampled_at = latest.sampled_at
+JOIN instance ON instance.id = entry.instance_id
+LEFT JOIN query_statement_text statement
+    ON statement.instance_id = entry.instance_id AND statement.queryid = entry.queryid
+GROUP BY entry.instance_id, instance.name, entry.queryid, statement.query_text
+ORDER BY total_exec_time_ms DESC, instance.name, entry.queryid
+LIMIT $1
+`
+
+type ListFleetTopSqlRow struct {
+	InstanceID      pgtype.UUID
+	InstanceName    string
+	Queryid         int64
+	QueryText       pgtype.Text
+	Calls           int64
+	TotalExecTimeMs float64
+}
+
+// 跨实例 Top SQL：每台实例只看它最近一次快照，同一条语句在多个库/用户下的行合并成一行。
+// 文本走 LEFT JOIN：还没采到文本的语句照样上榜，接口回一个缺文本的行，而不是把它藏起来。
+func (q *Queries) ListFleetTopSql(ctx context.Context, rowLimit int32) ([]ListFleetTopSqlRow, error) {
+	rows, err := q.db.Query(ctx, listFleetTopSql, rowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFleetTopSqlRow
+	for rows.Next() {
+		var i ListFleetTopSqlRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.Queryid,
+			&i.QueryText,
+			&i.Calls,
+			&i.TotalExecTimeMs,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listLongQuerySamples = `-- name: ListLongQuerySamples :many
 SELECT sample.sampled_at, sample.pid, sample.username, sample.database_name,
        sample.client_address, sample.state, sample.query_started_at,

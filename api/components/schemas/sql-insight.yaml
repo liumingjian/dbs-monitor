@@ -1,0 +1,29 @@
+TopSqlEntry:
+  type: object
+  description: >-
+    One normalised statement on one instance, aggregated across databases and users from that
+    instance's most recent query-statistics snapshot. The text is the extension's normalised
+    form, where literals are already placeholders; raw statement text with real literals is
+    never stored, so it can never appear here.
+  required: [instance_id, instance_name, queryid, calls, total_exec_time_ms]
+  properties:
+    instance_id: { type: string, format: uuid }
+    instance_name: { type: string }
+    queryid:
+      type: string
+      description: Native query identifier represented as a string to preserve int64 precision.
+    query_text:
+      type: string
+      description: >-
+        Normalised statement text, deduplicated per (instance, queryid). Absent when no text
+        has been captured yet for that identifier — absent is not the same as empty.
+    calls: { type: integer, format: int64, minimum: 0 }
+    total_exec_time_ms: { type: number, format: double, minimum: 0 }
+TopSqlList:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      maxItems: 200
+      items: { $ref: '#/TopSqlEntry' }

@@ -192,10 +192,3 @@
   white-space: nowrap;
 }
 
-/* 还没有页面可去的导航项（当前是 SQL 洞察）。它退到次要色并且不响应指针 ——
-   看得见它在哪一组、排第几，但点它不会有任何事发生，也不会跳到一个 404。
-   下一张票把它换成真链接时，这条规则连同 `upcoming` 那个闭包一起删掉。 */
-.dbs-shell-nav__upcoming {
-  color: var(--cds-text-disabled);
-  cursor: default;
-}

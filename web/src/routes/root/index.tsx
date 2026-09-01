@@ -16,7 +16,7 @@ import {
 } from '@carbon/react'
 import { Link, Outlet, createRootRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
-import type { ComponentProps, ComponentType, ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import type { components } from '../../api/schema'
@@ -252,18 +252,10 @@ function ShellSideNav({ collapsed }: { collapsed: boolean }) {
   const links = useMemo(() => ({
     overview: (props: object) => <Link {...props} to="/" />,
     instances: (props: object) => <Link {...props} to="/instances" />,
+    sqlInsight: (props: object) => <Link {...props} to="/sql-insight" />,
     alerts: (props: object) => <Link {...props} to="/alerts" search={{ tab: 'current', include_paused: false }} />,
     users: (props: object) => <Link {...props} to="/users" />,
     alertSettings: (props: object) => <Link {...props} to="/alert-settings/notifications" />,
-  }), [])
-
-  // 还没有页面可去的导航项。渲染成 `span` 而不是锚点：给一个指向 404 的假链接，
-  // 中键新开、复制链接、悬停预取全都会落空，而那正是导航项被信任的地方。
-  // 身份同样用 useMemo 固定住，理由与上面的链接闭包一样。
-  const upcoming = useMemo(() => ({
-    sqlInsight: ({ className, ...props }: ComponentProps<'span'>) => (
-      <span {...props} className={['dbs-shell-nav__upcoming', className].filter(Boolean).join(' ')} />
-    ),
   }), [])
 
   return (
@@ -286,15 +278,9 @@ function ShellSideNav({ collapsed }: { collapsed: boolean }) {
             as={links.instances}
             {...navLinkProps({ label: '实例列表', icon: 'database', collapsed, active: at('/instances') })}
           />
-          {/* SQL 洞察的页面在下一张票交付。入口先占位，而且**不是链接**：一条点开是
-              404 的导航项比没有入口更糟。它保持不可用态并把话说明白，下一张票把
-              `as` 换成一个真链接、加上 active 判定即可，位置不用再谈一次。 */}
           <SideNavLink
-            as={upcoming.sqlInsight}
-            {...navLinkProps({ label: 'SQL 洞察', icon: 'chartColumn', collapsed, active: false })}
-            aria-label="SQL 洞察（即将上线）"
-            title="SQL 洞察（即将上线）"
-            aria-disabled="true"
+            as={links.sqlInsight}
+            {...navLinkProps({ label: 'SQL 洞察', icon: 'chartColumn', collapsed, active: at('/sql-insight') })}
           />
         </ShellNavGroup>
         <ShellNavGroup heading="告警" collapsed={collapsed}>

@@ -192,6 +192,7 @@ var platformRelations = []string{
 	"performance_event",
 	"query_statistics_snapshot",
 	"query_statistics_snapshot_entry",
+	"query_statement_text",
 	"notification_policy",
 	"alert_rule_template",
 	"smtp_channel",

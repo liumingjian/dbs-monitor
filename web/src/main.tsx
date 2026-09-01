@@ -25,6 +25,7 @@ import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { overviewRoute } from './routes/overview'
 import { rootRoute } from './routes/root'
+import { sqlInsightRoute } from './routes/sql-insight'
 import { AppErrorBoundary, NotFoundPage, RouteErrorPage } from './routes/root/errorBoundary'
 import { usersRoute } from './routes/users'
 // Carbon 令牌层。全应用唯一的 Sass 入口，必须只 import 一次；见 styles/index.scss 顶部。
@@ -40,6 +41,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   alertsRoute,
   instancesRoute,
+  sqlInsightRoute,
   instanceRoute,
   standardMonitoringRoute,
   performanceEventsRoute,

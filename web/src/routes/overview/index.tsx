@@ -15,26 +15,34 @@ import { TruncatedText } from '../../primitives/TruncatedText'
 import { attributionLabel, collectionFreshnessLabel, collectionFreshnessTitle } from '../instanceProjection'
 import { defaultTimeRange } from '../instances.$id/timeRange'
 import { rootRoute } from '../root'
-import type { OverviewCount, StorageWatermarkEntry } from './overview'
-import { collectionCountTiles, healthCountTiles, storageRatio, storageTone, usagePercentLabel } from './overview'
+import type { OverviewCount, StorageWatermarkEntry, TopSqlEntry } from './overview'
+import {
+  collectionCountTiles,
+  healthCountTiles,
+  storageRatio,
+  storageTone,
+  topSqlSummaries,
+  usagePercentLabel,
+} from './overview'
 import './overview.css'
 
 type Instance = components['schemas']['Instance']
 
 /// 机群总览，登录后的落地页（`/`）。
 ///
-/// 四块从上到下，对应值班的人打开页面时依次问的两个问题：
+/// 五块从上到下，对应值班的人打开页面时依次问的几个问题：
 ///   1. 机群健康计数 —— 整体还好吗；
 ///   2. 采集自监控 —— 我看到的「还好」是不是因为根本没在采；
 ///   3. 需要关注的实例 Top 10 —— 我现在该看谁；
-///   4. 容量水位 Top 10 —— 这类指标不会报警，但会要命。
+///   4. 容量水位 Top 10 —— 这类指标不会报警，但会要命；
+///   5. Top SQL 前 5 —— 谁在费掉这些资源。
 ///
 /// 第二块排在第三块前面是刻意的：五百台里最容易悄悄烂掉的就是采集这一层，
-/// 而它烂掉时前一块会显示一片「正常」。
+/// 而它烂掉时前一块会显示一片「正常」。第五块排在最后是因为它回答的是「为什么」，
+/// 而值班的人先要知道「是不是出事了」。
 ///
 /// **不做**：全量实例格子墙（五百个格子没有信息量）、装饰性 KPI 环形图
 /// （DESIGN.md 的 Data visualisation 一节里压根没有环形图这个组件）。
-/// 「Top SQL 前 5」是下一张票的第五块，这里不摆空壳。
 export const overviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
@@ -100,6 +108,14 @@ function OverviewPage() {
       >
         {overview !== undefined && <StorageWatermarks entries={overview.storage} />}
       </Panel>
+
+      <Panel
+        title="Top SQL 前 5"
+        description="跨实例按总耗时排序。显示的是归一化后的语句（字面量已是 $1 占位符）。"
+        loading={loading}
+      >
+        {overview !== undefined && <TopSqlList entries={overview.top_sql} />}
+      </Panel>
     </div>
   )
 }
@@ -145,6 +161,34 @@ export function StorageWatermarks({ entries }: { entries: StorageWatermarkEntry[
               value={usagePercentLabel(entry.usage_percent)}
               ratio={storageRatio(entry.usage_percent)}
               tone={storageTone(entry.usage_percent)}
+            />
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/// Top SQL 前 5：五行「语句 + 总耗时 + 比例条」，整行是去 SQL 洞察全页的入口。
+///
+/// 这里不重复一张表：五行里再摆四列，每列在 974px 下分不到能读的宽度，
+/// 而这一块要回答的只是「最费资源的是哪几条」——「是哪台、跑了多少次」压进注解一行。
+export function TopSqlList({ entries }: { entries: TopSqlEntry[] }) {
+  if (entries.length === 0) {
+    return <p className="overview-empty dbs-caption">
+      还没有查询统计。这一块来自 pg_stat_statements，装了这个扩展并采集过一轮之后才有。
+    </p>
+  }
+  return (
+    <ul className="overview-top-sql" aria-label="Top SQL 前 5">
+      {topSqlSummaries(entries).map((summary) => (
+        <li key={summary.key}>
+          <Link className="overview-top-sql__row" to="/sql-insight" data-testid="overview-top-sql">
+            <MetricBar
+              label={<TruncatedText className="overview-top-sql__statement">{summary.statement}</TruncatedText>}
+              value={summary.elapsed}
+              ratio={summary.ratio}
+              caption={summary.caption}
             />
           </Link>
         </li>

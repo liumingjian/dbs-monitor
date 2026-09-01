@@ -414,11 +414,20 @@ ORDER BY datname`,
 	{
 		ID: TaskQueryStatistics, Kind: TaskKindSQL, Interval: 5 * time.Minute,
 		Requires: []CapabilityID{CapabilityExtensionPGStatStatements},
+		// query 一列取的是 pg_stat_statements 的归一化文本（字面量已是 $1 占位符，
+		// 这是该扩展的设计保证），它是**唯一**允许落库的 SQL 文本来源。
+		// pg_stat_activity 的原文带真实字面量，TaskStatActivity 的 SQL 里因此没有 query 这一列，
+		// 也不许有——见 dictionary_sql_text_test.go 的守卫用例。
+		// left(..., 4096) 给单条文本封顶：track_activity_query_size 可以调到很大，
+		// 一条几十 KB 的语句对排查没有额外价值，却会把去重表撑起来。
+		// COALESCE 到空串是因为 query 可以是 NULL（文本被扩展的外部文件回收，或权限不足）；
+		// 空串在采集侧被跳过，不会写成一行「空文本」盖掉上一次采到的真文本。
 		SQL: `SELECT queryid,
        dbid AS database_oid,
        userid AS user_oid,
        sum(calls)::bigint AS calls,
-       sum(total_exec_time)::double precision AS total_exec_time_ms
+       sum(total_exec_time)::double precision AS total_exec_time_ms,
+       COALESCE(left(max(query), 4096), '')::text AS query_text
 FROM pg_stat_statements
 GROUP BY queryid, dbid, userid
 ORDER BY total_exec_time_ms DESC, queryid, dbid, userid
