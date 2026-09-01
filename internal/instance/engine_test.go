@@ -3,6 +3,7 @@ package instance_test
 import (
 	"testing"
 
+	"github.com/liumingjian/dbs-monitor/internal/dbengine"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
 )
 
@@ -29,13 +30,17 @@ func TestResolveBootstrapDatabase(t *testing.T) {
 }
 
 func TestEngineValidity(t *testing.T) {
-	if !instance.EnginePostgreSQL.Valid() {
+	if !instance.EnginePostgreSQL.ValidForInstance() {
 		t.Fatal("POSTGRESQL should be a known engine")
 	}
 	for _, unknown := range []instance.Engine{"", "MYSQL", "postgresql"} {
-		if unknown.Valid() {
+		if unknown.ValidForInstance() {
 			t.Fatalf("engine %q should not be known yet", unknown)
 		}
+	}
+	// AGNOSTIC 是指标目录侧的取值：目录里有「与引擎无关」的行，实例却总是连到某个具体产品。
+	if dbengine.Agnostic.ValidForInstance() {
+		t.Fatal("AGNOSTIC must never be a valid instance engine")
 	}
 }
 

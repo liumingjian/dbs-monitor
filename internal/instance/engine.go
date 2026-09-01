@@ -4,39 +4,32 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/liumingjian/dbs-monitor/internal/dbengine"
 )
 
 // Engine 是一台被监控实例运行的数据库产品。
 //
-// 它是实例模型的一部分，不是指标目录的一部分：一条连接只跑一种产品，
-// 而引擎决定哪些采集任务适用、哪些指标存在，也决定 bootstrap database 有没有意义。
+// 类型本身住在 internal/dbengine：指标目录也要说「这一行属于哪个引擎」，两处必须是同一个词、
+// 同一套字面量。这里只是把它按实例侧的说法再导出一次，并且只承认实例合法的取值——
+// 实例永远不会是 AGNOSTIC（DDL 的 CHECK 与 ValidForInstance 各拦一道）。
+//
+// 引擎决定哪些采集任务适用、哪些指标存在，也决定 bootstrap database 有没有意义。
 // 接入时选定，之后不可改——改了等于换了一台实例，历史数据不再成立。
-type Engine string
+type Engine = dbengine.Engine
 
-const (
-	// EnginePostgreSQL 是目前唯一接入的引擎。MySQL 会作为第二个值加进来，
-	// 加的时候只需要在这里、DDL 的 CHECK 与 OpenAPI 的 InstanceEngine 三处各加一项。
-	EnginePostgreSQL Engine = "POSTGRESQL"
-)
+// EnginePostgreSQL 是目前唯一接入的引擎。MySQL 会作为第二个值加进来，
+// 加的时候只需要在 dbengine、DDL 的 CHECK 与 OpenAPI 的 InstanceEngine 三处各加一项。
+const EnginePostgreSQL = dbengine.PostgreSQL
 
 // Engines 按接入表单的展示顺序列出所有可选引擎。
 func Engines() []Engine {
-	return []Engine{EnginePostgreSQL}
-}
-
-// Valid 报告 engine 是不是一个已知引擎。空值不是已知引擎——调用方要先决定默认值。
-func (engine Engine) Valid() bool {
-	for _, known := range Engines() {
-		if engine == known {
-			return true
-		}
-	}
-	return false
+	return dbengine.InstanceEngines()
 }
 
 // DefaultBootstrapDatabase 是操作者没填 bootstrap database 时该用的库名。
 // PostgreSQL 建连接必须落到某个库上，约定用 postgres；MySQL 没有这个概念，留空。
-func (engine Engine) DefaultBootstrapDatabase() string {
+func DefaultBootstrapDatabase(engine Engine) string {
 	switch engine {
 	case EnginePostgreSQL:
 		return "postgres"
@@ -55,7 +48,7 @@ func ResolveBootstrapDatabase(engine Engine, requested string) string {
 	if trimmed != "" {
 		return trimmed
 	}
-	return engine.DefaultBootstrapDatabase()
+	return DefaultBootstrapDatabase(engine)
 }
 
 // BootstrapDatabaseColumn 把归一后的 bootstrap database 编成列值：空串意味着这个引擎

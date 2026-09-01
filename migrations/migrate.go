@@ -124,6 +124,9 @@ func up(
 		return applied, fmt.Errorf("apply migrations: %w", err)
 	}
 	applied += len(results)
+	if err := reconcileMetricCatalog(ctx, database); err != nil {
+		return applied, err
+	}
 	if err := reconcileAlertingSeeds(ctx, database); err != nil {
 		return applied, err
 	}

@@ -104,6 +104,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMetricCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/collection/tasks": {
         parameters: {
             query?: never;
@@ -1727,6 +1743,34 @@ export interface components {
                 }[];
             }[];
         };
+        /**
+         * @description Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
+         * @enum {string}
+         */
+        MetricEngine: "POSTGRESQL" | "AGNOSTIC";
+        /** @enum {string} */
+        SemanticSlot: "throughput" | "connections" | "connection_saturation" | "probe_latency" | "rollback_rate" | "replication_lag" | "cache_hit_ratio" | "storage_usage" | "deadlocks";
+        /** @enum {string} */
+        MetricLevel: "INSTANCE" | "DATABASE";
+        /** @enum {string} */
+        MetricAggregation: "NONE" | "SUM" | "WEIGHTED_AVERAGE";
+        MetricCatalogEntry: {
+            metric_id: string;
+            engine: components["schemas"]["MetricEngine"];
+            unit: string;
+            display_name: string;
+            semantic_slot: components["schemas"]["SemanticSlot"] | null;
+            level: components["schemas"]["MetricLevel"];
+            aggregation: components["schemas"]["MetricAggregation"];
+        };
+        SemanticSlotDeclaration: {
+            slot_id: components["schemas"]["SemanticSlot"];
+            display_name: string;
+        };
+        MetricCatalog: {
+            metrics: components["schemas"]["MetricCatalogEntry"][];
+            semantic_slots: components["schemas"]["SemanticSlotDeclaration"][];
+        };
         AgentReport: {
             /** Format: uuid */
             instance_id: string;
@@ -1868,7 +1912,7 @@ export interface components {
             };
         };
         /**
-         * @description Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards.
+         * @description Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
          * @enum {string}
          */
         InstanceEngine: "POSTGRESQL";
@@ -2308,6 +2352,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMetricCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The metric catalogue and the semantic slots it fills */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricCatalog"];
                 };
             };
         };

@@ -287,6 +287,9 @@ type ClientInterface interface {
 	// GetCurrentUser request
 	GetCurrentUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetMetricCatalog request
+	GetMetricCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetChannelFailures request
 	GetChannelFailures(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1248,6 +1251,18 @@ func (c *Client) EndMaintenanceWindow(ctx context.Context, id openapi_types.UUID
 
 func (c *Client) GetCurrentUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCurrentUserRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetMetricCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMetricCatalogRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -4112,6 +4127,33 @@ func NewGetCurrentUserRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewGetMetricCatalogRequest generates requests for GetMetricCatalog
+func NewGetMetricCatalogRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/metrics/catalog")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetChannelFailuresRequest generates requests for GetChannelFailures
 func NewGetChannelFailuresRequest(server string) (*http.Request, error) {
 	var err error
@@ -5434,6 +5476,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetCurrentUserWithResponse request
 	GetCurrentUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentUserResponse, error)
+
+	// GetMetricCatalogWithResponse request
+	GetMetricCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMetricCatalogResponse, error)
 
 	// GetChannelFailuresWithResponse request
 	GetChannelFailuresWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetChannelFailuresResponse, error)
@@ -6802,6 +6847,28 @@ func (r GetCurrentUserResponse) StatusCode() int {
 	return 0
 }
 
+type GetMetricCatalogResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MetricCatalog
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMetricCatalogResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMetricCatalogResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetChannelFailuresResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8109,6 +8176,15 @@ func (c *ClientWithResponses) GetCurrentUserWithResponse(ctx context.Context, re
 		return nil, err
 	}
 	return ParseGetCurrentUserResponse(rsp)
+}
+
+// GetMetricCatalogWithResponse request returning *GetMetricCatalogResponse
+func (c *ClientWithResponses) GetMetricCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMetricCatalogResponse, error) {
+	rsp, err := c.GetMetricCatalog(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMetricCatalogResponse(rsp)
 }
 
 // GetChannelFailuresWithResponse request returning *GetChannelFailuresResponse
@@ -10173,6 +10249,32 @@ func ParseGetCurrentUserResponse(rsp *http.Response) (*GetCurrentUserResponse, e
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest User
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMetricCatalogResponse parses an HTTP response from a GetMetricCatalogWithResponse call
+func ParseGetMetricCatalogResponse(rsp *http.Response) (*GetMetricCatalogResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMetricCatalogResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MetricCatalog
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

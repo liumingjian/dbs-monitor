@@ -2,7 +2,7 @@ import type { components } from '../../api/schema'
 import { metricUnavailability, type MetricChartSeries } from '../../domain/MetricChart'
 import type { MonitoringSearch } from './timeRange'
 import { isRFC3339 } from './timeRange'
-import { metricOptions, type MetricID } from './metricOptions'
+import { isMetricID, type MetricID } from './metricOptions'
 
 export type PerformanceEventTab = 'firing' | 'recovered' | 'disposed'
 export type PerformanceEventDisposition = Extract<components['schemas']['AlertDisposition'], 'ACKED' | 'IGNORED'>
@@ -70,8 +70,8 @@ export function serializePerformanceEventSearch(
 }
 
 export function eventMonitoringSearch(event: EventMonitoringContext): EventMonitoringSearch | undefined {
-  const metric = metricOptions.find((option) => option.id === event.metric_id)
-  if (!metric) return undefined
+  if (!isMetricID(event.metric_id)) return undefined
+  const metric = event.metric_id
 
   const start = new Date(event.derived_at)
   const observedEnd = new Date(event.recovered_at ?? event.updated_at)
@@ -79,7 +79,7 @@ export function eventMonitoringSearch(event: EventMonitoringContext): EventMonit
   return {
     from: start.toISOString(),
     to: end.toISOString(),
-    metric: metric.id,
+    metric,
     step: 'auto',
     columns: 2,
     connect: true,

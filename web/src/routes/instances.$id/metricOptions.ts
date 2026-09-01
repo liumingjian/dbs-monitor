@@ -1,3 +1,5 @@
+import { useMemo } from 'react'
+import { $api } from '../../api/client'
 import type { operations } from '../../api/schema'
 
 export type MetricID = operations['getMetricSeries']['parameters']['query']['metric'][number]
@@ -5,7 +7,6 @@ export type MetricID = operations['getMetricSeries']['parameters']['query']['met
 export type MetricOption = {
   id: MetricID
   label: string
-  enhancedCandidate: boolean
 }
 
 export const defaultMetric: MetricID = 'pg.connection.total'
@@ -45,17 +46,13 @@ const metricIDs = [
   'pg.replication_slot.retained_wal_bytes',
 ] as const satisfies readonly MetricID[]
 
-export const metricOptions = metricIDs.map((id) => ({
-  id,
-  label: metricLabel(id),
-  enhancedCandidate: isEnhancedCandidate(id),
-})) satisfies readonly MetricOption[]
+export const allMetricIDs: readonly MetricID[] = metricIDs
 
-export function metricOption(id: MetricID): MetricOption {
-  return { id, label: metricLabel(id), enhancedCandidate: isEnhancedCandidate(id) }
+export function isMetricID(value: unknown): value is MetricID {
+  return typeof value === 'string' && (metricIDs as readonly string[]).includes(value)
 }
 
-function isEnhancedCandidate(id: MetricID): boolean {
+export function isEnhancedCandidate(id: MetricID): boolean {
   switch (id) {
     case 'collector.last_success_time':
     case 'agent.status':
@@ -96,43 +93,28 @@ function isEnhancedCandidate(id: MetricID): boolean {
   }
 }
 
-function metricLabel(id: MetricID): string {
-  switch (id) {
-    case 'pg.availability.reachable': return '实例连通性'
-    case 'pg.probe.latency_ms': return '主动探针延迟'
-    case 'collector.last_success_time': return '最近成功采集时间'
-    case 'agent.status': return 'Agent 状态'
-    case 'host.cpu.usage_percent': return 'CPU 使用率'
-    case 'host.memory.usage_percent': return '内存使用率'
-    case 'host.disk.usage_percent': return '磁盘使用率'
-    case 'host.disk.free_bytes': return '磁盘剩余空间'
-    case 'host.disk.iops': return '磁盘 IOPS'
-    case 'host.disk.throughput_bytes_per_sec': return '磁盘吞吐'
-    case 'host.network.bytes_per_sec': return '网络流量'
-    case 'pg.connection.total': return '总连接数'
-    case 'pg.connection.active': return '活跃连接数'
-    case 'pg.connection.idle_in_transaction': return 'idle in transaction 连接数'
-    case 'pg.tps': return 'TPS'
-    case 'pg.xact.commit_per_sec': return '提交速率'
-    case 'pg.xact.rollback_per_sec': return '回滚速率'
-    case 'pg.tuples.read_per_sec': return '读行速率'
-    case 'pg.tuples.write_per_sec': return '写行速率'
-    case 'pg.temp.files_per_sec': return '临时文件数量速率'
-    case 'pg.temp.bytes_per_sec': return '临时文件写入速率'
-    case 'pg.transaction.long_count': return '长事务数量'
-    case 'pg.transaction.max_duration_sec': return '最长事务时长'
-    case 'pg.lock.waiting_count': return '锁等待数量'
-    case 'pg.session.blocked_count': return '被阻塞会话数'
-    case 'pg.query.long_running_count': return '长查询数量'
-    case 'pg.prepared_xacts.count': return '2PC 数量'
-    case 'pg.replication.role': return '实例角色'
-    case 'pg.replication.connection_state': return '复制连接状态'
-    case 'pg.replication.replay_lag_ms': return '复制回放延迟'
-    case 'pg.replication.wal_lag_bytes': return 'WAL 延迟字节数'
-    case 'pg.replication_slot.retained_wal_bytes': return 'Replication slot WAL 积压'
-    default: return assertNever(id)
-  }
+export type MetricCatalog = {
+  /// 展示名。目录还在路上时给出指标 ID —— 一个真实的、能照着搜的事实，不是编出来的文案。
+  label: (id: MetricID) => string
+  option: (id: MetricID) => MetricOption
+  options: (ids: readonly MetricID[]) => MetricOption[]
 }
+
+/// 指标目录由服务端给：展示名与单位都在 `metric_catalog` 里，前端不再自持一份 —— 跨引擎之后
+/// 那份副本每加一个指标就要改一次，改漏了不报错，只在界面上露出一个裸指标 ID。
+/// 目录是静态数据，取一次就缓存住；多个页面各自调用，TanStack Query 会合成同一次请求。
+export function useMetricCatalog(): MetricCatalog {
+  const catalogQuery = $api.useQuery('get', '/api/v1/metrics/catalog', {}, catalogQueryOptions)
+  const entries = catalogQuery.data?.metrics
+  return useMemo(() => {
+    const names = new Map<string, string>((entries ?? []).map((entry) => [entry.metric_id, entry.display_name]))
+    const label = (id: MetricID) => names.get(id) ?? id
+    const option = (id: MetricID): MetricOption => ({ id, label: label(id) })
+    return { label, option, options: (ids: readonly MetricID[]) => ids.map(option) }
+  }, [entries])
+}
+
+const catalogQueryOptions = { staleTime: Infinity, gcTime: Infinity }
 
 function assertNever(value: never): never {
   throw new Error(`unhandled metric ID: ${value}`)

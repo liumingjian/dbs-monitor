@@ -23,6 +23,7 @@ var packageLayers = map[string]int{
 	"internal/clock":            0,
 	"internal/collect":          2,
 	"internal/db":               0,
+	"internal/dbengine":         0,
 	"internal/evaluator":        2,
 	"internal/httpapi":          2,
 	"internal/instance":         1,

@@ -9,7 +9,7 @@ A database service endpoint watched as one unit: one connection to one server, w
 _Avoid_: Monitored database, host
 
 **Engine**:
-The database product a monitored instance runs. It decides which collection tasks apply and which metrics exist for that instance. It is chosen at onboarding and does not change afterwards: changing it would mean a different instance whose history no longer holds.
+The database product something belongs to. A monitored instance runs exactly one: it decides which collection tasks apply and which metrics exist for that instance, is chosen at onboarding, and does not change afterwards — changing it would mean a different instance whose history no longer holds. Every metric catalogue row names one too, and there the vocabulary has one more value: a metric that measures the host or the collection itself rather than a database product is engine-agnostic. An instance is never engine-agnostic.
 _Avoid_: Database type, driver, dialect
 
 **Bootstrap database**:
@@ -59,3 +59,11 @@ _Avoid_: Contact, member
 **Instance removal**:
 Deleting an instance's configuration and credentials immediately, closing all its unresolved alerts with an attributed reason, and letting its samples expire through retention. Re-onboarding the same endpoint yields a new instance that inherits nothing.
 _Avoid_: Archive instance, soft delete
+
+**Metric catalogue**:
+The table of every metric the platform knows: its ID, engine, unit, display name, level (instance or database), how a database-level metric aggregates into the instance-level value, and which semantic slot it fills. It is data, not schema — a metric ID is legal because a catalogue row exists, not because a CHECK constraint lists it.
+_Avoid_: Metric enum, metric whitelist
+
+**Semantic slot**:
+An engine-neutral position in the metric model that resolves, per engine, to one concrete metric ID. A slot with no metric on a given engine is not applicable there — an explicit answer, never an empty metric ID. Engine-private metrics deliberately fill no slot.
+_Avoid_: Neutral metric name, metric alias

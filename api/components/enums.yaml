@@ -31,6 +31,9 @@ InstanceEngine:
     Database product a monitored instance runs. Decides which collection tasks apply and
     which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and
     fixed afterwards.
+    Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is
+    always a connection to one concrete product, so AGNOSTIC is not offered here.
+    Both map onto the one Go type internal/dbengine.Engine.
   enum: [POSTGRESQL]
   x-enum-varnames: [InstanceEnginePostgreSQL]
 CapabilityStatus:
@@ -110,3 +113,42 @@ PerformanceEventType:
     - EventActiveSessionsHigh
     - EventReplicationLag
     - EventTempFilesSurge
+MetricEngine:
+  type: string
+  description: >-
+    Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine
+    plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics
+    hang off an instance but measure the host and the collection itself, not any database
+    product. Both map onto the one Go type internal/dbengine.Engine.
+  enum: [POSTGRESQL, AGNOSTIC]
+  x-enum-varnames: [MetricEnginePostgreSQL, MetricEngineAgnostic]
+SemanticSlot:
+  type: string
+  enum:
+    - throughput
+    - connections
+    - connection_saturation
+    - probe_latency
+    - rollback_rate
+    - replication_lag
+    - cache_hit_ratio
+    - storage_usage
+    - deadlocks
+  x-enum-varnames:
+    - SlotThroughput
+    - SlotConnections
+    - SlotConnectionSaturation
+    - SlotProbeLatency
+    - SlotRollbackRate
+    - SlotReplicationLag
+    - SlotCacheHitRatio
+    - SlotStorageUsage
+    - SlotDeadlocks
+MetricLevel:
+  type: string
+  enum: [INSTANCE, DATABASE]
+  x-enum-varnames: [MetricLevelInstance, MetricLevelDatabase]
+MetricAggregation:
+  type: string
+  enum: [NONE, SUM, WEIGHTED_AVERAGE]
+  x-enum-varnames: [MetricAggregationNone, MetricAggregationSum, MetricAggregationWeightedAverage]

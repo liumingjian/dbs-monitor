@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { metricOptions } from './metricOptions'
+import { allMetricIDs, isEnhancedCandidate, isMetricID } from './metricOptions'
 
-describe('metric options', () => {
+describe('metric IDs', () => {
   it('exposes every R1 P0 metric exactly once', () => {
-    expect(metricOptions).toHaveLength(32)
-    expect(new Set(metricOptions.map((option) => option.id)).size).toBe(32)
+    expect(allMetricIDs).toHaveLength(32)
+    expect(new Set(allMetricIDs).size).toBe(32)
   })
 
   it('exposes every pg_stat_activity task metric', () => {
-    expect(metricOptions.map((option) => option.id)).toEqual(expect.arrayContaining([
+    expect(allMetricIDs).toEqual(expect.arrayContaining([
       'pg.connection.total',
       'pg.connection.active',
       'pg.connection.idle_in_transaction',
@@ -18,5 +18,16 @@ describe('metric options', () => {
       'pg.session.blocked_count',
       'pg.query.long_running_count',
     ]))
+  })
+
+  it('recognises catalogued metric IDs and rejects everything else', () => {
+    expect(isMetricID('pg.tps')).toBe(true)
+    expect(isMetricID('mysql.qps')).toBe(false)
+    expect(isMetricID(undefined)).toBe(false)
+  })
+
+  it('keeps control-plane metrics out of the enhanced chart picker', () => {
+    expect(isEnhancedCandidate('agent.status')).toBe(false)
+    expect(isEnhancedCandidate('pg.tps')).toBe(true)
   })
 })

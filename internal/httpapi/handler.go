@@ -355,7 +355,7 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	if request.Body.Engine != nil {
 		engine = instance.Engine(*request.Body.Engine)
 	}
-	if !engine.Valid() {
+	if !engine.ValidForInstance() {
 		return api.CreateInstance400JSONResponse(errorBody(api.VALIDATIONFAILED, "不支持的数据库引擎")), nil
 	}
 	// bootstrap database 只是建连接用的库名，留空就按引擎取默认库；它不限定被监控的范围。
@@ -1379,7 +1379,7 @@ var RequiredRoles = map[string]string{
 	"ListMaintenanceWindows": "READONLY", "CreateMaintenanceWindow": "ALERT_ADMIN",
 	"UpdateMaintenanceWindow": "ALERT_ADMIN", "EndMaintenanceWindow": "ALERT_ADMIN", "DeleteMaintenanceWindow": "ALERT_ADMIN",
 	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
-	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
+	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY", "GetMetricCatalog": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
 	"ListLongQuerySamples": "READONLY", "GetQueryStatisticsSnapshot": "READONLY", "GetSessionSnapshot": "READONLY",
 	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",

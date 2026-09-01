@@ -41,8 +41,8 @@ import { browserStorage } from '../../root/navCollapse'
 import type { TableDensity } from '../../root/tableDensity'
 import { densityLabel, readTableDensity, writeTableDensity } from '../../root/tableDensity'
 import { defaultTimeRange } from '../timeRange'
-import { metricOptions } from '../metricOptions'
-import type { MetricOption } from '../metricOptions'
+import { allMetricIDs, isMetricID, useMetricCatalog } from '../metricOptions'
+import type { MetricCatalog, MetricOption } from '../metricOptions'
 import { WorkbenchHeader } from '../workbench'
 import './rules.css'
 
@@ -61,7 +61,7 @@ type Instance = components['schemas']['Instance']
 type NotificationPolicy = components['schemas']['NotificationPolicy']
 type CapabilityFit = 'SATISFIED' | 'UNSATISFIED' | 'UNKNOWN'
 
-const alertableMetricOptions = metricOptions.filter(({ id }) => (
+const alertableMetricIDs = allMetricIDs.filter((id) => (
   id !== 'pg.replication.role' && id !== 'pg.replication.replay_lag_ms'
 ))
 
@@ -78,6 +78,7 @@ export const alertRulesRoute = createRoute({
 /// 阈值与连续次数是相对着定的，遮住列表就只能靠记忆。
 function AlertRulesPage() {
   const { id } = alertRulesRoute.useParams()
+  const catalog = useMetricCatalog()
   const rulesQuery = $api.useQuery('get', '/api/v1/alert-rules')
   const templatesQuery = $api.useQuery('get', '/api/v1/alert-rule-templates')
   const instancesQuery = $api.useQuery('get', '/api/v1/instances')
@@ -221,6 +222,7 @@ function AlertRulesPage() {
         rowTestId="alert-rule-row"
         rowTone={severityRowTone}
         columns={alertRuleColumns({
+          catalog,
           canWrite,
           disabledReason,
           currentInstance: instanceQuery.data,
@@ -252,6 +254,7 @@ function AlertRulesPage() {
     />
 
     <TemplateModal
+      catalog={catalog}
       open={templateOpen}
       templates={templatesQuery.data ?? []}
       loading={templatesQuery.isPending}
@@ -473,6 +476,7 @@ function RuleDrawerForm({ editingRule, instances, policies, onClose, onSaved }: 
   onClose: () => void
   onSaved: () => void
 }) {
+  const metricItems: MetricOption[] = useMetricCatalog().options(alertableMetricIDs)
   const createMutation = $api.useMutation('post', '/api/v1/alert-rules')
   const updateMutation = $api.useMutation('put', '/api/v1/alert-rules/{id}')
   const form = useForm<AlertRuleValues>({
@@ -556,9 +560,9 @@ function RuleDrawerForm({ editingRule, instances, policies, onClose, onSaved }: 
               return '展开选项'
             }}
             disabled={isBuiltin}
-            items={alertableMetricOptions}
+            items={metricItems}
             itemToString={(item) => (item === null ? '' : `${item.label} · ${item.id}`)}
-            selectedItem={alertableMetricOptions.find((option) => option.id === metric.value) ?? null}
+            selectedItem={metricItems.find((option) => option.id === metric.value) ?? null}
             invalid={field.invalid}
             aria-describedby={field.describedBy}
             onChange={({ selectedItem }) => metric.onChange(selectedItem?.id ?? '')}
@@ -809,7 +813,8 @@ function NumberFormField({ control, name, label, min, helperText, errorText }: {
  * 模板
  * ------------------------------------------------------------------ */
 
-function TemplateModal({ open, templates, loading, canWrite, disabledReason, actionPending, onClose, onCreate }: {
+function TemplateModal({ catalog, open, templates, loading, canWrite, disabledReason, actionPending, onClose, onCreate }: {
+  catalog: MetricCatalog
   open: boolean
   templates: AlertRuleTemplate[]
   loading: boolean
@@ -822,7 +827,7 @@ function TemplateModal({ open, templates, loading, canWrite, disabledReason, act
   const columns: DataGridColumn<AlertRuleTemplate>[] = [
     { key: 'name', header: '模板', minWidth: 150, grow: 1.4, cell: (template) => <TruncatedText>{template.name}</TruncatedText> },
     { key: 'version', header: '版本', minWidth: 56, numeric: true, cell: (template) => `v${template.version}` },
-    { key: 'metric', header: '指标', minWidth: 130, cell: (template) => <TruncatedText title={template.metric_id}>{metricName(template.metric_id)}</TruncatedText> },
+    { key: 'metric', header: '指标', minWidth: 130, cell: (template) => <TruncatedText title={template.metric_id}>{metricName(catalog, template.metric_id)}</TruncatedText> },
     {
       key: 'condition',
       header: '条件',
@@ -910,7 +915,8 @@ function TemplateModal({ open, templates, loading, canWrite, disabledReason, act
 /// 减去内边距只剩约 49px 字形，也就是四个汉字。名称（约 50px 字形）、指标（43px）、
 /// 通知策略（53px）三列长文本因此只显示前三到四个字，全文在悬停提示与详情抽屉里。
 /// 这不是靠内边距或列宽再调能改回来的：15 列与 974px 这两个数放在一起就得出这个结果。
-function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, capabilities, onEdit, onCopy, onDelete, onEnabledChange, actionPending }: {
+function alertRuleColumns({ catalog, canWrite, disabledReason, currentInstance, tasks, capabilities, onEdit, onCopy, onDelete, onEnabledChange, actionPending }: {
+  catalog: MetricCatalog
   canWrite: boolean
   disabledReason: string | undefined
   currentInstance: Instance | undefined
@@ -946,7 +952,10 @@ function alertRuleColumns({ canWrite, disabledReason, currentInstance, tasks, ca
       key: 'metric',
       header: '指标',
       minWidth: 59,
-      cell: (rule) => <TruncatedText title={`${metricName(rule.metric_id)}（${rule.metric_id}）`}>{metricName(rule.metric_id)}</TruncatedText>,
+      cell: (rule) => {
+        const name = metricName(catalog, rule.metric_id)
+        return <TruncatedText title={`${name}（${rule.metric_id}）`}>{name}</TruncatedText>
+      },
     },
     {
       key: 'trigger',
@@ -1197,8 +1206,9 @@ function CapabilityFitBadge({ fit }: { fit: CapabilityFit }) {
   return <StatusBadge tone={capabilityFitTone(fit)}>{capabilityFitLabel(fit)}</StatusBadge>
 }
 
-function metricName(metricID: string): string {
-  return metricOptions.find((option) => option.id === metricID)?.label ?? metricID
+/// 规则里的指标 ID 是自由文本（内置规则与历史规则都可能带着字典外的 ID），认不出来就照原样显示。
+function metricName(catalog: MetricCatalog, metricID: string): string {
+  return isMetricID(metricID) ? catalog.label(metricID) : metricID
 }
 
 function positiveInteger(value: number | undefined): value is number {

@@ -425,6 +425,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("connection metadata update did not preserve ciphertext and advance version: version %d", credentialVersion)
 	}
 
+	assertMetricCatalog(t, client, server.URL+"/api/v1/metrics/catalog")
+
 	tasksURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/tasks", server.URL, instanceID)
 	tasks := getResponse(t, client, tasksURL)
 	if tasks.StatusCode != http.StatusOK {
@@ -1194,6 +1196,49 @@ func assertAgentState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ins
 	}
 	if gotVersion != version || gotCode.String != code || gotMessage.String != message {
 		t.Fatalf("Agent state = (%q, %q, %q), want (%q, %q, %q)", gotVersion, gotCode.String, gotMessage.String, version, code, message)
+	}
+}
+
+// 指标目录由服务端交付：展示名与单位从这里来，前端不再自己留一份。
+func assertMetricCatalog(t *testing.T, client *http.Client, address string) {
+	t.Helper()
+	response := getResponse(t, client, address)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("metric catalog status = %d, want 200", response.StatusCode)
+	}
+	var body api.MetricCatalog
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode metric catalog: %v", err)
+	}
+	if len(body.Metrics) != len(metric.Metrics) {
+		t.Fatalf("catalog metric count = %d, want %d", len(body.Metrics), len(metric.Metrics))
+	}
+	if len(body.SemanticSlots) != len(metric.SemanticSlots) {
+		t.Fatalf("catalog semantic slot count = %d, want %d", len(body.SemanticSlots), len(metric.SemanticSlots))
+	}
+	var throughput *api.MetricCatalogEntry
+	for index := range body.Metrics {
+		if body.Metrics[index].MetricId == metric.MetricTPS.String() {
+			throughput = &body.Metrics[index]
+			break
+		}
+	}
+	if throughput == nil {
+		t.Fatal("catalog is missing pg.tps")
+	}
+	slot, err := throughput.SemanticSlot.Get()
+	if err != nil || slot != api.SlotThroughput {
+		t.Fatalf("pg.tps semantic slot = %v (err %v), want %q", slot, err, api.SlotThroughput)
+	}
+	if throughput.DisplayName != "TPS" || throughput.Unit != "tx/s" ||
+		throughput.Engine != api.MetricEnginePostgreSQL || throughput.Level != api.MetricLevelInstance {
+		t.Fatalf("pg.tps catalog entry = %+v", *throughput)
+	}
+	for index := range body.Metrics {
+		if body.Metrics[index].DisplayName == "" {
+			t.Fatalf("catalog entry %q has no display name", body.Metrics[index].MetricId)
+		}
 	}
 }
 
