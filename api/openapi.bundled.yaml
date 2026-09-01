@@ -233,6 +233,8 @@ paths:
                 - pg.connection.total
                 - pg.connection.active
                 - pg.connection.idle_in_transaction
+                - pg.connection.max
+                - pg.connection.saturation_percent
                 - pg.tps
                 - pg.xact.commit_per_sec
                 - pg.xact.rollback_per_sec
@@ -251,6 +253,10 @@ paths:
                 - pg.replication.replay_lag_ms
                 - pg.replication.wal_lag_bytes
                 - pg.replication_slot.retained_wal_bytes
+                - pg.cache.hit_ratio
+                - pg.cache.block_access_per_sec
+                - pg.database.size_bytes
+                - pg.deadlock.count
         - name: from
           in: query
           required: true
@@ -410,6 +416,8 @@ paths:
             - pg.replication_slot
             - pg.prepared_xacts
             - pg.role
+            - pg.settings
+            - pg.database_size
             - pg.stat_statements
     put:
       tags:
@@ -3582,6 +3590,8 @@ components:
             - pg.replication_slot
             - pg.prepared_xacts
             - pg.role
+            - pg.settings
+            - pg.database_size
             - pg.stat_statements
         kind:
           type: string

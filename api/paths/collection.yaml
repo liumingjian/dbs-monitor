@@ -84,6 +84,8 @@
           - pg.replication_slot
           - pg.prepared_xacts
           - pg.role
+          - pg.settings
+          - pg.database_size
           - pg.stat_statements
   put:
     tags: [collection]

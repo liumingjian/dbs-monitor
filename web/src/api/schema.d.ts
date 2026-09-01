@@ -180,7 +180,7 @@ export interface paths {
             header?: never;
             path: {
                 id: string;
-                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.settings" | "pg.database_size" | "pg.stat_statements";
             };
             cookie?: never;
         };
@@ -1630,7 +1630,7 @@ export interface components {
         };
         CollectionTaskState: {
             /** @enum {string} */
-            task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.settings" | "pg.database_size" | "pg.stat_statements";
             /** @enum {string} */
             kind: "probe" | "sql" | "agent-derived";
             interval_seconds: number;
@@ -2323,7 +2323,7 @@ export interface operations {
     getMetricSeries: {
         parameters: {
             query: {
-                metric: ("pg.availability.reachable" | "pg.probe.latency_ms" | "collector.last_success_time" | "agent.status" | "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec" | "pg.connection.total" | "pg.connection.active" | "pg.connection.idle_in_transaction" | "pg.tps" | "pg.xact.commit_per_sec" | "pg.xact.rollback_per_sec" | "pg.tuples.read_per_sec" | "pg.tuples.write_per_sec" | "pg.temp.files_per_sec" | "pg.temp.bytes_per_sec" | "pg.transaction.long_count" | "pg.transaction.max_duration_sec" | "pg.lock.waiting_count" | "pg.session.blocked_count" | "pg.query.long_running_count" | "pg.prepared_xacts.count" | "pg.replication.role" | "pg.replication.connection_state" | "pg.replication.replay_lag_ms" | "pg.replication.wal_lag_bytes" | "pg.replication_slot.retained_wal_bytes")[];
+                metric: ("pg.availability.reachable" | "pg.probe.latency_ms" | "collector.last_success_time" | "agent.status" | "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec" | "pg.connection.total" | "pg.connection.active" | "pg.connection.idle_in_transaction" | "pg.connection.max" | "pg.connection.saturation_percent" | "pg.tps" | "pg.xact.commit_per_sec" | "pg.xact.rollback_per_sec" | "pg.tuples.read_per_sec" | "pg.tuples.write_per_sec" | "pg.temp.files_per_sec" | "pg.temp.bytes_per_sec" | "pg.transaction.long_count" | "pg.transaction.max_duration_sec" | "pg.lock.waiting_count" | "pg.session.blocked_count" | "pg.query.long_running_count" | "pg.prepared_xacts.count" | "pg.replication.role" | "pg.replication.connection_state" | "pg.replication.replay_lag_ms" | "pg.replication.wal_lag_bytes" | "pg.replication_slot.retained_wal_bytes" | "pg.cache.hit_ratio" | "pg.cache.block_access_per_sec" | "pg.database.size_bytes" | "pg.deadlock.count")[];
                 from: string;
                 to: string;
                 step?: "auto" | "15s" | "1m" | "5m" | "raw";
@@ -2475,7 +2475,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.settings" | "pg.database_size" | "pg.stat_statements";
             };
             cookie?: never;
         };

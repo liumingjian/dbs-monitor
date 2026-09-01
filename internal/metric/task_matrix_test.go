@@ -176,6 +176,18 @@ func TestPGPreparedXactsShapeMatrix(t *testing.T) {
 	})
 }
 
+// max_connections 是配置项，一次一行；饱和度的分母就是它。
+func TestPGSettingsShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskSettings)
+	assertTaskShapeMatrix(t, task, metricColumnShapes(task))
+}
+
+// pg_database 一库一行，第一列是库名——体积也是库级指标。
+func TestPGDatabaseSizeShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskDatabaseSize)
+	assertVariableRowsTaskShapeMatrix(t, task, metricColumnShapes(task))
+}
+
 func TestPGRoleShapeMatrix(t *testing.T) {
 	task := requiredTask(t, metric.TaskRole)
 	assertTaskShapeMatrix(t, task, []taskColumnShape{{name: "role", oid: pgtype.TextOID}})

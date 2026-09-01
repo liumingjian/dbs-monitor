@@ -26,6 +26,8 @@ const metricIDs = [
   'pg.connection.total',
   'pg.connection.active',
   'pg.connection.idle_in_transaction',
+  'pg.connection.max',
+  'pg.connection.saturation_percent',
   'pg.tps',
   'pg.xact.commit_per_sec',
   'pg.xact.rollback_per_sec',
@@ -44,6 +46,10 @@ const metricIDs = [
   'pg.replication.replay_lag_ms',
   'pg.replication.wal_lag_bytes',
   'pg.replication_slot.retained_wal_bytes',
+  'pg.cache.hit_ratio',
+  'pg.cache.block_access_per_sec',
+  'pg.database.size_bytes',
+  'pg.deadlock.count',
 ] as const satisfies readonly MetricID[]
 
 export const allMetricIDs: readonly MetricID[] = metricIDs
@@ -59,6 +65,10 @@ export function isEnhancedCandidate(id: MetricID): boolean {
     case 'host.disk.free_bytes':
     case 'pg.prepared_xacts.count':
     case 'pg.replication.role':
+    case 'pg.connection.max':
+    case 'pg.database.size_bytes':
+      // 最大连接数是配置项、数据库体积是慢变量：增强监控的秒级窗口里它们都是一条直线，
+      // 选进来只会占一格。饱和度才是连接上限在这里该有的样子。
       return false
     case 'pg.availability.reachable':
     case 'pg.probe.latency_ms':
@@ -87,6 +97,10 @@ export function isEnhancedCandidate(id: MetricID): boolean {
     case 'pg.replication.replay_lag_ms':
     case 'pg.replication.wal_lag_bytes':
     case 'pg.replication_slot.retained_wal_bytes':
+    case 'pg.connection.saturation_percent':
+    case 'pg.cache.hit_ratio':
+    case 'pg.cache.block_access_per_sec':
+    case 'pg.deadlock.count':
       return true
     default:
       return assertNever(id)

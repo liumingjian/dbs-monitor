@@ -18,7 +18,7 @@ describe('enhanced monitoring', () => {
       aggregation: 'average',
       columns: 2,
     })
-    expect(enhancedMonitoringMetricIDs).toHaveLength(27)
+    expect(enhancedMonitoringMetricIDs).toHaveLength(31)
     expect(enhancedMonitoringMetricIDs.filter((metric) => metric.startsWith('host.'))).toEqual([
       'host.cpu.usage_percent',
       'host.memory.usage_percent',

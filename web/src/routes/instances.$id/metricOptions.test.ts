@@ -3,8 +3,8 @@ import { allMetricIDs, isEnhancedCandidate, isMetricID } from './metricOptions'
 
 describe('metric IDs', () => {
   it('exposes every R1 P0 metric exactly once', () => {
-    expect(allMetricIDs).toHaveLength(32)
-    expect(new Set(allMetricIDs).size).toBe(32)
+    expect(allMetricIDs).toHaveLength(38)
+    expect(new Set(allMetricIDs).size).toBe(38)
   })
 
   it('exposes every pg_stat_activity task metric', () => {
