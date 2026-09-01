@@ -2327,6 +2327,7 @@ export interface operations {
                 from: string;
                 to: string;
                 step?: "auto" | "15s" | "1m" | "5m" | "raw";
+                by_database?: boolean;
             };
             header?: never;
             path: {

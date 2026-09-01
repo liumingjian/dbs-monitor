@@ -57,6 +57,12 @@ CREATE TABLE metric_catalog (
     semantic_slot text REFERENCES metric_semantic_slot(slot_id),
     level text NOT NULL CHECK (level IN ('INSTANCE', 'DATABASE')),
     aggregation text NOT NULL CHECK (aggregation IN ('NONE', 'SUM', 'WEIGHTED_AVERAGE')),
+    -- 加权平均的权重取自另一个库级指标（命中率按 blks_hit + blks_read 加权）。没有权重的
+    -- 「加权平均」就是算术平均，而算术平均正是这条规则要挡住的东西，所以两者必须成对出现。
+    aggregation_weight text,
+    CONSTRAINT metric_catalog_weighted_average_has_weight CHECK (
+        (aggregation = 'WEIGHTED_AVERAGE') = (aggregation_weight IS NOT NULL)
+    ),
     -- 实例级指标没有可聚合的东西；库级指标必须说清楚怎么收敛成实例级。
     CONSTRAINT metric_catalog_aggregation_matches_level CHECK (
         (level = 'INSTANCE' AND aggregation = 'NONE')
@@ -66,15 +72,23 @@ CREATE TABLE metric_catalog (
     UNIQUE (semantic_slot, engine)
 );
 
+-- 一个实例是一条连接，连接下面可以有很多个库，所以时序表要有库这一维：
+-- database_name 空串表示实例级指标（连接数、探针延迟……），非空表示这一条序列量的是那一个库。
+-- 只加这一个具名维度，不做通用标签模型，理由见 docs/adr/0002-single-named-metric-dimension.md。
+--
+-- 唯一键因此是 (instance_id, metric_id, database_name)——labels_key 一并留在键里，是因为它还扛着
+-- 与库正交的另外两个维度（replica、slot：一台实例有多个备库、多个复制槽，它们不属于任何一个库）。
+-- 库级指标的 labels_key 恒为 '{}'，对它们而言这个键就是规范说的那个三元组。
 CREATE TABLE metric_series (
     series_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     instance_id uuid NOT NULL REFERENCES instance(id) ON DELETE CASCADE,
     metric_id text NOT NULL REFERENCES metric_catalog(metric_id),
+    database_name text NOT NULL DEFAULT '',
     labels jsonb NOT NULL DEFAULT '{}',
     labels_key text NOT NULL,
     first_seen timestamptz NOT NULL DEFAULT now(),
     last_seen timestamptz NOT NULL,
-    UNIQUE (instance_id, metric_id, labels_key)
+    UNIQUE (instance_id, metric_id, database_name, labels_key)
 );
 
 CREATE TABLE metric_sample (

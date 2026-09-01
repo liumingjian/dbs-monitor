@@ -115,3 +115,39 @@ func SlotDeclared(slot SemanticSlot) bool {
 	}
 	return false
 }
+
+// Lookup 取出目录里这一条指标。
+func Lookup(id MetricID) (Metric, bool) {
+	for _, item := range Metrics {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return Metric{}, false
+}
+
+// LevelFor 说这个指标量的是整台实例还是其中一个库。目录里没有的指标当作实例级：
+// 未知指标不会有库维度的序列，把它当库级只会让读取侧去找一个不存在的聚合方式。
+func LevelFor(id MetricID) MetricLevel {
+	if item, exists := Lookup(id); exists {
+		return item.Level
+	}
+	return LevelInstance
+}
+
+// AggregationFor 是这个库级指标收敛成实例级的方式；实例级指标返回 AggregationNone。
+func AggregationFor(id MetricID) MetricAggregation {
+	if item, exists := Lookup(id); exists {
+		return item.Aggregation
+	}
+	return AggregationNone
+}
+
+// WeightMetricFor 是加权平均的权重指标。只有 WEIGHTED_AVERAGE 的指标有权重。
+func WeightMetricFor(id MetricID) (MetricID, bool) {
+	item, exists := Lookup(id)
+	if !exists || item.Weight == "" {
+		return "", false
+	}
+	return item.Weight, true
+}

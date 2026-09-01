@@ -976,58 +976,40 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 			}
 		}
 
-		series, err := queries.SeriesForMetric(ctx, metric.SeriesForMetricParams{
-			InstanceID: instanceID, MetricID: metricID.String(),
-		})
+		series, err := readMetricSeries(ctx, queries, instanceID, metricID, step, request.Params.From, request.Params.To)
 		if err != nil {
 			return nil, err
 		}
-		for _, found := range series {
-			points := make([]struct {
-				ts    time.Time
-				value float64
-			}, 0)
-			if step.raw {
-				raw, err := queries.PointsInRange(ctx, metric.PointsInRangeParams{
-					SeriesID: found.SeriesID,
-					Ts:       pgtype.Timestamptz{Time: request.Params.From, Valid: true},
-					Ts_2:     pgtype.Timestamptz{Time: request.Params.To, Valid: true},
-				})
-				if err != nil {
-					return nil, err
-				}
-				for _, point := range raw {
-					points = append(points, struct {
-						ts    time.Time
-						value float64
-					}{point.Ts.Time, point.Value})
-				}
-			} else {
-				bucketed, err := queries.BucketedPointsInRange(ctx, metric.BucketedPointsInRangeParams{
-					SeriesID: found.SeriesID,
-					Ts:       pgtype.Timestamptz{Time: request.Params.From, Valid: true},
-					Ts_2:     pgtype.Timestamptz{Time: request.Params.To, Valid: true},
-					Bucket:   step.bucket,
-				})
-				if err != nil {
-					return nil, err
-				}
-				for _, point := range bucketed {
-					points = append(points, struct {
-						ts    time.Time
-						value float64
-					}{point.Ts.Time, point.Value})
-				}
+		// 「有没有序列」要在收敛之前数：收敛之后永远是一条，会把「还没采到任何东西」
+		// （NO_SAMPLES_YET）说成「这段时间里没有点」（NO_DATA_IN_RANGE）。
+		storedSeriesCount := len(series)
+		// 库级指标默认收敛成实例级的一条序列：列表与总览只显示实例级值，否则一个连接下
+		// 几十个库会把行数以另一种方式撑爆。逐库明细是工作台显式要来的（by_database=true），
+		// 那时库名放进 labels，和 replica / slot 一样成为图例上的一维。
+		if metric.LevelFor(metricID) == metric.LevelDatabase && !byDatabase(request.Params.ByDatabase) {
+			aggregated, err := aggregateSeriesToInstance(
+				ctx, queries, instanceID, metricID, step, request.Params.From, request.Params.To, series,
+			)
+			if err != nil {
+				return nil, err
 			}
-			if len(points) == 0 {
+			series = []fetchedSeries{{labels: map[string]string{}, points: aggregated}}
+		}
+		for _, found := range series {
+			if len(found.points) == 0 {
 				continue
 			}
 			item := struct {
 				Labels map[string]string `json:"labels"`
 				Points [][]*float64      `json:"points"`
-			}{Labels: map[string]string{}, Points: make([][]*float64, 0, len(points))}
-			_ = json.Unmarshal(found.Labels, &item.Labels)
-			for _, point := range points {
+			}{Labels: map[string]string{}, Points: make([][]*float64, 0, len(found.points))}
+			for key, value := range found.labels {
+				item.Labels[key] = value
+			}
+			if found.databaseName != "" {
+				item.Labels[metric.DimensionDatabase] = found.databaseName
+			}
+			for _, point := range found.points {
 				timestamp, value := float64(point.ts.Unix()), point.value
 				item.Points = append(item.Points, []*float64{&timestamp, &value})
 			}
@@ -1040,7 +1022,7 @@ func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetr
 				entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONFAILED)
 			} else if collectionState.stale {
 				entry.Unavailability = nullable.NewNullableWithValue(api.STALE)
-			} else if len(series) == 0 {
+			} else if storedSeriesCount == 0 {
 				entry.Unavailability = nullable.NewNullableWithValue(api.NOSAMPLESYET)
 			} else {
 				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)

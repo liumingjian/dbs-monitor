@@ -54,6 +54,15 @@
           type: string
           enum: [auto, 15s, 1m, 5m, raw]
           default: auto
+      # 库级指标（TPS、提交回滚、元组读写、临时文件……）默认按目录里的聚合方式收敛成实例级的
+      # 一条序列。置真则逐库展开，库名以 `database` 出现在序列的 labels 里——只有实例工作台
+      # 会这么要，列表与总览一律看实例级值。实例级指标不受这个开关影响。
+      - name: by_database
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
     responses:
       '200':
         description: Metric series

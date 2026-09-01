@@ -338,17 +338,37 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 		}
 		return collectedBatch{samples: samples, statActivitySnapshot: &snapshot}, nil
 	case metric.TaskStatDatabase:
-		observation := statDatabaseSnapshot{observedAt: service.clock.Now().UTC()}
-		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
-			&observation.counters[statDatabaseXactCommitIndex],
-			&observation.counters[statDatabaseXactRollbackIndex],
-			&observation.counters[statDatabaseTuplesReadIndex],
-			&observation.counters[statDatabaseTuplesWriteIndex],
-			&observation.counters[statDatabaseTempFilesIndex],
-			&observation.counters[statDatabaseTempBytesIndex],
-		); err != nil {
+		// 一库一行。这条任务不能走 collectDeclaredTask：它的值是计数器求差得来的速率，
+		// 需要上一轮的快照，而声明式路径是无状态的。
+		observation := statDatabaseSnapshot{
+			observedAt: service.clock.Now().UTC(),
+			databases:  make(map[string]statDatabaseCounters),
+		}
+		rows, err := conn.Query(ctx, run.task.SQL)
+		if err != nil {
 			return collectedBatch{}, err
 		}
+		defer rows.Close()
+		for rows.Next() {
+			var databaseName string
+			counters := statDatabaseCounters{}
+			if err := rows.Scan(
+				&databaseName,
+				&counters[statDatabaseXactCommitIndex],
+				&counters[statDatabaseXactRollbackIndex],
+				&counters[statDatabaseTuplesReadIndex],
+				&counters[statDatabaseTuplesWriteIndex],
+				&counters[statDatabaseTempFilesIndex],
+				&counters[statDatabaseTempBytesIndex],
+			); err != nil {
+				return collectedBatch{}, err
+			}
+			observation.databases[databaseName] = counters
+		}
+		if err := rows.Err(); err != nil {
+			return collectedBatch{}, err
+		}
+		rows.Close()
 		return service.statDatabaseRates.observe(run.key.instanceID, observation), nil
 	case metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole:
 		return collectDeclaredTask(ctx, conn, run.task)

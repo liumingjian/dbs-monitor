@@ -83,9 +83,12 @@ type Metric struct {
 	DisplayName string
 	// Engine 与 Slot / Level / Aggregation 一起构成 metric_catalog 的一行；
 	// 迁移之后由 migrations.reconcileMetricCatalog 落进表里。
-	Engine            Engine
-	Level             MetricLevel
-	Aggregation       MetricAggregation
+	Engine      Engine
+	Level       MetricLevel
+	Aggregation MetricAggregation
+	// Weight 是加权平均的权重来源：另一个库级指标，逐库与本指标同名同库配对。
+	// 只有 AggregationWeightedAverage 有权重，而且必须有——见 catalog_test.go 的成对约束。
+	Weight            MetricID
 	Slot              SemanticSlot
 	Type              MetricType
 	Unit              string
@@ -112,19 +115,19 @@ var Metrics = []Metric{
 	{ID: MetricConnectionTotal, DisplayName: "总连接数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotConnections, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricConnectionActive, DisplayName: "活跃连接数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricConnectionIdleInTransaction, DisplayName: "idle in transaction 连接数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
-	{ID: MetricTPS, DisplayName: "TPS", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotThroughput, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
-	{ID: MetricXactCommitPerS, DisplayName: "提交速率", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
-	{ID: MetricXactRollbackPerS, DisplayName: "回滚速率", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotRollbackRate, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
-	{ID: MetricTuplesReadPerS, DisplayName: "读行速率", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeRate, Unit: "rows/s", Dimensions: []string{"instance"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
-	{ID: MetricTuplesWritePerS, DisplayName: "写行速率", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeRate, Unit: "rows/s", Dimensions: []string{"instance"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
-	{ID: MetricTempFilesPerS, DisplayName: "临时文件数量速率", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeRate, Unit: "files/s", Dimensions: []string{"instance"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
-	{ID: MetricTempBytesPerS, DisplayName: "临时文件写入速率", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeRate, Unit: "bytes/s", Dimensions: []string{"instance"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	{ID: MetricTPS, DisplayName: "TPS", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotThroughput, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	{ID: MetricXactCommitPerS, DisplayName: "提交速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
+	{ID: MetricXactRollbackPerS, DisplayName: "回滚速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotRollbackRate, Type: MetricTypeRate, Unit: "tx/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
+	{ID: MetricTuplesReadPerS, DisplayName: "读行速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "rows/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
+	{ID: MetricTuplesWritePerS, DisplayName: "写行速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "rows/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
+	{ID: MetricTempFilesPerS, DisplayName: "临时文件数量速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "files/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	{ID: MetricTempBytesPerS, DisplayName: "临时文件写入速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "bytes/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricLongTransactionCount, DisplayName: "长事务数量", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricMaxTransactionDurationSec, DisplayName: "最长事务时长", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "seconds", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricLockWaitingCount, DisplayName: "锁等待数量", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricBlockedSessionCount, DisplayName: "被阻塞会话数", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricLongRunningQueryCount, DisplayName: "长查询数量", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
-	{ID: MetricPreparedXactsCount, DisplayName: "2PC 数量", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance", "database"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	{ID: MetricPreparedXactsCount, DisplayName: "2PC 数量", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeGauge, Unit: "count", Dimensions: []string{"instance", "database"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricReplicationRole, DisplayName: "实例角色", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeState, Unit: "state", Dimensions: []string{"instance"}, Calculation: CalculationStateMapping, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityNo, Producer: ProducerServerTask},
 	{ID: MetricReplicationConnectionState, DisplayName: "复制连接状态", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Type: MetricTypeState, Unit: "state", Dimensions: []string{"instance", "replica"}, Calculation: CalculationStateMapping, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricReplicationReplayLagMS, DisplayName: "复制回放延迟", Engine: EnginePostgreSQL, Level: LevelInstance, Aggregation: AggregationNone, Slot: SlotReplicationLag, Type: MetricTypeGauge, Unit: "ms", Dimensions: []string{"instance", "replica"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityNo, Producer: ProducerServerTask},
@@ -171,6 +174,11 @@ const (
 	TaskKindAgentDerived TaskKind = "agent-derived"
 )
 
+// DimensionDatabase 是唯一一个不落进 labels 的维度：它落进 metric_series.database_name。
+// 采集侧认这个名字（见 internal/collect/task_rows.go），所以一个新的库级指标只要在它的
+// Yields 上写 Dimensions: []string{DimensionDatabase}，就自动按库落序列。
+const DimensionDatabase = "database"
+
 type MetricYield struct {
 	Metric     MetricID
 	Columns    []string
@@ -196,7 +204,10 @@ var Tasks = []Task{
 	{
 		ID: TaskStatDatabase, Kind: TaskKindSQL, Interval: 5 * time.Second,
 		Requires: []CapabilityID{CapabilityRolePGMonitor},
-		SQL: `SELECT
+		// pg_stat_database 一库一行。这里 GROUP BY datname 之后一库落一条序列——原来这条查询
+		// 不带 GROUP BY，一次就把全实例加总了，谁在产生这些事务无从查起。实例级的总数改由读取侧
+		// 按目录里的聚合方式收敛（这一族都是 SUM），和加总前的每库明细并存。
+		SQL: `SELECT datname::text AS database,
 	       COALESCE(sum(xact_commit), 0)::double precision AS xact_commit,
 	       COALESCE(sum(xact_rollback), 0)::double precision AS xact_rollback,
 	       COALESCE(sum(tup_returned + tup_fetched), 0)::double precision AS tuples_read,
@@ -204,15 +215,17 @@ var Tasks = []Task{
 	       COALESCE(sum(temp_files), 0)::double precision AS temp_files,
 	       COALESCE(sum(temp_bytes), 0)::double precision AS temp_bytes
 FROM pg_stat_database
-WHERE datname NOT IN ('template0', 'template1')`,
+WHERE datname IS NOT NULL AND datname NOT IN ('template0', 'template1')
+GROUP BY datname
+ORDER BY datname`,
 		Yields: []MetricYield{
-			{Metric: MetricTPS, Columns: []string{"xact_commit", "xact_rollback"}},
-			{Metric: MetricXactCommitPerS, Columns: []string{"xact_commit"}},
-			{Metric: MetricXactRollbackPerS, Columns: []string{"xact_rollback"}},
-			{Metric: MetricTuplesReadPerS, Columns: []string{"tuples_read"}},
-			{Metric: MetricTuplesWritePerS, Columns: []string{"tuples_write"}},
-			{Metric: MetricTempFilesPerS, Columns: []string{"temp_files"}},
-			{Metric: MetricTempBytesPerS, Columns: []string{"temp_bytes"}},
+			{Metric: MetricTPS, Columns: []string{DimensionDatabase, "xact_commit", "xact_rollback"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricXactCommitPerS, Columns: []string{DimensionDatabase, "xact_commit"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricXactRollbackPerS, Columns: []string{DimensionDatabase, "xact_rollback"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricTuplesReadPerS, Columns: []string{DimensionDatabase, "tuples_read"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricTuplesWritePerS, Columns: []string{DimensionDatabase, "tuples_write"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricTempFilesPerS, Columns: []string{DimensionDatabase, "temp_files"}, Dimensions: []string{DimensionDatabase}},
+			{Metric: MetricTempBytesPerS, Columns: []string{DimensionDatabase, "temp_bytes"}, Dimensions: []string{DimensionDatabase}},
 		},
 	},
 	{
@@ -337,7 +350,7 @@ FROM pg_database AS database
 LEFT JOIN pg_prepared_xacts AS prepared ON prepared.database = database.datname
 WHERE database.datallowconn
 GROUP BY database.datname`,
-		Yields: []MetricYield{{Metric: MetricPreparedXactsCount, Columns: []string{"database", "prepared_xacts_count"}, Dimensions: []string{"database"}}},
+		Yields: []MetricYield{{Metric: MetricPreparedXactsCount, Columns: []string{"database", "prepared_xacts_count"}, Dimensions: []string{DimensionDatabase}}},
 	},
 	{
 		ID: TaskRole, Kind: TaskKindSQL, Interval: 5 * time.Minute,

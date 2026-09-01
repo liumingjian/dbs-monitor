@@ -180,10 +180,10 @@ func (q *Queries) PointsInRange(ctx context.Context, arg PointsInRangeParams) ([
 }
 
 const seriesForMetric = `-- name: SeriesForMetric :many
-SELECT series_id, labels
+SELECT series_id, database_name, labels
 FROM metric_series
 WHERE instance_id = $1 AND metric_id = $2
-ORDER BY series_id
+ORDER BY database_name, series_id
 `
 
 type SeriesForMetricParams struct {
@@ -192,8 +192,9 @@ type SeriesForMetricParams struct {
 }
 
 type SeriesForMetricRow struct {
-	SeriesID int64
-	Labels   []byte
+	SeriesID     int64
+	DatabaseName string
+	Labels       []byte
 }
 
 func (q *Queries) SeriesForMetric(ctx context.Context, arg SeriesForMetricParams) ([]SeriesForMetricRow, error) {
@@ -205,7 +206,7 @@ func (q *Queries) SeriesForMetric(ctx context.Context, arg SeriesForMetricParams
 	var items []SeriesForMetricRow
 	for rows.Next() {
 		var i SeriesForMetricRow
-		if err := rows.Scan(&i.SeriesID, &i.Labels); err != nil {
+		if err := rows.Scan(&i.SeriesID, &i.DatabaseName, &i.Labels); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -261,25 +262,27 @@ func (q *Queries) SetTaskInterval(ctx context.Context, arg SetTaskIntervalParams
 }
 
 const upsertSeries = `-- name: UpsertSeries :one
-INSERT INTO metric_series (instance_id, metric_id, labels, labels_key, last_seen)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (instance_id, metric_id, labels_key)
+INSERT INTO metric_series (instance_id, metric_id, database_name, labels, labels_key, last_seen)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (instance_id, metric_id, database_name, labels_key)
 DO UPDATE SET last_seen = GREATEST(metric_series.last_seen, EXCLUDED.last_seen)
 RETURNING series_id
 `
 
 type UpsertSeriesParams struct {
-	InstanceID pgtype.UUID
-	MetricID   string
-	Labels     []byte
-	LabelsKey  string
-	LastSeen   pgtype.Timestamptz
+	InstanceID   pgtype.UUID
+	MetricID     string
+	DatabaseName string
+	Labels       []byte
+	LabelsKey    string
+	LastSeen     pgtype.Timestamptz
 }
 
 func (q *Queries) UpsertSeries(ctx context.Context, arg UpsertSeriesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, upsertSeries,
 		arg.InstanceID,
 		arg.MetricID,
+		arg.DatabaseName,
 		arg.Labels,
 		arg.LabelsKey,
 		arg.LastSeen,

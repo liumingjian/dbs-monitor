@@ -324,13 +324,14 @@ type MaintenanceWindowInstance struct {
 }
 
 type MetricCatalog struct {
-	MetricID     string
-	Engine       string
-	Unit         string
-	DisplayName  string
-	SemanticSlot pgtype.Text
-	Level        string
-	Aggregation  string
+	MetricID          string
+	Engine            string
+	Unit              string
+	DisplayName       string
+	SemanticSlot      pgtype.Text
+	Level             string
+	Aggregation       string
+	AggregationWeight pgtype.Text
 }
 
 type MetricSample struct {
@@ -345,13 +346,14 @@ type MetricSemanticSlot struct {
 }
 
 type MetricSeries struct {
-	SeriesID   int64
-	InstanceID pgtype.UUID
-	MetricID   string
-	Labels     []byte
-	LabelsKey  string
-	FirstSeen  pgtype.Timestamptz
-	LastSeen   pgtype.Timestamptz
+	SeriesID     int64
+	InstanceID   pgtype.UUID
+	MetricID     string
+	DatabaseName string
+	Labels       []byte
+	LabelsKey    string
+	FirstSeen    pgtype.Timestamptz
+	LastSeen     pgtype.Timestamptz
 }
 
 type NotificationAttempt struct {

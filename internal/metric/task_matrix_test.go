@@ -61,12 +61,28 @@ func TestPGStatStatementsDeclaration(t *testing.T) {
 	}
 }
 
+// pg_stat_database 一库一行，所以这条查询的行数是可变的，而且第一列是库名。
 func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 	task, ok := taskByID(metric.TaskStatDatabase)
 	if !ok {
 		t.Fatalf("task %q is missing", metric.TaskStatDatabase)
 	}
-	assertTaskShapeMatrix(t, task, metricColumnShapes(task))
+	assertVariableRowsTaskShapeMatrix(t, task, metricColumnShapes(task))
+}
+
+// 库级指标的每一个 yield 都要声明库维度，否则采集出来的行会互相覆盖：
+// 序列的唯一键里有 database_name，声明漏了就等于把几十个库写进同一条序列。
+func TestDatabaseLevelYieldsDeclareTheDatabaseDimension(t *testing.T) {
+	for _, task := range metric.Tasks {
+		for _, yield := range task.Yields {
+			if metric.LevelFor(yield.Metric) != metric.LevelDatabase {
+				continue
+			}
+			if !slices.Contains(yield.Dimensions, metric.DimensionDatabase) {
+				t.Errorf("task %q yields database-level metric %q without the database dimension", task.ID, yield.Metric)
+			}
+		}
+	}
 }
 
 func TestPGStatActivityShapeMatrix(t *testing.T) {
@@ -186,6 +202,11 @@ func metricColumnShapes(task metric.Task) []taskColumnShape {
 	columns := taskColumns(task)
 	shapes := make([]taskColumnShape, 0, len(columns))
 	for _, name := range columns {
+		// 库名是唯一一个不是 float8 的取值列：它是维度，不是度量。
+		if name == metric.DimensionDatabase {
+			shapes = append(shapes, taskColumnShape{name: name, oid: pgtype.TextOID})
+			continue
+		}
 		shapes = append(shapes, taskColumnShape{name: name, oid: pgtype.Float8OID})
 	}
 	return shapes
