@@ -452,6 +452,13 @@ type PlatformEvent struct {
 	SubjectID    pgtype.UUID
 }
 
+type QueryStatementText struct {
+	InstanceID pgtype.UUID
+	Queryid    int64
+	QueryText  string
+	UpdatedAt  pgtype.Timestamptz
+}
+
 type QueryStatisticsSnapshot struct {
 	InstanceID pgtype.UUID
 	SampledAt  pgtype.Timestamptz

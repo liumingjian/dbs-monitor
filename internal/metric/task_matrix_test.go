@@ -55,9 +55,17 @@ func TestPGStatStatementsDeclaration(t *testing.T) {
 			t.Errorf("pg_stat_statements query is missing %q", fragment)
 		}
 	}
-	sqlTextColumnPattern := regexp.MustCompile(`(?i)\b(query|query_text|sql|sql_text)\b`)
-	if sqlTextColumnPattern.MatchString(task.SQL) {
-		t.Fatal("pg_stat_statements query selects SQL text")
+	// 这一条从前是反过来断言的（「不许取 SQL 文本」）。票 #221 把它翻了面：
+	// pg_stat_statements 的文本里字面量已经是占位符，这是该扩展的设计保证，落库的
+	// 隐私风险可控，而没有文本的排行只有 queryid，没人认得出那是什么语句。
+	// **翻面的只有这一个任务**：pg_stat_activity 的原文照旧一个字都不许取，
+	// 那条规则由上面的 TestPGStatActivityUsesSingleSnapshot 与
+	// statement_text_test.go 的全字典扫描一起守着。
+	if !regexp.MustCompile(`\bquery\b`).MatchString(task.SQL) {
+		t.Error("pg_stat_statements query no longer collects the normalised statement text")
+	}
+	if !strings.Contains(task.SQL, "AS query_text") {
+		t.Error("pg_stat_statements query does not expose query_text")
 	}
 }
 

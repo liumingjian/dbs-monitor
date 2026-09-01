@@ -18,6 +18,7 @@ tags:
   - name: diagnostics
   - name: notification-settings
   - name: overview
+  - name: sql-insight
 paths:
   /api/v1/login:
     post:
@@ -89,6 +90,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FleetOverview'
+  /api/v1/top-sql:
+    get:
+      tags:
+        - sql-insight
+      operationId: listTopSql
+      x-required-role: READONLY
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        '200':
+          description: Cross-instance top statements ordered by total elapsed time
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TopSqlList'
   /api/v1/instances:
     get:
       tags:
@@ -3657,13 +3679,14 @@ components:
           description: Number of instances matching the filters, before paging.
     FleetOverview:
       type: object
-      description: 'The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, and which disks are filling up.'
+      description: 'The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, which disks are filling up, and which statements cost the most.'
       required:
         - total
         - health
         - collection
         - attention
         - storage
+        - top_sql
       properties:
         total:
           type: integer
@@ -3685,6 +3708,12 @@ components:
           description: The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty.
           items:
             $ref: '#/components/schemas/StorageWatermarkEntry'
+        top_sql:
+          type: array
+          maxItems: 5
+          description: The five statements costing the fleet the most elapsed time, highest first. The full ranking lives on the SQL insight page; five is what fits on a landing page without turning it into a second table.
+          items:
+            $ref: '#/components/schemas/TopSqlEntry'
     FleetHealthCounts:
       type: object
       description: How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size.
@@ -3750,6 +3779,45 @@ components:
         sampled_at:
           type: string
           format: date-time
+    TopSqlEntry:
+      type: object
+      description: One normalised statement on one instance, aggregated across databases and users from that instance's most recent query-statistics snapshot. The text is the extension's normalised form, where literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here.
+      required:
+        - instance_id
+        - instance_name
+        - queryid
+        - calls
+        - total_exec_time_ms
+      properties:
+        instance_id:
+          type: string
+          format: uuid
+        instance_name:
+          type: string
+        queryid:
+          type: string
+          description: Native query identifier represented as a string to preserve int64 precision.
+        query_text:
+          type: string
+          description: Normalised statement text, deduplicated per (instance, queryid). Absent when no text has been captured yet for that identifier — absent is not the same as empty.
+        calls:
+          type: integer
+          format: int64
+          minimum: 0
+        total_exec_time_ms:
+          type: number
+          format: double
+          minimum: 0
+    TopSqlList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          maxItems: 200
+          items:
+            $ref: '#/components/schemas/TopSqlEntry'
     InstanceHealth:
       type: object
       required:

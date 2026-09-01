@@ -93,3 +93,34 @@
 .overview-attention__counts {
   white-space: nowrap;
 }
+
+/* Top SQL 前 5：一行一条语句，整行可点。等宽字形留给语句本身，
+   注解与耗时由指标条排版。 */
+.overview-top-sql {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-03);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-top-sql__row {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  min-inline-size: 0;
+}
+
+.overview-top-sql__row:hover {
+  background: var(--cds-layer-hover);
+}
+
+.overview-top-sql__row:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
+.overview-top-sql__statement {
+  font-family: var(--dbs-font-mono);
+}

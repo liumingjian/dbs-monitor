@@ -8,7 +8,7 @@ import { EMPTY_STORAGE_STATE } from './auth'
 test.describe('登录后的落地页', () => {
   test.use({ storageState: EMPTY_STORAGE_STATE })
 
-  test('登录直接落到机群总览，四块都在', async ({ page }) => {
+  test('登录直接落到机群总览，五块都在', async ({ page }) => {
     await page.goto('/login')
     await page.getByLabel('用户名').fill('admin')
     await page.getByLabel('密码').fill('t11-playwright-password')
@@ -16,16 +16,14 @@ test.describe('登录后的落地页', () => {
 
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('heading', { name: '机群总览' })).toBeVisible()
-    for (const title of ['机群健康', '采集自监控', '需要关注的实例', '容量水位']) {
+    for (const title of ['机群健康', '采集自监控', '需要关注的实例', '容量水位', 'Top SQL 前 5']) {
       await expect(page.getByRole('heading', { name: title })).toBeVisible()
     }
-    // 第五块 Top SQL 是下一张票的，这里不该有它的空壳。
-    await expect(page.getByRole('heading', { name: 'Top SQL' })).toHaveCount(0)
 
-    // 侧栏六项三组；SQL 洞察先占位，不是链接（点开是 404 的入口比没有入口更糟）。
+    // 侧栏六项三组，六项全是真链接。
     const nav = page.getByRole('navigation', { name: '主导航' })
     for (const [group, items] of [
-      ['监控', ['总览', '实例列表']],
+      ['监控', ['总览', '实例列表', 'SQL 洞察']],
       ['告警', ['全局告警', '告警设置']],
       ['系统', ['用户管理']],
     ] as const) {
@@ -33,8 +31,6 @@ test.describe('登录后的落地页', () => {
         await expect(nav.getByRole('list', { name: group }).getByRole('link', { name: new RegExp(item) })).toBeVisible()
       }
     }
-    await expect(nav.getByTitle('SQL 洞察（即将上线）')).toBeVisible()
-    await expect(nav.getByRole('link', { name: /SQL 洞察/ })).toHaveCount(0)
 
     // 旧的落地地址仍然可用：它被人存过书签，也被发给过同事。
     await page.goto('/instances')
@@ -75,4 +71,17 @@ test('健康计数点开落到筛好的实例列表', async ({ page }) => {
   // 筛选条件真的落在控件上，不只是留在地址栏里：这个视图整条发给同事时，
   // 对方看到的是同一个已经筛好的列表。「清除筛选」只有在真的筛了东西时才可用。
   await expect(page.getByRole('button', { name: '清除筛选' })).toBeEnabled()
+})
+
+test('侧栏的 SQL 洞察进得去，显示的是语句而不是 queryid', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('navigation', { name: '主导航' }).getByRole('link', { name: /SQL 洞察/ }).click()
+
+  await expect(page).toHaveURL((url) => url.pathname === '/sql-insight')
+  await expect(page.getByRole('heading', { name: 'SQL 洞察' })).toBeVisible()
+  // 列名就是这一页的承诺：SQL 文本、所属实例、调用次数、总耗时。
+  const table = page.getByRole('table', { name: '跨实例 Top SQL' })
+  for (const column of ['SQL 文本', '所属实例', '调用次数', '总耗时']) {
+    await expect(table.getByRole('columnheader', { name: column })).toBeVisible()
+  }
 })

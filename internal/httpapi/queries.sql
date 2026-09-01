@@ -311,6 +311,30 @@ WHERE instance_id = sqlc.arg(instance_id)
   AND sampled_at = sqlc.arg(sampled_at)
 ORDER BY total_exec_time_ms DESC, queryid, database_oid, user_oid;
 
+-- name: ListFleetTopSql :many
+-- 跨实例 Top SQL：每台实例只看它最近一次快照，同一条语句在多个库/用户下的行合并成一行。
+-- 文本走 LEFT JOIN：还没采到文本的语句照样上榜，接口回一个缺文本的行，而不是把它藏起来。
+WITH latest AS (
+    SELECT DISTINCT ON (instance_id) instance_id, sampled_at
+    FROM query_statistics_snapshot
+    ORDER BY instance_id, sampled_at DESC
+)
+SELECT entry.instance_id,
+       instance.name AS instance_name,
+       entry.queryid,
+       statement.query_text,
+       sum(entry.calls)::bigint AS calls,
+       sum(entry.total_exec_time_ms)::double precision AS total_exec_time_ms
+FROM latest
+JOIN query_statistics_snapshot_entry entry
+    ON entry.instance_id = latest.instance_id AND entry.sampled_at = latest.sampled_at
+JOIN instance ON instance.id = entry.instance_id
+LEFT JOIN query_statement_text statement
+    ON statement.instance_id = entry.instance_id AND statement.queryid = entry.queryid
+GROUP BY entry.instance_id, instance.name, entry.queryid, statement.query_text
+ORDER BY total_exec_time_ms DESC, instance.name, entry.queryid
+LIMIT sqlc.arg(row_limit);
+
 -- name: GetRecentSessionSnapshot :one
 SELECT sampled_at, original_count, truncated
 FROM instance_session_snapshot

@@ -71,3 +71,7 @@ _Avoid_: Neutral metric name, metric alias
 **Alert rule template**:
 A read-only built-in starting point for an alert rule. It belongs to the engine of the metric it addresses: a template addressing a semantic slot is offered on every engine that binds the slot and creates one rule that spans them, an engine-agnostic one is offered everywhere, and any other is offered only on instances of its own engine. A rule keeps addressing the metric it was written on; on an instance of another engine it evaluates whichever metric that engine binds to the same slot, and a rule on an engine-private metric cannot be scoped to such an instance at all.
 _Avoid_: One template per engine, rule library entry
+
+**Normalised statement text**:
+The form of a SQL statement in which literal values have already been replaced by placeholders by the database engine itself — `pg_stat_statements.query` on PostgreSQL, `events_statements_summary_by_digest.digest_text` on MySQL. It is the only statement text the platform stores, kept once per (instance, statement identifier) rather than per snapshot. The raw statement text carried by a live session is a different fact: it holds real literals, which may be personal data or credentials, and is never stored — a long-query sample therefore reports duration, wait events and blocking relationships and nothing else.
+_Avoid_: SQL text, query, statement

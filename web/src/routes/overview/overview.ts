@@ -3,11 +3,14 @@ import { healthLabel, healthTone } from '../../domain/HealthStatus'
 import type { StatusTone } from '../../primitives/StatusBadge'
 import type { HealthStatusValue, InstanceListSearch } from '../instances/instanceListSearch'
 import { INSTANCE_HEALTH_STATUSES, defaultInstanceListSearch, withInstanceFilters } from '../instances/instanceListSearch'
+import type { TopSqlEntry } from '../sql-insight/topSql'
+import { elapsedLabel, statementLabel, topSqlRowKey } from '../sql-insight/topSql'
 
 export type FleetOverview = components['schemas']['FleetOverview']
 export type FleetHealthCounts = components['schemas']['FleetHealthCounts']
 export type FleetCollectionHealth = components['schemas']['FleetCollectionHealth']
 export type StorageWatermarkEntry = components['schemas']['StorageWatermarkEntry']
+export type { TopSqlEntry } from '../sql-insight/topSql'
 
 function assertNever(value: never): never {
   throw new Error(`unexpected overview value: ${String(value)}`)
@@ -103,4 +106,37 @@ export function storageTone(percent: number): StatusTone | undefined {
 /// 比例条要的 0..1 占比。百分比越界（采集端给出 101%）时由展示件自己夹住，这里不改数。
 export function storageRatio(percent: number): number {
   return percent / 100
+}
+
+/// 总览第五块的一行。
+///
+/// 与 SQL 洞察页显示的是同一份事实（同一个接口字段、同一套读法），只是这里只取五条、
+/// 每行压成一条指标条：总览回答「现在最费资源的是哪几条」，完整排行在 SQL 洞察页上。
+export type TopSqlSummary = {
+  /** 稳定的键，也是渲染时的 React key。 */
+  key: string
+  /** 归一化 SQL 文本；没采到文本时是带 queryid 的说明，不是空串。 */
+  statement: string
+  /** 已经格式化好的总耗时。 */
+  elapsed: string
+  /** 「实例 · 调用次数」，一行注解说清这条 SQL 是谁的、跑了多少次。 */
+  caption: string
+  /** 相对榜首的占比，画那条 4px 的比例条用。榜首恒为 1。 */
+  ratio: number
+}
+
+/// Top SQL 前 5 的投影。
+///
+/// 比例条相对**榜首**而不是相对机群总耗时：读者要看的是「第一条比第二条严重多少」，
+/// 而机群总耗时无从得知——榜单只有五行，它们加起来不是全部。
+/// 榜首耗时为 0（刚重置过统计）时所有条都是空的，这是真实读数，不是缺数。
+export function topSqlSummaries(entries: TopSqlEntry[]): TopSqlSummary[] {
+  const highest = entries.reduce((most, entry) => Math.max(most, entry.total_exec_time_ms), 0)
+  return entries.map((entry) => ({
+    key: topSqlRowKey(entry),
+    statement: statementLabel(entry),
+    elapsed: elapsedLabel(entry.total_exec_time_ms),
+    caption: `${entry.instance_name} · ${entry.calls} 次调用`,
+    ratio: highest === 0 ? 0 : entry.total_exec_time_ms / highest,
+  }))
 }

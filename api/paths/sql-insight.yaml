@@ -1,0 +1,18 @@
+/api/v1/top-sql:
+  get:
+    tags: [sql-insight]
+    operationId: listTopSql
+    x-required-role: READONLY
+    # 跨实例的 Top SQL，按总耗时排序。每台实例只取它最近一次查询统计快照，
+    # 同一条语句在多个库/用户下的行合并成一行：读者要找的是「哪条 SQL 在拖垮机群」，
+    # 不是「哪个 (queryid, dbid, userid) 三元组」。
+    parameters:
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+    responses:
+      '200':
+        description: Cross-instance top statements ordered by total elapsed time
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/sql-insight.yaml#/TopSqlList }

@@ -966,7 +966,7 @@ type FleetHealthCounts struct {
 	Warning  int `json:"warning"`
 }
 
-// FleetOverview The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, and which disks are filling up.
+// FleetOverview The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, which disks are filling up, and which statements cost the most.
 type FleetOverview struct {
 	// Attention The instances that need handling first, ordered by health tier then alert severity. Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy and paused instances never appear here.
 	Attention []Instance `json:"attention"`
@@ -979,6 +979,9 @@ type FleetOverview struct {
 
 	// Storage The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty.
 	Storage []StorageWatermarkEntry `json:"storage"`
+
+	// TopSql The five statements costing the fleet the most elapsed time, highest first. The full ranking lives on the SQL insight page; five is what fits on a landing page without turning it into a second table.
+	TopSql []TopSqlEntry `json:"top_sql"`
 
 	// Total Number of monitored instances.
 	Total int `json:"total"`
@@ -1546,6 +1549,25 @@ type StorageWatermarkEntry struct {
 	UsagePercent float64            `json:"usage_percent"`
 }
 
+// TopSqlEntry One normalised statement on one instance, aggregated across databases and users from that instance's most recent query-statistics snapshot. The text is the extension's normalised form, where literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here.
+type TopSqlEntry struct {
+	Calls        int64              `json:"calls"`
+	InstanceId   openapi_types.UUID `json:"instance_id"`
+	InstanceName string             `json:"instance_name"`
+
+	// QueryText Normalised statement text, deduplicated per (instance, queryid). Absent when no text has been captured yet for that identifier — absent is not the same as empty.
+	QueryText *string `json:"query_text,omitempty"`
+
+	// Queryid Native query identifier represented as a string to preserve int64 precision.
+	Queryid         string  `json:"queryid"`
+	TotalExecTimeMs float64 `json:"total_exec_time_ms"`
+}
+
+// TopSqlList defines model for TopSqlList.
+type TopSqlList struct {
+	Items []TopSqlEntry `json:"items"`
+}
+
 // Unavailability defines model for Unavailability.
 type Unavailability string
 
@@ -1712,6 +1734,11 @@ type CreateSessionJSONBody struct {
 
 // DeleteSessionJSONBody defines parameters for DeleteSession.
 type DeleteSessionJSONBody = map[string]interface{}
+
+// ListTopSqlParams defines parameters for ListTopSql.
+type ListTopSqlParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
 // ReportAgentMetricsJSONRequestBody defines body for ReportAgentMetrics for application/json ContentType.
 type ReportAgentMetricsJSONRequestBody = AgentReport
@@ -2054,6 +2081,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/platform-events)
 	ListPlatformEvents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/top-sql)
+	ListTopSql(w http.ResponseWriter, r *http.Request, params ListTopSqlParams)
 
 	// (GET /api/v1/users)
 	ListUsers(w http.ResponseWriter, r *http.Request)
@@ -4182,6 +4212,33 @@ func (siw *ServerInterfaceWrapper) ListPlatformEvents(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListTopSql operation middleware
+func (siw *ServerInterfaceWrapper) ListTopSql(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTopSqlParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTopSql(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -4488,6 +4545,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/platform-events", wrapper.ListPlatformEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/top-sql", wrapper.ListTopSql)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users", wrapper.CreateUser)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users/{id}/password", wrapper.ResetUserPassword)
@@ -6538,6 +6596,23 @@ func (response ListPlatformEvents200JSONResponse) VisitListPlatformEventsRespons
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListTopSqlRequestObject struct {
+	Params ListTopSqlParams
+}
+
+type ListTopSqlResponseObject interface {
+	VisitListTopSqlResponse(w http.ResponseWriter) error
+}
+
+type ListTopSql200JSONResponse TopSqlList
+
+func (response ListTopSql200JSONResponse) VisitListTopSqlResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ListUsersRequestObject struct {
 }
 
@@ -6947,6 +7022,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/platform-events)
 	ListPlatformEvents(ctx context.Context, request ListPlatformEventsRequestObject) (ListPlatformEventsResponseObject, error)
+
+	// (GET /api/v1/top-sql)
+	ListTopSql(ctx context.Context, request ListTopSqlRequestObject) (ListTopSqlResponseObject, error)
 
 	// (GET /api/v1/users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -9271,6 +9349,32 @@ func (sh *strictHandler) ListPlatformEvents(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListPlatformEventsResponseObject); ok {
 		if err := validResponse.VisitListPlatformEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTopSql operation middleware
+func (sh *strictHandler) ListTopSql(w http.ResponseWriter, r *http.Request, params ListTopSqlParams) {
+	var request ListTopSqlRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTopSql(ctx, request.(ListTopSqlRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTopSql")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTopSqlResponseObject); ok {
+		if err := validResponse.VisitListTopSqlResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

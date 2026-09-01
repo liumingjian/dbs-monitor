@@ -1,0 +1,25 @@
+/*
+ * SQL 洞察的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色与间距一律走令牌，字体档位走 `.dbs-*` 类。
+ */
+
+.sql-insight-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-05);
+  padding: var(--cds-spacing-06);
+  max-inline-size: 100%;
+}
+
+.sql-insight-page__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cds-spacing-05);
+}
+
+/* SQL 用等宽字体：占位符 $1、括号与逗号在比例字体下会挤成一团。
+   截断成一行由 TruncatedText 负责，这里只管字形。 */
+.sql-insight-statement {
+  font-family: var(--dbs-font-mono);
+}

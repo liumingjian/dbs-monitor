@@ -393,6 +393,9 @@ type ClientInterface interface {
 	// ListPlatformEvents request
 	ListPlatformEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListTopSql request
+	ListTopSql(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListUsers request
 	ListUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1725,6 +1728,18 @@ func (c *Client) GetPerformanceEvent(ctx context.Context, id openapi_types.UUID,
 
 func (c *Client) ListPlatformEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListPlatformEventsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListTopSql(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListTopSqlRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -5368,6 +5383,55 @@ func NewListPlatformEventsRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewListTopSqlRequest generates requests for ListTopSql
+func NewListTopSqlRequest(server string, params *ListTopSqlParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/top-sql")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListUsersRequest generates requests for ListUsers
 func NewListUsersRequest(server string) (*http.Request, error) {
 	var err error
@@ -5908,6 +5972,9 @@ type ClientWithResponsesInterface interface {
 
 	// ListPlatformEventsWithResponse request
 	ListPlatformEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPlatformEventsResponse, error)
+
+	// ListTopSqlWithResponse request
+	ListTopSqlWithResponse(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*ListTopSqlResponse, error)
 
 	// ListUsersWithResponse request
 	ListUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListUsersResponse, error)
@@ -7814,6 +7881,28 @@ func (r ListPlatformEventsResponse) StatusCode() int {
 	return 0
 }
 
+type ListTopSqlResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TopSqlList
+}
+
+// Status returns HTTPResponse.Status
+func (r ListTopSqlResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListTopSqlResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListUsersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8893,6 +8982,15 @@ func (c *ClientWithResponses) ListPlatformEventsWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseListPlatformEventsResponse(rsp)
+}
+
+// ListTopSqlWithResponse request returning *ListTopSqlResponse
+func (c *ClientWithResponses) ListTopSqlWithResponse(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*ListTopSqlResponse, error) {
+	rsp, err := c.ListTopSql(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListTopSqlResponse(rsp)
 }
 
 // ListUsersWithResponse request returning *ListUsersResponse
@@ -11505,6 +11603,32 @@ func ParseListPlatformEventsResponse(rsp *http.Response) (*ListPlatformEventsRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []PlatformEvent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListTopSqlResponse parses an HTTP response from a ListTopSqlWithResponse call
+func ParseListTopSqlResponse(rsp *http.Response) (*ListTopSqlResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListTopSqlResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TopSqlList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { parseInstanceListSearch } from '../instances/instanceListSearch'
-import type { FleetCollectionHealth, FleetHealthCounts } from './overview'
-import { collectionCountTiles, healthCountTiles, storageRatio, storageTone, usagePercentLabel } from './overview'
+import type { FleetCollectionHealth, FleetHealthCounts, TopSqlEntry } from './overview'
+import {
+  collectionCountTiles,
+  healthCountTiles,
+  storageRatio,
+  storageTone,
+  topSqlSummaries,
+  usagePercentLabel,
+} from './overview'
 
 const counts: FleetHealthCounts = { critical: 3, warning: 5, unknown: 1, healthy: 40, paused: 2 }
 const collection: FleetCollectionHealth = { stale_data: 7, agent_offline: 2, paused: 2 }
@@ -55,6 +62,55 @@ describe('fleet overview projections', () => {
     for (const tile of healthCountTiles(counts)) {
       expect(Object.keys(tile.search)).toEqual(['status'])
     }
+  })
+
+  it('reads the top five statements as text, elapsed time and a share of the worst one', () => {
+    const entries: TopSqlEntry[] = [
+      {
+        instance_id: '11111111-1111-4111-8111-111111111111',
+        instance_name: '订单库主库',
+        queryid: '42',
+        query_text: 'UPDATE orders SET state = $1 WHERE id = $2',
+        calls: 900,
+        total_exec_time_ms: 120_000,
+      },
+      {
+        instance_id: '22222222-2222-4222-8222-222222222222',
+        instance_name: '账务库',
+        queryid: '-7',
+        calls: 12,
+        total_exec_time_ms: 30_000,
+      },
+    ]
+    expect(topSqlSummaries(entries)).toEqual([
+      {
+        key: '11111111-1111-4111-8111-111111111111:42',
+        statement: 'UPDATE orders SET state = $1 WHERE id = $2',
+        elapsed: '2.0 min',
+        caption: '订单库主库 · 900 次调用',
+        ratio: 1,
+      },
+      {
+        key: '22222222-2222-4222-8222-222222222222:-7',
+        statement: 'queryid -7（未采到 SQL 文本）',
+        elapsed: '30.0 s',
+        caption: '账务库 · 12 次调用',
+        ratio: 0.25,
+      },
+    ])
+  })
+
+  // 榜首耗时为 0（统计刚被重置）时比例条是空的，而不是除出一个 NaN 宽度。
+  it('draws empty bars rather than NaN when nothing has cost any time yet', () => {
+    const entry: TopSqlEntry = {
+      instance_id: '33333333-3333-4333-8333-333333333333',
+      instance_name: '只读库',
+      queryid: '1',
+      query_text: 'SELECT 1',
+      calls: 0,
+      total_exec_time_ms: 0,
+    }
+    expect(topSqlSummaries([entry])[0]).toMatchObject({ ratio: 0, elapsed: '0.0 ms' })
   })
 
   it('reads a watermark as a whole percent and only colours the top two bands', () => {

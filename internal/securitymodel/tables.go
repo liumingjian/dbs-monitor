@@ -38,6 +38,8 @@ var PageAuthorizations = []PageAuthorization{
 	// 机群总览是登录后的落地页，地址就是 `/`。
 	{Path: "/", Sources: []string{"web/src/routes/overview/index.tsx"}, Visible: allRoles},
 	{Path: "/instances", Sources: []string{"web/src/routes/instances/index.tsx"}, Visible: allRoles},
+	// SQL 洞察是跨实例的只读页面，没有任何写操作。
+	{Path: "/sql-insight", Sources: []string{"web/src/routes/sql-insight/index.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id", Sources: []string{"web/src/routes/instances.$id/index.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id/monitoring", Sources: []string{"web/src/routes/instances.$id/monitoring.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id/performance-events", Sources: []string{"web/src/routes/instances.$id/performanceEventsPage.tsx"}, Visible: allRoles},
