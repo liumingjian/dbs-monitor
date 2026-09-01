@@ -1,15 +1,15 @@
 -- name: UpsertSeries :one
-INSERT INTO metric_series (instance_id, metric_id, labels, labels_key, last_seen)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (instance_id, metric_id, labels_key)
+INSERT INTO metric_series (instance_id, metric_id, database_name, labels, labels_key, last_seen)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (instance_id, metric_id, database_name, labels_key)
 DO UPDATE SET last_seen = GREATEST(metric_series.last_seen, EXCLUDED.last_seen)
 RETURNING series_id;
 
 -- name: SeriesForMetric :many
-SELECT series_id, labels
+SELECT series_id, database_name, labels
 FROM metric_series
 WHERE instance_id = $1 AND metric_id = $2
-ORDER BY series_id;
+ORDER BY database_name, series_id;
 
 -- name: PointsInRange :many
 SELECT ts, value

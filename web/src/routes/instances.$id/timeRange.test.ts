@@ -52,6 +52,7 @@ describe('time range search', () => {
       step: '1m' as const,
       columns: 3 as const,
       connect: false,
+      databases: true,
       metric: 'pg.tps' as const,
     }
 
@@ -62,12 +63,21 @@ describe('time range search', () => {
     [{ step: '10m' }, '粒度必须来自支持的选项'],
     [{ columns: 4 }, '列数必须是 1、2 或 3'],
     [{ connect: 'sometimes' }, '光标联动参数无效'],
+    [{ databases: 'maybe' }, '按库展开参数无效'],
   ])('returns an explained invalid state for malformed monitoring search %o', (extra, error) => {
     expect(parseTimeRange({
       from: '2026-08-03T00:00:00.000Z',
       to: '2026-08-03T01:00:00.000Z',
       ...extra,
     })).toEqual({ error })
+  })
+
+  /// 按库展开是地址的一部分，缺省不展开：默认口径与列表、总览一致，都是实例级值。
+  it('defaults to the instance-level view when the address says nothing about databases', () => {
+    expect(parseTimeRange({
+      from: '2026-08-03T00:00:00.000Z',
+      to: '2026-08-03T01:00:00.000Z',
+    })).toEqual({ from: '2026-08-03T00:00:00.000Z', to: '2026-08-03T01:00:00.000Z' })
   })
 
   it('builds and round-trips the enhanced 30-minute raw baseline', () => {

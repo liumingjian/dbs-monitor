@@ -1231,9 +1231,20 @@ func assertMetricCatalog(t *testing.T, client *http.Client, address string) {
 	if err != nil || slot != api.SlotThroughput {
 		t.Fatalf("pg.tps semantic slot = %v (err %v), want %q", slot, err, api.SlotThroughput)
 	}
+	// TPS 是库级的：一条连接下每个库各有自己的 TPS，实例级值是它们的和（#217）。
 	if throughput.DisplayName != "TPS" || throughput.Unit != "tx/s" ||
-		throughput.Engine != api.MetricEnginePostgreSQL || throughput.Level != api.MetricLevelInstance {
+		throughput.Engine != api.MetricEnginePostgreSQL || throughput.Level != api.MetricLevelDatabase ||
+		throughput.Aggregation != api.MetricAggregationSum {
 		t.Fatalf("pg.tps catalog entry = %+v", *throughput)
+	}
+	// 连接数是实例级的，没有可聚合的东西——库维度不该蔓延到实例级指标上。
+	for index := range body.Metrics {
+		if body.Metrics[index].MetricId != metric.MetricConnectionTotal.String() {
+			continue
+		}
+		if body.Metrics[index].Level != api.MetricLevelInstance || body.Metrics[index].Aggregation != api.MetricAggregationNone {
+			t.Fatalf("pg.connection.total catalog entry = %+v", body.Metrics[index])
+		}
 	}
 	for index := range body.Metrics {
 		if body.Metrics[index].DisplayName == "" {

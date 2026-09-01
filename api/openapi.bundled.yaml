@@ -275,6 +275,12 @@ paths:
               - 5m
               - raw
             default: auto
+        - name: by_database
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Metric series

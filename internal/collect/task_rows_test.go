@@ -39,10 +39,11 @@ func TestSamplesForTaskRow(t *testing.T) {
 			want:   []collectedSample{{metricID: metric.MetricReplicationSlotRetainedWAL, value: 0, labels: map[string]string{"slot": "slot-a"}}},
 		},
 		{
-			name:   "prepared transactions retain database dimension",
+			// 库这一维走 database_name 列，不进 labels：时序表上只有这一个具名维度。
+			name:   "prepared transactions land the database dimension on the series column",
 			taskID: metric.TaskPreparedXacts,
 			row:    map[string]any{"database": "app", "prepared_xacts_count": float64(2)},
-			want:   []collectedSample{{metricID: metric.MetricPreparedXactsCount, value: 2, labels: map[string]string{"database": "app"}}},
+			want:   []collectedSample{{metricID: metric.MetricPreparedXactsCount, value: 2, databaseName: "app"}},
 		},
 	}
 

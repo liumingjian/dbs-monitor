@@ -111,6 +111,30 @@ func TestEveryCatalogEntryIsDescribed(t *testing.T) {
 	}
 }
 
+// 加权平均与权重指标必须成对：没有权重的加权平均就是算术平均，而算术平均正是
+// 这条聚合规则要挡住的东西。metric_catalog 上的 metric_catalog_weighted_average_has_weight
+// 是同一条约束。库级指标之外的东西不能当权重——权重要能逐库和被加权的指标配对。
+func TestWeightedAverageMetricsDeclareAWeight(t *testing.T) {
+	for _, item := range metric.Metrics {
+		weight, hasWeight := metric.WeightMetricFor(item.ID)
+		if (item.Aggregation == metric.AggregationWeightedAverage) != hasWeight {
+			t.Errorf("metric %q has aggregation %q and weight %q", item.ID, item.Aggregation, weight)
+			continue
+		}
+		if !hasWeight {
+			continue
+		}
+		declared, exists := metric.Lookup(weight)
+		if !exists {
+			t.Errorf("metric %q weights on %q, which is not in the catalogue", item.ID, weight)
+			continue
+		}
+		if declared.Level != metric.LevelDatabase {
+			t.Errorf("metric %q weights on %q, which is %s-level", item.ID, weight, declared.Level)
+		}
+	}
+}
+
 func TestNineSemanticSlotsAreDeclared(t *testing.T) {
 	if len(metric.SemanticSlots) != 9 {
 		t.Fatalf("declared %d semantic slots, want 9", len(metric.SemanticSlots))

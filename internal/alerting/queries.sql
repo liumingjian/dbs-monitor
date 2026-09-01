@@ -199,7 +199,13 @@ WHERE rule.id = sqlc.arg(rule_id)
   AND rule.deleted_at IS NULL;
 
 -- name: SamplesInRuleWindow :many
-SELECT sample.ts, sample.value
+--
+-- 告警判定只在实例级聚合值上进行（规范 #213「告警」一节，本轮不做按库告警），所以同一时刻
+-- 落在多个库上的那几条序列在这里先合成一个数：sum 就是目录里 SUM 那一档聚合。
+-- 实例级指标只有一条序列，sum 是恒等的。
+-- **加权平均的指标不能走这条路**——它需要权重序列，SQL 里给不出。第一个 WEIGHTED_AVERAGE
+-- 指标落地时（#218 的缓存命中率）必须在这里补一条加权路径，否则告警会拿到算术和。
+SELECT sample.ts, sum(sample.value)::double precision AS value
 FROM metric_series series
 JOIN metric_sample sample ON sample.series_id = series.series_id
 WHERE series.instance_id = sqlc.arg(instance_id)
@@ -207,6 +213,7 @@ WHERE series.instance_id = sqlc.arg(instance_id)
   AND series.labels_key = sqlc.arg(metric_dimension_key)
   AND sample.ts > sqlc.arg(window_start)
   AND sample.ts <= sqlc.arg(window_end)
+GROUP BY sample.ts
 ORDER BY sample.ts DESC;
 
 -- name: SaveAlertSnapshot :one

@@ -15,6 +15,9 @@ export type MonitoringSearch = {
   columns?: ChartColumns
   connect?: boolean
   monitoring?: MonitoringView
+  /// 按库展开。库级指标（TPS、提交回滚、元组读写、临时文件……）默认显示实例级聚合值；
+  /// 打开之后一库一条线。是地址的一部分，所以「按库看到的这一屏」能原样发给同事。
+  databases?: boolean
 }
 
 export function parseTimeRange(search: Record<string, unknown>): MonitoringSearch | InvalidTimeRange {
@@ -43,12 +46,16 @@ export function parseTimeRange(search: Record<string, unknown>): MonitoringSearc
   const connect = parseConnect(search.connect)
   if (search.connect !== undefined && connect === undefined) return { error: '光标联动参数无效' }
 
+  const databases = parseBoolean(search.databases)
+  if (search.databases !== undefined && databases === undefined) return { error: '按库展开参数无效' }
+
   const result: MonitoringSearch = { from: from.toISOString(), to: to.toISOString() }
   if (metric !== undefined) result.metric = metric
   if (step !== undefined) result.step = step
   if (columns !== undefined) result.columns = columns
   if (connect !== undefined) result.connect = connect
   if (monitoring !== undefined) result.monitoring = monitoring
+  if (databases !== undefined) result.databases = databases
   return result
 }
 
@@ -59,6 +66,7 @@ export function serializeTimeRange(value: MonitoringSearch): Record<string, stri
   if (value.columns !== undefined) result.columns = value.columns
   if (value.connect !== undefined) result.connect = value.connect
   if (value.monitoring !== undefined) result.monitoring = value.monitoring
+  if (value.databases !== undefined) result.databases = value.databases
   return result
 }
 
@@ -100,6 +108,10 @@ function parseColumns(value: unknown): ChartColumns | undefined {
 }
 
 function parseConnect(value: unknown): boolean | undefined {
+  return parseBoolean(value)
+}
+
+function parseBoolean(value: unknown): boolean | undefined {
   if (value === true || value === 'true') return true
   if (value === false || value === 'false') return false
   return undefined

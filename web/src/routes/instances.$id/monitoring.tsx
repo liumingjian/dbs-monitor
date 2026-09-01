@@ -194,10 +194,13 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
   const step = search.step ?? 'auto'
   const columns = search.columns ?? 2
   const connected = search.connect ?? true
+  /// 一条连接下可以有几十个库。默认给实例级聚合值——列表、总览与这里的默认口径是同一个数；
+  /// 打开「按库展开」才逐库要，因为「是哪个库出的问题」只有在工作台里才被问到。
+  const byDatabase = search.databases ?? false
   const metricsQuery = $api.useQuery('get', '/api/v1/instances/{id}/metrics/series', {
     params: {
       path: { id },
-      query: { metric: standardMonitoringMetricIDs, from: search.from, to: search.to, step },
+      query: { metric: standardMonitoringMetricIDs, from: search.from, to: search.to, step, by_database: byDatabase },
     },
   }, standardMonitoringPollingOptions)
   const rulesQuery = $api.useQuery('get', '/api/v1/alert-rules', {}, standardMonitoringPollingOptions)
@@ -250,6 +253,17 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
             labelB=""
             toggled={connected}
             onToggle={(value) => updateSearch({ connect: value })}
+          />
+        </div>
+        <div className="monitoring-page__toggle">
+          <Toggle
+            id="monitoring-databases"
+            size="sm"
+            labelText="按库展开"
+            labelA=""
+            labelB=""
+            toggled={byDatabase}
+            onToggle={(value) => updateSearch({ databases: value })}
           />
         </div>
         {metricsQuery.dataUpdatedAt > 0 && <Freshness

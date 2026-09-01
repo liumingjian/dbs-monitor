@@ -38,18 +38,23 @@ func reconcileMetricCatalog(ctx context.Context, database *sql.DB) error {
 		if item.Slot != "" {
 			slot = item.Slot.String()
 		}
+		var weight any
+		if item.Weight != "" {
+			weight = item.Weight.String()
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO metric_catalog (
-				metric_id, engine, unit, display_name, semantic_slot, level, aggregation
-			) VALUES ($1, $2, $3, $4, $5, $6, $7)
+				metric_id, engine, unit, display_name, semantic_slot, level, aggregation, aggregation_weight
+			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 			ON CONFLICT (metric_id) DO UPDATE SET
 				engine = excluded.engine,
 				unit = excluded.unit,
 				display_name = excluded.display_name,
 				semantic_slot = excluded.semantic_slot,
 				level = excluded.level,
-				aggregation = excluded.aggregation`,
+				aggregation = excluded.aggregation,
+				aggregation_weight = excluded.aggregation_weight`,
 			item.ID.String(), string(item.Engine), item.Unit, item.DisplayName,
-			slot, string(item.Level), string(item.Aggregation),
+			slot, string(item.Level), string(item.Aggregation), weight,
 		); err != nil {
 			return fmt.Errorf("seed metric catalog entry %q: %w", item.ID, err)
 		}

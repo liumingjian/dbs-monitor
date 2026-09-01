@@ -1524,10 +1524,11 @@ type ListLongQuerySamplesParams struct {
 
 // GetMetricSeriesParams defines parameters for GetMetricSeries.
 type GetMetricSeriesParams struct {
-	Metric []GetMetricSeriesParamsMetric `form:"metric" json:"metric"`
-	From   time.Time                     `form:"from" json:"from"`
-	To     time.Time                     `form:"to" json:"to"`
-	Step   *GetMetricSeriesParamsStep    `form:"step,omitempty" json:"step,omitempty"`
+	Metric     []GetMetricSeriesParamsMetric `form:"metric" json:"metric"`
+	From       time.Time                     `form:"from" json:"from"`
+	To         time.Time                     `form:"to" json:"to"`
+	Step       *GetMetricSeriesParamsStep    `form:"step,omitempty" json:"step,omitempty"`
+	ByDatabase *bool                         `form:"by_database,omitempty" json:"by_database,omitempty"`
 }
 
 // GetMetricSeriesParamsMetric defines parameters for GetMetricSeries.
@@ -3047,6 +3048,14 @@ func (siw *ServerInterfaceWrapper) GetMetricSeries(w http.ResponseWriter, r *htt
 	err = runtime.BindQueryParameter("form", true, false, "step", r.URL.Query(), &params.Step)
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "step", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "by_database" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "by_database", r.URL.Query(), &params.ByDatabase)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "by_database", Err: err})
 		return
 	}
 
