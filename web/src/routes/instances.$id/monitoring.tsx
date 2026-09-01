@@ -1,7 +1,18 @@
-import { InfoCircleOutlined, ProfileOutlined } from '@ant-design/icons'
+import {
+  Button,
+  ContentSwitcher,
+  StructuredListBody,
+  StructuredListCell,
+  StructuredListRow,
+  StructuredListWrapper,
+  Switch,
+  Tab,
+  TabList,
+  Tabs,
+} from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
-import { Alert, Button, Card, Descriptions, Empty, Modal, Segmented, Select, Space, Spin, Switch, Tabs, Typography } from 'antd'
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
@@ -9,6 +20,13 @@ import { Freshness } from '../../domain/Freshness'
 import { MetricChart, metricUnavailability, type MetricChartSeries, type MetricThreshold } from '../../domain/MetricChart'
 import { TimeRangePicker } from '../../domain/TimeRangePicker'
 import { unavailabilityHref, type Unavailability } from '../../domain/UnavailabilityBlock'
+import { Dropdown } from '../../primitives/Dropdown'
+import { Icon } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
+import { MultiSelect } from '../../primitives/MultiSelect'
+import { NotificationBar } from '../../primitives/NotificationBar'
+import { Panel } from '../../primitives/Panel'
+import { Toggle } from '../../primitives/Toggle'
 import { rootRoute } from '../root'
 import {
   buildEnhancedChartView,
@@ -22,10 +40,9 @@ import {
   enhancedWindowOptions,
   parseEnhancedPreferences,
   type EnhancedAggregation,
-  type EnhancedColumns,
   type EnhancedPreferences,
 } from './enhancedMonitoring'
-import { metricOption, type MetricID } from './metricOptions'
+import { metricOption, type MetricID, type MetricOption } from './metricOptions'
 import { longQuerySamplesPageHref } from './sessionLayout'
 import {
   findStandardMonitoringChart,
@@ -34,7 +51,6 @@ import {
   type StandardMonitoringChart,
 } from './standardMonitoring'
 import {
-  defaultEnhancedTimeRange,
   defaultTimeRange,
   enhancedWindowMinutes,
   parseTimeRange,
@@ -42,9 +58,9 @@ import {
   type EnhancedWindowMinutes,
   type MetricStep,
   type MonitoringSearch,
-  type MonitoringView,
 } from './timeRange'
 import { WorkbenchHeader } from './workbench'
+import './monitoring.css'
 
 export const standardMonitoringRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -59,6 +75,25 @@ type AlertRule = components['schemas']['AlertRule']
 
 const standardMonitoringPollingOptions = { refetchInterval: pollingIntervals.standardMonitoring }
 const enhancedMonitoringPollingOptions = { refetchInterval: pollingIntervals.enhancedMonitoring }
+
+type StepOption = { id: MetricStep; label: string }
+
+// 组件库的 `items` 收的是可变数组，所以这一张不写 `as const`；取值仍然被 `MetricStep` 钉住。
+const stepOptions: StepOption[] = [
+  { id: 'auto', label: '自动' },
+  { id: '15s', label: '15 秒' },
+  { id: '1m', label: '1 分钟' },
+  { id: '5m', label: '5 分钟' },
+  { id: 'raw', label: '原始粒度' },
+]
+
+const columnOptions = [1, 2, 3] as const satisfies readonly ChartColumns[]
+
+const aggregationOptions = [
+  { value: 'average', label: '平均' },
+  { value: 'maximum', label: '最大' },
+  { value: 'minimum', label: '最小' },
+] as const satisfies readonly { value: EnhancedAggregation; label: string }[]
 
 /**
  * A chart of a metric that has an alerting rule should show where that rule fires;
@@ -87,14 +122,16 @@ export function instanceThresholds(
 function StandardMonitoringRoutePage() {
   const { id } = standardMonitoringRoute.useParams()
   const search = standardMonitoringRoute.useSearch()
+  const navigate = standardMonitoringRoute.useNavigate()
 
   if ('error' in search) {
-    return <Alert
-      type="error"
-      showIcon
-      title={search.error}
-      action={<Link to="/instances/$id/monitoring" params={{ id }} search={defaultTimeRange()}><Button>使用最近一小时</Button></Link>}
-    />
+    return <div className="monitoring-page">
+      <NotificationBar tone="critical" title={search.error} />
+      {/* 复位是一个动作而不是一个地址：当前地址本身就是坏的，没有可复制的链接可言。 */}
+      <Button size="md" className="monitoring-page__reset" onClick={() => void navigate({ search: defaultTimeRange() })}>
+        使用最近一小时
+      </Button>
+    </div>
   }
 
   return search.monitoring === 'enhanced'
@@ -102,6 +139,49 @@ function StandardMonitoringRoutePage() {
     : <StandardMonitoringPage id={id} search={search} />
 }
 
+/// 标准监控与增强监控之间的切换。
+///
+/// 两档都是**地址**（`monitoring` 是 search param），所以页签是真锚点：`<Tab as={链接组件}>`，
+/// 中键新开与复制链接都还在，`role="tab"` / `aria-selected` 由 Carbon 照常给。
+/// `activation="manual"` 是必需的 —— 自动激活会让方向键在不导航的情况下改选中态，
+/// 页签就和地址对不上了。判定与理由见 `web/CLAUDE.md` 的先例一节。
+///
+/// 两个去处都从当前时间范围推出来，而不是「点下去那一刻的最近一小时」：换一档视图
+/// 不该把读者好不容易定位到的时间窗口丢掉。增强监控只收 30 / 60 / 180 / 360 分钟的窗口
+/// （见 `parseTimeRange`），所以取以当前结束时刻收尾的 30 分钟。
+function MonitoringViewTabs({ id, search }: { id: string; search: MonitoringSearch }) {
+  // `as` 槽只收组件，不能顺带把路由属性交出去；memo 固定身份，否则每次渲染都会重挂锚点、
+  // 把键盘焦点甩掉（先例见 workbench.tsx）。
+  const links = useMemo(() => {
+    const standard: MonitoringSearch = {
+      from: search.from,
+      to: search.to,
+      step: 'auto',
+      columns: search.columns ?? 2,
+      connect: search.connect ?? true,
+    }
+    const enhanced: MonitoringSearch = {
+      from: new Date(new Date(search.to).getTime() - 30 * 60_000).toISOString(),
+      to: search.to,
+      monitoring: 'enhanced',
+      step: 'raw',
+    }
+    return {
+      standard: (props: object) => <Link {...props} to="/instances/$id/monitoring" params={{ id }} search={standard} />,
+      enhanced: (props: object) => <Link {...props} to="/instances/$id/monitoring" params={{ id }} search={enhanced} />,
+    }
+  }, [id, search])
+
+  return <Tabs selectedIndex={search.monitoring === 'enhanced' ? 1 : 0}>
+    <TabList aria-label="监控视图" activation="manual">
+      <Tab as={links.standard}>标准监控</Tab>
+      <Tab as={links.enhanced}>增强监控</Tab>
+    </TabList>
+  </Tabs>
+}
+
+/// 标准监控：22 张图分三组，粒度 / 列数 / 光标联动 / 时间范围都在地址里，
+/// 所以一张截图的链接发给同事，看到的是同一屏。
 function StandardMonitoringPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const navigate = standardMonitoringRoute.useNavigate()
   const instanceQuery = $api.useQuery(
@@ -127,82 +207,88 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
     void navigate({ search: { ...search, ...update } })
   }
 
-  function changeMonitoring(view: MonitoringView) {
-    void navigate({ search: view === 'enhanced' ? defaultEnhancedTimeRange() : defaultTimeRange() })
-  }
-
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
+  return <div className="monitoring-page">
     <WorkbenchHeader id={id} instanceName={instanceQuery.data?.name} activeKey="monitoring" search={search} />
-    <Tabs activeKey="standard" onChange={(key) => changeMonitoring(key as MonitoringView)} items={[
-      { key: 'standard', label: '标准监控' },
-      { key: 'enhanced', label: '增强监控' },
-    ]} />
+    <MonitoringViewTabs id={id} search={search} />
 
-    <section id="monitoring-controls" className="monitoring-controls" aria-label="标准监控控制">
+    <section id="monitoring-controls" className="monitoring-page__controls" aria-label="标准监控控制">
       <TimeRangePicker
         from={search.from}
         to={search.to}
         onChange={(range) => updateSearch(range)}
       />
-      <Space wrap>
-        <label htmlFor="metric-step">数据粒度</label>
-        <Select<MetricStep>
+      <div className="monitoring-page__control-row">
+        <Dropdown<StepOption>
           id="metric-step"
-          aria-label="数据粒度"
-          value={step}
-          options={[
-            { value: 'auto', label: '自动' },
-            { value: '15s', label: '15 秒' },
-            { value: '1m', label: '1 分钟' },
-            { value: '5m', label: '5 分钟' },
-            { value: 'raw', label: '原始粒度' },
-          ]}
-          onChange={(value) => updateSearch({ step: value })}
-          style={{ width: 132 }}
+          className="monitoring-page__step"
+          size="md"
+          titleText="数据粒度"
+          label="自动"
+          items={stepOptions}
+          itemToString={(item) => item?.label ?? ''}
+          selectedItem={stepOptions.find((option) => option.id === step) ?? stepOptions[0]}
+          onChange={({ selectedItem }) => {
+            if (selectedItem) updateSearch({ step: selectedItem.id })
+          }}
         />
-        <span>列数</span>
-        <Segmented<ChartColumns>
-          aria-label="图表列数"
-          value={columns}
-          options={[{ label: '1 列', value: 1 }, { label: '2 列', value: 2 }, { label: '3 列', value: 3 }]}
+        <ColumnSwitcher
+          name="列数"
+          label="图表列数"
+          columns={columns}
           onChange={(value) => updateSearch({ columns: value })}
         />
-        <Switch aria-label="光标联动" checked={connected} onChange={(value) => updateSearch({ connect: value })} />
-        <span>光标联动</span>
+        {/*
+          * 左右两侧的开关文案清空：状态由 `aria-checked` 与外观表达，这里不需要第三份。
+          * 「可见的滑块点不动」那个坑归 `primitives/Toggle` 管，页面不用再绕。
+          */}
+        <div className="monitoring-page__toggle">
+          <Toggle
+            id="monitoring-connect"
+            size="sm"
+            labelText="光标联动"
+            labelA=""
+            labelB=""
+            toggled={connected}
+            onToggle={(value) => updateSearch({ connect: value })}
+          />
+        </div>
         {metricsQuery.dataUpdatedAt > 0 && <Freshness
           dataUpdatedAt={metricsQuery.dataUpdatedAt}
           collectionInterval={standardMonitoringPollingOptions.refetchInterval}
         />}
-      </Space>
+      </div>
     </section>
 
-    {metricsQuery.isPending ? <Spin size="large" /> : standardMonitoringGroups.map((group) => (
-      <section key={group.key} aria-labelledby={`${group.key}-heading`}>
-        <Typography.Title id={`${group.key}-heading`} level={3}>{group.title}</Typography.Title>
-        <div className="metric-grid" data-columns={columns}>
-          {group.charts.map((chart, chartIndex) => {
+    {standardMonitoringGroups.map((group) => (
+      <section key={group.key} className="monitoring-page__group" aria-labelledby={`${group.key}-heading`}>
+        <h2 id={`${group.key}-heading`} className="dbs-panel-title">{group.title}</h2>
+        <div className="monitoring-page__grid" data-testid="metric-grid" data-columns={columns}>
+          {group.charts.map((chart) => {
             const view = buildChartView(chart, metricsQuery.data?.metrics)
             const primaryMetric = chart.metrics[0]
             return (
-              <Card
+              <Panel
                 key={chart.key}
-                className="metric-card"
-                style={{ '--card-index': chartIndex } as CSSProperties}
+                className="monitoring-page__card"
+                data-testid="metric-card"
+                headingLevel={3}
                 title={chart.title}
-                extra={<Space size="small">
+                // 规范要求骨架占位而不是整页转圈：卡片框与标题先立住，读者知道等的是哪张图。
+                loading={metricsQuery.isPending}
+                actions={<>
                   {chart.drilldown && <Button
-                    type="link"
-                    size="small"
-                    icon={<ProfileOutlined />}
+                    kind="ghost"
+                    size="sm"
+                    renderIcon={Icon.glyph.listBulleted}
                     href={longQuerySamplesHref(id, search)}
                   >查看采样记录</Button>}
                   <Button
-                    type="text"
-                    size="small"
-                    icon={<InfoCircleOutlined />}
+                    kind="ghost"
+                    size="sm"
+                    renderIcon={Icon.glyph.information}
                     onClick={() => updateSearch({ metric: primaryMetric })}
                   >指标详情</Button>
-                </Space>}
+                </>}
               >
                 <MetricChart
                   label={chart.title}
@@ -214,7 +300,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
                   loading={metricsQuery.isFetching}
                   thresholds={instanceThresholds(rulesQuery.data, id, chart.metrics, metricsQuery.data?.metrics)}
                 />
-              </Card>
+              </Panel>
             )
           })}
         </div>
@@ -226,9 +312,11 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
       metrics={metricsQuery.data?.metrics}
       onClose={() => updateSearch({ metric: undefined })}
     />
-  </Space>
+  </div>
 }
 
+/// 增强监控：5 秒原始点，指标集合、聚合方式与布局是本机偏好（localStorage），
+/// 时间窗口仍然是地址的一部分。
 function EnhancedMonitoringPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const navigate = standardMonitoringRoute.useNavigate()
   const [preferences, setPreferences] = useState<EnhancedPreferences>(() => readEnhancedPreferences(id))
@@ -262,10 +350,6 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
     void navigate({ search: { ...search, ...update } })
   }
 
-  function changeMonitoring(view: MonitoringView) {
-    void navigate({ search: view === 'enhanced' ? defaultEnhancedTimeRange() : defaultTimeRange() })
-  }
-
   function changeWindow(minutes: EnhancedWindowMinutes) {
     const to = new Date()
     updateSearch({
@@ -282,40 +366,43 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
 
   let monitoringContent: ReactNode
   if (preferences.metrics.length === 0) {
-    monitoringContent = <Empty description="未选择指标" />
-  } else if (metricsQuery.isPending) {
-    monitoringContent = <Spin size="large" />
+    monitoringContent = <div className="monitoring-page__empty">
+      <span className="dbs-body">未选择指标</span>
+      <span className="dbs-caption">在「指标管理」里挑几个指标，这里就会画出对应的原始粒度曲线。</span>
+    </div>
   } else {
     monitoringContent = enhancedMonitoringGroups.map((group) => {
       const selectedMetrics = group.metrics.filter((metric) => preferences.metrics.includes(metric))
       if (selectedMetrics.length === 0) return null
 
-      return <section key={group.key} aria-labelledby={`enhanced-${group.key}-heading`}>
-        <Typography.Title id={`enhanced-${group.key}-heading`} level={3}>{group.title}</Typography.Title>
-        <div className="metric-grid" data-columns={preferences.columns}>
+      return <section key={group.key} className="monitoring-page__group" aria-labelledby={`enhanced-${group.key}-heading`}>
+        <h2 id={`enhanced-${group.key}-heading`} className="dbs-panel-title">{group.title}</h2>
+        <div className="monitoring-page__grid" data-testid="metric-grid" data-columns={preferences.columns}>
           {selectedMetrics.map((metricID) => {
             const option = metricOption(metricID)
             const view = buildEnhancedChartView(metricID, metricsQuery.data?.metrics, preferences.aggregation, bucketSeconds)
             const taskResult = collectionTaskResult(tasksQuery.data, metricID)
-            return <Card
+            return <Panel
               key={metricID}
-              className="metric-card enhanced-metric-card"
-              style={{ '--card-index': selectedMetrics.indexOf(metricID) } as CSSProperties}
+              className="monitoring-page__card"
+              data-testid="enhanced-metric-card"
+              headingLevel={3}
               title={option.label}
-              extra={<Space size="small">
+              loading={metricsQuery.isPending}
+              actions={<>
                 {metricID === 'pg.query.long_running_count' && <Button
-                  type="link"
-                  size="small"
-                  icon={<ProfileOutlined />}
+                  kind="ghost"
+                  size="sm"
+                  renderIcon={Icon.glyph.listBulleted}
                   href={longQuerySamplesHref(id, search)}
                 >查看采样记录</Button>}
                 <Button
-                  type="text"
-                  size="small"
-                  icon={<InfoCircleOutlined />}
+                  kind="ghost"
+                  size="sm"
+                  renderIcon={Icon.glyph.information}
                   onClick={() => updateSearch({ metric: metricID })}
                 >指标详情</Button>
-              </Space>}
+              </>}
             >
               <MetricChart
                 label={option.label}
@@ -326,72 +413,80 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
                 unavailabilityDetail={view.unavailability ? enhancedUnavailabilityDetail(view.unavailability, taskResult) : undefined}
                 loading={metricsQuery.isFetching}
               />
-            </Card>
+            </Panel>
           })}
         </div>
       </section>
     })
   }
 
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
+  return <div className="monitoring-page">
     <WorkbenchHeader id={id} instanceName={instanceQuery.data?.name} activeKey="monitoring" search={search} />
-    <Tabs activeKey="enhanced" onChange={(key) => changeMonitoring(key as MonitoringView)} items={[
-      { key: 'standard', label: '标准监控' },
-      { key: 'enhanced', label: '增强监控' },
-    ]} />
+    <MonitoringViewTabs id={id} search={search} />
 
-    <Alert
-      type="info"
-      showIcon
-      title="5 秒增强采集常态运行"
-      description="增强监控的 5 秒采集为常态运行，磁盘与查询开销与是否打开本页无关；打开本页不会给数据库增加任何额外查询压力。"
-    />
+    <NotificationBar tone="info" title="5 秒增强采集常态运行">
+      增强监控的 5 秒采集为常态运行，磁盘与查询开销与是否打开本页无关；打开本页不会给数据库增加任何额外查询压力。
+    </NotificationBar>
 
-    <section id="monitoring-controls" className="monitoring-controls enhanced-monitoring-controls" aria-label="增强监控控制">
-      <Space wrap>
-        <label htmlFor="enhanced-metrics">指标管理</label>
-        <Select<MetricID[], { value: MetricID; label: string }>
+    <section id="monitoring-controls" className="monitoring-page__controls" aria-label="增强监控控制">
+      <div className="monitoring-page__control-row">
+        <MultiSelect<MetricOption>
           id="enhanced-metrics"
-          aria-label="指标管理"
-          mode="multiple"
-          value={preferences.metrics}
-          options={enhancedMonitoringMetricOptions.map((option) => ({ value: option.id, label: option.label }))}
-          onChange={(metrics) => updatePreferences({ metrics })}
-          maxTagCount="responsive"
-          style={{ minWidth: 280 }}
+          className="monitoring-page__metrics"
+          size="md"
+          titleText="指标管理"
+          label={`已选 ${preferences.metrics.length} 个指标`}
+          items={enhancedMonitoringMetricOptions}
+          itemToString={(item) => item?.label ?? ''}
+          selectedItems={enhancedMonitoringMetricOptions.filter((option) => preferences.metrics.includes(option.id))}
+          onChange={({ selectedItems }) => {
+            // 回来的顺序跟着点选顺序走。按指标字典的固定顺序重排，请求里的 `metric`
+            // 参数才稳定，查询键也就不会因为点选先后而抖动。
+            const chosen = new Set((selectedItems ?? []).map((item) => item.id))
+            updatePreferences({ metrics: enhancedMonitoringMetricIDs.filter((metric) => chosen.has(metric)) })
+          }}
         />
-        <span>时间窗口</span>
-        <Segmented<EnhancedWindowMinutes>
-          aria-label="增强监控时间窗口"
-          value={windowMinutes}
-          options={enhancedWindowOptions.map((option) => ({ label: option.label, value: option.minutes }))}
-          onChange={changeWindow}
-        />
-      </Space>
-      <Space wrap>
-        <span>聚合方式</span>
-        <Segmented<EnhancedAggregation>
-          aria-label="聚合方式"
-          value={preferences.aggregation}
-          options={[
-            { label: '平均', value: 'average' },
-            { label: '最大', value: 'maximum' },
-            { label: '最小', value: 'minimum' },
-          ]}
-          onChange={(aggregation) => updatePreferences({ aggregation })}
-        />
-        <span>布局</span>
-        <Segmented<EnhancedColumns>
-          aria-label="图表布局"
-          value={preferences.columns}
-          options={[{ label: '1 列', value: 1 }, { label: '2 列', value: 2 }, { label: '3 列', value: 3 }]}
-          onChange={(columns) => updatePreferences({ columns })}
+        <div className="monitoring-page__field">
+          <span className="cds--label">时间窗口</span>
+          <ContentSwitcher
+            aria-label="增强监控时间窗口"
+            size="md"
+            selectedIndex={enhancedWindowOptions.findIndex((option) => option.minutes === windowMinutes)}
+            onChange={({ index }) => {
+              const next = index === undefined ? undefined : enhancedWindowOptions[index]
+              if (next !== undefined) changeWindow(next.minutes)
+            }}
+          >
+            {enhancedWindowOptions.map((option) => <Switch key={option.minutes} name={String(option.minutes)} text={option.label} />)}
+          </ContentSwitcher>
+        </div>
+      </div>
+      <div className="monitoring-page__control-row">
+        <div className="monitoring-page__field">
+          <span className="cds--label">聚合方式</span>
+          <ContentSwitcher
+            aria-label="聚合方式"
+            size="md"
+            selectedIndex={aggregationOptions.findIndex((option) => option.value === preferences.aggregation)}
+            onChange={({ index }) => {
+              const next = index === undefined ? undefined : aggregationOptions[index]
+              if (next !== undefined) updatePreferences({ aggregation: next.value })
+            }}
+          >
+            {aggregationOptions.map((option) => <Switch key={option.value} name={option.value} text={option.label} />)}
+          </ContentSwitcher>
+        </div>
+        <ColumnSwitcher
+          name="布局"
+          label="图表布局"
+          columns={preferences.columns}
+          onChange={(value) => updatePreferences({ columns: value })}
         />
         {metricsQuery.dataUpdatedAt > 0 && <Freshness
           dataUpdatedAt={metricsQuery.dataUpdatedAt}
           collectionInterval={enhancedMonitoringPollingOptions.refetchInterval}
         />}
-      </Space>
+      </div>
     </section>
 
     {monitoringContent}
@@ -401,7 +496,32 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
       response={metricsQuery.data?.metrics.find((item) => item.metric === selectedMetric)}
       onClose={() => updateSearch({ metric: undefined })}
     />
-  </Space>
+  </div>
+}
+
+/// 列数切换。分段单选而不是下拉：三档都在眼前，选中态由 `aria-selected` 表达，
+/// 颜色不是唯一信号。看得见的那句短标签（列数 / 布局）是可访问名的子串，两边不打架。
+function ColumnSwitcher({ name, label, columns, onChange }: {
+  name: string
+  label: string
+  columns: ChartColumns
+  onChange: (columns: ChartColumns) => void
+}) {
+  return <div className="monitoring-page__field">
+    <span className="cds--label">{name}</span>
+    <ContentSwitcher
+      aria-label={label}
+      size="md"
+      selectedIndex={columnOptions.indexOf(columns)}
+      onChange={({ index }) => {
+        // 组件库把选中下标标成可选；拿不到下标就是没换档，什么都不做，别兜底成第一档。
+        const next = index === undefined ? undefined : columnOptions[index]
+        if (next !== undefined) onChange(next)
+      }}
+    >
+      {columnOptions.map((value) => <Switch key={value} name={String(value)} text={`${value} 列`} />)}
+    </ContentSwitcher>
+  </div>
 }
 
 function buildChartView(
@@ -450,23 +570,46 @@ function longQuerySamplesHref(id: string, search: MonitoringSearch): string {
   })
 }
 
+/// 键值清单。原来是 AntD 的 `Descriptions`，这里用 Carbon 的结构化列表表达同一件事。
+function MetricKeyValues({ label, items }: {
+  label: string
+  items: { key: string; label: string; value: ReactNode }[]
+}) {
+  return <StructuredListWrapper aria-label={label} isCondensed className="monitoring-page__list">
+    <StructuredListBody>
+      {items.map((item) => (
+        <StructuredListRow key={item.key}>
+          <StructuredListCell noWrap>{item.label}</StructuredListCell>
+          <StructuredListCell>{item.value}</StructuredListCell>
+        </StructuredListRow>
+      ))}
+    </StructuredListBody>
+  </StructuredListWrapper>
+}
+
 function MetricDetails({ chart, metrics, onClose }: {
   chart: StandardMonitoringChart | undefined
   metrics: ResponseMetric[] | undefined
   onClose: () => void
 }) {
-  return <Modal title={chart?.title ?? '指标详情'} open={chart !== undefined} footer={null} onCancel={onClose}>
-    {chart && <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Typography.Paragraph>{chart.description}</Typography.Paragraph>
-      <Descriptions column={1} size="small" bordered items={chart.metrics.map((metric) => {
+  return <Modal
+    passiveModal
+    open={chart !== undefined}
+    modalHeading={chart?.title ?? '指标详情'}
+    closeButtonLabel="关闭指标详情"
+    onRequestClose={onClose}
+  >
+    {chart && <div className="monitoring-page__details">
+      <p className="dbs-body">{chart.description}</p>
+      <MetricKeyValues label={`${chart.title} 的指标`} items={chart.metrics.map((metric) => {
         const response = metrics?.find((item) => item.metric === metric)
         return {
           key: metric,
           label: metricOption(metric).label,
-          children: <><code>{metric}</code>{response ? ` · ${response.unit}` : ''}</>,
+          value: <><code>{metric}</code>{response ? ` · ${response.unit}` : ''}</>,
         }
       })} />
-    </Space>}
+    </div>}
   </Modal>
 }
 
@@ -475,15 +618,21 @@ function EnhancedMetricDetails({ metric, response, onClose }: {
   response: ResponseMetric | undefined
   onClose: () => void
 }) {
-  return <Modal title={metric ? metricOption(metric).label : '指标详情'} open={metric !== undefined} footer={null} onCancel={onClose}>
-    {metric && <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-      <Typography.Paragraph>{enhancedMetricDescription(metric)}</Typography.Paragraph>
-      <Descriptions column={1} size="small" bordered items={[
-        { key: 'id', label: '指标 ID', children: <code>{metric}</code> },
-        { key: 'unit', label: '单位', children: response?.unit ?? '等待样本' },
-        { key: 'step', label: '读取粒度', children: '原始点' },
+  return <Modal
+    passiveModal
+    open={metric !== undefined}
+    modalHeading={metric ? metricOption(metric).label : '指标详情'}
+    closeButtonLabel="关闭指标详情"
+    onRequestClose={onClose}
+  >
+    {metric && <div className="monitoring-page__details">
+      <p className="dbs-body">{enhancedMetricDescription(metric)}</p>
+      <MetricKeyValues label="指标详情" items={[
+        { key: 'id', label: '指标 ID', value: <code>{metric}</code> },
+        { key: 'unit', label: '单位', value: response?.unit ?? '等待样本' },
+        { key: 'step', label: '读取粒度', value: '原始点' },
       ]} />
-    </Space>}
+    </div>}
   </Modal>
 }
 

@@ -1,0 +1,158 @@
+/*
+ * 告警详情的版式。纯 CSS（组件级样式表不得是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距 / 圆角一律走令牌，字体档位走 `.dbs-*` 类，不写字面量色值。
+ *
+ * 带 `.cds--link` 的元素上的规则把自己的类名写两遍：组件级样式表在打包顺序上排在
+ * `styles/index.scss` 之前，单类对单类的平局由注入顺序决出，Carbon 会赢。
+ */
+
+.alert-detail {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.alert-detail__back.alert-detail__back {
+  justify-self: start;
+}
+
+.alert-detail__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.alert-detail__heading {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+/* 规则名与两枚徽章同一行：状态与级别是读者第一眼要找的两件事。 */
+.alert-detail__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  min-inline-size: 0;
+}
+
+.alert-detail__title-row h1 {
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.alert-detail__subject {
+  margin: 0;
+  color: var(--cds-text-secondary);
+  min-inline-size: 0;
+}
+
+.alert-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+}
+
+.alert-detail__placeholder {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+/* ---- 键值清单 ---- */
+
+.alert-detail__list .cds--structured-list-tbody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.alert-detail__list .cds--structured-list-row {
+  min-inline-size: 0;
+}
+
+@media (min-width: 42rem) {
+  .alert-detail__list[data-columns='2'] .cds--structured-list-tbody,
+  .alert-detail__list[data-columns='3'] .cds--structured-list-tbody {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 64rem) {
+  .alert-detail__list[data-columns='3'] .cds--structured-list-tbody {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* ---- 规则快照 ---- */
+
+.alert-detail__snapshot {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .alert-detail__snapshot {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/*
+ * 等宽 JSON：**不折行**。`overflow-wrap: anywhere` 会把键名和阈值从中间劈开，
+ * 等宽文本的可读性正是靠「一个 token 不被拆」撑着的（票 #201）。装不下就横向滚，
+ * 滚动条落在这个盒子自己身上：它不是表格，也不构成页面的横向溢出。
+ * `tabindex="0"` 是因为可滚动区域必须能用键盘滚。
+ */
+.alert-detail__json {
+  margin: 0;
+  padding: var(--dbs-spacing-sm);
+  max-block-size: 22rem;
+  overflow: auto;
+  border: 1px solid var(--cds-border-subtle-01);
+  border-radius: var(--dbs-radius-none);
+  background-color: var(--cds-layer-01);
+  color: var(--cds-text-primary);
+  white-space: pre;
+  tab-size: 2;
+}
+
+.alert-detail__json:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+/* ---- 证据与处置：宽屏两列，窄屏一列 ---- */
+
+.alert-detail__grid {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .alert-detail__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * 证据区（处置记录 / 触发现场快照）整行铺开。
+ *
+ * 它们各带一张八列 / 十一列的明细表，而半幅栅格在 1280px 下只有 446px —— 那个宽度连
+ * 表头都写不下（「规则版本」被截成「规...」）。缺的是容器宽度，不是列：规范禁止丢列，
+ * 也禁止在表格附近加横向滚动，所以答案是把容器给够。上面两块是空态面板，它们并排正合适。
+ */
+.alert-detail__grid > .alert-detail-section {
+  grid-column: 1 / -1;
+}
+
+/* 指标不在字典里时的说明块：通知条 + 单独一行的指标 ID。 */
+.alert-detail__missing-metric {
+  display: grid;
+  gap: var(--dbs-spacing-xs);
+  min-inline-size: 0;
+}

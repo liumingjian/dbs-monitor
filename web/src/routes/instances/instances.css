@@ -1,0 +1,101 @@
+/*
+ * 实例列表的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色与间距一律走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定：
+ * 在表格附近再加一个滚动容器，粘性表头就会掉进表格里（DESIGN.md 明确写了这个坑）。
+ */
+
+.instances-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，表格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.instances-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.instances-page__header h1 {
+  margin: 0;
+}
+
+/* 筛选栏。控件各自带标签，所以是一排「标签 + 控件」的块，底对齐。 */
+.instances-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--dbs-spacing-sm);
+}
+
+.instances-filters__control {
+  inline-size: 13rem;
+}
+
+.instances-filters__checks {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-md);
+  /* 复选框没有上方标签，与带标签的下拉框底部对齐时要自己补回控件的下沿。 */
+  padding-block-end: var(--dbs-spacing-xs);
+}
+
+.instances-filters__freshness {
+  margin-inline-start: auto;
+  padding-block-end: var(--dbs-spacing-xs);
+  color: var(--cds-text-secondary);
+}
+
+/* 分页条在面板 footer 里，去掉 Carbon 自带的上边框：footer 上面已经有一条发丝线了。 */
+.instances-pagination {
+  border-block-start: none;
+  inline-size: 100%;
+}
+
+/* ---- 表格内容 ---- */
+
+/* 实例名这一列既是行的标题也是行的入口。链接本身要占满格子并成为截断的参照，
+   否则内层的 `.dbs-truncate`（`max-inline-size: 100%`）量的是行内锚点的收缩宽度，
+   长名字会把这一列撑开而不是打省略号。 */
+.instances-table__name {
+  display: block;
+  max-inline-size: 100%;
+}
+
+.instances-table__counts,
+.instances-table__markers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+  /* 一格一行：装不下就交给单元格自己的省略号，不换行把行撑高。 */
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* 标记条（domain/SuppressionTags）默认允许换行，详情页那种宽松版式要的就是换行；
+   表格里一格只写一行，装不下交给单元格的省略号。选择器带页面前缀，特指度高于
+   `.dbs-marker-list`，两张样式表谁先加载都不影响结果。 */
+.instances-page .instances-table__markers {
+  flex-wrap: nowrap;
+}
+
+.instances-table__counts {
+  /* 计数是等宽数字，右对齐后 C/W/I 三格在行与行之间对得齐。 */
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 计数本身带 C / W / I 前缀，颜色只是让「有严重告警」先跳出来，不是唯一信号。
+   为零的那一档退到次要文字色，扫视时只有非零的数字有颜色。 */
+.instances-table__counts > span[data-tone='critical'] { color: var(--dbs-status-critical); }
+.instances-table__counts > span[data-tone='warning'] { color: var(--dbs-status-warning); }
+.instances-table__counts > span[data-tone='unknown'] { color: var(--cds-text-secondary); }
+
+/* 密集档位下这一列不渲染（规范：32px 行丢掉缩略图），所以这里只管标准档位的高度。 */
+.instances-page .dbs-sparkline {
+  inline-size: 100%;
+}

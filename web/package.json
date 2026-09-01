@@ -6,22 +6,24 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b --force",
     "lint": "eslint .",
     "test": "vitest",
     "e2e": "playwright test"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.1.0",
+    "@carbon/charts-react": "^1.27.18",
+    "@carbon/icons-react": "^11.87.0",
+    "@carbon/react": "^1.115.0",
+    "@floating-ui/react": "^0.27.4",
     "@tanstack/react-query": "^5.90.0",
     "@tanstack/react-router": "^1.131.0",
-    "antd": "6.5.3",
-    "dayjs": "^1.11.21",
-    "echarts": "^6.0.0",
     "openapi-fetch": "^0.17.0",
     "openapi-react-query": "0.5.4",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.87.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
@@ -35,6 +37,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "jsdom": "^26.1.0",
+    "sass-embedded": "^1.103.1",
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.39.0",
     "vite": "^7.1.0",

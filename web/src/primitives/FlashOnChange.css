@@ -1,0 +1,48 @@
+/*
+ * 变化高亮。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色走令牌，没有一个字面量色值。
+ *
+ * 400ms 是 DESIGN.md「Motion」写死的时长，令牌层里没有这一档
+ * （fast=110ms 给 hover/focus，mid=240ms 给抽屉与侧栏），所以就地写出来并注明出处。
+ */
+
+.dbs-flash-on-change {
+  /* 行内框就够：底色正好盖住字形本身，不占额外宽度，也就不会在刷新时挤动版式。 */
+  display: inline;
+  border-radius: var(--dbs-radius-none);
+}
+
+/*
+ * 动画整条包在媒体查询里，而不是靠 duration 抹掉：
+ * 「不想看到动效」的答案是不发生，不是发生得很快。
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .dbs-flash-on-change[data-flash='a'] {
+    animation: dbs-flash-on-change-a 400ms var(--dbs-easing) 1;
+  }
+
+  .dbs-flash-on-change[data-flash='b'] {
+    animation: dbs-flash-on-change-b 400ms var(--dbs-easing) 1;
+  }
+}
+
+@keyframes dbs-flash-on-change-a {
+  from {
+    background-color: var(--dbs-surface-selected);
+  }
+
+  to {
+    background-color: transparent;
+  }
+}
+
+/* 与上面逐字相同：交替使用是为了让连续两次变化都能重放，见组件里的说明。 */
+@keyframes dbs-flash-on-change-b {
+  from {
+    background-color: var(--dbs-surface-selected);
+  }
+
+  to {
+    background-color: transparent;
+  }
+}

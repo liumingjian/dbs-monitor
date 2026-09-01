@@ -1,0 +1,15 @@
+/*
+ * 标记条：一排彼此正交的状态徽章。
+ *
+ * 间距由这一层给，徽章自身不带外边距 —— 否则每个用到徽章的地方都得各自补一遍，
+ * 而徽章在表格单元格里本来就应该是紧贴内容的。
+ * 表格里要「一格一行」的调用方在自己的类上改写 `flex-wrap`。
+ */
+
+.dbs-marker-list {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}

@@ -1,0 +1,54 @@
+/*
+ * 时间范围选择器：一条工具条，底对齐。
+ * 色值全部走令牌，本文件不出现任何字面量色值。
+ */
+
+.dbs-time-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--dbs-spacing-xs);
+}
+
+/* 「最近」是那排快捷档的引导词，和按钮底对齐会浮在半空，所以自己压到行底。 */
+.dbs-time-range__quick-label {
+  padding-block-end: var(--dbs-spacing-sm);
+  color: var(--cds-text-secondary);
+  white-space: nowrap;
+}
+
+/* 四个档是一组，彼此之间只留一条发丝缝，读起来是一个分段控件而不是四个按钮。 */
+.dbs-time-range__presets {
+  display: flex;
+  gap: 1px;
+}
+
+.dbs-time-range__presets .cds--btn {
+  padding-inline: var(--dbs-spacing-sm);
+}
+
+/* Carbon 的表单项默认铺满可用宽度；这里两个输入框只要装得下一个时刻。
+ *
+ * 宽度是量出来的：原生 `datetime-local` 自己排的是 `MM/DD/YYYY, hh:mm:ss AM` 再加一个
+ * 日历按钮，13.5rem（216px）装不下，被切掉的正好是末尾的 AM/PM —— 上午和下午于是长得
+ * 一模一样，而这是一个时间范围控件。16.5rem（264px）容得下整串值加按钮，仍然比
+ * 「铺满可用宽度」窄得多，工具条的其余控件不动位置。 */
+.dbs-time-range__field {
+  flex: 0 0 auto;
+  min-inline-size: 0;
+}
+
+.dbs-time-range__field .cds--form-item {
+  flex: 0 0 auto;
+  inline-size: 16.5rem;
+}
+
+@media (max-width: 671px) {
+  .dbs-time-range__field .cds--form-item {
+    inline-size: 100%;
+  }
+
+  .dbs-time-range__field {
+    flex: 1 1 100%;
+  }
+}

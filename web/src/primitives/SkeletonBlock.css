@@ -1,0 +1,59 @@
+/*
+ * 骨架占位。微光取 Carbon 的 skeleton 令牌，节奏取本规范的动效令牌。
+ * `prefers-reduced-motion` 下退化为静止的灰块 —— 值班界面不该有多余的动。
+ */
+
+.dbs-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xs);
+  inline-size: 100%;
+}
+
+.dbs-skeleton__line {
+  position: relative;
+  display: block;
+  block-size: var(--dbs-skeleton-line-height, 1rem);
+  inline-size: 100%;
+  background-color: var(--cds-skeleton-background);
+  border-radius: var(--dbs-radius-none);
+  overflow: hidden;
+}
+
+.dbs-skeleton__line[data-last='true'] {
+  inline-size: 60%;
+}
+
+.dbs-skeleton__line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--cds-skeleton-element);
+  transform-origin: left;
+  animation: dbs-skeleton-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes dbs-skeleton-shimmer {
+  0% {
+    opacity: 0.3;
+    transform: scaleX(0);
+  }
+
+  20% {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  28%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbs-skeleton__line::after {
+    animation: none;
+    opacity: 0.4;
+    transform: none;
+  }
+}

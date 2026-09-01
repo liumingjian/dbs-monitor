@@ -1,0 +1,57 @@
+//
+// DESIGN.md 令牌表的字面量值。
+//
+// 这是整个前端唯一允许出现字面量色值的文件。别处一律通过语义令牌引用：
+// Carbon 自带的令牌用 `theme.$<token>`，Carbon 没有的产品令牌用 `var(--dbs-<token>)`
+// （见 `_product-tokens.scss`）。
+//
+// 值逐条对应 DESIGN.md front matter 的 `colors:` 段；改这里之前先改 DESIGN.md。
+//
+
+// --- 与 Carbon white 主题一致，仅为可读性重述（不参与覆盖） ---
+$primary: #0f62fe;
+$ink: #161616;
+$canvas: #ffffff;
+
+// --- 产品面覆盖：DESIGN.md 与 Carbon 冲突处以 DESIGN.md 为准 ---
+
+/// DESIGN.md `status-warning`。白底 5.19:1，可作前景。
+/// Carbon `support-warning` 默认 yellow-30 #f1c21b，白底 1.68:1，Carbon 自己的指引
+/// 也说它是背景色而非前景色；监控产品要把它用在 8px 状态点与越界数值上，必须过线。
+$status-warning: #c14200;
+
+/// DESIGN.md `ink-secondary`。白底 5.02:1。
+/// 用于表格副标签、帮助文字、图表轴标签。
+$ink-secondary: #6f6f6f;
+
+// --- 状态色（Carbon 的 support-* 已覆盖 error/success，这里保留产品语义名） ---
+$status-critical: #da1e28;
+$status-critical-bg: #fff1f1;
+$status-warning-bg: #fff2e8;
+$status-normal: #24a148;
+$status-normal-bg: #defbe6;
+$status-unknown: #6f6f6f;
+$status-offline: #6f6f6f;
+$surface-selected: #e8f0fe;
+
+// --- 状态徽章上的文字色（浅底 + 深一档的同色系文字） ---
+// critical / warning 逐字取自 DESIGN.md 的 `status-badge-critical` /
+// `status-badge-warning`。normal 那一档 DESIGN.md 没有给：状态色本身 #24a148
+// 压在 #defbe6 上只有 3.2:1，作文字不过线，所以按前两档同样的做法取同色系深一档
+// （Carbon green-70），白底 5.5:1。
+$status-critical-text: #a2191f;
+$status-warning-text: #8a3800;
+$status-normal-text: #0e6027;
+
+// --- 数据可视化色板 ---
+// Carbon v11 的主题映射里**没有** data-vis-* 令牌（v10 有，v11 移除了），
+// 所以这一族只能由我们自己发布为自定义属性。刻意排除 red-50 #fa4d56，
+// 避免数据系列与 status-critical 混淆。
+$viz-1: #1192e8;
+$viz-2: #6929c4;
+$viz-3: #005d5d;
+$viz-4: #9f1853;
+$viz-5: #198038;
+$viz-6: #b28600;
+$viz-grid: #e0e0e0;
+$viz-axis: #6f6f6f;

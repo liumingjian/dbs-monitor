@@ -21,3 +21,12 @@ __pycache__/
 /dbs-monitor-agent
 /SHA256SUMS
 web/e2e/.auth/
+
+# Local agent configuration and scratch space (per-machine, not part of the project)
+.agents/
+.claude/settings.json
+skills-lock.json
+# Skills the skill manager installs on this machine (recorded in skills-lock.json).
+# .claude/skills/playwright-cli is checked in deliberately and stays tracked.
+.claude/skills/
+!.claude/skills/playwright-cli/

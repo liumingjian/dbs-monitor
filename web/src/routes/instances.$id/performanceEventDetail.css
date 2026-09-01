@@ -1,0 +1,75 @@
+/*
+ * 性能事件详情的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * 涉及 Carbon 单类名规则（`.cds--link` / 结构化列表）的地方，选择器写成重复类名把
+ * 优先级抬高一档 —— 只写一遍就得靠样式表注入顺序压过它，而那个顺序由打包器的模块图
+ * 决定，边距会静默算成 0（先例见 primitives/NotificationBar.css）。
+ */
+
+.performance-event-detail {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.performance-event-detail__back.performance-event-detail__back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+}
+
+.performance-event-detail__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.performance-event-detail__identity {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+/* 标题与徽标同一行：徽标在 h1 之外，标题的可访问名才只有事件类型本身。 */
+.performance-event-detail__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+}
+
+.performance-event-detail__title h1 {
+  margin: 0;
+}
+
+.performance-event-detail__identity p {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.performance-event-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+}
+
+/* 原因摘要与建议动作是一对，宽屏并排；1280px 上两栏各自还有 400px 以上的字行。 */
+.performance-event-detail__guidance {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.performance-event-detail__guidance p {
+  margin: 0;
+}
+
+@media (max-width: 42rem) {
+  .performance-event-detail__guidance {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

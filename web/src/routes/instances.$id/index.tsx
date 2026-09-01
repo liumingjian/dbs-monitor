@@ -1,16 +1,7 @@
-import {
-  AlertOutlined,
-  ApiOutlined,
-  CalendarOutlined,
-  ClusterOutlined,
-  DashboardOutlined,
-  DatabaseOutlined,
-  FundProjectionScreenOutlined,
-  ToolOutlined,
-} from '@ant-design/icons'
+import { Button, StructuredListBody, StructuredListCell, StructuredListRow, StructuredListWrapper } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
-import { Alert, Button, Card, Descriptions, Empty, List, Space, Spin, Typography } from 'antd'
-import type { CSSProperties, ReactNode } from 'react'
+import { useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
@@ -20,15 +11,20 @@ import { formatMetricNumber } from '../../domain/MetricChart'
 import { HealthStatus } from '../../domain/HealthStatus'
 import { SuppressionTags } from '../../domain/SuppressionTags'
 import { unavailabilityCopy, unavailabilityHref } from '../../domain/UnavailabilityBlock'
+import { Icon } from '../../primitives/Icon'
+import { MetricBar } from '../../primitives/MetricBar'
+import { NotificationBar } from '../../primitives/NotificationBar'
+import { Panel } from '../../primitives/Panel'
+import { SkeletonBlock } from '../../primitives/SkeletonBlock'
 import {
   attributionLabel,
   dataFreshnessLabel,
   lastCollectedAtLabel,
 } from '../instanceProjection'
 import { rootRoute } from '../root'
+import { FlashOnChange } from '../../primitives/FlashOnChange'
 import { metricOption, type MetricID } from './metricOptions'
 import {
-  OVERVIEW_MODULES,
   latestMetricFacts,
   overviewDestinations,
   overviewMetricGroups,
@@ -39,11 +35,16 @@ import {
 } from './overview'
 import { defaultTimeRange, parseTimeRange, type MonitoringSearch } from './timeRange'
 import { WorkbenchHeader } from './workbench'
+import './overview.css'
 
 type ResponseMetric = components['schemas']['MetricSeriesResponse']['metrics'][number]
 type PerformanceEvent = components['schemas']['PerformanceEvent']
 
 const overviewPollingOptions = { refetchInterval: pollingIntervals.overview }
+
+// 健康状态那一段的标题 id。写死而不是 `useId`：它是页面上唯一的一处，
+// 而且要能被段落的 `aria-labelledby` 稳定引用。
+const statusHeadingID = 'instance-health-heading'
 
 export const instanceRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -55,19 +56,29 @@ export const instanceRoute = createRoute({
 function InstanceOverviewRoutePage() {
   const { id } = instanceRoute.useParams()
   const search = instanceRoute.useSearch()
+  const navigate = instanceRoute.useNavigate()
 
   if ('error' in search) {
-    return <Alert
-      type="error"
-      showIcon
-      title={search.error}
-      action={<Link to="/instances/$id" params={{ id }} search={defaultTimeRange()}><Button>使用最近一小时</Button></Link>}
-    />
+    return <div className="overview-page">
+      <NotificationBar tone="critical" title={search.error} />
+      {/* 复位是一个动作而不是一个地址：当前地址本身就是坏的，没有可复制的链接可言。 */}
+      <Button size="md" className="overview-page__reset" onClick={() => void navigate({ search: defaultTimeRange() })}>
+        使用最近一小时
+      </Button>
+    </div>
   }
 
   return <InstanceOverviewPage id={id} search={search} />
 }
 
+/// 实例总览。
+///
+/// 版式：工作台页头（`h1` + 页签条）→ 健康状态带（这台实例现在是什么状况）→ 数据新鲜度
+/// → 七个模块面板。模块的集合与顺序由 `overview.ts` 的 `OVERVIEW_MODULES` 定死，
+/// 这里不另立一套。
+///
+/// 刷新后确实变了的数值闪一次（`primitives/FlashOnChange`）：这一页每 30 秒整块重画，
+/// 没有这个提示就分不清「刷新了但没变」与「变了」。
 function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const instanceQuery = $api.useQuery(
     'get',
@@ -88,129 +99,181 @@ function InstanceOverviewPage({ id, search }: { id: string; search: MonitoringSe
     },
   }, overviewPollingOptions)
 
-  if (instanceQuery.isPending) return <Spin size="large" />
-  if (!instanceQuery.data) return <Alert type="error" showIcon title="无法加载实例总览" />
+  // Carbon 的 `as` 槽只收组件，不能顺带把路由属性交出去，所以每个去处包成一个已经
+  // 知道自己去哪儿的组件，并用 memo 固定身份（先例见 workbench.tsx）。
+  const links = useMemo(() => {
+    const lockWaitSearch = { from: search.from, to: search.to, filter: 'lock_wait' } as const
+    const alertsSearch = { tab: 'current', include_paused: false } as const
+    return {
+      maintenance: (props: object) => <Link {...props} to="/alert-settings/maintenance-windows/new" search={{ instance_id: id }} />,
+      monitoring: (props: object) => <Link {...props} to="/instances/$id/monitoring" params={{ id }} search={search} />,
+      sessions: (props: object) => <Link {...props} to="/instances/$id/sessions" params={{ id }} search={lockWaitSearch} />,
+      alerts: (props: object) => <Link {...props} to="/instances/$id/alerts" params={{ id }} search={alertsSearch} />,
+      collection: (props: object) => <Link
+        {...props}
+        to="/instances/$id/collection"
+        params={{ id }}
+        search={search.metric ? { metric: search.metric } : {}}
+      />,
+    }
+  }, [id, search])
+
+  // 规范要求骨架占位，不要整页转圈：先把版式立起来，读者知道自己在等什么。
+  if (instanceQuery.isPending) {
+    return <div className="overview-page">
+      <SkeletonBlock lines={2} label="实例总览加载中" />
+      <SkeletonBlock lines={4} decorative />
+      <SkeletonBlock lines={6} decorative />
+    </div>
+  }
+  if (!instanceQuery.data) {
+    return <div className="overview-page">
+      <NotificationBar tone="critical" title="无法加载实例总览" />
+    </div>
+  }
 
   const instance = instanceQuery.data
   const metrics = metricsQuery.data?.metrics
-  const unresolvedAlertCount = instance.health.counts.critical + instance.health.counts.warning + instance.health.counts.info
+  const counts = instance.health.counts
+  const unresolvedAlertCount = counts.critical + counts.warning + counts.info
 
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
+  return <div className="overview-page">
     <WorkbenchHeader id={id} instanceName={instance.name} activeKey="overview" search={search} />
 
-    <section className="overview-status" aria-labelledby="instance-health-heading">
-      <Space direction="vertical" size="small" style={{ width: '100%' }}>
-        <Space wrap>
-          <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
-          <Typography.Title id="instance-health-heading" level={3} style={{ margin: 0 }}>
-            {attributionLabel(instance)}
-          </Typography.Title>
-        </Space>
-        <Space wrap size={4}>
-          <Typography.Text code>C{instance.health.counts.critical}</Typography.Text>
-          <Typography.Text code>W{instance.health.counts.warning}</Typography.Text>
-          <Typography.Text code>I{instance.health.counts.info}</Typography.Text>
-          <SuppressionTags flags={instance.health.flags} />
-        </Space>
-        <Space wrap>
-          <Typography.Text type="secondary">{instance.host}:{instance.port} · {instance.database}</Typography.Text>
-          {instance.collection_pause.paused && <Link to="/instances/$id/collection" params={{ id }}>查看采集暂停设置</Link>}
-          {instance.health.flags.in_maintenance && <Link to="/alert-settings/maintenance-windows">查看维护窗口</Link>}
-          <Link to="/alert-settings/maintenance-windows/new" search={{ instance_id: id }}>
-            <Button icon={<CalendarOutlined />}>新建维护窗口</Button>
-          </Link>
-        </Space>
-      </Space>
+    <section className="overview-page__status" data-testid="overview-status" aria-labelledby={statusHeadingID}>
+      <div className="overview-page__status-line">
+        <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
+        {/* 当前归因就是「这台实例现在为什么是这个状态」，所以它是这一段的标题。 */}
+        <h2 id={statusHeadingID} className="dbs-panel-title overview-page__attribution">
+          {attributionLabel(instance)}
+        </h2>
+      </div>
+      <div className="overview-page__status-line">
+        <span className="overview-page__counts dbs-numeric">
+          <FlashOnChange value={counts.critical}><span data-tone="critical">C{counts.critical}</span></FlashOnChange>
+          <FlashOnChange value={counts.warning}><span data-tone="warning">W{counts.warning}</span></FlashOnChange>
+          <FlashOnChange value={counts.info}><span data-tone="unknown">I{counts.info}</span></FlashOnChange>
+        </span>
+        <SuppressionTags flags={instance.health.flags} />
+      </div>
+      <div className="overview-page__status-line">
+        <span className="dbs-caption overview-page__endpoint">
+          {instance.host}:{instance.port} · {instance.database}
+        </span>
+        {instance.collection_pause.paused && <Link
+          className="cds--link"
+          to="/instances/$id/collection"
+          params={{ id }}
+        >查看采集暂停设置</Link>}
+        {instance.health.flags.in_maintenance && <Link
+          className="cds--link"
+          to="/alert-settings/maintenance-windows"
+        >查看维护窗口</Link>}
+        <Button as={links.maintenance} kind="tertiary" size="md" renderIcon={Icon.glyph.calendar}>新建维护窗口</Button>
+      </div>
     </section>
 
-    {metricsQuery.dataUpdatedAt > 0 && <Freshness
-      dataUpdatedAt={metricsQuery.dataUpdatedAt}
-      collectionInterval={overviewPollingOptions.refetchInterval}
-    />}
+    {metricsQuery.dataUpdatedAt > 0 && <div className="overview-page__freshness">
+      <Freshness
+        dataUpdatedAt={metricsQuery.dataUpdatedAt}
+        collectionInterval={overviewPollingOptions.refetchInterval}
+      />
+    </div>}
 
-    <div className="overview-grid">
-      <OverviewCard module="availability" title="可用性与采集状态" icon={<ApiOutlined />} loading={metricsQuery.isPending}>
-        <MetricFacts
-          id={id}
-          search={search}
-          metricIDs={overviewMetricGroups.availability}
-          metrics={metrics}
-        />
-        <Descriptions size="small" column={1} items={[
-          { key: 'collected', label: '最近采集时间', children: lastCollectedAtLabel(instance.last_collected_at) },
-          { key: 'agent', label: 'Agent 状态', children: agentStatusLabel(instance.agent_status) },
-          { key: 'freshness', label: '数据新鲜度', children: dataFreshnessLabel(instance.data_freshness_seconds) },
+    <div className="overview-page__grid">
+      <OverviewPanel module="availability" title="可用性与采集状态" loading={metricsQuery.isPending}>
+        <MetricFacts id={id} search={search} metricIDs={overviewMetricGroups.availability} metrics={metrics} />
+        <KeyValueList label="采集状态" items={[
+          { key: 'collected', label: '最近采集时间', value: lastCollectedAtLabel(instance.last_collected_at) },
+          { key: 'agent', label: 'Agent 状态', value: agentStatusLabel(instance.agent_status) },
+          { key: 'freshness', label: '数据新鲜度', value: dataFreshnessLabel(instance.data_freshness_seconds) },
         ]} />
-      </OverviewCard>
+      </OverviewPanel>
 
-      <OverviewCard module="alerts" title="当前告警摘要" icon={<AlertOutlined />}>
-        <Descriptions size="small" column={1} items={[
-          { key: 'critical', label: '严重告警', children: instance.health.counts.critical },
-          { key: 'warning', label: '警告告警', children: instance.health.counts.warning },
-          { key: 'info', label: 'Info 告警', children: instance.health.counts.info },
-          { key: 'unresolved', label: '未恢复告警', children: unresolvedAlertCount },
-          { key: 'attribution', label: '当前归因', children: attributionLabel(instance) },
+      <OverviewPanel module="alerts" title="当前告警摘要">
+        <KeyValueList label="当前告警摘要" items={[
+          { key: 'critical', label: '严重告警', value: counts.critical },
+          { key: 'warning', label: '警告告警', value: counts.warning },
+          { key: 'info', label: 'Info 告警', value: counts.info },
+          { key: 'unresolved', label: '未恢复告警', value: unresolvedAlertCount },
+          { key: 'attribution', label: '当前归因', value: attributionLabel(instance) },
         ]} />
-        <Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}>
-          <Button type="link">查看当前告警</Button>
-        </Link>
-      </OverviewCard>
+        <Link
+          className="cds--link overview-page__panel-link"
+          to="/instances/$id/alerts"
+          params={{ id }}
+          search={{ tab: 'current', include_paused: false }}
+        >查看当前告警</Link>
+      </OverviewPanel>
 
-      <OverviewCard module="resources" title="核心资源" icon={<DashboardOutlined />} loading={metricsQuery.isPending}>
+      <OverviewPanel module="resources" title="核心资源" loading={metricsQuery.isPending}>
         <MetricFacts id={id} search={search} metricIDs={overviewMetricGroups.resources} metrics={metrics} />
-      </OverviewCard>
+      </OverviewPanel>
 
-      <OverviewCard module="database" title="数据库负载" icon={<DatabaseOutlined />} loading={metricsQuery.isPending}>
+      <OverviewPanel module="database" title="数据库负载" loading={metricsQuery.isPending}>
         <MetricFacts id={id} search={search} metricIDs={overviewMetricGroups.database} metrics={metrics} />
-        <Link to="/instances/$id/sessions" params={{ id }} search={{ from: search.from, to: search.to, filter: 'lock_wait' }}>
-          <Button type="link">查看锁等待会话</Button>
-        </Link>
-      </OverviewCard>
+        <Link
+          className="cds--link overview-page__panel-link"
+          to="/instances/$id/sessions"
+          params={{ id }}
+          search={{ from: search.from, to: search.to, filter: 'lock_wait' }}
+        >查看锁等待会话</Link>
+      </OverviewPanel>
 
-      <OverviewCard module="replication" title="复制状态" icon={<ClusterOutlined />} loading={metricsQuery.isPending}>
+      <OverviewPanel module="replication" title="复制状态" loading={metricsQuery.isPending}>
         <MetricFacts id={id} search={search} metricIDs={overviewMetricGroups.replication} metrics={metrics} />
-      </OverviewCard>
+      </OverviewPanel>
 
-      <OverviewCard module="events" title="近期性能事件" icon={<FundProjectionScreenOutlined />} loading={eventsQuery.isPending}>
+      <OverviewPanel module="events" title="近期性能事件" loading={eventsQuery.isPending}>
         <PerformanceEvents events={eventsQuery.data?.items} />
-      </OverviewCard>
+      </OverviewPanel>
 
-      <OverviewCard module="troubleshooting" title="快速排障入口" icon={<ToolOutlined />}>
-        <Space wrap>
-          <Link to="/instances/$id/monitoring" params={{ id }} search={search}>
-            <Button type="primary" icon={<DashboardOutlined />}>标准监控</Button>
-          </Link>
-          <Link to="/instances/$id/sessions" params={{ id }} search={{ from: search.from, to: search.to, filter: 'lock_wait' }}>
-            <Button icon={<DatabaseOutlined />}>会话与阻塞</Button>
-          </Link>
-          <Link to="/instances/$id/alerts" params={{ id }} search={{ tab: 'current', include_paused: false }}>
-            <Button icon={<AlertOutlined />}>当前告警</Button>
-          </Link>
-          <Link to="/instances/$id/collection" params={{ id }} search={search.metric ? { metric: search.metric } : {}}>
-            <Button icon={<ApiOutlined />}>采集状态</Button>
-          </Link>
-        </Space>
-      </OverviewCard>
+      <OverviewPanel module="troubleshooting" title="快速排障入口">
+        <div className="overview-page__actions">
+          <Button as={links.monitoring} size="md" renderIcon={Icon.glyph.chartLine}>标准监控</Button>
+          <Button as={links.sessions} kind="tertiary" size="md" renderIcon={Icon.glyph.database}>会话与阻塞</Button>
+          <Button as={links.alerts} kind="tertiary" size="md" renderIcon={Icon.glyph.notification}>当前告警</Button>
+          <Button as={links.collection} kind="tertiary" size="md" renderIcon={Icon.glyph.plug}>采集状态</Button>
+        </div>
+      </OverviewPanel>
     </div>
-  </Space>
+  </div>
 }
 
-function OverviewCard({ module, title, icon, loading = false, children }: {
+/// 总览模块面板。`data-overview-module` 承载的是领域取值（这是哪一个模块），
+/// `data-testid` 只是定位钩子，两者各有各的用处，不要合并。
+function OverviewPanel({ module, title, loading = false, children }: {
   module: OverviewModule
   title: string
-  icon: ReactNode
   loading?: boolean
   children: ReactNode
 }) {
-  return <Card
-    className="overview-card"
-    style={{ '--card-index': OVERVIEW_MODULES.indexOf(module) } as CSSProperties}
+  return <Panel
+    className="overview-page__panel"
     data-overview-module={module}
-    title={<Space>{icon}<span>{title}</span></Space>}
+    title={<span data-testid="overview-module-title">{title}</span>}
     loading={loading}
   >
     {children}
-  </Card>
+  </Panel>
+}
+
+/// 键值清单。原来是 AntD 的 `Descriptions`，这里用 Carbon 的结构化列表表达同一件事。
+/// 值一律过一遍变化高亮：这一页每 30 秒重画，不标出来就看不见哪个数动了。
+function KeyValueList({ label, items }: {
+  label: string
+  items: { key: string; label: string; value: string | number }[]
+}) {
+  return <StructuredListWrapper aria-label={label} isCondensed className="overview-page__list">
+    <StructuredListBody>
+      {items.map((item) => (
+        <StructuredListRow key={item.key}>
+          <StructuredListCell noWrap>{item.label}</StructuredListCell>
+          <StructuredListCell><FlashOnChange value={item.value} /></StructuredListCell>
+        </StructuredListRow>
+      ))}
+    </StructuredListBody>
+  </StructuredListWrapper>
 }
 
 function MetricFacts({ id, search, metricIDs, metrics }: {
@@ -219,69 +282,86 @@ function MetricFacts({ id, search, metricIDs, metrics }: {
   metricIDs: readonly MetricID[]
   metrics: ResponseMetric[] | undefined
 }) {
-  return <Descriptions size="small" column={1} items={metricIDs.map((metricID) => {
-    const metric = metrics?.find((item) => item.metric === metricID)
-    const snapshot = latestMetricFacts(metric)
-    const destinations = overviewDestinations(id, { ...search, metric: metricID })
-    return {
-      key: metricID,
-      label: <Link
-        to="/instances/$id/monitoring"
-        params={{ id }}
-        search={{ ...search, metric: metricID }}
-      >{metricOption(metricID).label}</Link>,
-      children: <MetricFactValue
-        metricID={metricID}
-        snapshot={snapshot}
-        monitoringHref={destinations.monitoring}
-        collectionHref={destinations.collection}
-      />,
-    }
-  })} />
+  return <div className="overview-page__facts">
+    {metricIDs.map((metricID) => <MetricFact
+      key={metricID}
+      id={id}
+      search={search}
+      metricID={metricID}
+      snapshot={latestMetricFacts(metrics?.find((item) => item.metric === metricID))}
+    />)}
+  </div>
 }
 
-function MetricFactValue({ metricID, snapshot, monitoringHref, collectionHref }: {
+/// 一个指标的当前值。取不到值时这里出现的是一句「为什么没有」加一个去处，不是一个 0 ——
+/// 缺数不是 0，规范在图表与总览两处都是这么要求的。
+function MetricFact({ id, search, metricID, snapshot }: {
+  id: string
+  search: MonitoringSearch
   metricID: MetricID
   snapshot: LatestMetricFacts
-  monitoringHref: string
-  collectionHref: string
 }) {
+  const name = <Link
+    className="cds--link"
+    to="/instances/$id/monitoring"
+    params={{ id }}
+    search={{ ...search, metric: metricID }}
+  >{metricOption(metricID).label}</Link>
+
   if (snapshot.unavailability) {
+    const destinations = overviewDestinations(id, { ...search, metric: metricID })
     const copy = unavailabilityCopy(snapshot.unavailability)
-    const href = unavailabilityHref(snapshot.unavailability, { current: monitoringHref, collection: collectionHref })
-    return <Space direction="vertical" size={0}>
-      <Typography.Text>{copy.title}</Typography.Text>
-      <Typography.Text type="secondary">{copy.description}</Typography.Text>
-      <a href={href}>{copy.action}</a>
-    </Space>
+    const href = unavailabilityHref(snapshot.unavailability, {
+      current: destinations.monitoring,
+      collection: destinations.collection,
+    })
+    // 整条通知条放进格子里太重了（一个面板里能有六个指标），所以是紧凑的三行：
+    // 标题、原因、去处。文案与去处仍然取自 `domain/UnavailabilityBlock` 的那一份。
+    return <div className="overview-page__missing">
+      <span className="dbs-caption">{name}</span>
+      <span className="dbs-body">{copy.title}</span>
+      <span className="dbs-caption">{copy.description}</span>
+      <a className="cds--link" href={href}>{copy.action}</a>
+    </div>
   }
-  return <Space direction="vertical" size={0}>
-    {snapshot.facts.map((fact, index) => <span key={`${fact.sampledAt}-${index}`}>
-      {dimensionLabel(fact.labels)}{fact.value === null ? '缺数' : formatMetricValue(metricID, fact.value, snapshot.unit)}
-    </span>)}
-  </Space>
+
+  return <>
+    {snapshot.facts.map((fact, index) => {
+      const value = fact.value === null ? '缺数' : formatMetricValue(metricID, fact.value, snapshot.unit)
+      return <MetricBar
+        key={`${fact.sampledAt}-${index}`}
+        label={name}
+        value={<FlashOnChange value={value} />}
+        ratio={ratioOf(snapshot.unit, fact.value)}
+        caption={dimensionLabel(fact.labels)}
+      />
+    })}
+  </>
+}
+
+/// 只有百分比有「满格」这回事；别的单位没有分母，画一条比例条就是编造。
+function ratioOf(unit: string, value: number | null): number | undefined {
+  return unit === 'percent' && value !== null ? value / 100 : undefined
 }
 
 function PerformanceEvents({ events }: { events: PerformanceEvent[] | undefined }) {
   if (!events || events.length === 0) {
-    return <Empty
-      image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description={<Space direction="vertical" size={0}>
-        <Typography.Text>{performanceEventsEmptyState.title}</Typography.Text>
-        <Typography.Text type="secondary">{performanceEventsEmptyState.description}</Typography.Text>
-      </Space>}
-    />
+    return <div className="overview-page__empty">
+      <span className="dbs-body">{performanceEventsEmptyState.title}</span>
+      <span className="dbs-caption">{performanceEventsEmptyState.description}</span>
+    </div>
   }
-  return <List dataSource={events} renderItem={(event) => <List.Item>
-    <List.Item.Meta
-      title={<Space wrap><AlertStatus status={event.alert_status} /><span>{eventTypeLabel(event.event_type)}</span></Space>}
-      description={<>
-        {event.cause_summary}<br />
-        建议动作：{event.suggested_action}<br />
-        <Typography.Text type="secondary">{new Date(event.updated_at).toLocaleString()}</Typography.Text>
-      </>}
-    />
-  </List.Item>} />
+  return <ul className="overview-page__events">
+    {events.map((event) => <li key={event.id} className="overview-page__event">
+      <div className="overview-page__event-head">
+        <AlertStatus status={event.alert_status} />
+        <span className="dbs-body">{eventTypeLabel(event.event_type)}</span>
+        <span className="dbs-caption">{new Date(event.updated_at).toLocaleString()}</span>
+      </div>
+      <p className="dbs-caption">{event.cause_summary}</p>
+      <p className="dbs-caption">建议动作：{event.suggested_action}</p>
+    </li>)}
+  </ul>
 }
 
 function agentStatusLabel(status: components['schemas']['InstanceAgentStatus']): string {
@@ -320,9 +400,9 @@ function eventTypeLabel(eventType: components['schemas']['PerformanceEventType']
   }
 }
 
-function dimensionLabel(labels: Record<string, string>): string {
+function dimensionLabel(labels: Record<string, string>): string | undefined {
   const entries = Object.entries(labels)
-  return entries.length === 0 ? '' : `${entries.map(([key, value]) => `${key}=${value}`).join(', ')}: `
+  return entries.length === 0 ? undefined : entries.map(([key, value]) => `${key}=${value}`).join(', ')
 }
 
 function formatMetricValue(metricID: MetricID, value: number, unit: string): string {

@@ -1,0 +1,253 @@
+/*
+ * 告警流的版式。纯 CSS（组件级样式表不得是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距 / 圆角一律走令牌，字体档位走 `.dbs-*` 类，不写字面量色值。
+ *
+ * **这里没有、也不许有 `overflow-x`。** 表格的横向行为整个由 primitives/DataGrid 决定。
+ *
+ * 凡是落在带 `.cds--link` 的元素上的规则，选择器都把自己的类名写两遍。组件级样式表被
+ * 路由模块 import 进来，在打包顺序上排在 `styles/index.scss` **之前**，单类对单类的
+ * 平局由注入顺序决出，Carbon 会赢 —— 那类失效不报错，只是值悄悄变回 Carbon 的
+ * （见 NotificationBar.css 里同一个坑）。
+ */
+
+.alert-stream {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，表格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.alert-stream__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.alert-stream__heading {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.alert-stream__heading h1 {
+  margin: 0;
+}
+
+.alert-stream__lede {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.alert-stream__reset {
+  justify-self: start;
+}
+
+/* 页签上的计数。文案在前、数字在后，密集的一行里数字用等宽体才对得齐。 */
+.alert-stream__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+}
+
+.alert-stream__tab-count {
+  color: var(--cds-text-secondary);
+}
+
+/* 工具条：筛选控件与数据新鲜度，和表格分开，不塞进面板标题栏。 */
+.alert-stream__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-md);
+  min-block-size: var(--dbs-spacing-xl);
+}
+
+.alert-stream__freshness {
+  margin-inline-start: auto;
+  color: var(--cds-text-secondary);
+}
+
+/* 分页条在面板 footer 里，去掉 Carbon 自带的上边框：footer 上面已经有一条发丝线了。 */
+.alert-stream__pagination {
+  border-block-start: none;
+  inline-size: 100%;
+}
+
+/* ---- 表格内容 ---- */
+
+.alert-stream__rule {
+  font-weight: 600;
+}
+
+/* 标记条默认允许换行，详情页那种宽松版式要的就是换行；表格里一格只写一行，
+   装不下交给单元格的省略号。选择器带页面前缀，特指度高于 `.dbs-marker-list`。 */
+.alert-stream .alert-stream__markers {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+  flex-wrap: nowrap;
+  overflow: hidden;
+  white-space: nowrap;
+  max-inline-size: 100%;
+}
+
+/* 「为什么没有数字」+「去哪儿处理」写在同一行：40px 的行放不下两行。 */
+.alert-reason {
+  display: flex;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+  min-inline-size: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.alert-reason__title {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  text-overflow: ellipsis;
+}
+
+/* 类名写两遍：`.cds--link` 的 `display: inline-flex` 会让省略号失效，而两者同特指度。 */
+.alert-reason__action.alert-reason__action {
+  display: inline-block;
+  overflow: hidden;
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 图标档：去处只有 16px，永远不参与压缩，被截断的是原因文字（它带 title）。 */
+.alert-reason[data-icon-action] .alert-reason__action.alert-reason__action {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+/* 行内操作是图标链接。蓝色在这里表示「可交互」，与状态色互不借用。 */
+.alert-stream__detail.alert-stream__detail {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---- 手机版：一条告警一张卡片 ---- */
+
+.alert-cards {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.alert-card {
+  position: relative;
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  padding: var(--dbs-spacing-md);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+  min-inline-size: 0;
+}
+
+/* 卡片首端的 3px 色条，与表格行上那条是同一件事，只是转了 90 度的版式里仍然在同一边。
+   它重复的是卡片里已经写着的状态与级别，不是唯一信号。 */
+.alert-card[data-tone]::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: 3px;
+}
+
+.alert-card[data-tone='critical']::before { background-color: var(--dbs-status-critical); }
+.alert-card[data-tone='warning']::before { background-color: var(--dbs-status-warning); }
+
+.alert-card__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-xs);
+}
+
+.alert-card__duration {
+  margin-inline-start: auto;
+  color: var(--cds-text-secondary);
+}
+
+.alert-card__rule {
+  margin: 0;
+  font-weight: 600;
+  min-inline-size: 0;
+}
+
+.alert-card__subject {
+  margin: 0;
+  color: var(--cds-text-secondary);
+  min-inline-size: 0;
+}
+
+/* 数值与时间：两列键值。等宽体保证竖着扫的时候小数点对得齐。 */
+.alert-card__facts {
+  display: grid;
+  gap: var(--dbs-spacing-xs) var(--dbs-spacing-md);
+  margin: var(--dbs-spacing-xs) 0 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.alert-card__facts dt {
+  color: var(--cds-text-secondary);
+}
+
+.alert-card__facts dd {
+  margin: 0;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.alert-card .alert-card__markers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--dbs-spacing-xxs);
+  margin-block-start: var(--dbs-spacing-xxs);
+}
+
+.alert-card__reason {
+  margin-block-start: var(--dbs-spacing-xxs);
+}
+
+/* 触摸目标 48px（DESIGN.md 的 Touch Targets）。手机上这是卡片里唯一要点的东西。 */
+.alert-card__detail.alert-card__detail {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-block-size: 3rem;
+}
+
+.alert-cards__empty {
+  margin: 0;
+  padding: var(--dbs-spacing-xl) var(--dbs-spacing-md);
+  color: var(--cds-text-primary);
+  text-align: center;
+}
+
+/* 单列宽度下的收拢：页头与工具条不再左右分置，新鲜度回到行首而不是被推到右边。 */
+@media (max-width: 48rem) {
+  .alert-stream__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .alert-stream__freshness {
+    margin-inline-start: 0;
+  }
+
+  /* 分页条在窄屏会横向溢出。每页条数只有 50 一档（接口的 limit 是常量），
+     所以这半截在手机上不承载任何选择，收掉它换回宽度，页码与条目范围都还在。 */
+  .alert-stream__pagination .cds--pagination__left .cds--select__item-count {
+    display: none;
+  }
+}

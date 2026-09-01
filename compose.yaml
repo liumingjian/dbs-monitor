@@ -146,7 +146,9 @@ services:
       - ${ACCEPTANCE_PLATFORM_TLS_DIR:-./results/acceptance-platform-tls}:/acceptance-tls:ro
       - ./test/acceptance/postgres-tls-entrypoint.sh:/acceptance-postgres-entrypoint.sh:ro
       - ./test/acceptance/fixtures/platform-init.sql:/docker-entrypoint-initdb.d/platform-init.sql:ro
-    ports: ["55442:5432"]
+    # 端口可覆盖：多个问答栈（scripts/qa-up.sh）会在同一台机器上并存，
+    # 各自用 QA_PLATFORM_PORT / QA_TARGET_PORT 占一段私有端口，互不抢占。
+    ports: ["${QA_PLATFORM_PORT:-55442}:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dbs_monitor -d dbs_monitor"]
       interval: 1s
@@ -164,7 +166,7 @@ services:
     volumes:
       - ./scripts/matrix/pg-stat-statements.sql:/docker-entrypoint-initdb.d/pg-stat-statements.sql:ro
       - ./test/acceptance/fixtures/target-init.sql:/docker-entrypoint-initdb.d/acceptance-target.sql:ro
-    ports: ["55447:5432"]
+    ports: ["${QA_TARGET_PORT:-55447}:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U monitored -d monitored"]
       interval: 1s

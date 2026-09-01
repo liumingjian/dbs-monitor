@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { chartData, formatMetricNumber, metricUnavailability, thresholdsForSeries } from './MetricChart'
+import {
+  chartData,
+  formatMetricNumber,
+  metricUnavailability,
+  percentAxisDomain,
+  percentAxisFloor,
+  thresholdsForSeries,
+} from './MetricChart'
 
 describe('chartData', () => {
   it('preserves an explicitly missing value as a gap', () => {
@@ -63,5 +70,44 @@ describe('thresholdsForSeries', () => {
 
   it('does not draw the same line twice when two series share a unit', () => {
     expect(thresholdsForSeries(thresholds, series, 2)).toEqual([])
+  })
+})
+
+describe('percentAxisDomain', () => {
+  const percentSeries = (values: number[]) => [{ name: '命中率', unit: 'percent', points: values.map((value, index) => [index, value]) }]
+
+  it('does not draw a hit-rate chart from zero, because that is a flat line at the top of the frame', () => {
+    expect(percentAxisDomain(percentSeries([96.2, 99.8, 97.4]), [])).toEqual([90, 100])
+  })
+
+  it('anchors at zero when the data really does approach zero', () => {
+    expect(percentAxisDomain(percentSeries([0.5, 3, 8]), [])).toEqual([0, 100])
+  })
+
+  it('always leaves at least a ten-point window', () => {
+    expect(percentAxisDomain(percentSeries([99.95, 100]), [])).toEqual([90, 100])
+  })
+
+  it('keeps a threshold inside the frame, above and below the data', () => {
+    const thresholds = [{ label: '命中率低', unit: 'percent', value: 45, severity: 'warning' as const }]
+    expect(percentAxisDomain(percentSeries([96, 98]), thresholds)).toEqual([40, 100])
+    const high = [{ label: '越界', unit: 'percent', value: 120, severity: 'critical' as const }]
+    expect(percentAxisDomain(percentSeries([96, 98]), high)).toEqual([90, 120])
+  })
+
+  it('ignores series of other units and gaps', () => {
+    const series = [
+      { name: '使用率', unit: 'percent', points: [[1, null], [2, 55]] },
+      { name: '剩余空间', unit: 'bytes', points: [[1, 1024]] },
+    ]
+    expect(percentAxisDomain(series, [])).toEqual([50, 100])
+  })
+
+  it('does not invent a window when there is nothing to plot', () => {
+    expect(percentAxisDomain(percentSeries([]), [])).toEqual([0, 100])
+  })
+
+  it('floors negatives instead of clamping them to zero', () => {
+    expect(percentAxisFloor(-3)).toBe(-10)
   })
 })

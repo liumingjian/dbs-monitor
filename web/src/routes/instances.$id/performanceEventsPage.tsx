@@ -1,7 +1,6 @@
-import { FundProjectionScreenOutlined } from '@ant-design/icons'
+import { Button, ContentSwitcher, Pagination, Switch, Tab, TabList, Tabs } from '@carbon/react'
 import { Link, createRoute } from '@tanstack/react-router'
-import { Alert, Button, Empty, Segmented, Space, Table, Tabs, Typography } from 'antd'
-import type { TableColumnsType } from 'antd'
+import { useMemo, useState } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import { pollingIntervals } from '../../api/polling'
@@ -9,14 +8,23 @@ import type { components } from '../../api/schema'
 import { AlertStatus } from '../../domain/AlertStatus'
 import { Freshness } from '../../domain/Freshness'
 import { TimeRangePicker } from '../../domain/TimeRangePicker'
+import type { DataGridColumn } from '../../primitives/DataGrid'
+import { DataGrid } from '../../primitives/DataGrid'
+import { NotificationBar } from '../../primitives/NotificationBar'
+import { Panel } from '../../primitives/Panel'
+import type { StatusTone } from '../../primitives/StatusBadge'
+import { TruncatedText } from '../../primitives/TruncatedText'
 import { rootRoute } from '../root'
+import { browserStorage } from '../root/navCollapse'
+import type { TableDensity } from '../root/tableDensity'
+import { densityLabel, readTableDensity, writeTableDensity } from '../root/tableDensity'
 import {
-  isPerformanceEventTab,
   parsePerformanceEventSearch,
   performanceEventRecoveryFilter,
   serializePerformanceEventSearch,
   type PerformanceEventDisposition,
   type PerformanceEventSearch,
+  type PerformanceEventTab,
 } from './performanceEvents'
 import {
   PerformanceEventSeverityTag,
@@ -27,10 +35,14 @@ import {
   performanceEventTypeLabel,
 } from './performanceEventPresentation'
 import { WorkbenchHeader } from './workbench'
+import './performanceEvents.css'
 
 type PerformanceEvent = components['schemas']['PerformanceEvent']
+type AlertSeverity = components['schemas']['AlertSeverity']
 
 const eventPageSize = 50
+
+const tabOrder = ['firing', 'recovered', 'disposed'] as const satisfies readonly PerformanceEventTab[]
 
 export const performanceEventsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -53,12 +65,14 @@ function PerformanceEventsPage() {
       disposition: 'ACKED',
       page: 1,
     }
-    return <Alert
-      type="error"
-      showIcon
-      title={search.error}
-      action={<Link to="/instances/$id/performance-events" params={{ id }} search={serializePerformanceEventSearch(defaults)}><Button>使用默认筛选</Button></Link>}
-    />
+    return <div className="performance-events-page">
+      <NotificationBar tone="critical" title={search.error} />
+      <Link
+        to="/instances/$id/performance-events"
+        params={{ id }}
+        search={serializePerformanceEventSearch(defaults)}
+      ><Button size="md">使用默认筛选</Button></Link>
+    </div>
   }
 
   return <PerformanceEventLists
@@ -68,11 +82,14 @@ function PerformanceEventsPage() {
   />
 }
 
+/// 性能事件列表。版式照列表页样板：工作台页头 → 页内标题 → 页签 → 工具条 →
+/// 一个 flush 面板包住表格，分页放在面板的 footer 里。
 function PerformanceEventLists({ instanceID, search, onSearchChange }: {
   instanceID: string
   search: PerformanceEventSearch
   onSearchChange: (search: PerformanceEventSearch) => void
 }) {
+  const [density, setDensity] = useState<TableDensity>(() => readTableDensity(browserStorage))
   const instance = $api.useQuery('get', '/api/v1/instances/{id}', {
     params: { path: { id: instanceID } },
   })
@@ -92,96 +109,314 @@ function PerformanceEventLists({ instanceID, search, onSearchChange }: {
     },
   }, { refetchInterval: search.tab === 'firing' ? pollingIntervals.firingPerformanceEvents : false })
 
-  function changeTab(tab: string) {
-    if (!isPerformanceEventTab(tab)) return
-    onSearchChange({ ...search, tab, page: 1 })
+  // 页签就是地址。每个去处包成一个「已经知道自己去哪儿」的组件，身份用 memo 固定住 ——
+  // 身份一变锚点就重挂，键盘焦点会被甩掉（先例见 workbench.tsx）。
+  const tabLinks = useMemo(() => {
+    const destination = (tab: PerformanceEventTab) => (props: object) => <Link
+      {...props}
+      to="/instances/$id/performance-events"
+      params={{ id: instanceID }}
+      search={serializePerformanceEventSearch({ ...search, tab, page: 1 })}
+    />
+    return {
+      firing: destination('firing'),
+      recovered: destination('recovered'),
+      disposed: destination('disposed'),
+    }
+  }, [instanceID, search])
+
+  const total = events.data?.total
+  // 计数只挂在当前页签上：另外两档的总数从来没有请求过，写个数字上去就是编的。
+  const tabLabel = (tab: PerformanceEventTab, label: string) =>
+    search.tab === tab && total !== undefined ? `${label} ${total}` : label
+
+  function changeDensity(next: TableDensity) {
+    setDensity(next)
+    writeTableDensity(browserStorage, next)
   }
 
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
+  return <div className="performance-events-page">
     <WorkbenchHeader
       id={instanceID}
       instanceName={instance.data?.name}
       activeKey="events"
       search={{ from: search.from, to: search.to }}
     />
-    <Space className="workbench-heading" wrap>
-      <div>
-        <Typography.Title level={2} style={{ margin: 0 }}>性能事件</Typography.Title>
-        <Typography.Text type="secondary">查看告警派生的异常、原因与处置证据</Typography.Text>
-      </div>
-      <FundProjectionScreenOutlined className="page-heading-icon" />
-    </Space>
-    <TimeRangePicker
-      from={search.from}
-      to={search.to}
-      onChange={(range) => onSearchChange({ ...search, ...range, page: 1 })}
-    />
-    <Tabs activeKey={search.tab} onChange={changeTab} items={[
-      { key: 'firing', label: search.tab === 'firing' ? `触发中 ${events.data?.total ?? ''}` : '触发中' },
-      { key: 'recovered', label: search.tab === 'recovered' ? `已恢复 ${events.data?.total ?? ''}` : '已恢复' },
-      { key: 'disposed', label: search.tab === 'disposed' ? `已确认 / 已忽略 ${events.data?.total ?? ''}` : '已确认 / 已忽略' },
-    ]} />
-    {search.tab === 'disposed' && <Segmented<PerformanceEventDisposition>
-      aria-label="处置状态"
-      value={search.disposition}
-      options={[{ value: 'ACKED', label: '已确认' }, { value: 'IGNORED', label: '已忽略' }]}
-      onChange={(disposition) => onSearchChange({
-        ...search,
-        disposition,
-        page: 1,
-      })}
-    />}
-    {search.tab === 'firing' && events.dataUpdatedAt > 0 && <Freshness
-      dataUpdatedAt={events.dataUpdatedAt}
-      collectionInterval={pollingIntervals.firingPerformanceEvents}
-    />}
-    {events.error && <Alert type="error" showIcon title={apiErrorMessage(events.error, '性能事件加载失败')} />}
-    <Table<PerformanceEvent>
-      rowKey="id"
-      loading={events.isPending}
-      dataSource={events.data?.items ?? []}
-      columns={eventColumns(search)}
-      scroll={{ x: 1700 }}
-      pagination={{
-        current: search.page,
-        pageSize: eventPageSize,
-        total: events.data?.total,
-        showSizeChanger: false,
-        onChange: (page) => onSearchChange({ ...search, page }),
-      }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={eventEmptyText(search)} /> }}
-    />
-  </Space>
+
+    <div className="performance-events-page__heading">
+      <h2 className="dbs-panel-title">性能事件</h2>
+      <p className="dbs-caption">查看告警派生的异常、原因与处置证据</p>
+    </div>
+
+    <Tabs selectedIndex={tabOrder.indexOf(search.tab)}>
+      <TabList aria-label="性能事件状态" activation="manual">
+        <Tab as={tabLinks.firing}>{tabLabel('firing', '触发中')}</Tab>
+        <Tab as={tabLinks.recovered}>{tabLabel('recovered', '已恢复')}</Tab>
+        <Tab as={tabLinks.disposed}>{tabLabel('disposed', '已确认 / 已忽略')}</Tab>
+      </TabList>
+    </Tabs>
+
+    <div className="performance-events-toolbar" role="group" aria-label="性能事件筛选">
+      <TimeRangePicker
+        from={search.from}
+        to={search.to}
+        onChange={(range) => onSearchChange({ ...search, ...range, page: 1 })}
+      />
+      {search.tab === 'disposed' && <DispositionSwitcher
+        disposition={search.disposition}
+        onChange={(disposition) => onSearchChange({ ...search, disposition, page: 1 })}
+      />}
+      {search.tab === 'firing' && events.dataUpdatedAt > 0 && <span className="performance-events-toolbar__freshness">
+        <Freshness
+          dataUpdatedAt={events.dataUpdatedAt}
+          collectionInterval={pollingIntervals.firingPerformanceEvents}
+        />
+      </span>}
+    </div>
+
+    {events.error && <NotificationBar tone="critical" title={apiErrorMessage(events.error, '性能事件加载失败')} />}
+
+    <Panel
+      flush
+      title={eventPanelTitle(search, total)}
+      actions={<DensitySwitcher density={density} onChange={changeDensity} />}
+      footer={<Pagination
+        className="performance-events-pagination"
+        size="md"
+        page={search.page}
+        pageSize={eventPageSize}
+        pageSizes={[eventPageSize]}
+        // 每页条数在这一页是给死的（迁移前也没有切换器）。禁用而不是藏起来：
+        // 藏了就没人知道一页是 50 条。
+        pageSizeInputDisabled
+        // 总数还没回来时页数就是未知的，不是 0：`pagesUnknown` 让分页条照实说
+        // 「第 N 页」，而不是编一个总数出来。
+        totalItems={total}
+        pagesUnknown={total === undefined}
+        backwardText="上一页"
+        forwardText="下一页"
+        itemsPerPageText="每页条数"
+        itemRangeText={(min, max, count) => `第 ${min}–${max} 条，共 ${count} 条`}
+        itemText={(min, max) => `第 ${min}–${max} 条`}
+        pageText={(page) => `第 ${page} 页`}
+        pageRangeText={(_current, count) => `共 ${count} 页`}
+        pageNumberText="页码"
+        onChange={({ page }) => onSearchChange({ ...search, page })}
+      />}
+    >
+      <DataGrid<PerformanceEvent>
+        label="性能事件列表"
+        density={density}
+        // 12 列。标准内边距下这张表只能靠丢列活着（见 `eventColumns` 上的说明）；
+        // 紧凑档把 16px/侧压到 8px/侧，换回 128px 字形宽度，「最近发生」与「维护窗口」
+        // 因此回到了列表里。见 `DataGrid` 的 `cellPadding`。
+        cellPadding="compact"
+        loading={events.isPending}
+        skeletonRows={8}
+        rows={events.data?.items ?? []}
+        rowKey={(event) => event.id}
+        rowTestId="performance-event-row"
+        rowTone={(event) => severityBarTone(event.severity)}
+        columns={eventColumns(search)}
+        empty={{ title: eventEmptyText(search), description: '换一个时间范围，或切到别的页签看看其他状态的事件。' }}
+      />
+    </Panel>
+  </div>
 }
 
-function eventColumns(search: PerformanceEventSearch): TableColumnsType<PerformanceEvent> {
+/// 密集模式切换。读写只有 `routes/root/tableDensity.ts` 一个去处，键名不要各自再发明。
+function DensitySwitcher({ density, onChange }: { density: TableDensity; onChange: (density: TableDensity) => void }) {
+  const densities = ['standard', 'dense'] as const satisfies readonly TableDensity[]
+  return (
+    <ContentSwitcher
+      size="sm"
+      selectedIndex={densities.indexOf(density)}
+      onChange={({ index }) => {
+        // 组件库把选中下标标成可选；拿不到下标就是没换档，什么都不做，别兜底成第一档。
+        const next = index === undefined ? undefined : densities[index]
+        if (next !== undefined) onChange(next)
+      }}
+    >
+      {densities.map((value) => <Switch key={value} name={value} text={densityLabel(value)} />)}
+    </ContentSwitcher>
+  )
+}
+
+/// 「已确认 / 已忽略」页签里的二级筛选。分段单选而不是第三层页签：它不是地址的主结构，
+/// 只是这张表的取值筛选，和时间范围同一档，所以留在工具条里。
+function DispositionSwitcher({ disposition, onChange }: {
+  disposition: PerformanceEventDisposition
+  onChange: (disposition: PerformanceEventDisposition) => void
+}) {
+  const dispositions = ['ACKED', 'IGNORED'] as const satisfies readonly PerformanceEventDisposition[]
+  return (
+    <ContentSwitcher
+      size="md"
+      selectedIndex={dispositions.indexOf(disposition)}
+      onChange={({ index }) => {
+        const next = index === undefined ? undefined : dispositions[index]
+        if (next !== undefined) onChange(next)
+      }}
+    >
+      {dispositions.map((value) => (
+        <Switch key={value} name={value} text={performanceEventDispositionLabel(value)} />
+      ))}
+    </ContentSwitcher>
+  )
+}
+
+/// 行首 3px 色条只是把「级别」那一列的取值重复一遍，不是唯一信号；info 不上条。
+function severityBarTone(severity: AlertSeverity): StatusTone | undefined {
+  switch (severity) {
+    case 'critical': return 'critical'
+    case 'warning': return 'warning'
+    case 'info': return undefined
+    default: return assertNever(severity)
+  }
+}
+
+function eventPanelTitle(search: PerformanceEventSearch, total: number | undefined): string {
+  const label = eventTabTitle(search)
+  return total === undefined ? label : `${label}（${total}）`
+}
+
+function eventTabTitle(search: PerformanceEventSearch): string {
+  switch (search.tab) {
+    case 'firing': return '触发中的事件'
+    case 'recovered': return '已恢复的事件'
+    case 'disposed': return `${performanceEventDispositionLabel(search.disposition)}的事件`
+    default: return assertNever(search.tab)
+  }
+}
+
+/// 列宽是在 1280px 上量出来的，不是估的。
+///
+/// 页面可用宽度实测 974px（1280 − 256px 侧栏 − 页边距）。迁移前这张表有 12 列、声明
+/// `scroll={{ x: 1700 }}`，靠横向滚动活着；规范不允许 1280px 横向滚动。第一版收成十列，
+/// 把「最近发生」「维护窗口 ID」「原因摘要」「建议动作」挪去了详情页 —— 那是在组件库默认的
+/// 16px/侧内边距下唯一能让每列留住完整取值的做法（十列光内边距就是 320px）。
+///
+/// `cellPadding="compact"` 之后内边距减半（12 列 192px），预算多出 128px 字形宽度，
+/// 其中两列因此回到了列表里：
+///   - **最近发生**：与「首次发生」同一档紧凑时刻（全文进 `title`），108px；
+///   - **维护窗口 ID**：等宽前缀，55px，装不下就省略号 + 悬停全文 —— 它是个不透明标识，
+///     截断它只丢字形，不丢意思。
+///
+/// **另外两列仍然装不下，这里说清楚**：`原因摘要` 与 `建议动作` 的取值是整句话
+/// （迁移前各占 300px）。12 列已经用掉 773 / 782 的字形预算，两列各自只能分到 50px 上下，
+/// 也就是四个汉字加省略号 —— 那不是「装下了」，只是把丢失伪装成省略号。它们留在详情页，
+/// 每一行都有「详情」链接，而摘要本身是由事件类型、触发指标、触发值与阈值生成的一句话，
+/// 这四列都在表里。这是一次产品取舍，写进结题报告，不是靠调宽度能改的结论。
+///
+/// 一格一个事实：40px 的行放不下两行，所以迁移前挤在「状态 / 级别」一格里的三件事
+/// （告警状态、严重度、维护归因）在这里是三列。
+///
+/// 列只给 `minWidth`、各列一律 `grow: 1`（web/CLAUDE.md 的列宽契约）：
+/// `minWidth` = max(表头自然宽, 压不动的内容宽) + 16px 内边距，合计 965 ≤ 974，
+/// 所以每列都不低于自己的下限，表头一个都不会被截成「维...」。
+function eventColumns(search: PerformanceEventSearch): DataGridColumn<PerformanceEvent>[] {
   return [
     {
-      title: '状态 / 级别',
-      width: 150,
-      render: (_, event) => <Space><AlertStatus status={event.alert_status} /><PerformanceEventSeverityTag severity={event.severity} /><PerformanceEventMaintenanceTag inMaintenance={event.in_maintenance} /></Space>,
+      key: 'status',
+      header: '状态',
+      minWidth: 68, // 「告警中」徽标 52
+      cell: (event) => <AlertStatus status={event.alert_status} />,
     },
-    { title: '事件类型', width: 170, render: (_, event) => performanceEventTypeLabel(event.event_type) },
-    { title: '首次发生', width: 190, render: (_, event) => performanceEventTimeLabel(event.derived_at) },
-    { title: '最近发生', width: 190, render: (_, event) => performanceEventTimeLabel(event.updated_at) },
-    { title: '持续时间', width: 110, render: (_, event) => performanceEventDurationLabel(event.duration_ms) },
-    { title: '触发指标', width: 220, dataIndex: 'metric_id' },
-    { title: '触发值 / 阈值', width: 130, render: (_, event) => `${event.trigger_value} / ${event.threshold}` },
-    { title: '处置', width: 100, render: (_, event) => performanceEventDispositionLabel(event.disposition) },
-    { title: '维护窗口', width: 150, render: (_, event) => event.maintenance_window_id?.slice(0, 8) ?? '—' },
-    { title: '原因摘要', width: 300, dataIndex: 'cause_summary' },
-    { title: '建议动作', width: 300, dataIndex: 'suggested_action' },
     {
-      title: '操作',
-      fixed: 'right',
-      width: 90,
-      render: (_, event) => <Link
+      key: 'severity',
+      header: '级别',
+      minWidth: 57, // 「严重」徽标 41
+      cell: (event) => <PerformanceEventSeverityTag severity={event.severity} />,
+    },
+    {
+      key: 'maintenance',
+      header: '维护',
+      minWidth: 68, // 「维护中」徽标 52
+      cell: (event) => (event.in_maintenance ? <PerformanceEventMaintenanceTag inMaintenance /> : '—'),
+    },
+    {
+      key: 'type',
+      header: '事件类型',
+      minWidth: 101, // 「临时文件突增」85
+      cell: (event) => <TruncatedText>{performanceEventTypeLabel(event.event_type)}</TruncatedText>,
+    },
+    {
+      key: 'metric',
+      header: '触发指标',
+      minWidth: 80, // `pg.lock.waiting_count` 是最长的一档，会带省略号 + 悬停全文
+      cell: (event) => <TruncatedText className="dbs-numeric">{event.metric_id}</TruncatedText>,
+    },
+    {
+      key: 'value',
+      header: '触发值 / 阈值',
+      minWidth: 100,
+      numeric: true,
+      cell: (event) => `${event.trigger_value} / ${event.threshold}`,
+    },
+    {
+      key: 'derived',
+      header: '首次发生',
+      minWidth: 124, // 等宽的「08/11 10:15」108（英文区域设置多一个逗号）
+      cell: (event) => eventTimeCell(event.derived_at),
+    },
+    {
+      // 「首次发生 + 持续时间」推得出它，但推导要在脑子里做减法；紧凑内边距把这一列买回来了。
+      key: 'updated',
+      header: '最近发生',
+      minWidth: 124,
+      cell: (event) => eventTimeCell(event.updated_at),
+    },
+    {
+      key: 'duration',
+      header: '持续时间',
+      minWidth: 69,
+      numeric: true,
+      cell: (event) => performanceEventDurationLabel(event.duration_ms),
+    },
+    {
+      key: 'disposition',
+      header: '处置',
+      minWidth: 59,
+      cell: (event) => performanceEventDispositionLabel(event.disposition),
+    },
+    {
+      // 不透明标识，列表里读的是「有没有关联维护窗口」，具体是哪一个到详情页核对。
+      // 截断它只丢字形不丢意思，全文在悬停提示里。
+      key: 'maintenance-window',
+      header: '维护窗口',
+      minWidth: 71,
+      cell: (event) => (event.maintenance_window_id === undefined
+        ? '—'
+        : <TruncatedText className="dbs-numeric" title={event.maintenance_window_id}>
+          {event.maintenance_window_id.slice(0, 8)}
+        </TruncatedText>),
+    },
+    {
+      key: 'detail',
+      header: '操作',
+      minWidth: 44, // 「详情」28
+      cell: (event) => <Link
+        className="cds--link"
         to="/instances/$id/performance-events/$eventId"
         params={{ id: event.instance_id, eventId: event.id }}
         search={serializePerformanceEventSearch(search)}
       >详情</Link>,
     },
   ]
+}
+
+/// 表格里的时刻。一整个 `toLocaleString()` 要 125px；格子里只写「月-日 时:分」，
+/// 完整时刻（含年与秒）进 `title` —— 和长文本截断是同一个约定：显示收窄，信息不丢。
+/// 详情页仍然写完整时刻。`hour12: false` 是为了不让 AM/PM 再多吃 24px。
+function eventTimeCell(value: string) {
+  const compact = new Date(value).toLocaleString(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  return <TruncatedText className="dbs-numeric" title={performanceEventTimeLabel(value)}>{compact}</TruncatedText>
 }
 
 function eventEmptyText(search: PerformanceEventSearch): string {

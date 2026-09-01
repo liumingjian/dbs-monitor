@@ -1,0 +1,78 @@
+/*
+ * 指标条。状态色只出现在 4px 的条与数值上，永远不是一整块底色。
+ */
+
+.dbs-metric-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.dbs-metric-bar__label {
+  color: var(--cds-text-secondary);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dbs-metric-bar__value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--dbs-spacing-xxs);
+  color: var(--cds-text-primary);
+}
+
+.dbs-metric-bar__unit {
+  color: var(--cds-text-secondary);
+}
+
+.dbs-metric-bar__track {
+  display: block;
+  block-size: 0.25rem; /* 4px */
+  inline-size: 100%;
+  background-color: var(--cds-layer-accent-01);
+  border-radius: var(--dbs-radius-none);
+}
+
+.dbs-metric-bar__fill {
+  display: block;
+  block-size: 100%;
+  background-color: var(--cds-text-secondary);
+  transition: inline-size var(--dbs-duration-mid) var(--dbs-easing);
+}
+
+.dbs-metric-bar__caption {
+  color: var(--cds-text-secondary);
+}
+
+.dbs-metric-bar[data-tone='critical'] .dbs-metric-bar__fill {
+  background-color: var(--dbs-status-critical);
+}
+
+.dbs-metric-bar[data-tone='warning'] .dbs-metric-bar__fill {
+  background-color: var(--dbs-status-warning);
+}
+
+.dbs-metric-bar[data-tone='normal'] .dbs-metric-bar__fill {
+  background-color: var(--dbs-status-normal);
+}
+
+.dbs-metric-bar[data-tone='unknown'] .dbs-metric-bar__fill {
+  background-color: var(--dbs-status-unknown);
+}
+
+/* 越界的数值本身也上色 —— 数字是读者真正在看的东西。 */
+.dbs-metric-bar[data-tone='critical'] .dbs-metric-bar__value {
+  color: var(--dbs-status-critical);
+}
+
+.dbs-metric-bar[data-tone='warning'] .dbs-metric-bar__value {
+  color: var(--dbs-status-warning);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbs-metric-bar__fill {
+    transition: none;
+  }
+}

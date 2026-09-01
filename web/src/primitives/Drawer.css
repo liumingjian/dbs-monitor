@@ -1,0 +1,114 @@
+/*
+ * 右侧抽屉。直角、发丝线、无投影 —— 与页面的分离靠遮罩与左边那条线，不靠阴影。
+ */
+
+.dbs-drawer__scrim {
+  display: flex;
+  justify-content: flex-end;
+  background-color: var(--cds-overlay);
+  z-index: 9000; /* 页头与侧栏之上 */
+}
+
+.dbs-drawer {
+  display: flex;
+  flex-direction: column;
+  inline-size: 30rem; /* 480px：规范里的抽屉宽度 */
+  max-inline-size: 100vw;
+  block-size: 100%;
+  background-color: var(--cds-background);
+  color: var(--cds-text-primary);
+  border-inline-start: 1px solid var(--cds-border-subtle-01);
+  border-radius: var(--dbs-radius-none);
+  outline: none;
+  animation: dbs-drawer-enter var(--dbs-duration-mid) var(--dbs-easing);
+}
+
+.dbs-drawer[data-size='lg'] {
+  inline-size: 45rem; /* 720px */
+}
+
+@keyframes dbs-drawer-enter {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbs-drawer {
+    animation: none;
+  }
+}
+
+.dbs-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+  padding: var(--dbs-spacing-md);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+}
+
+.dbs-drawer__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.dbs-drawer__title {
+  margin: 0;
+}
+
+.dbs-drawer__description {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.dbs-drawer__close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--dbs-radius-none);
+  background-color: transparent;
+  color: var(--cds-icon-primary);
+  cursor: pointer;
+  transition: background-color var(--dbs-duration-fast) var(--dbs-easing);
+}
+
+.dbs-drawer__close:hover {
+  background-color: var(--cds-layer-hover-01);
+}
+
+.dbs-drawer__close:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+.dbs-drawer__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--dbs-spacing-md);
+}
+
+.dbs-drawer__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--dbs-spacing-xs);
+  padding: var(--dbs-spacing-md);
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dbs-drawer__close {
+    transition: none;
+  }
+}

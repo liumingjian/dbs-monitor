@@ -1,12 +1,17 @@
-import { useEffect, useRef } from 'react'
-import { LineChart } from 'echarts/charts'
-import { GridComponent, LegendComponent, MarkLineComponent, TooltipComponent } from 'echarts/components'
-import type { EChartsType } from 'echarts/core'
-import { connect, init, use } from 'echarts/core'
-import { CanvasRenderer } from 'echarts/renderers'
+import { useMemo } from 'react'
+import { LineChart } from '@carbon/charts-react'
+import type { LineChartOptions } from '@carbon/charts-react'
+import { Alignments, LegendPositions, ScaleTypes } from '@carbon/charts-react'
+import { tokenValue, vizPalette } from '../styles/tokens'
 import { UnavailabilityBlock, type Unavailability } from './UnavailabilityBlock'
-
-use([LineChart, GridComponent, LegendComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
+// 图表库自带的预编译 CSS。它不属于 `index.scss` 里那张 Carbon 组件清单（那是
+// `@carbon/react` 的子集），也不能走 Sass：`@carbon/charts` 只是 `@carbon/charts-react`
+// 的传递依赖，本项目的 `install-strategy=linked` 不把传递依赖摊到顶层，Sass 解析不到
+// 它的 `scss/` 入口。这份 CSS 里没有 `@font-face`、没有任何外部 URL（已核对），
+// 字族靠 `MetricChart.css` 里的两个自定义属性接回令牌层。
+import '@carbon/charts-react/styles.min.css'
+// 顺序有意义：本组件的覆盖必须排在库自带样式之后。
+import './MetricChart.css'
 
 type Point = (number | null)[]
 
@@ -30,6 +35,11 @@ type MetricChartProps = {
   unavailability: Unavailability | null
   unavailabilityHref: string
   unavailabilityDetail?: string
+  /**
+   * 跨图联动光标的分组名。**当前无效果**：图表库没有 `echarts.connect` 的等价物
+   * （`BaseChartOptions` 里没有任何跨实例同步选项，`Chart.services` 是未公开的内部对象）。
+   * 参数保留是为了不动调用方，联动能力的去留见结题报告。
+   */
   connectionGroup?: string
   loading?: boolean
   thresholds?: readonly MetricThreshold[]
@@ -71,7 +81,7 @@ function formatBytes(value: number): string {
 /**
  * `value` is how an operator reads the number ("96.3%"), `axis` is the terser form for
  * a tick label (the unit is already the axis name), and `zeroBaseline` says whether
- * anchoring the axis at zero is honest: it is for a percentage, but it destroys
+ * anchoring the axis at zero is honest: it is for a count, but it destroys
  * resolution for byte counts and rates, whose variation sits far above zero.
  * One row per unit, so a new unit is one edit rather than four dispatches on the same string.
  */
@@ -82,6 +92,7 @@ type UnitStyle = {
 }
 
 const unitStyles: Record<string, UnitStyle> = {
+  // percent 的下限由 `percentAxisDomain` 单独决定，不走 zeroBaseline 这条路。
   percent: { value: (value) => `${percentDecimal.format(value)}%`, axis: (value) => `${value}%`, zeroBaseline: true },
   bytes: { value: formatBytes, axis: (value) => formatBytes(value).replace(' ', ''), zeroBaseline: false },
   'bytes/s': { value: (value) => `${formatBytes(value)}/s`, axis: (value) => formatBytes(value).replace(' ', ''), zeroBaseline: false },
@@ -109,14 +120,15 @@ export function formatMetricNumber(value: number, unit: string): string {
   return unitStyle(unit).value(value)
 }
 
-function severityColor(severity: MetricThreshold['severity']): string {
+/// 严重度对应的语义令牌名。色值不写在 TS 里，见 `web/src/styles/tokens.ts`。
+function severityToken(severity: MetricThreshold['severity']): string {
   switch (severity) {
     case 'critical':
-      return '#cf1322'
+      return '--dbs-status-critical'
     case 'warning':
-      return '#d46b08'
+      return '--dbs-status-warning'
     case 'info':
-      return '#8c8c8c'
+      return '--dbs-status-unknown'
     default:
       return assertNever(severity)
   }
@@ -142,27 +154,79 @@ export function thresholdsForSeries(
   return thresholds.filter((threshold) => threshold.unit === unit)
 }
 
-type TooltipRow = { seriesIndex: number; seriesName?: string; marker?: string; value?: unknown }
+/**
+ * 百分比轴的下限。
+ *
+ * 这是**新行为**，不是旧实现的搬运：旧实现把百分比轴钉死在 0，缓冲区命中率
+ * 于是被画成贴在框顶的一条直线，正是规范抱怨的那个失败。
+ *
+ * 规则，按这个顺序：
+ * 1. `low`（数据与百分比阈值里最小的那个）不超过 10 时下限取 0 —— 数据真的逼近零，
+ *    这时钉零是诚实的，放大反而制造出不存在的波动。
+ * 2. 否则向下取到 10 的整数倍，但**不超过 90**。上限至少是 100（见 `percentCeiling`），
+ *    所以轴永远至少留 10 个百分点的窗口，不会退化成一条被放大到全屏的噪声。
+ * 3. 负值（理论上不该出现，但 `unit` 是 API 的自由文本）照样向下取整，不夹到 0。
+ */
+export function percentAxisFloor(low: number): number {
+  const step = Math.floor(low / 10) * 10
+  if (low <= 10) return Math.min(0, step)
+  return Math.min(90, step)
+}
+
+/**
+ * 百分比轴的取值区间。
+ *
+ * 阈值参与下限的计算：一条画不进框里的阈值线等于没画。
+ * 没有任何有限取值时退回 `[0, 上限]`，不去猜一个窗口。
+ */
+export function percentAxisDomain(
+  series: readonly MetricChartSeries[],
+  thresholds: readonly MetricThreshold[],
+): [number, number] {
+  const percentThresholds = thresholds.filter((threshold) => threshold.unit === 'percent').map((item) => item.value)
+  const ceiling = percentCeiling(thresholds)
+  const values: number[] = []
+  for (const item of series) {
+    if (item.unit !== 'percent') continue
+    for (const point of item.points) {
+      const value = point[1]
+      if (typeof value === 'number' && Number.isFinite(value)) values.push(value)
+    }
+  }
+  const low = Math.min(...values, ...percentThresholds)
+  if (!Number.isFinite(low)) return [0, ceiling]
+  return [percentAxisFloor(low), ceiling]
+}
+
+/** `Math.max(100)` with no thresholds, so an ordinary percent axis still ends at 100. */
+function percentCeiling(thresholds: readonly MetricThreshold[]): number {
+  return Math.max(100, ...thresholds.filter((threshold) => threshold.unit === 'percent').map((threshold) => threshold.value))
+}
+
+type ChartRow = { group: string; date: Date; value: number | null }
+
+/// 图表库吃的是长表（每行一个点），不是 echarts 那种按系列分组的二维数组。
+function chartRows(series: MetricChartSeries[]): ChartRow[] {
+  return series.flatMap((item) =>
+    chartData(item.points).map(([timestamp, value]) => ({ group: item.name, date: new Date(timestamp), value })),
+  )
+}
 
 /**
  * Every series gets its own unit. A shared formatter printed the disk chart's
  * free-bytes series as a percentage.
+ *
+ * 图表库按 `(value, label)` 回调，`label` 是系列名；时间那一行传进来的是 `Date`。
  */
-function tooltipFormatter(series: MetricChartSeries[]): (params: unknown) => string {
-  return (params) => {
-    const rows = (Array.isArray(params) ? params : [params]) as TooltipRow[]
-    const head = rows[0]
-    const heading = head !== undefined && Array.isArray(head.value) && typeof head.value[0] === 'number'
-      ? new Date(head.value[0]).toLocaleString()
-      : ''
-    const lines = rows.map((row) => {
-      const raw = Array.isArray(row.value) ? row.value[1] : undefined
-      const unit = series[row.seriesIndex]?.unit
-      // A gap must read as a gap; there is no unit under which it becomes a number.
-      const text = typeof raw === 'number' && unit !== undefined ? formatMetricNumber(raw, unit) : '缺数'
-      return `${row.marker ?? ''}${row.seriesName ?? ''}: ${text}`
-    })
-    return [heading, ...lines].join('<br/>')
+function tooltipValueFormatter(series: MetricChartSeries[]): (value: unknown, label?: string) => string {
+  const units = new Map(series.map((item) => [item.name, item.unit]))
+  return (value, label) => {
+    if (value instanceof Date) return value.toLocaleString()
+    const unit = label === undefined ? undefined : units.get(label)
+    if (typeof value === 'number' && unit !== undefined) return formatMetricNumber(value, unit)
+    // A gap must read as a gap; there is no unit under which it becomes a number.
+    if (value === null || value === undefined) return '缺数'
+    return String(value)
   }
 }
 
@@ -173,7 +237,6 @@ export function MetricChart({
   unavailability,
   unavailabilityHref,
   unavailabilityDetail,
-  connectionGroup,
   loading = false,
   thresholds,
 }: MetricChartProps) {
@@ -184,88 +247,25 @@ export function MetricChart({
       detail={unavailabilityDetail}
     />
   }
-  return <ChartCanvas
+  return <ChartFigure
     label={label}
     series={series}
     step={step}
     loading={loading}
-    connectionGroup={connectionGroup}
     thresholds={thresholds}
   />
 }
 
-function ChartCanvas({ label, series, step, loading, connectionGroup, thresholds }: {
+function ChartFigure({ label, series, step, loading, thresholds }: {
   label: string
   series: MetricChartSeries[]
   step: string
   loading: boolean
-  connectionGroup?: string
   thresholds?: readonly MetricThreshold[]
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<EChartsType | null>(null)
-
-  useEffect(() => {
-    if (!ref.current) return
-    const chart = init(ref.current)
-    chartRef.current = chart
-    const observer = new ResizeObserver(() => chart.resize())
-    observer.observe(ref.current)
-    return () => {
-      observer.disconnect()
-      chartRef.current = null
-      chart.dispose()
-    }
-  }, [])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chart) return
-    chart.group = connectionGroup ?? `metric-chart-${chart.id}`
-    if (connectionGroup) connect(connectionGroup)
-    const units = [...new Set(series.map((item) => item.unit))]
-    const drawn = thresholds ?? []
-    chart.setOption({
-      // A dashboard that repolls every 10-30s must not replay an entrance on every
-      // refresh: the motion would read as the data itself jumping.
-      animation: false,
-      grid: { left: 62, right: units.length > 1 ? 62 : 20, top: series.length > 1 ? 50 : 24, bottom: 44 },
-      legend: { show: series.length > 1, top: 0, type: 'scroll' },
-      tooltip: { trigger: 'axis', axisPointer: { type: 'line' }, formatter: tooltipFormatter(series) },
-      xAxis: {
-        type: 'time',
-        axisLabel: { formatter: '{HH}:{mm}', hideOverlap: true },
-        axisLine: { lineStyle: { color: '#c3c2b7' } },
-        splitLine: { show: false },
-      },
-      yAxis: units.map((unit, index) => {
-        const style = unitStyle(unit)
-        return {
-          type: 'value',
-          name: unit,
-          min: style.zeroBaseline ? 0 : undefined,
-          // 100 is the natural ceiling for a percentage, but a threshold above it
-          // would then be drawn outside the grid, which is worse than a taller axis.
-          max: unit === 'percent' ? percentCeiling(drawn) : undefined,
-          scale: !style.zeroBaseline,
-          axisLabel: { formatter: style.axis },
-          position: index === 0 ? 'left' : 'right',
-          splitLine: { show: index === 0, lineStyle: { color: '#e1e0d9', width: 1 } },
-        }
-      }),
-      series: series.map((item, index) => ({
-        name: item.name,
-        type: 'line',
-        data: chartData(item.points),
-        yAxisIndex: units.indexOf(item.unit),
-        connectNulls: false,
-        showSymbol: false,
-        lineStyle: { color: chartColors[index % chartColors.length], width: 2 },
-        // The alerting threshold belongs on the chart it is evaluated against.
-        ...markLineOption(thresholdsForSeries(drawn, series, index)),
-      })),
-    }, { notMerge: true })
-  }, [connectionGroup, series, thresholds])
+  const drawn = useMemo(() => thresholds ?? [], [thresholds])
+  const data = useMemo(() => chartRows(series), [series])
+  const options = useMemo(() => chartOptions(series, drawn), [series, drawn])
 
   const tableRows = series.flatMap((item) => chartData(item.points).map(([timestamp, value]) => ({
     key: `${item.name}-${timestamp}`,
@@ -276,8 +276,22 @@ function ChartCanvas({ label, series, step, loading, connectionGroup, thresholds
   })))
 
   return (
-    <figure className="metric-figure" data-loading={loading} aria-label={`${label}趋势`}>
-      <div ref={ref} className="metric-chart-canvas" />
+    <figure className="metric-figure" data-testid="metric-chart" data-loading={loading} aria-label={`${label}趋势`}>
+      <div className="metric-chart-canvas">
+        <LineChart data={data} options={options} />
+      </div>
+      {drawn.length > 0 && (
+        // 图表库的阈值标签只在悬停时浮出来，旧实现是常驻的。少一块常驻的数值就是少一项能力，
+        // 所以这里把它补回来 —— 顺带它对屏幕阅读器可读，画在 SVG 里的那个标签从来不是。
+        <ul className="metric-thresholds dbs-caption">
+          {drawn.map((threshold) => (
+            <li key={`${threshold.unit}-${threshold.label}-${threshold.value}`} data-severity={threshold.severity}>
+              <span className="metric-thresholds__rule" aria-hidden="true" />
+              {threshold.label} {formatMetricNumber(threshold.value, threshold.unit)}
+            </li>
+          ))}
+        </ul>
+      )}
       <figcaption>实际粒度：{step}</figcaption>
       <details className="metric-data-table">
         <summary>查看数据表</summary>
@@ -298,29 +312,100 @@ function ChartCanvas({ label, series, step, loading, connectionGroup, thresholds
   )
 }
 
-/** `Math.max(100)` with no thresholds, so an ordinary percent axis still ends at 100. */
-function percentCeiling(thresholds: readonly MetricThreshold[]): number {
-  return Math.max(100, ...thresholds.filter((threshold) => threshold.unit === 'percent').map((threshold) => threshold.value))
-}
+/**
+ * 选项推导。只依赖入参与令牌层：没有 ref、没有 DOM 尺寸、没有实例状态。
+ *
+ * 视觉上刻意关掉的东西：数据点标记（`points.enabled`）、纵向网格线（`grid.x`）、
+ * 工具条、缩放条，以及**全部动画** —— 一个每 10–30 秒重新拉数的面板每次刷新都重放
+ * 一遍入场，读起来就像数据自己在跳。
+ */
+function chartOptions(
+  series: MetricChartSeries[],
+  thresholds: readonly MetricThreshold[],
+): LineChartOptions {
+  const units = [...new Set(series.map((item) => item.unit))]
+  const palette = vizPalette().filter((color) => color !== '')
+  const scale: Record<string, string> = {}
+  series.forEach((item, index) => {
+    const color = palette[index % palette.length]
+    if (color !== undefined) scale[item.name] = color
+  })
 
-function markLineOption(thresholds: MetricThreshold[]) {
-  if (thresholds.length === 0) return {}
   return {
-    markLine: {
-      silent: true,
-      symbol: 'none',
-      data: thresholds.map((threshold) => ({
-        yAxis: threshold.value,
-        lineStyle: { color: severityColor(threshold.severity), type: 'dashed', width: 1 },
-        label: {
-          formatter: `${threshold.label} ${formatMetricNumber(threshold.value, threshold.unit)}`,
-          position: 'insideEndTop',
-          color: severityColor(threshold.severity),
-          fontSize: 11,
-        },
-      })),
+    // 刻意不给 SVG 无障碍名：可访问名由外层 `<figure aria-label>` 一处给出。
+    // 两处都给会让同一张图在无障碍树里出现两个同名节点。
+    animations: false,
+    resizable: true,
+    // 时间刻度的写法。库的默认值是英文的 `MMM d, hh a`（首个刻度）与 `hh a`：
+    // 「Aug 31, 10:28 AM」在一张 470px 宽的图里要 120px，五个刻度就开始互相压字，
+    // 首尾两个还各有一半落在画布之外被裁掉。缩到 24 小时制之后一个刻度约 35px，
+    // 既不叠也不需要库自作主张地旋转 45°（旋转本身又会让首个刻度往左伸出画布）。
+    //
+    // 分钟档与秒档不写日期：那个窗口最长两小时，日期是常数，而它就写在上方的时间范围里；
+    // 完整时刻仍然在悬停提示和「查看数据表」里。小时档及以上会跨天，日期由首刻度带出。
+    timeScale: {
+      timeIntervalFormats: {
+        '15seconds': { primary: 'HH:mm:ss', secondary: 'HH:mm:ss' },
+        minute: { primary: 'HH:mm', secondary: 'HH:mm' },
+        '30minutes': { primary: 'HH:mm', secondary: 'HH:mm' },
+        hourly: { primary: 'MM-dd HH:mm', secondary: 'HH:mm' },
+        daily: { primary: 'MM-dd', secondary: 'MM-dd' },
+        weekly: { primary: 'MM-dd', secondary: 'MM-dd' },
+        monthly: { primary: 'yyyy-MM', secondary: 'yyyy-MM' },
+        quarterly: { primary: 'yyyy-MM', secondary: 'yyyy-MM' },
+        yearly: { primary: 'yyyy', secondary: 'yyyy' },
+      },
+    },
+    height: '100%',
+    toolbar: { enabled: false },
+    points: { enabled: false },
+    grid: { x: { enabled: false }, y: { enabled: true } },
+    legend: {
+      enabled: series.length > 1,
+      position: LegendPositions.TOP,
+      alignment: Alignments.LEFT,
+      clickable: false,
+    },
+    tooltip: { valueFormatter: tooltipValueFormatter(series) },
+    ...(Object.keys(scale).length > 0 ? { color: { scale } } : {}),
+    axes: {
+      // 刻度上限。库对横轴不算「放得下几个」（那套只用在纵轴上），默认按一个固定值取，
+      // 于是一小时的窗口能排出十几个刻度、彼此贴着。六个刻度在 1280px 下的最窄一张图
+      // （约 300px 画布）里也是每个 50px，读得开。这是上限不是定数：d3 仍然会取整到
+      // 一个好看的时间间隔上，实际画出来是四到七个。
+      bottom: { mapsTo: 'date', scaleType: ScaleTypes.TIME, ticks: { number: 6 } },
+      left: axisOptions(units[0], series, thresholds),
+      ...(units.length > 1
+        ? {
+            right: {
+              ...axisOptions(units[1], series, thresholds),
+              correspondingDatasets: series.filter((item) => item.unit === units[1]).map((item) => item.name),
+            },
+          }
+        : {}),
     },
   }
 }
 
-const chartColors = ['#1677ff', '#d46b08', '#389e0d', '#c41d7f', '#531dab', '#08979c']
+/// 一个单位一根轴。百分比轴走上面那条下限规则，其余单位沿用旧行为：
+/// 计数类钉零，字节数与耗时类按数据实际范围取。
+function axisOptions(unit: string | undefined, series: MetricChartSeries[], thresholds: readonly MetricThreshold[]) {
+  if (unit === undefined) return { mapsTo: 'value', scaleType: ScaleTypes.LINEAR }
+  const style = unitStyle(unit)
+  const drawn = thresholds.filter((threshold) => threshold.unit === unit)
+  return {
+    mapsTo: 'value',
+    scaleType: ScaleTypes.LINEAR,
+    ...(unit === '' ? {} : { title: unit }),
+    ticks: { formatter: (tick: number | Date) => (tick instanceof Date ? tick.toLocaleString() : style.axis(tick)) },
+    ...(unit === 'percent'
+      ? { domain: percentAxisDomain(series, thresholds), includeZero: false }
+      : { includeZero: style.zeroBaseline }),
+    thresholds: drawn.map((threshold) => ({
+      value: threshold.value,
+      label: threshold.label,
+      fillColor: tokenValue(severityToken(threshold.severity)),
+      valueFormatter: (value: number) => formatMetricNumber(value, unit),
+    })),
+  }
+}

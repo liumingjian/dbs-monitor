@@ -1,0 +1,160 @@
+/*
+ * 监控页（标准与增强）的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色 / 间距一律走令牌，字体档位走 `.dbs-*` 类，没有一个字面量色值。
+ *
+ * 这里**没有、也不许有 `overflow-x`**：图表卡片自己裁剪自己的绘制区
+ * （见 domain/MetricChart.css 里那条 `svg.layout-svg-wrapper`），页面这一层再套一个
+ * 滚动容器只会把问题挪个地方。
+ */
+
+.monitoring-page {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  /* 网格列默认 auto，内容宽的子项会把整行撑开；给死一列，图表网格才是「被给多少用多少」。 */
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.monitoring-page__reset {
+  justify-self: start;
+}
+
+/* ---- 控制条 ---- */
+
+.monitoring-page__controls {
+  display: grid;
+  gap: var(--dbs-spacing-sm);
+  padding-block-end: var(--dbs-spacing-md);
+  border-block-end: 1px solid var(--cds-border-subtle-01);
+  /* 缺数说明块的「去处」指到这里；锚点跳转别把控制条塞到炭黑页头底下。 */
+  scroll-margin-block-start: var(--dbs-header-height);
+}
+
+.monitoring-page__control-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--dbs-spacing-sm);
+  min-inline-size: 0;
+}
+
+/* 「短标签 + 分段控件」竖着一组，和带标签的下拉框底部对齐。 */
+.monitoring-page__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xxs);
+  min-inline-size: 0;
+}
+
+.monitoring-page__step {
+  inline-size: 9rem;
+}
+
+.monitoring-page__metrics {
+  inline-size: 20rem;
+  max-inline-size: 100%;
+}
+
+/* 开关自带上方标签，与其它带标签的控件一样底对齐。 */
+.monitoring-page__toggle {
+  display: flex;
+  align-items: flex-end;
+}
+
+.monitoring-page__controls .freshness {
+  margin-inline-start: auto;
+  padding-block-end: var(--dbs-spacing-xxs);
+}
+
+/* ---- 图表网格 ---- */
+
+.monitoring-page__group {
+  display: grid;
+  gap: var(--dbs-spacing-sm);
+  min-inline-size: 0;
+}
+
+.monitoring-page__group > h2 {
+  margin: 0;
+}
+
+.monitoring-page__grid {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+  align-items: stretch;
+}
+
+.monitoring-page__grid[data-columns='1'] { grid-template-columns: minmax(0, 1fr); }
+.monitoring-page__grid[data-columns='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.monitoring-page__grid[data-columns='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+/*
+ * 卡片标题栏：三列布局下「标题 + 两个次要操作」在 400px 里挤得下，但指标名一长就得换行。
+ * 面板默认不许标题栏换行（`flex: none` 的操作区），这里放开，宁可占两行也不要溢出。
+ */
+.monitoring-page__card .dbs-panel__header {
+  flex-wrap: wrap;
+  gap: var(--dbs-spacing-xs);
+}
+
+.monitoring-page__card .dbs-panel__actions {
+  flex: 0 1 auto;
+}
+
+/* ---- 指标详情对话框 ---- */
+
+.monitoring-page__details {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+
+.monitoring-page__details p {
+  margin: 0;
+}
+
+/* Carbon 给结构化列表留了一段很大的下边距；这里的间距由上面的 grid 统一管。 */
+.monitoring-page__list.monitoring-page__list {
+  margin-block: 0;
+}
+
+/* ---- 空态 ---- */
+
+.monitoring-page__empty {
+  display: grid;
+  gap: var(--dbs-spacing-xxs);
+  justify-items: start;
+  padding: var(--dbs-spacing-md);
+  border: 1px solid var(--cds-border-subtle-01);
+  background-color: var(--cds-background);
+}
+
+.monitoring-page__empty .dbs-caption {
+  color: var(--cds-text-secondary);
+}
+
+/* 三列在中等宽度下每张图只剩三百多像素，曲线读不出来，退回两列。 */
+@media (max-width: 61rem) {
+  .monitoring-page__grid[data-columns='3'] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* 窄屏：图表一律一列，控制条各控件占满一行。 */
+@media (max-width: 42rem) {
+  .monitoring-page__grid[data-columns] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monitoring-page__control-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .monitoring-page__step,
+  .monitoring-page__metrics {
+    inline-size: 100%;
+  }
+
+  .monitoring-page__controls .freshness {
+    margin-inline-start: 0;
+  }
+}

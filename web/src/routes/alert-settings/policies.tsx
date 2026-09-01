@@ -1,22 +1,37 @@
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
-import { createRoute } from '@tanstack/react-router'
-import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, Typography } from 'antd'
+import { Button, Checkbox, TextInput } from '@carbon/react'
 import { useState } from 'react'
+import { Controller, useForm } from 'react-hook-form'
+import type { FieldPath } from 'react-hook-form'
+import { z } from 'zod'
 import { $api } from '../../api/client'
-import { apiErrorMessage } from '../../api/errors'
+import { apiErrorMessage, applyApiFieldErrors } from '../../api/errors'
 import type { components } from '../../api/schema'
-import { rootRoute } from '../root'
-import { AlertSettingsHeader } from './header'
+import { zodResolver } from '../../forms/zodResolver'
+import { DataGrid } from '../../primitives/DataGrid'
+import { FormField } from '../../primitives/FormField'
+import { Icon } from '../../primitives/Icon'
+import { Modal } from '../../primitives/Modal'
+import { MultiSelect } from '../../primitives/MultiSelect'
+import { NotificationBar } from '../../primitives/NotificationBar'
+import { NumberInput } from '../../primitives/NumberInput'
+import { Panel } from '../../primitives/Panel'
+import { StatusBadge } from '../../primitives/StatusBadge'
+import { Toggle } from '../../primitives/Toggle'
+import { TruncatedText } from '../../primitives/TruncatedText'
+import { ConfirmedAction, InlineAction } from './ConfirmedAction'
+import { readOnlyReason } from './shared'
+import type { Feedback } from './shared'
 
 type Policy = components['schemas']['NotificationPolicy']
 type PolicyInput = components['schemas']['NotificationPolicyInput']
+type AlertSeverity = components['schemas']['AlertSeverity']
 type PolicyForm = Omit<PolicyInput, 'channels' | 'repeat_interval'> & {
   smtp_enabled: boolean
   webhook_target_ids: string[]
   repeat_interval_value: number
 }
-type Feedback = { type: 'success' | 'error'; text: string }
 type RepeatIntervalUnitSeconds = 1 | 60
+type Option = { id: string; label: string }
 
 const secondsPerMinute = 60
 const secondsPerHour = 60 * secondsPerMinute
@@ -24,162 +39,28 @@ const fallbackRepeatIntervalMinimumSeconds = 15 * secondsPerMinute
 const defaultRepeatIntervalSeconds = secondsPerHour
 const maximumRepeatIntervalSeconds = 24 * secondsPerHour
 
-type PoliciesTableProps = {
-  policies: Policy[]
-  loading: boolean
-  canManage: boolean
-  onEdit: (policy: Policy) => void
-  onDelete: (policy: Policy) => void
+const severities = ['critical', 'warning', 'info'] as const satisfies readonly AlertSeverity[]
+
+function severityLabel(severity: AlertSeverity): string {
+  switch (severity) {
+    case 'critical':
+      return '严重'
+    case 'warning':
+      return '警告'
+    case 'info':
+      return '提示'
+    default:
+      return assertNever(severity)
+  }
 }
 
-export const policySettingsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/alert-settings/policies',
-  component: PolicySettingsPage,
-})
-
-function PolicySettingsPage() {
-  const policySettingsQuery = $api.useQuery('get', '/api/v1/notification-policy-settings')
-  const policiesQuery = $api.useQuery('get', '/api/v1/notification-policies')
-  const contactsQuery = $api.useQuery('get', '/api/v1/notification-contacts')
-  const groupsQuery = $api.useQuery('get', '/api/v1/notification-contact-groups')
-  const webhooksQuery = $api.useQuery('get', '/api/v1/notification-channels/webhooks')
-  const currentUserQuery = $api.useQuery('get', '/api/v1/me')
-  const createMutation = $api.useMutation('post', '/api/v1/notification-policies')
-  const updateMutation = $api.useMutation('put', '/api/v1/notification-policies/{id}')
-  const deleteMutation = $api.useMutation('delete', '/api/v1/notification-policies/{id}')
-  const [form] = Form.useForm<PolicyForm>()
-  const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<Policy | null>(null)
-  const [feedback, setFeedback] = useState<Feedback | null>(null)
-  const role = currentUserQuery.data?.role
-  const canManage = role === 'ALERT_ADMIN' || role === 'PLATFORM_ADMIN'
-  const repeatIntervalMinimum = policySettingsQuery.data?.repeat_interval_minimum ?? fallbackRepeatIntervalMinimumSeconds
-  const repeatUnitSeconds = repeatIntervalUnitSeconds(repeatIntervalMinimum)
-  const canManagePolicies = canManage && !policySettingsQuery.isPending
-
-  function openEditor(policy?: Policy) {
-    setEditing(policy ?? null)
-    form.resetFields()
-    form.setFieldsValue(policy ? policyFormValues(policy, repeatUnitSeconds) : {
-      name: '', contact_ids: [], contact_group_ids: [], severity_filter: ['critical', 'warning', 'info'],
-      notify_on_fire: true, notify_on_recovery: true, repeat_interval_value: defaultRepeatIntervalSeconds / repeatUnitSeconds, smtp_enabled: true, webhook_target_ids: [],
-    })
-    setOpen(true)
-  }
-
-  function save(values: PolicyForm) {
-    const body = policyInput(values, repeatUnitSeconds)
-    const options = {
-      onSuccess: () => {
-        setOpen(false)
-        setFeedback({ type: 'success' as const, text: editing ? '通知策略已更新' : '通知策略已创建' })
-        void policiesQuery.refetch()
-      },
-      onError: (error: unknown) => setFeedback({ type: 'error' as const, text: apiErrorMessage(error, '保存通知策略失败') }),
-    }
-    if (editing) updateMutation.mutate({ params: { path: { id: editing.id } }, body }, options)
-    else createMutation.mutate({ body }, options)
-  }
-
-  function remove(policy: Policy) {
-    deleteMutation.mutate(
-      { params: { path: { id: policy.id } } },
-      {
-        onSuccess: () => void policiesQuery.refetch(),
-        onError: (error) => setFeedback({ type: 'error', text: apiErrorMessage(error, '删除通知策略失败') }),
-      },
-    )
-  }
-
-  return (
-    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
-      <AlertSettingsHeader active="policies" />
-      {!canManage && <Alert type="info" showIcon title="只读模式" description="需要告警管理员角色才能修改通知策略" />}
-      {feedback && <Alert type={feedback.type} title={feedback.text} closable onClose={() => setFeedback(null)} />}
-      <Space className="settings-section-heading" wrap>
-        <Typography.Title level={4} style={{ margin: 0 }}>通知策略</Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} disabled={!canManagePolicies} onClick={() => openEditor()}>新建策略</Button>
-      </Space>
-      <PoliciesTable
-        policies={policiesQuery.data ?? []}
-        loading={policiesQuery.isPending}
-        canManage={canManagePolicies}
-        onEdit={openEditor}
-        onDelete={remove}
-      />
-      <Modal title={editing ? '编辑通知策略' : '新建通知策略'} open={open} width={760} footer={null} destroyOnHidden onCancel={() => setOpen(false)}>
-        <Form<PolicyForm> form={form} layout="vertical" onFinish={save}>
-          <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true }]}><Input /></Form.Item>
-          <div className="settings-form-grid">
-            <Form.Item name="contact_ids" label="联系人"><Select mode="multiple" options={(contactsQuery.data ?? []).map((contact) => ({ value: contact.id, label: `${contact.name} · ${contact.email}` }))} /></Form.Item>
-            <Form.Item name="contact_group_ids" label="联系人组"><Select mode="multiple" options={(groupsQuery.data ?? []).map((group) => ({ value: group.id, label: group.name }))} /></Form.Item>
-            <Form.Item name="severity_filter" label="级别过滤" rules={[{ required: true, message: '请至少选择一个级别' }]}><Select mode="multiple" options={[{ value: 'critical', label: '严重' }, { value: 'warning', label: '警告' }, { value: 'info', label: '提示' }]} /></Form.Item>
-            <Form.Item name="repeat_interval_value" label={`重复间隔（${repeatUnitSeconds === secondsPerMinute ? '分钟' : '秒'}）`} rules={[{ required: true }]}>
-              <InputNumber min={repeatIntervalMinimum / repeatUnitSeconds} max={maximumRepeatIntervalSeconds / repeatUnitSeconds} precision={0} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item name="notify_on_fire" label="触发通知" valuePropName="checked"><Switch /></Form.Item>
-            <Form.Item name="notify_on_recovery" label="恢复通知" valuePropName="checked"><Switch /></Form.Item>
-          </div>
-          <Form.Item name="smtp_enabled" valuePropName="checked"><Checkbox>SMTP</Checkbox></Form.Item>
-          <Form.Item name="webhook_target_ids" label="Webhook 目标"><Select mode="multiple" options={(webhooksQuery.data ?? []).map((target) => ({ value: target.id, label: target.name, disabled: !target.enabled }))} /></Form.Item>
-          <Button type="primary" htmlType="submit" loading={createMutation.isPending || updateMutation.isPending}>保存</Button>
-        </Form>
-      </Modal>
-    </Space>
-  )
+function assertNever(value: never): never {
+  throw new Error(`unexpected notification policy value: ${String(value)}`)
 }
 
-function PoliciesTable({ policies, loading, canManage, onEdit, onDelete }: PoliciesTableProps) {
-  return (
-    <Table<Policy>
-      rowKey="id"
-      loading={loading}
-      dataSource={policies}
-      pagination={false}
-      scroll={{ x: 1080 }}
-      columns={[
-        {
-          title: '名称',
-          render: (_, policy) => (
-            <Space>
-              {policy.name}
-              {policy.is_default && <Tag color="blue">全局默认</Tag>}
-            </Space>
-          ),
-        },
-        { title: '级别过滤', render: (_, policy) => policy.severity_filter.join('、') },
-        {
-          title: '触发 / 恢复',
-          render: (_, policy) => `${policy.notify_on_fire ? '开启' : '关闭'} / ${policy.notify_on_recovery ? '开启' : '关闭'}`,
-        },
-        { title: '重复间隔', render: (_, policy) => repeatLabel(policy.repeat_interval) },
-        {
-          title: '接收范围',
-          render: (_, policy) => `${policy.contact_ids.length} 联系人 · ${policy.contact_group_ids.length} 组 · ${policy.channels.length} 渠道`,
-        },
-        {
-          title: '操作',
-          width: 120,
-          render: (_, policy) => (
-            <Space>
-              <Tooltip title="编辑策略">
-                <Button aria-label={`编辑 ${policy.name}`} icon={<EditOutlined />} disabled={!canManage} onClick={() => onEdit(policy)} />
-              </Tooltip>
-              <Popconfirm title="删除此通知策略？" disabled={!canManage || policy.is_default} onConfirm={() => onDelete(policy)}>
-                <Tooltip title={policy.is_default ? '全局默认策略不可删除' : '删除策略'}>
-                  <span>
-                    <Button aria-label={`删除 ${policy.name}`} danger icon={<DeleteOutlined />} disabled={!canManage || policy.is_default} />
-                  </span>
-                </Tooltip>
-              </Popconfirm>
-            </Space>
-          ),
-        },
-      ]}
-    />
-  )
-}
+// ---------------------------------------------------------------------------
+// 表单值 ↔ 请求体（纯函数；`policies.test.ts` 是这段的行为基线）
+// ---------------------------------------------------------------------------
 
 export function policyFormValues(policy: Policy, repeatUnitSeconds: RepeatIntervalUnitSeconds): PolicyForm {
   return {
@@ -221,4 +102,439 @@ function repeatLabel(seconds: number) {
   if (seconds < secondsPerMinute) return `${seconds} 秒`
   if (seconds % secondsPerHour === 0) return `${seconds / secondsPerHour} 小时`
   return `${seconds / secondsPerMinute} 分钟`
+}
+
+// ---------------------------------------------------------------------------
+// 校验
+// ---------------------------------------------------------------------------
+
+function policySchema(minimumValue: number, maximumValue: number, unitLabel: string) {
+  return z.object({
+    name: z.string().refine((value) => value.trim() !== '', '请输入名称'),
+    contact_ids: z.array(z.string()),
+    contact_group_ids: z.array(z.string()),
+    severity_filter: z.array(z.enum(severities)).min(1, '请至少选择一个级别'),
+    notify_on_fire: z.boolean(),
+    notify_on_recovery: z.boolean(),
+    repeat_interval_value: z
+      .number({ error: '请输入重复间隔' })
+      .int('重复间隔必须是整数')
+      .min(minimumValue, `重复间隔不得小于 ${minimumValue} ${unitLabel}`)
+      .max(maximumValue, `重复间隔不得大于 ${maximumValue} ${unitLabel}`),
+    smtp_enabled: z.boolean(),
+    webhook_target_ids: z.array(z.string()),
+  })
+}
+
+type PolicyValues = z.infer<ReturnType<typeof policySchema>>
+
+const policyFields = [
+  'name',
+  'contact_ids',
+  'contact_group_ids',
+  'severity_filter',
+  'notify_on_fire',
+  'notify_on_recovery',
+  'repeat_interval_value',
+  'smtp_enabled',
+  'webhook_target_ids',
+] as const satisfies readonly FieldPath<PolicyValues>[]
+
+// ---------------------------------------------------------------------------
+// 标签页
+// ---------------------------------------------------------------------------
+
+/// 「通知策略」标签。
+export function PoliciesPanel({ canManage }: { canManage: boolean }) {
+  const settingsQuery = $api.useQuery('get', '/api/v1/notification-policy-settings')
+  const policiesQuery = $api.useQuery('get', '/api/v1/notification-policies')
+  const contactsQuery = $api.useQuery('get', '/api/v1/notification-contacts')
+  const groupsQuery = $api.useQuery('get', '/api/v1/notification-contact-groups')
+  const webhooksQuery = $api.useQuery('get', '/api/v1/notification-channels/webhooks')
+  const deleteMutation = $api.useMutation('delete', '/api/v1/notification-policies/{id}')
+  const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [editor, setEditor] = useState<{ policy: Policy | null } | null>(null)
+
+  const repeatIntervalMinimum = settingsQuery.data?.repeat_interval_minimum ?? fallbackRepeatIntervalMinimumSeconds
+  const repeatUnitSeconds = repeatIntervalUnitSeconds(repeatIntervalMinimum)
+  // 部署最小间隔还没取到时不给建策略：拿兜底值建出来的策略可能被服务端拒绝。
+  const canManagePolicies = canManage && !settingsQuery.isPending
+  const policySettingsReason = canManage ? '正在读取部署的最小重复间隔' : readOnlyReason.policies
+
+  function remove(policy: Policy) {
+    setFeedback(null)
+    deleteMutation.mutate({ params: { path: { id: policy.id } } }, {
+      onSuccess: () => {
+        setFeedback({ tone: 'normal', text: '通知策略已删除' })
+        void policiesQuery.refetch()
+      },
+      onError: (error) => setFeedback({ tone: 'critical', text: apiErrorMessage(error, '删除通知策略失败') }),
+    })
+  }
+
+  const policies = policiesQuery.data ?? []
+
+  return (
+    <div className="alert-settings-stack">
+      {feedback !== null && (
+        <NotificationBar tone={feedback.tone} title={feedback.text} onClose={() => setFeedback(null)} />
+      )}
+      {policiesQuery.isError && (
+        <NotificationBar tone="critical" title={apiErrorMessage(policiesQuery.error, '通知策略加载失败')} />
+      )}
+      <Panel
+        flush
+        title={`通知策略（${policies.length}）`}
+        actions={<span title={canManagePolicies ? undefined : policySettingsReason}>
+          <Button size="sm" renderIcon={Icon.glyph.add} disabled={!canManagePolicies} onClick={() => setEditor({ policy: null })}>
+            新建策略
+          </Button>
+        </span>}
+      >
+        <DataGrid<Policy>
+          label="通知策略"
+          loading={policiesQuery.isPending}
+          rows={policies}
+          rowKey={(policy) => policy.id}
+          rowTestId="policy-row"
+          columns={[
+            { key: 'name', header: '名称', minWidth: 170, grow: 1.2, cell: (policy) => <TruncatedText className="alert-settings-strong">{policy.name}</TruncatedText> },
+            {
+              key: 'default',
+              header: '默认',
+              minWidth: 88,
+              grow: 1.5,
+              cell: (policy) => policy.is_default
+                ? <StatusBadge tone="normal">全局默认</StatusBadge>
+                : <span className="alert-settings-muted">—</span>,
+            },
+            {
+              key: 'severity',
+              header: '级别过滤',
+              minWidth: 150,
+              cell: (policy) => <TruncatedText>{policy.severity_filter.map(severityLabel).join('、')}</TruncatedText>,
+            },
+            { key: 'fire', header: '触发通知', minWidth: 100, grow: 1.4, cell: (policy) => (policy.notify_on_fire ? '开启' : '关闭') },
+            { key: 'recovery', header: '恢复通知', minWidth: 100, grow: 1.4, cell: (policy) => (policy.notify_on_recovery ? '开启' : '关闭') },
+            { key: 'repeat', header: '重复间隔', minWidth: 104, numeric: true, grow: 1.3, cell: (policy) => repeatLabel(policy.repeat_interval) },
+            { key: 'contacts', header: '联系人', minWidth: 92, numeric: true, grow: 1.4, cell: (policy) => policy.contact_ids.length },
+            { key: 'groups', header: '联系人组', minWidth: 96, numeric: true, grow: 1.4, cell: (policy) => policy.contact_group_ids.length },
+            { key: 'channels', header: '渠道', minWidth: 88, numeric: true, grow: 1.4, cell: (policy) => policy.channels.length },
+            {
+              key: 'actions',
+              header: '操作',
+              minWidth: 96,
+              grow: 1.6,
+              align: 'end',
+              cell: (policy) => (
+                <span className="alert-settings-row-actions">
+                  <InlineAction
+                    name={`编辑 ${policy.name}`}
+                    icon="edit"
+                    disabled={!canManagePolicies}
+                    disabledReason={policySettingsReason}
+                    onClick={() => setEditor({ policy })}
+                  />
+                  <ConfirmedAction
+                    name={`删除 ${policy.name}`}
+                    icon="trashCan"
+                    destructive
+                    heading="删除通知策略"
+                    description={`删除后按 ${policy.name} 派发的告警将改由其他策略决定去向；没有策略匹配时不会有人收到通知。此操作不可撤销。`}
+                    confirmLabel="删除策略"
+                    disabled={!canManagePolicies || policy.is_default}
+                    disabledReason={policy.is_default ? '全局默认策略不可删除' : policySettingsReason}
+                    onConfirm={() => remove(policy)}
+                  />
+                </span>
+              ),
+            },
+          ]}
+          empty={{ title: '暂无通知策略', description: '新建策略，决定哪些告警发给谁、走哪个渠道。' }}
+        />
+      </Panel>
+      {editor !== null && (
+        <PolicyModal
+          policy={editor.policy}
+          repeatUnitSeconds={repeatUnitSeconds}
+          repeatIntervalMinimum={repeatIntervalMinimum}
+          contactOptions={(contactsQuery.data ?? []).map((contact) => ({ id: contact.id, label: `${contact.name} · ${contact.email}` }))}
+          groupOptions={(groupsQuery.data ?? []).map((group) => ({ id: group.id, label: group.name }))}
+          webhookOptions={(webhooksQuery.data ?? []).map((target) => ({ id: target.id, label: target.enabled ? target.name : `${target.name}（已停用）` }))}
+          onClose={() => setEditor(null)}
+          onSaved={(message) => {
+            setEditor(null)
+            setFeedback({ tone: 'normal', text: message })
+            void policiesQuery.refetch()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function PolicyModal({
+  policy,
+  repeatUnitSeconds,
+  repeatIntervalMinimum,
+  contactOptions,
+  groupOptions,
+  webhookOptions,
+  onClose,
+  onSaved,
+}: {
+  policy: Policy | null
+  repeatUnitSeconds: RepeatIntervalUnitSeconds
+  repeatIntervalMinimum: number
+  contactOptions: Option[]
+  groupOptions: Option[]
+  webhookOptions: Option[]
+  onClose: () => void
+  onSaved: (message: string) => void
+}) {
+  const createMutation = $api.useMutation('post', '/api/v1/notification-policies')
+  const updateMutation = $api.useMutation('put', '/api/v1/notification-policies/{id}')
+  const [failure, setFailure] = useState('')
+  const unitLabel = repeatUnitSeconds === secondsPerMinute ? '分钟' : '秒'
+  const minimumValue = repeatIntervalMinimum / repeatUnitSeconds
+  const maximumValue = maximumRepeatIntervalSeconds / repeatUnitSeconds
+  const severityOptions: { id: AlertSeverity; label: string }[] = severities.map((value) => ({ id: value, label: severityLabel(value) }))
+
+  const { control, formState, handleSubmit, register, setError } = useForm<PolicyValues>({
+    resolver: zodResolver(policySchema(minimumValue, maximumValue, unitLabel)),
+    defaultValues: policy === null
+      ? {
+        name: '',
+        contact_ids: [],
+        contact_group_ids: [],
+        severity_filter: [...severities],
+        notify_on_fire: true,
+        notify_on_recovery: true,
+        repeat_interval_value: defaultRepeatIntervalSeconds / repeatUnitSeconds,
+        smtp_enabled: true,
+        webhook_target_ids: [],
+      }
+      : toPolicyValues(policyFormValues(policy, repeatUnitSeconds)),
+  })
+
+  const submit = handleSubmit((values) => {
+    setFailure('')
+    const body = policyInput({ ...values, name: values.name.trim(), template_id: policy?.template_id }, repeatUnitSeconds)
+    const options = {
+      onSuccess: () => onSaved(policy === null ? '通知策略已创建' : '通知策略已更新'),
+      onError: (error: unknown) => {
+        if (applyApiFieldErrors<PolicyValues>(error, policyFields, setError).length === 0) {
+          setFailure(apiErrorMessage(error, '保存通知策略失败'))
+        }
+      },
+    }
+    if (policy !== null) {
+      updateMutation.mutate({ params: { path: { id: policy.id } }, body }, options)
+      return
+    }
+    createMutation.mutate({ body }, options)
+  })
+
+  return (
+    <Modal
+      open
+      modalHeading={policy === null ? '新建通知策略' : '编辑通知策略'}
+      primaryButtonText="保存策略"
+      secondaryButtonText="取消"
+      primaryButtonDisabled={createMutation.isPending || updateMutation.isPending}
+      size="md"
+      onRequestSubmit={() => void submit()}
+      onRequestClose={onClose}
+      onSecondarySubmit={onClose}
+    >
+      <form className="alert-settings-form" onSubmit={submit} noValidate>
+        {failure !== '' && <NotificationBar tone="critical" title={failure} />}
+        <FormField label="名称" required errorText={formState.errors.name?.message}>
+          {(field) => <TextInput
+            id={field.id}
+            labelText=""
+            hideLabel
+            invalid={field.invalid}
+            aria-describedby={field.describedBy}
+            {...register('name')}
+          />}
+        </FormField>
+        <div className="alert-settings-form__row">
+          <FormField label="联系人" errorText={formState.errors.contact_ids?.message}>
+            {(field) => <Controller
+              name="contact_ids"
+              control={control}
+              render={({ field: value }) => <OptionMultiSelect
+                id={field.id}
+                label="选择联系人"
+                options={contactOptions}
+                selected={value.value}
+                describedBy={field.describedBy}
+                onChange={value.onChange}
+              />}
+            />}
+          </FormField>
+          <FormField label="联系人组" errorText={formState.errors.contact_group_ids?.message}>
+            {(field) => <Controller
+              name="contact_group_ids"
+              control={control}
+              render={({ field: value }) => <OptionMultiSelect
+                id={field.id}
+                label="选择联系人组"
+                options={groupOptions}
+                selected={value.value}
+                describedBy={field.describedBy}
+                onChange={value.onChange}
+              />}
+            />}
+          </FormField>
+        </div>
+        <div className="alert-settings-form__row">
+          <FormField label="级别过滤" required errorText={formState.errors.severity_filter?.message}>
+            {(field) => <Controller
+              name="severity_filter"
+              control={control}
+              render={({ field: value }) => <MultiSelect<{ id: AlertSeverity; label: string }>
+                id={field.id}
+                titleText=""
+                hideLabel
+                label="选择级别"
+                items={severityOptions}
+                itemToString={(item) => item?.label ?? ''}
+                selectedItems={severityOptions.filter((option) => value.value.includes(option.id))}
+                invalid={field.invalid}
+                aria-describedby={field.describedBy}
+                onChange={({ selectedItems }) => value.onChange((selectedItems ?? []).map((item) => item.id))}
+              />}
+            />}
+          </FormField>
+          <FormField
+            label={`重复间隔（${unitLabel}）`}
+            required
+            helperText={`本部署允许的最小间隔是 ${minimumValue} ${unitLabel}。`}
+            errorText={formState.errors.repeat_interval_value?.message}
+          >
+            {(field) => <Controller
+              name="repeat_interval_value"
+              control={control}
+              render={({ field: value }) => <NumberInput
+                id={field.id}
+                label=""
+                hideLabel
+                min={minimumValue}
+                max={maximumValue}
+                invalid={field.invalid}
+                aria-describedby={field.describedBy}
+                ref={value.ref}
+                name={value.name}
+                value={value.value}
+                onBlur={value.onBlur}
+                // 取值在 onChange 的第二个参数里，所以走 Controller 而不是 register。
+                onChange={(_event, state) => value.onChange(state.value === '' ? undefined : Number(state.value))}
+              />}
+            />}
+          </FormField>
+        </div>
+        <div className="alert-settings-form__row">
+          <FormField label="触发通知" errorText={formState.errors.notify_on_fire?.message}>
+            {(field) => <Controller
+              name="notify_on_fire"
+              control={control}
+              render={({ field: value }) => <Toggle
+                id={field.id}
+                size="sm"
+                labelText=""
+                hideLabel
+                labelA="关闭"
+                labelB="开启"
+                toggled={value.value}
+                onToggle={(next) => value.onChange(next)}
+              />}
+            />}
+          </FormField>
+          <FormField label="恢复通知" errorText={formState.errors.notify_on_recovery?.message}>
+            {(field) => <Controller
+              name="notify_on_recovery"
+              control={control}
+              render={({ field: value }) => <Toggle
+                id={field.id}
+                size="sm"
+                labelText=""
+                hideLabel
+                labelA="关闭"
+                labelB="开启"
+                toggled={value.value}
+                onToggle={(next) => value.onChange(next)}
+              />}
+            />}
+          </FormField>
+        </div>
+        <FormField label="发送渠道" errorText={formState.errors.smtp_enabled?.message}>
+          {(field) => <Controller
+            name="smtp_enabled"
+            control={control}
+            render={({ field: value }) => <Checkbox
+              id={field.id}
+              labelText="SMTP"
+              checked={value.value}
+              onChange={(_event, { checked }) => value.onChange(checked)}
+            />}
+          />}
+        </FormField>
+        <FormField label="Webhook 目标" errorText={formState.errors.webhook_target_ids?.message}>
+          {(field) => <Controller
+            name="webhook_target_ids"
+            control={control}
+            render={({ field: value }) => <OptionMultiSelect
+              id={field.id}
+              label="选择 Webhook 目标"
+              options={webhookOptions}
+              selected={value.value}
+              describedBy={field.describedBy}
+              onChange={value.onChange}
+            />}
+          />}
+        </FormField>
+      </form>
+    </Modal>
+  )
+}
+
+/// 表单值里除了 `template_id` 之外与 `PolicyForm` 同型；`template_id` 没有输入框，
+/// 所以它不进表单，提交时从被编辑的策略上原样带回（见 `submit`）。
+function toPolicyValues(form: PolicyForm): PolicyValues {
+  return {
+    name: form.name,
+    contact_ids: form.contact_ids,
+    contact_group_ids: form.contact_group_ids,
+    severity_filter: form.severity_filter,
+    notify_on_fire: form.notify_on_fire,
+    notify_on_recovery: form.notify_on_recovery,
+    repeat_interval_value: form.repeat_interval_value,
+    smtp_enabled: form.smtp_enabled,
+    webhook_target_ids: form.webhook_target_ids,
+  }
+}
+
+function OptionMultiSelect({ id, label, options, selected, describedBy, onChange }: {
+  id: string
+  label: string
+  options: Option[]
+  selected: string[]
+  describedBy: string | undefined
+  onChange: (next: string[]) => void
+}) {
+  return (
+    <MultiSelect<Option>
+      id={id}
+      titleText=""
+      hideLabel
+      label={label}
+      items={options}
+      itemToString={(item) => item?.label ?? ''}
+      selectedItems={options.filter((option) => selected.includes(option.id))}
+      aria-describedby={describedBy}
+      onChange={({ selectedItems }) => onChange((selectedItems ?? []).map((item) => item.id))}
+    />
+  )
 }

@@ -1,0 +1,49 @@
+/*
+ * 行内趋势缩略图。
+ *
+ * 宽度是「容器给多少用多少」：默认撑满，但不小于 40px、不大于 96px，
+ * 这样 1280px 下表格收窄时它跟着窄，而不是把整行顶出横向滚动。
+ */
+
+.dbs-sparkline {
+  display: block;
+  inline-size: 100%;
+  min-inline-size: 2.5rem; /* 40px */
+  max-inline-size: 6rem; /* 96px */
+}
+
+.dbs-sparkline__svg {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+}
+
+.dbs-sparkline__line {
+  fill: none;
+  stroke: var(--dbs-viz-1);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.dbs-sparkline__empty {
+  stroke: var(--cds-border-subtle-01);
+  stroke-width: 1;
+}
+
+.dbs-sparkline[data-tone='critical'] .dbs-sparkline__line {
+  stroke: var(--dbs-status-critical);
+}
+
+.dbs-sparkline[data-tone='warning'] .dbs-sparkline__line {
+  stroke: var(--dbs-status-warning);
+}
+
+.dbs-sparkline[data-tone='normal'] .dbs-sparkline__line {
+  stroke: var(--dbs-status-normal);
+}
+
+.dbs-sparkline[data-tone='unknown'] .dbs-sparkline__line {
+  stroke: var(--dbs-status-unknown);
+}

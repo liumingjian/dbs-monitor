@@ -1,0 +1,132 @@
+//
+// 全应用唯一的 Sass 入口。只在 `web/src/main.tsx` 里 import 一次。
+//
+// **组件级 .scss 不得直接 @use Carbon。** Sass 只允许一个模块在整次编译里被
+// `with (...)` 配置一次，而且必须是它的**首次**加载；`@carbon/styles` 内部又会
+// 无配置地加载 `@carbon/type`。任何一个组件样式表先一步 @use 到 Carbon，
+// 这里的字体族与主题覆盖就会以
+// `This module was already loaded, so it can't be configured using "with"`
+// 报错，而且报错位置读起来跟真正的原因毫无关系。
+//
+// 下面 @use 的顺序是有意义的，不要重排：
+//   1. 本地纯粹模块（不碰 Carbon）
+//   2. Carbon config —— 必须最先，因为 type / theme 都会无配置地加载它
+//   3. Carbon type —— 必须早于 themes，因为 @carbon/themes 会加载 @carbon/type
+//   4. 本地 themes（此时加载 @carbon/themes 才安全）
+//   5. Carbon theme
+//   6. Carbon 本体
+//
+
+@use 'fonts';
+
+// 关掉 Carbon 自带的 @font-face 发射：它指向 `@ibm/plex` 包或 IBM 的 Akamai CDN。
+// 私有化部署没有外网，CDN 那条路会静默降级成系统字体。字体改为自托管，见 `_fonts.scss`。
+// `$use-akamai-cdn` 本来就默认 false，这里显式写出来，让「运行时不请求外部域名」
+// 这件事一次 grep 就能查到。
+@use '@carbon/react/scss/config' with (
+  $css--font-face: false,
+  $use-akamai-cdn: false
+);
+
+// 中文回退栈追加在 Plex 之后。Carbon 不提供任何 CJK 字面。
+@use '@carbon/react/scss/type' with ($font-families: fonts.$families);
+
+@use 'themes' as product-themes;
+
+// `$theme` 决定 Carbon 在编译期内联进 `var(--cds-x, <fallback>)` 的那个 fallback，
+// `$fallback` 决定没在主题里出现的令牌取什么值 —— 两个都要给，否则一部分用法会
+// 悄悄拿回 Carbon 的默认色。
+@use '@carbon/react/scss/theme' as theme with (
+  $theme: product-themes.$light,
+  $fallback: product-themes.$light
+);
+@use '@carbon/react/scss/zone' with ($zones: product-themes.$zones);
+
+@use 'product-tokens';
+
+// Carbon 的全局重置。整包引入时它是被顺带带进来的，逐组件引入就得自己写出来。
+@use '@carbon/react/scss/reset';
+
+// 布局令牌（`--cds-layout-size-height-*` / `--cds-layout-density-padding-inline-*`）。
+// 和 reset 一样，是整包引入时顺带进来、逐组件引入必须自己写的一行，而且**不写就坏**：
+// 输入框一类组件的高度是 `block-size: var(--cds-layout-size-height-local)`，
+// 而这个 local 值是一串引用上面那些令牌的 `clamp()`。令牌没定义 ⇒ 整条声明在计算值阶段
+// 失效 ⇒ 高度退回 auto，40px 的输入框缩成 19px 的一条。表现上只是「有点矮」，
+// 不报错也不显眼，所以这里写清楚：它不是可选项。（栅格 `scss/grid` 与 `scss/layer`
+// 仍然刻意不引入，那两个是版式工具类，与这一行无关。）
+@use '@carbon/react/scss/layout';
+
+// ---------------------------------------------------------------------------
+// Carbon 组件子集。
+//
+// **不要写 `@use '@carbon/react'`。** 那一行发射全部 ~70 个组件的 CSS，其中
+// 三分之二这个产品永远不会用（fluid-* 系列、AI 标签、教学浮层、文件上传、树视图
+// 等等），实测 100.08 kB gzip，是规格估算 35–55 kB 的两倍。
+//
+// 这张清单就是本应用的 Carbon 组件面。**用了清单外的 Carbon 组件，它会渲染成
+// 没有样式的裸元素** —— 不报错，只是难看。要用新组件就在这里加一行，并说明是哪个
+// 页面需要它。反过来，一个组件从代码里彻底消失时，这里也应该跟着删。
+//
+// 依赖会自己跟来：组件的 Sass 分片各自 @use 它依赖的分片（tooltip 会带上 popover，
+// combo-box 会带上 list-box），所以清单只需要列直接使用的那些。
+//
+// 刻意**不**引入的两块：
+//   - `scss/grid`：Carbon 的 16 栅格（css-grid 与 flexbox 两套）。本应用的版式一直是
+//     组件样式表里的原生 CSS grid，没有理由为此多背一份栅格 CSS。
+//     不要用 `<Grid>` / `<Column>`，用 CSS grid。
+//   - `scss/layer`：`.cds--layer-*` 工具类。层级由令牌与发丝线表达，不套层级容器。
+// ---------------------------------------------------------------------------
+
+@use '@carbon/react/scss/components/accordion'; // 可折叠的长说明
+@use '@carbon/react/scss/components/button';
+@use '@carbon/react/scss/components/checkbox';
+@use '@carbon/react/scss/components/combo-box';
+@use '@carbon/react/scss/components/content-switcher'; // 分段切换（视图切换、粒度切换）
+@use '@carbon/react/scss/components/copy-button'; // 连接串、SQL 指纹的一键复制
+@use '@carbon/react/scss/components/data-table'; // primitives/DataGrid
+@use '@carbon/react/scss/components/date-picker'; // 维护窗口的日期选择
+@use '@carbon/react/scss/components/dropdown';
+@use '@carbon/react/scss/components/form'; // 标签、必填标记、字段级错误文案的基座
+@use '@carbon/react/scss/components/inline-loading'; // 按钮里的进行中状态
+@use '@carbon/react/scss/components/link';
+@use '@carbon/react/scss/components/list';
+@use '@carbon/react/scss/components/loading';
+@use '@carbon/react/scss/components/menu'; // OverflowMenu 的菜单面
+@use '@carbon/react/scss/components/modal'; // 二次确认
+@use '@carbon/react/scss/components/multiselect';
+@use '@carbon/react/scss/components/notification'; // primitives/NotificationBar
+@use '@carbon/react/scss/components/number-input';
+@use '@carbon/react/scss/components/overflow-menu'; // 行内次要操作
+@use '@carbon/react/scss/components/pagination';
+@use '@carbon/react/scss/components/radio-button';
+@use '@carbon/react/scss/components/search';
+@use '@carbon/react/scss/components/select';
+@use '@carbon/react/scss/components/skeleton-styles'; // Carbon 自己的骨架件
+@use '@carbon/react/scss/components/structured-list'; // 键值清单（原 Descriptions）
+@use '@carbon/react/scss/components/tabs';
+@use '@carbon/react/scss/components/tag';
+@use '@carbon/react/scss/components/text-area';
+@use '@carbon/react/scss/components/text-input';
+@use '@carbon/react/scss/components/time-picker'; // 维护窗口的时刻选择
+@use '@carbon/react/scss/components/toggle';
+@use '@carbon/react/scss/components/tooltip';
+@use '@carbon/react/scss/components/ui-shell'; // 炭黑页头 + 侧栏
+
+// 字体档位工具类。必须在 Carbon 之后，才能压过 Carbon 的组件默认排版。
+@use 'type-classes';
+
+:root {
+  // Carbon 自己不发射 :root 的令牌块 —— 它靠 `var(--cds-x, <编译期 fallback>)` 兜底，
+  // 而有一部分用法（theme 模块导出的 $token 变量）是不带 fallback 的 `var(--cds-x)`。
+  // 显式发一遍，令牌才真正是运行时可覆盖的一层，深色主题也才只是换一个 map。
+  @include theme.theme(product-themes.$light);
+  @include product-tokens.theme-tokens(product-themes.$light);
+  @include product-tokens.structure-tokens;
+}
+
+// 加深色主题时，这里加一个块：
+//   [data-dbs-theme='dark'] {
+//     @include theme.theme(product-themes.$dark);
+//     @include product-tokens.theme-tokens(product-themes.$dark);
+//   }
+// 组件侧不需要任何改动 —— 令牌层存在的意义就是这个。

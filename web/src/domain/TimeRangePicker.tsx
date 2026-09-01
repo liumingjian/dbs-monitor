@@ -1,6 +1,7 @@
-import { ClockCircleOutlined } from '@ant-design/icons'
-import { Button, Space } from 'antd'
+import { Button, TextInput } from '@carbon/react'
 import { useRef } from 'react'
+import { Icon } from '../primitives/Icon'
+import './TimeRangePicker.css'
 
 export type AbsoluteTimeRange = { from: string; to: string }
 
@@ -22,6 +23,14 @@ export function quickRange(minutes: number, now: number): AbsoluteTimeRange {
   }
 }
 
+/// 时间范围选择器。
+///
+/// 两个输入框是**浏览器原生的 `datetime-local`**，不是浮层日期选择器：原生控件自带全套
+/// 键盘与输入法行为，换一个浮层就要把它们重做一遍，而这里没有一件事是原生做不到的。
+/// 它们的可访问名（开始时间 / 结束时间）是端到端用例的定位口，不要改。
+///
+/// 蓝色只表示可交互，所以选中的快捷档用的是主按钮那支蓝 —— 那说的是「你按下的是这个」，
+/// 不是状态；未选中的档走次级按钮。选中态同时由 `aria-pressed` 表达，不只靠颜色。
 export function TimeRangePicker({ from, to, onChange }: TimeRangePickerProps) {
   const fromRef = useRef<HTMLInputElement>(null)
   const toRef = useRef<HTMLInputElement>(null)
@@ -40,25 +49,47 @@ export function TimeRangePicker({ from, to, onChange }: TimeRangePickerProps) {
   const spanMinutes = Math.round((new Date(to).getTime() - new Date(from).getTime()) / 60_000)
 
   return (
-    <Space wrap>
+    <div className="dbs-time-range">
       {/* Typing two absolute timestamps was the price of the most common action on the page. */}
-      <span className="time-quick-label">最近</span>
-      <Space.Compact className="time-quick-ranges">
+      <span className="dbs-time-range__quick-label dbs-caption">最近</span>
+      <div className="dbs-time-range__presets">
         {QUICK_RANGES.map((range) => (
           <Button
             key={range.minutes}
-            size="small"
-            type={spanMinutes === range.minutes ? 'primary' : 'default'}
+            size="md"
+            kind={spanMinutes === range.minutes ? 'primary' : 'ghost'}
+            aria-pressed={spanMinutes === range.minutes}
             aria-label={`最近 ${range.label}`}
             onClick={() => onChange(quickRange(range.minutes, Date.now()))}
           >{range.label}</Button>
         ))}
-      </Space.Compact>
-      <input key={from} ref={fromRef} type="datetime-local" aria-label="开始时间" defaultValue={toLocalInput(from)} />
-      <span aria-hidden="true">至</span>
-      <input key={to} ref={toRef} type="datetime-local" aria-label="结束时间" defaultValue={toLocalInput(to)} />
-      <Button aria-label="应用时间范围" icon={<ClockCircleOutlined />} onClick={applyRange}>应用时间范围</Button>
-    </Space>
+      </div>
+      <div className="dbs-time-range__field">
+        <TextInput
+          key={from}
+          ref={fromRef}
+          id="time-range-from"
+          size="md"
+          type="datetime-local"
+          labelText="开始时间"
+          defaultValue={toLocalInput(from)}
+        />
+      </div>
+      <div className="dbs-time-range__field">
+        <TextInput
+          key={to}
+          ref={toRef}
+          id="time-range-to"
+          size="md"
+          type="datetime-local"
+          labelText="结束时间"
+          defaultValue={toLocalInput(to)}
+        />
+      </div>
+      <Button size="md" kind="tertiary" aria-label="应用时间范围" renderIcon={Icon.glyph.time} onClick={applyRange}>
+        应用时间范围
+      </Button>
+    </div>
   )
 }
 

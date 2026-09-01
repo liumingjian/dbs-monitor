@@ -62,22 +62,23 @@ test('enhanced monitoring opens raw curves and isolates protected collection gap
   await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&monitoring=enhanced&step=raw`)
 
   await expect(page.getByRole('tab', { name: '增强监控' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.locator('.enhanced-metric-card')).toHaveCount(27)
+  await expect(page.getByTestId('enhanced-metric-card')).toHaveCount(27)
   await expect(page.getByRole('figure', { name: 'CPU 使用率趋势' })).toBeVisible()
   await expect(page.getByText('实际粒度：raw')).toBeVisible()
   await expect(page.getByText(/平台自我保护：最近一次采集因背压被跳过/)).toBeVisible()
-  await expect.poll(() => canvasHasPixels(page.locator('canvas').first())).toBe(true)
+  // 唯一有数据的指标（CPU 使用率）真的把桩里的 42/47/44 画了出来。
+  await expect.poll(() => chartValues(page.getByRole('figure', { name: 'CPU 使用率趋势' }))).toEqual(['42%', '47%', '44%'])
 })
 
-async function canvasHasPixels(canvas: Locator): Promise<boolean> {
-  return canvas.evaluate((element) => {
-    if (!(element instanceof HTMLCanvasElement)) return false
-    const context = element.getContext('2d')
-    if (!context || element.width === 0 || element.height === 0) return false
-    const pixels = context.getImageData(0, 0, element.width, element.height).data
-    for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] > 0) return true
-    }
-    return false
-  })
+/**
+ * 每张图下方都有一个可展开的无障碍数据表。表里的数值就是这张图收到的数据——
+ * 这正是原先读 canvas 像素想证明的事，而数据表与 canvas/SVG 哪种渲染技术都无关。
+ */
+async function chartValues(chart: Locator): Promise<string[]> {
+  const table = chart.getByRole('table')
+  if (!(await table.isVisible())) await chart.getByText('查看数据表').click()
+  const rows = await table.getByRole('row').all()
+  const cells = await Promise.all(rows.map((row) => row.getByRole('cell').allInnerTexts()))
+  // 表头行只有 columnheader、没有 cell，因此在这里被过滤掉；每行最后一列是数值。
+  return cells.filter((row) => row.length > 0).map((row) => row[row.length - 1])
 }

@@ -1,15 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Link, RouterProvider, createRoute, createRouter, redirect } from '@tanstack/react-router'
-import { Button, ConfigProvider, Result } from 'antd'
+import { RouterProvider, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { alertsRoute } from './routes/alerts'
 import { instanceAlertDetailRoute } from './routes/instances.$id/alerts.$alertId'
 import { instanceAlertsRoute } from './routes/instances.$id/alerts'
-import { notificationSettingsRoute } from './routes/alert-settings/notifications'
-import { contactSettingsRoute } from './routes/alert-settings/contacts'
-import { maintenanceNewRoute, maintenanceSettingsRoute } from './routes/alert-settings/maintenance'
-import { policySettingsRoute } from './routes/alert-settings/policies'
+import {
+  alertSettingsRoute,
+  contactSettingsRoute,
+  maintenanceNewRoute,
+  maintenanceSettingsRoute,
+  notificationSettingsRoute,
+  policySettingsRoute,
+} from './routes/alert-settings'
 import { instanceRoute } from './routes/instances.$id'
 import { performanceEventDetailRoute } from './routes/instances.$id/performanceEventDetail'
 import { performanceEventsRoute } from './routes/instances.$id/performanceEventsPage'
@@ -17,13 +20,15 @@ import { collectionManagementRoute } from './routes/instances.$id/collection'
 import { standardMonitoringRoute } from './routes/instances.$id/monitoring'
 import { alertRulesRoute } from './routes/instances.$id/alerts/rules'
 import { instanceSettingsRoute } from './routes/instances.$id/settings'
-import { longQuerySamplesRoute } from './routes/instances.$id/longQuerySamples'
-import { queryStatisticsRoute } from './routes/instances.$id/queryStatisticsPage'
-import { sessionsRoute } from './routes/instances.$id/sessions'
+import { longQuerySamplesRoute, queryStatisticsRoute, sessionsRoute } from './routes/instances.$id/sessions'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
 import { rootRoute } from './routes/root'
+import { AppErrorBoundary, NotFoundPage, RouteErrorPage } from './routes/root/errorBoundary'
 import { usersRoute } from './routes/users'
+// Carbon 令牌层。全应用唯一的 Sass 入口，必须只 import 一次；见 styles/index.scss 顶部。
+// 排在 styles.css 之前：令牌先落地，styles.css 里剩下的全局元素样式才引用得到它们。
+import './styles/index.scss'
 import './styles.css'
 
 // `/` matched nothing, so the entry URL rendered a bare English "Not Found".
@@ -47,22 +52,28 @@ const routeTree = rootRoute.addChildren([
   alertRulesRoute,
   collectionManagementRoute,
   instanceSettingsRoute,
+  // 会话与阻塞：合并后的多标签页面，加上两个旧子地址的重定向。
   sessionsRoute,
   longQuerySamplesRoute,
   queryStatisticsRoute,
   usersRoute,
+  // 告警设置：合并后的多标签页面，加上四个旧地址的重定向。
+  alertSettingsRoute,
   notificationSettingsRoute,
   contactSettingsRoute,
   policySettingsRoute,
   maintenanceSettingsRoute,
   maintenanceNewRoute,
 ])
-const router = createRouter({ routeTree, defaultPreload: 'intent', defaultNotFoundComponent: () => <Result
-    status="404"
-    title="页面不存在"
-    subTitle="该地址没有对应的页面，可能是链接过期或输入有误。"
-    extra={<Link to="/instances"><Button type="primary">返回实例列表</Button></Link>}
-  /> })
+// `defaultErrorComponent` 是路由级的错误边界：一个页面在渲染或取数时抛出异常，
+// 它接住那一段路由，外框与导航都还在。`AppErrorBoundary` 是外面那一层，接住外框自己
+// 和路由器初始化时抛出的异常 —— 那两类发生在路由匹配之外，没有它就是整页白屏。
+const router = createRouter({
+  routeTree,
+  defaultPreload: 'intent',
+  defaultNotFoundComponent: NotFoundPage,
+  defaultErrorComponent: RouteErrorPage,
+})
 const queryClient = new QueryClient()
 
 declare module '@tanstack/react-router' {
@@ -70,5 +81,11 @@ declare module '@tanstack/react-router' {
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode><ConfigProvider><QueryClientProvider client={queryClient}><RouterProvider router={router} /></QueryClientProvider></ConfigProvider></React.StrictMode>,
+  <React.StrictMode>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </AppErrorBoundary>
+  </React.StrictMode>,
 )

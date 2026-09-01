@@ -1,0 +1,17 @@
+/* 告警证据区（处置记录 / 触发现场快照）。两处都是「概览 + 明细表」的同一种版式。 */
+
+.alert-evidence-stack {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+
+.alert-evidence-actions {
+  display: flex;
+  gap: var(--dbs-spacing-xs);
+}
+
+.alert-evidence-form {
+  display: grid;
+  gap: var(--dbs-spacing-md);
+}
+

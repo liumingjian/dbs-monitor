@@ -1,0 +1,40 @@
+/*
+ * 状态徽章。色值全部走令牌，本文件不出现任何字面量色值。
+ * 圆角为零；层级靠底色与文字色表达，不用投影。
+ */
+
+.dbs-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbs-status-badge-gap, var(--dbs-spacing-xxs));
+  max-inline-size: 100%;
+  /* 尺寸由所处的密度上下文给，缺省是 20px（40px 行高里上下各留 10px）。
+     密集表格（primitives/DataGrid 的 dense 档）在容器上改写这几个属性，徽章跟着变小，
+     所以没有「密集徽章」这个 prop —— 页面无从忘记切换，也无从各自切换成不同的值。 */
+  min-block-size: var(--dbs-status-badge-block-size, 1.25rem);
+  padding-inline: var(--dbs-status-badge-padding-inline, var(--dbs-spacing-xs));
+  border-radius: var(--dbs-radius-none);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dbs-status-badge[data-tone='critical'] {
+  background-color: var(--dbs-status-critical-bg);
+  color: var(--dbs-status-critical-text);
+}
+
+.dbs-status-badge[data-tone='warning'] {
+  background-color: var(--dbs-status-warning-bg);
+  color: var(--dbs-status-warning-text);
+}
+
+.dbs-status-badge[data-tone='normal'] {
+  background-color: var(--dbs-status-normal-bg);
+  color: var(--dbs-status-normal-text);
+}
+
+.dbs-status-badge[data-tone='unknown'] {
+  background-color: var(--cds-layer-01);
+  color: var(--cds-text-secondary);
+}
