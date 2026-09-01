@@ -8,7 +8,7 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 state="${QA_STATE_DIR:-$HOME/.dbs-monitor-qa}"
 listen_port="${QA_PORT:-18443}"
 base_url="https://127.0.0.1:$listen_port"
-admin_password="${QA_ADMIN_PASSWORD:-qa-admin-password}"
+admin_password="${QA_ADMIN_PASSWORD:-admin}"
 ca="$state/server-tls/ca.crt"
 cookie="$state/cookie.txt"
 instance_name="${QA_INSTANCE_NAME:-QA target pg17}"

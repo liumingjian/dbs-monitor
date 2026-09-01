@@ -9,7 +9,7 @@ ca="$state/server-tls/ca.crt"
 cookie="$state/cookie.txt"
 curl --noproxy '*' -sf --cacert "$ca" -c "$cookie" \
   -H 'Content-Type: application/json' -X POST "$base_url/api/v1/login" \
-  --data "{\"username\":\"admin\",\"password\":\"${QA_ADMIN_PASSWORD:-qa-admin-password}\"}" >/dev/null
+  --data "{\"username\":\"admin\",\"password\":\"${QA_ADMIN_PASSWORD:-admin}\"}" >/dev/null
 curl --noproxy '*' -sf --cacert "$ca" -b "$cookie" "$base_url/api/v1/instances" > "$state/instances.json"
 node -e '
 const fs = require("fs")

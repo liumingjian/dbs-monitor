@@ -15,7 +15,7 @@ export QA_PLATFORM_PORT="$platform_port" QA_TARGET_PORT="$target_port"
 # take the master key, TLS material, or the running pids with it.
 state="${QA_STATE_DIR:-$HOME/.dbs-monitor-qa}"
 tls_dir="${QA_TLS_HOME:-$HOME/.dbs-monitor-acceptance-tls}"
-admin_password="${QA_ADMIN_PASSWORD:-qa-admin-password}"
+admin_password="${QA_ADMIN_PASSWORD:-admin}"
 instance_name="${QA_INSTANCE_NAME:-QA target pg17}"
 listen_port="${QA_PORT:-18443}"
 base_url="https://127.0.0.1:$listen_port"

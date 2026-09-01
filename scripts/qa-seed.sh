@@ -33,7 +33,7 @@ fi
 # --- alert rules ---
 curl --noproxy '*' -sf --cacert "$ca" -c "$cookie" \
   -H 'Content-Type: application/json' -X POST "$base_url/api/v1/login" \
-  --data "{\"username\":\"admin\",\"password\":\"${QA_ADMIN_PASSWORD:-qa-admin-password}\"}" >/dev/null
+  --data "{\"username\":\"admin\",\"password\":\"${QA_ADMIN_PASSWORD:-admin}\"}" >/dev/null
 
 instance_id=$(api "$base_url/api/v1/instances" \
   | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b)||[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')

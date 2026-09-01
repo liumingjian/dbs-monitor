@@ -22,7 +22,7 @@ const { chromium } = createRequire(`${process.cwd()}/`)('@playwright/test')
 
 const base = process.env.QA_BASE_URL ?? 'https://127.0.0.1:18443'
 const out = process.env.QA_SHOT_DIR ?? '/tmp/qa-shots'
-const password = process.env.QA_ADMIN_PASSWORD ?? 'qa-admin-password'
+const password = process.env.QA_ADMIN_PASSWORD ?? 'admin'
 
 /// 常规审阅宽度与最小支持宽度。移动档单列在 `mobileRoutes` 里单独走。
 const viewports = [
