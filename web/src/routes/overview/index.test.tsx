@@ -9,9 +9,9 @@ import {
 } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { parseInstanceListSearch } from '../instances/instanceListSearch'
+import { parseInstanceListSearch } from '../../domain/instanceListSearch'
 import { parseSearch, stringifySearch } from '../searchParams'
-import { CountTiles, StorageWatermarks } from './index'
+import { CountTiles, StorageUsageList } from './index'
 import { collectionCountTiles, healthCountTiles } from './overview'
 
 afterEach(cleanup)
@@ -106,9 +106,9 @@ describe('overview numbers', () => {
     expect(filterValues(destination(/采集暂停/), 'status')).toEqual(['PAUSED'])
   })
 
-  it('links each storage watermark to that instance', async () => {
+  it('links each storage usage row to that instance', async () => {
     await renderInRouter(
-      <StorageWatermarks
+      <StorageUsageList
         entries={[
           {
             instance_id: '11111111-1111-4111-8111-111111111111',
@@ -123,8 +123,8 @@ describe('overview numbers', () => {
     expect(screen.getByText('91%')).toBeTruthy()
   })
 
-  it('says the watermark is unmeasured instead of showing an empty list of zeroes', async () => {
-    await renderInRouter(<StorageWatermarks entries={[]} />)
+  it('says storage usage is unmeasured instead of showing an empty list of zeroes', async () => {
+    await renderInRouter(<StorageUsageList entries={[]} />)
     expect(screen.getByText(/还没有磁盘水位读数/)).toBeTruthy()
   })
 })

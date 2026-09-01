@@ -13,6 +13,7 @@ Unavailability:
     - FEATURE_DISABLED
     - VERSION_UNSUPPORTED
     - NOT_APPLICABLE_ROLE
+    - NOT_APPLICABLE_ENGINE
     - COUNTER_RESET
 AlertStatus:
   type: string

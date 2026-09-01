@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TopSqlEntry } from './topSql'
-import { elapsedLabel, queryStatisticsDrilldown, statementLabel, topSqlRowKey } from './topSql'
+import { elapsedLabel, statementLabel, topSqlRowKey } from './topSql'
 
 function entry(overrides: Partial<TopSqlEntry> = {}): TopSqlEntry {
   return {
@@ -34,11 +34,5 @@ describe('top SQL projection', () => {
     expect(elapsedLabel(1500)).toBe('1.5 s')
     expect(elapsedLabel(90_000)).toBe('1.5 min')
     expect(elapsedLabel(5_400_000)).toBe('1.5 h')
-  })
-
-  it('drills down onto the query-statistics tab of the owning instance', () => {
-    const search = queryStatisticsDrilldown()
-    expect(search).toMatchObject({ tab: 'query-statistics' })
-    expect('error' in search).toBe(false)
   })
 })

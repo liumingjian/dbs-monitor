@@ -12,15 +12,15 @@ import { MetricBar } from '../../primitives/MetricBar'
 import { NotificationBar } from '../../primitives/NotificationBar'
 import { Panel } from '../../primitives/Panel'
 import { TruncatedText } from '../../primitives/TruncatedText'
-import { attributionLabel, collectionFreshnessLabel, collectionFreshnessTitle } from '../instanceProjection'
+import { attributionLabel, collectionFreshnessLabel, collectionFreshnessTitle, usageTone } from '../../domain/instanceProjection'
 import { defaultTimeRange } from '../instances.$id/timeRange'
 import { rootRoute } from '../root'
-import type { OverviewCount, StorageWatermarkEntry, TopSqlEntry } from './overview'
+import type { TopSqlEntry } from '../../domain/topSql'
+import type { OverviewCount, StorageUsageEntry } from './overview'
 import {
   collectionCountTiles,
   healthCountTiles,
   storageRatio,
-  storageTone,
   topSqlSummaries,
   usagePercentLabel,
 } from './overview'
@@ -106,7 +106,7 @@ function OverviewPage() {
         description="磁盘使用率最高的十台。这类指标不会报警，但会要命。"
         loading={loading}
       >
-        {overview !== undefined && <StorageWatermarks entries={overview.storage} />}
+        {overview !== undefined && <StorageUsageList entries={overview.storage} />}
       </Panel>
 
       <Panel
@@ -141,26 +141,26 @@ export function CountTiles({ tiles, label }: { tiles: OverviewCount[]; label: st
 
 /// 容量水位：十行「实例名 + 百分比 + 比例条」，不是十个环形图。
 /// 缺读数的实例不在榜上，也不以 0% 出现——从没量过与「盘是空的」是两件事。
-export function StorageWatermarks({ entries }: { entries: StorageWatermarkEntry[] }) {
+export function StorageUsageList({ entries }: { entries: StorageUsageEntry[] }) {
   if (entries.length === 0) {
     return <p className="overview-empty dbs-caption">还没有磁盘水位读数。这项由 Agent 上报，装了 Agent 才有。</p>
   }
   return (
-    <ul className="overview-watermarks" aria-label="容量水位前十">
+    <ul className="overview-storage-list" aria-label="容量水位前十">
       {entries.map((entry) => (
         <li key={entry.instance_id}>
           <Link
-            className="overview-watermark"
+            className="overview-storage-entry"
             to="/instances/$id"
             params={{ id: entry.instance_id }}
             search={defaultTimeRange()}
-            data-testid="overview-watermark"
+            data-testid="overview-storage-entry"
           >
             <MetricBar
               label={<TruncatedText>{entry.instance_name}</TruncatedText>}
               value={usagePercentLabel(entry.usage_percent)}
               ratio={storageRatio(entry.usage_percent)}
-              tone={storageTone(entry.usage_percent)}
+              tone={usageTone(entry.usage_percent)}
             />
           </Link>
         </li>

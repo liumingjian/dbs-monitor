@@ -1,16 +1,15 @@
 import type { components } from '../../api/schema'
 import { healthLabel, healthTone } from '../../domain/HealthStatus'
 import type { StatusTone } from '../../primitives/StatusBadge'
-import type { HealthStatusValue, InstanceListSearch } from '../instances/instanceListSearch'
-import { INSTANCE_HEALTH_STATUSES, defaultInstanceListSearch, withInstanceFilters } from '../instances/instanceListSearch'
-import type { TopSqlEntry } from '../sql-insight/topSql'
-import { elapsedLabel, statementLabel, topSqlRowKey } from '../sql-insight/topSql'
+import type { HealthStatusValue, InstanceListSearch } from '../../domain/instanceListSearch'
+import { INSTANCE_HEALTH_STATUSES, defaultInstanceListSearch, withInstanceFilters } from '../../domain/instanceListSearch'
+import type { TopSqlEntry } from '../../domain/topSql'
+import { elapsedLabel, statementLabel, topSqlRowKey } from '../../domain/topSql'
 
 export type FleetOverview = components['schemas']['FleetOverview']
 export type FleetHealthCounts = components['schemas']['FleetHealthCounts']
 export type FleetCollectionHealth = components['schemas']['FleetCollectionHealth']
-export type StorageWatermarkEntry = components['schemas']['StorageWatermarkEntry']
-export type { TopSqlEntry } from '../sql-insight/topSql'
+export type StorageUsageEntry = components['schemas']['StorageUsageEntry']
 
 function assertNever(value: never): never {
   throw new Error(`unexpected overview value: ${String(value)}`)
@@ -90,17 +89,9 @@ export function collectionCountTiles(collection: FleetCollectionHealth): Overvie
   ]
 }
 
-/// 磁盘水位的读法。四舍五入到整数百分比：小数位在一屏十行里只是噪声。
+/// 磁盘使用率的读法。四舍五入到整数百分比：小数位在一屏十行里只是噪声。
 export function usagePercentLabel(percent: number): string {
   return `${Math.round(percent)}%`
-}
-
-/// 水位档位。只有「快满了」与「满了」两档上色，其余中性 —— 十行全上色等于没有颜色。
-/// 与实例列表的连接饱和度用同一组阈值，两处读起来才是同一种紧张程度。
-export function storageTone(percent: number): StatusTone | undefined {
-  if (percent >= 90) return 'critical'
-  if (percent >= 75) return 'warning'
-  return undefined
 }
 
 /// 比例条要的 0..1 占比。百分比越界（采集端给出 101%）时由展示件自己夹住，这里不改数。

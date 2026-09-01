@@ -1,4 +1,4 @@
-import type { components } from '../../api/schema'
+import type { components } from '../api/schema'
 
 export type InstanceEngine = components['schemas']['InstanceEngine']
 export type HealthStatusValue = components['schemas']['HealthStatus']
@@ -85,16 +85,18 @@ export function parseInstanceListSearch(search: Record<string, unknown>): Instan
   const sort = search.sort
   if (sort !== undefined && !isMember(sort, INSTANCE_LIST_SORTS)) return { error: '排序取值无效' }
 
-  const result: InstanceListSearch = {}
-  if (page !== undefined && page !== defaultPage) result.page = page
-  if (pageSize !== undefined && pageSize !== defaultPageSize) result.page_size = pageSize
-  if (typeof q === 'string' && q !== '') result.q = q
-  if (engine !== undefined && engine.length > 0) result.engine = engine
-  if (status !== undefined && status.length > 0) result.status = status
-  if (flags !== undefined && flags.length > 0) result.flags = flags
-  if (severity !== undefined && severity.length > 0) result.severity = severity
-  if (sort !== undefined && sort !== defaultSort) result.sort = sort
-  return result
+  // 取默认值与空清单的字段一律不进结果，这一条与 withInstanceFilters 共用 pruneEmpty：
+  // 「哪些字段值得写进地址」只能有一个定义，抄两份就会出现「筛完地址变了、解析回来又没了」。
+  return pruneEmpty({
+    page,
+    page_size: pageSize,
+    q: typeof q === 'string' ? q : undefined,
+    engine,
+    status,
+    flags,
+    severity,
+    sort,
+  })
 }
 
 /// 交给接口的 query。空清单整项不发——`?status=` 在服务端是「筛了一个空集合」还是

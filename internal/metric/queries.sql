@@ -58,9 +58,12 @@ DO UPDATE SET interval_seconds = EXCLUDED.interval_seconds,
               updated_by = EXCLUDED.updated_by,
               updated_at = EXCLUDED.updated_at;
 
--- name: LatestSamplePerSeriesForMetric :many
--- 一个指标在全机群的最新读数，每条序列一行（磁盘按挂载点分序列，实例级的取值由调用方
--- 在 Go 里收敛）。窗口是必需的：没有下限就会把几个月前停止上报的实例算成「当前水位」。
+-- name: RecentValuePerSeriesForMetric :many
+-- 一个指标在全机群的最近读数，每条序列一行（磁盘按挂载点分序列，实例级的取值由调用方
+-- 在 Go 里收敛）。窗口是必需的：没有下限就会把几个月前停止上报的实例算成「现在的读数」。
+--
+-- 名字里刻意不出现 latest sample time / watermark：CONTEXT.md 把这两个说法留给了
+-- 采集完整性水位，那是「每个到期义务都满足到了哪一刻」，不是「某条序列最后一个点的值」。
 SELECT DISTINCT ON (series.series_id)
        series.instance_id,
        series.series_id,

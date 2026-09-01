@@ -9,8 +9,9 @@ import { NotificationBar } from '../../primitives/NotificationBar'
 import { Panel } from '../../primitives/Panel'
 import { TruncatedText } from '../../primitives/TruncatedText'
 import { rootRoute } from '../root'
-import type { TopSqlEntry } from './topSql'
-import { elapsedLabel, queryStatisticsDrilldown, statementLabel, topSqlRowKey } from './topSql'
+import type { TopSqlEntry } from '../../domain/topSql'
+import { elapsedLabel, statementLabel, topSqlRowKey } from '../../domain/topSql'
+import { queryStatisticsDrilldown } from './queryStatisticsDrilldown'
 import './sqlInsight.css'
 
 /// SQL 洞察：跨实例的 Top SQL，按总耗时排序。

@@ -22,10 +22,12 @@ func TestResolveSlotBindings(t *testing.T) {
 		{name: "connection saturation", slot: metric.SlotConnectionSaturation, engine: metric.EnginePostgreSQL, want: metric.MetricConnectionSaturationPercent},
 		{name: "cache hit ratio", slot: metric.SlotCacheHitRatio, engine: metric.EnginePostgreSQL, want: metric.MetricCacheHitRatio},
 		{name: "deadlocks", slot: metric.SlotDeadlocks, engine: metric.EnginePostgreSQL, want: metric.MetricDeadlockCount},
-		// 容量水位是规范里唯一一个「库级 + 主机」的位：PostgreSQL 侧是库的体积，
-		// 主机侧是数据目录所在文件系统的水位。两条绑定落在两个引擎上，位只有一个。
-		{name: "storage usage on PostgreSQL", slot: metric.SlotStorageUsage, engine: metric.EnginePostgreSQL, want: metric.MetricDatabaseSizeBytes},
+		// 容量水位只有一条绑定，而且是引擎无关的那条：它量的是主机的盘，百分比。
+		// 数据库体积（字节）**不填这个位**——同一个位在不同引擎上给出不同单位的话，
+		// 谁都没法通用地消费它。所以这个位在任何引擎上问，答案都是主机水位。
+		{name: "storage usage on PostgreSQL", slot: metric.SlotStorageUsage, engine: metric.EnginePostgreSQL, want: metric.MetricHostDiskUsagePercent},
 		{name: "storage usage on the host", slot: metric.SlotStorageUsage, engine: metric.EngineAgnostic, want: metric.MetricHostDiskUsagePercent},
+		{name: "storage usage on a second engine", slot: metric.SlotStorageUsage, engine: engineUnderTest, want: metric.MetricHostDiskUsagePercent},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			got, err := metric.ResolveSlot(testCase.slot, testCase.engine)
@@ -138,6 +140,27 @@ func TestWeightedAverageMetricsDeclareAWeight(t *testing.T) {
 		}
 		if declared.Level != metric.LevelDatabase {
 			t.Errorf("metric %q weights on %q, which is %s-level", item.ID, weight, declared.Level)
+		}
+	}
+}
+
+// 一个位在不同引擎上解析出来的指标必须是同一个单位。位是「引擎中立地引用一个数」的
+// 唯一手段：单位一旦随引擎变，总览的那一格、告警模板的那个阈值就都在两种量纲之间
+// 静默地换来换去——那比没有位更糟，因为界面看起来还是对的。
+func TestSlotBindingsAgreeOnUnit(t *testing.T) {
+	units := make(map[metric.SemanticSlot]metric.MetricID)
+	for _, item := range metric.Metrics {
+		if item.Slot == "" {
+			continue
+		}
+		previous, seen := units[item.Slot]
+		if !seen {
+			units[item.Slot] = item.ID
+			continue
+		}
+		if metric.UnitFor(previous) != metric.UnitFor(item.ID) {
+			t.Errorf("slot %q binds %q (%s) and %q (%s): a slot cannot change unit per engine",
+				item.Slot, previous, metric.UnitFor(previous), item.ID, metric.UnitFor(item.ID))
 		}
 	}
 }

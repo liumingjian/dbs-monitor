@@ -59,6 +59,11 @@ LEFT JOIN instance_collect_state agent_state
 LEFT JOIN instance_capability_snapshot capability ON capability.instance_id = instance.id
 WHERE instance.id = $1;
 
+-- name: ListInstanceEngines :many
+-- 一批实例各自跑的是哪个产品。批量时序端点按语义位取数时要用它：位是逐台按实例自己的
+-- 引擎解析的，而一次请求里的实例可以跑在不同引擎上。只取两列——这里要的是引擎，不是实例。
+SELECT id, engine FROM instance WHERE id = ANY(@instance_ids::uuid[]);
+
 -- name: GetInstanceForUpdate :one
 SELECT engine, host, port, database_name, username, password_ciphertext, password_key_version
 FROM instance

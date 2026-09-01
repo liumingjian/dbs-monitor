@@ -57,9 +57,20 @@ Carbon 的 `postinstall` 会上报遥测，开关在根 Makefile 里显式关着
 
 `AlertStatus` / `CollectionPausedTag` / `Freshness` / `HealthStatus` / `MetricChart` / `SuppressionTags` / `TimeRangePicker` / `UnavailabilityBlock`。
 清单只增不改语义：新增项须带业务含义，且在本文件登记。通用面板、表格外壳、指标条不得进入。
-清单管的是组件（`.tsx`）。`domain/` 下的非组件模块（`.ts`）不在清单里，也不受它约束：
+清单管的是组件（`.tsx`）。`domain/` 下的非组件模块（`.ts`）不在清单里，也不受它约束，
+但**要在这里登记**（判据同样是「多个页面共用，且带业务含义」）：
 registry.ts（清单解析）、instanceEngine.ts（引擎的展示名、接入表单的引擎清单、
-bootstrap 数据库的标签与说明——三个页面共用，页面私有件放不下）。
+bootstrap 数据库的标签与说明——三个页面共用，页面私有件放不下）、
+instanceProjection.ts（实例行的读法：告警归因、采集新鲜度与 Agent 失效、连接饱和度与
+使用率档位、从批量趋势响应里按语义位取序列——实例列表、实例总览、机群总览三处共用）、
+instanceListSearch.ts（实例列表的地址栏契约：筛选、排序、分页的取值集合与解析，
+以及交给接口的 query——实例列表自己用，机群总览的每个可点数字下钻到它）、
+topSql.ts（Top SQL 一行的读法：归一化 SQL 文本、总耗时的量级换算、行的身份——
+SQL 洞察页与机群总览第五块共用）。
+
+**跨页面目录横向 import 是这条规则的另一面**：`routes/<甲>/` 不去 `routes/<乙>/` 里拿件。
+两页都要的东西按上面的判据上浮到 `domain/`；只是「点这一行去哪儿」这类去处，留在出发的
+那一页里（它认识路由，而 `domain/` 不认识）。
 
 ### `primitives/`
 
@@ -190,8 +201,9 @@ Carbon 的默认文案全是英文，而且不给就静默生效 —— `Modal` 
 `web/src/routes/root/tableDensity.ts`（`readTableDensity` / `writeTableDensity`，落 localStorage，
 存储不可用就降级成不记忆）。页面拿它初始化 `useState`，在 `onChange` 里同时 set + write，
 控件是一个两档的 Carbon `ContentSwitcher`（分段单选，不是开关）。样板在实例列表里，照抄十行，
-不要各自再发明一套键名。**密集档（32px）不渲染趋势缩略图那一列** —— 规范是「丢掉缩略图而不是
-压扁它」，留一列空格子只是白占宽度。
+不要各自再发明一套键名。**密集档换来的是行高，不是少一列**：丢列在任何宽度、任何档位下都是
+禁止的（见上面列宽契约的第 6 条），一个切到密集档的读者不会预期某一列就此消失，而消失没有
+任何提示。行内图元该收窄就收窄——趋势缩略图在 32px 的行里传 `height={14}`，走势照样看得出来。
 
 ### 页签条是导航，不是受控状态
 

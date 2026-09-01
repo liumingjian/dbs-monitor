@@ -16,6 +16,7 @@ const destinationCases = [
   ['FEATURE_DISABLED', '/collection'],
   ['VERSION_UNSUPPORTED', '/collection'],
   ['NOT_APPLICABLE_ROLE', '/collection'],
+  ['NOT_APPLICABLE_ENGINE', '/collection'],
   ['COUNTER_RESET', '/current'],
 ] as const
 const codes = destinationCases.map(([code]) => code)

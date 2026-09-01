@@ -33,7 +33,7 @@ FleetCollectionHealth:
       type: integer
       minimum: 0
       description: Instances whose collection is paused.
-StorageWatermarkEntry:
+StorageUsageEntry:
   type: object
   description: >-
     One instance's highest disk usage. The value is the worst mount on that host, not an
@@ -74,7 +74,7 @@ FleetOverview:
       description: >-
         The ten highest disk usages, highest first. Instances with no disk sample are absent
         rather than reported as 0 — never measured is not the same as empty.
-      items: { $ref: '#/StorageWatermarkEntry' }
+      items: { $ref: '#/StorageUsageEntry' }
     top_sql:
       type: array
       maxItems: 5

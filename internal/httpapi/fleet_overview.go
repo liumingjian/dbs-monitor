@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"time"
 
@@ -29,9 +30,12 @@ const (
 	storageLimit   = 10
 )
 
-// storageWatermarkWindow 是「最近一次读数」的有效期。超过这个窗口没有新样本，
-// 这台的磁盘水位就是**未知**，不是最后那个值：一个月前的 91% 拿来当今天的水位在骗人。
-const storageWatermarkWindow = 6 * time.Hour
+// storageUsageWindow 是「最近一次读数」的有效期。超过这个窗口没有新样本，这台的磁盘
+// 使用率就是**未知**，不是最后那个值：一个月前的 91% 拿来当今天的读数在骗人。
+//
+// 这里刻意不叫 watermark：CONTEXT.md 把 watermark 留给了采集完整性水位（一个源的每个
+// 到期义务都满足到的那个时刻），那是另一件事，两处同名会让术语表失真。
+const storageUsageWindow = 6 * time.Hour
 
 // GetFleetOverview 返回总览页四块的聚合结果。
 func (handler *Handler) GetFleetOverview(ctx context.Context, _ api.GetFleetOverviewRequestObject) (api.GetFleetOverviewResponseObject, error) {
@@ -40,11 +44,11 @@ func (handler *Handler) GetFleetOverview(ctx context.Context, _ api.GetFleetOver
 		return nil, err
 	}
 	overview := summarizeFleet(instances)
-	watermarks, err := handler.storageWatermarks(ctx, instances)
+	storage, err := handler.storageUsage(ctx, instances)
 	if err != nil {
 		return nil, err
 	}
-	overview.Storage = watermarks
+	overview.Storage = storage
 	topSQL, err := handler.topSQL(ctx, topSQLOverviewLimit)
 	if err != nil {
 		return nil, err
@@ -58,7 +62,7 @@ func summarizeFleet(instances []api.Instance) api.FleetOverview {
 	overview := api.FleetOverview{
 		Total:      len(instances),
 		Attention:  instancesNeedingAttention(instances),
-		Storage:    []api.StorageWatermarkEntry{},
+		Storage:    []api.StorageUsageEntry{},
 		TopSql:     []api.TopSqlEntry{},
 		Health:     api.FleetHealthCounts{},
 		Collection: api.FleetCollectionHealth{},
@@ -137,53 +141,54 @@ func sortByAttention(instances []api.Instance) {
 		if first.Health.Counts.Info != second.Health.Counts.Info {
 			return first.Health.Counts.Info > second.Health.Counts.Info
 		}
-		if first.Name != second.Name {
-			return first.Name < second.Name
-		}
-		return first.Id.String() < second.Id.String()
+		return instanceStableOrder(first, second)
 	})
 }
 
-// storageWatermarks 读容量水位：语义位「容量水位」在主机侧解析成 host.disk.usage_percent。
+// storageUsage 读容量水位那一块：语义位「容量水位」**逐引擎**解析成具体指标。
+//
+// 机群里可以混着多个引擎，所以这里按实例的引擎去解析，而不是写死一个引擎去问 ——
+// 位的那层指向如果在调用处被一个常量绕过去，它就只是个摆设了。今天九个位里只有这一个
+// 由引擎无关的指标（host.disk.usage_percent）填，各引擎解析出来的是同一个指标；
+// 真到了某个引擎自带库存水位的那天，这里会自然多查一个指标，一行都不用改。
 //
 // 一台机器上可能挂多个盘，每个挂载点一条序列。实例级取值取**最大**的那一个，不取平均：
 // 一个满了的盘就是满了，旁边三个空盘不会让它变得没事。
-func (handler *Handler) storageWatermarks(ctx context.Context, instances []api.Instance) ([]api.StorageWatermarkEntry, error) {
-	metricID, err := metric.ResolveSlot(metric.SlotStorageUsage, metric.EngineAgnostic)
-	if err != nil {
-		return nil, err
-	}
-	since := handler.clock.Now().UTC().Add(-storageWatermarkWindow)
-	rows, err := metric.New(handler.platform).LatestSamplePerSeriesForMetric(ctx, metric.LatestSamplePerSeriesForMetricParams{
-		MetricID: metricID.String(),
-		Since:    pgtype.Timestamptz{Time: since, Valid: true},
-	})
-	if err != nil {
-		return nil, err
-	}
+func (handler *Handler) storageUsage(ctx context.Context, instances []api.Instance) ([]api.StorageUsageEntry, error) {
+	metricIDs := storageMetricsForFleet(instances)
+	since := handler.clock.Now().UTC().Add(-storageUsageWindow)
 	names := make(map[uuid.UUID]string, len(instances))
 	for _, item := range instances {
 		names[item.Id] = item.Name
 	}
-	worst := make(map[uuid.UUID]api.StorageWatermarkEntry, len(rows))
-	for _, row := range rows {
-		instanceID := uuid.UUID(row.InstanceID.Bytes)
-		name, known := names[instanceID]
-		if !known {
-			continue
+	worst := make(map[uuid.UUID]api.StorageUsageEntry, len(instances))
+	for _, metricID := range metricIDs {
+		rows, err := metric.New(handler.platform).RecentValuePerSeriesForMetric(ctx, metric.RecentValuePerSeriesForMetricParams{
+			MetricID: metricID.String(),
+			Since:    pgtype.Timestamptz{Time: since, Valid: true},
+		})
+		if err != nil {
+			return nil, err
 		}
-		candidate := api.StorageWatermarkEntry{
-			InstanceId:   instanceID,
-			InstanceName: name,
-			UsagePercent: row.Value,
-			SampledAt:    row.Ts.Time.UTC(),
-		}
-		current, seen := worst[instanceID]
-		if !seen || candidate.UsagePercent > current.UsagePercent {
-			worst[instanceID] = candidate
+		for _, row := range rows {
+			instanceID := uuid.UUID(row.InstanceID.Bytes)
+			name, known := names[instanceID]
+			if !known {
+				continue
+			}
+			candidate := api.StorageUsageEntry{
+				InstanceId:   instanceID,
+				InstanceName: name,
+				UsagePercent: row.Value,
+				SampledAt:    row.Ts.Time.UTC(),
+			}
+			current, seen := worst[instanceID]
+			if !seen || candidate.UsagePercent > current.UsagePercent {
+				worst[instanceID] = candidate
+			}
 		}
 	}
-	entries := make([]api.StorageWatermarkEntry, 0, len(worst))
+	entries := make([]api.StorageUsageEntry, 0, len(worst))
 	for _, entry := range worst {
 		entries = append(entries, entry)
 	}
@@ -200,4 +205,22 @@ func (handler *Handler) storageWatermarks(ctx context.Context, instances []api.I
 		entries = entries[:storageLimit]
 	}
 	return entries, nil
+}
+
+// storageMetricsForFleet 是这一群实例上「容量水位」这个位解析出来的具体指标全集。
+//
+// 某个引擎没有绑定这个位时，那个引擎的实例就是不适用 —— 跳过它，而不是替它退回一个
+// 别的引擎的指标。位解析不出来是一句关于引擎的事实，不是一次可以兜底的失败。
+func storageMetricsForFleet(instances []api.Instance) []metric.MetricID {
+	metricIDs := make([]metric.MetricID, 0, 1)
+	for _, item := range instances {
+		resolved, err := metric.ResolveSlot(metric.SlotStorageUsage, metric.Engine(item.Engine))
+		if err != nil {
+			continue
+		}
+		if !slices.Contains(metricIDs, resolved) {
+			metricIDs = append(metricIDs, resolved)
+		}
+	}
+	return metricIDs
 }

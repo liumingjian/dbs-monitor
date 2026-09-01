@@ -93,7 +93,9 @@ export function aggregateEnhancedPoints(
 }
 
 type EnhancedResponseMetric = {
-  metric: string
+  // 可选：批量端点按语义位取数时，位没有绑定的那一条没有指标 ID（那正是「不适用」这个
+  // 显式结论）。增强监控永远按具体指标 ID 取，所以这里只是与生成的类型对齐。
+  metric?: string
   unit: string
   unavailability: Unavailability | null
   series: readonly {

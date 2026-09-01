@@ -3122,16 +3122,36 @@ func NewGetInstancesMetricSeriesRequest(server string, params *GetInstancesMetri
 			}
 		}
 
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "metric", runtime.ParamLocationQuery, params.Metric); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
+		if params.Metric != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "metric", runtime.ParamLocationQuery, *params.Metric); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
 				}
 			}
+
+		}
+
+		if params.Slot != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "slot", runtime.ParamLocationQuery, *params.Slot); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {

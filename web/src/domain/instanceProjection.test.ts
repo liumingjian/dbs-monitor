@@ -6,11 +6,11 @@ import {
   collectionFreshnessLabel,
   collectionFreshnessTitle,
   connectionSaturationLabel,
-  connectionSaturationTone,
   dataFreshnessLabel,
-  instanceMetricEntry,
+  instanceSlotEntry,
   latestValue,
   trendValues,
+  usageTone,
 } from './instanceProjection'
 
 type Instance = components['schemas']['Instance']
@@ -48,12 +48,14 @@ const trends: InstancesMetricSeriesResponse = {
       metrics: [
         {
           metric: 'pg.tps',
+          slot: 'throughput',
           unit: 'tx/s',
           unavailability: null,
           series: [{ labels: {}, points: [[1, 12], [2, null], [3, 21]] }],
         },
         {
           metric: 'pg.connection.saturation_percent',
+          slot: 'connection_saturation',
           unit: 'percent',
           unavailability: null,
           series: [{ labels: {}, points: [[1, 40], [2, 87.4], [3, null]] }],
@@ -63,8 +65,8 @@ const trends: InstancesMetricSeriesResponse = {
     {
       instance_id: '00000000-0000-4000-8000-000000000002',
       metrics: [
-        { metric: 'pg.tps', unit: 'tx/s', unavailability: 'NO_SAMPLES_YET', series: [] },
-        { metric: 'pg.connection.saturation_percent', unit: 'percent', unavailability: 'NO_SAMPLES_YET', series: [] },
+        { metric: 'pg.tps', slot: 'throughput', unit: 'tx/s', unavailability: 'NO_SAMPLES_YET', series: [] },
+        { metric: 'pg.connection.saturation_percent', slot: 'connection_saturation', unit: 'percent', unavailability: 'NO_SAMPLES_YET', series: [] },
       ],
     },
   ],
@@ -92,7 +94,7 @@ describe('instance list column projection', () => {
   it('never turns a missing sample into zero', () => {
     expect(dataFreshnessLabel(undefined)).toBe('未知')
     expect(connectionSaturationLabel(null)).toBe('—')
-    expect(connectionSaturationTone(null)).toBeUndefined()
+    expect(usageTone(null)).toBeUndefined()
     expect(trendValues(undefined)).toEqual([])
     expect(latestValue(undefined)).toBeNull()
   })
@@ -100,21 +102,21 @@ describe('instance list column projection', () => {
   it('reads connection saturation as a rounded percentage with two escalation bands', () => {
     expect(connectionSaturationLabel(87.4)).toBe('87%')
     expect(connectionSaturationLabel(0)).toBe('0%')
-    expect(connectionSaturationTone(10)).toBeUndefined()
-    expect(connectionSaturationTone(75)).toBe('warning')
-    expect(connectionSaturationTone(90)).toBe('critical')
+    expect(usageTone(10)).toBeUndefined()
+    expect(usageTone(75)).toBe('warning')
+    expect(usageTone(90)).toBe('critical')
   })
 
-  it('picks each instance out of one batched trend response', () => {
+  it('picks each instance out of one batched trend response, addressed by semantic slot', () => {
     const first = '00000000-0000-4000-8000-000000000001'
     const second = '00000000-0000-4000-8000-000000000002'
     // 折线保留缺口，不补零：补零会把「没采到」画成「掉到 0」。
-    expect(trendValues(instanceMetricEntry(trends, first, 'pg.tps'))).toEqual([12, null, 21])
+    expect(trendValues(instanceSlotEntry(trends, first, 'throughput'))).toEqual([12, null, 21])
     // 饱和度取最后一个真正有值的点，末尾的缺数不会把它抹成空。
-    expect(latestValue(instanceMetricEntry(trends, first, 'pg.connection.saturation_percent'))).toBe(87.4)
-    expect(trendValues(instanceMetricEntry(trends, second, 'pg.tps'))).toEqual([])
-    expect(instanceMetricEntry(trends, 'missing-instance', 'pg.tps')).toBeUndefined()
-    expect(instanceMetricEntry(undefined, first, 'pg.tps')).toBeUndefined()
+    expect(latestValue(instanceSlotEntry(trends, first, 'connection_saturation'))).toBe(87.4)
+    expect(trendValues(instanceSlotEntry(trends, second, 'throughput'))).toEqual([])
+    expect(instanceSlotEntry(trends, 'missing-instance', 'throughput')).toBeUndefined()
+    expect(instanceSlotEntry(undefined, first, 'throughput')).toBeUndefined()
   })
 
   it('says so when there is nothing to attribute', () => {

@@ -371,11 +371,20 @@ paths:
               format: uuid
         - name: metric
           in: query
-          required: true
+          required: false
+          description: 具体指标 ID，可重复。与 slot 至少给一个。
           schema:
             type: array
             items:
               $ref: '#/components/schemas/MetricId'
+        - name: slot
+          in: query
+          required: false
+          description: 语义位，可重复。逐台按实例自己的引擎解析成具体指标；该引擎没有绑定这个位时， 响应里那一条带着 slot 与 NOT_APPLICABLE_ENGINE，而不是一个空指标 ID。
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/SemanticSlot'
         - name: from
           in: query
           required: true
@@ -402,7 +411,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/InstancesMetricSeriesResponse'
         '400':
-          description: Invalid time range, step, or instance list
+          description: Invalid time range, step, instance list, or metric/slot selection
           content:
             application/json:
               schema:
@@ -2362,6 +2371,7 @@ components:
         - FEATURE_DISABLED
         - VERSION_UNSUPPORTED
         - NOT_APPLICABLE_ROLE
+        - NOT_APPLICABLE_ENGINE
         - COUNTER_RESET
     AlertStatus:
       type: string
@@ -3707,7 +3717,7 @@ components:
           maxItems: 10
           description: The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty.
           items:
-            $ref: '#/components/schemas/StorageWatermarkEntry'
+            $ref: '#/components/schemas/StorageUsageEntry'
         top_sql:
           type: array
           maxItems: 5
@@ -3759,7 +3769,7 @@ components:
           type: integer
           minimum: 0
           description: Instances whose collection is paused.
-    StorageWatermarkEntry:
+    StorageUsageEntry:
       type: object
       description: 'One instance''s highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing.'
       required:
@@ -4185,14 +4195,17 @@ components:
         - pg.deadlock.count
     MetricSeriesEntry:
       type: object
+      description: 'One requested metric''s series for one instance. Addressed by concrete metric id, `metric` is always present. Addressed by semantic slot, `slot` is always present and `metric` only when that instance''s engine binds the slot: a slot with no binding is answered explicitly (`NOT_APPLICABLE_ENGINE`) rather than with an empty metric id.'
       required:
-        - metric
         - unit
         - unavailability
         - series
       properties:
         metric:
           type: string
+        slot:
+          allOf:
+            - $ref: '#/components/schemas/SemanticSlot'
         unit:
           type: string
         unavailability:

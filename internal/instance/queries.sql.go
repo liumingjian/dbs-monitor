@@ -403,6 +403,37 @@ func (q *Queries) ListCredentialsForKeyRotation(ctx context.Context) ([]ListCred
 	return items, nil
 }
 
+const listInstanceEngines = `-- name: ListInstanceEngines :many
+SELECT id, engine FROM instance WHERE id = ANY($1::uuid[])
+`
+
+type ListInstanceEnginesRow struct {
+	ID     pgtype.UUID
+	Engine string
+}
+
+// 一批实例各自跑的是哪个产品。批量时序端点按语义位取数时要用它：位是逐台按实例自己的
+// 引擎解析的，而一次请求里的实例可以跑在不同引擎上。只取两列——这里要的是引擎，不是实例。
+func (q *Queries) ListInstanceEngines(ctx context.Context, instanceIds []pgtype.UUID) ([]ListInstanceEnginesRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceEngines, instanceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceEnginesRow
+	for rows.Next() {
+		var i ListInstanceEnginesRow
+		if err := rows.Scan(&i.ID, &i.Engine); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstances = `-- name: ListInstances :many
 SELECT instance.id, instance.name, instance.engine, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,

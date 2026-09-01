@@ -39,11 +39,11 @@ import {
   collectionFreshnessLabel,
   collectionFreshnessTitle,
   connectionSaturationLabel,
-  connectionSaturationTone,
-  instanceMetricEntry,
+  instanceSlotEntry,
   latestValue,
   trendValues,
-} from '../instanceProjection'
+  usageTone,
+} from '../../domain/instanceProjection'
 import { defaultTimeRange } from '../instances.$id/timeRange'
 import { rootRoute } from '../root'
 import { browserStorage } from '../root/navCollapse'
@@ -56,7 +56,7 @@ import type {
   InstanceListSearch,
   InstanceListSort,
   InvalidInstanceListSearch,
-} from './instanceListSearch'
+} from '../../domain/instanceListSearch'
 import {
   INSTANCE_ALERT_SEVERITIES,
   INSTANCE_FLAGS,
@@ -71,7 +71,7 @@ import {
   instanceListQuery,
   parseInstanceListSearch,
   withInstanceFilters,
-} from './instanceListSearch'
+} from '../../domain/instanceListSearch'
 import './instances.css'
 
 type InstanceCreateInput = components['schemas']['InstanceCreateInput']
@@ -85,9 +85,14 @@ function assertNever(value: never): never {
 /// 吞吐与连接饱和度是列表上仅有的两个指标读数，一次批量请求一起取回。
 ///
 /// 趋势从连接数换成**吞吐**：连接数已经由饱和度列用一个百分比说清楚了，
-/// 折线再画一遍是同一件事说两次。两者都是语义位（吞吐 / 连接饱和度）在 PostgreSQL 上的绑定。
-const throughputMetric = 'pg.tps'
-const saturationMetric = 'pg.connection.saturation_percent'
+/// 折线再画一遍是同一件事说两次。
+///
+/// 两者都写成**语义位**，不写具体指标 ID：规范与 ADR-0001 都说「总览页、实例列表、
+/// 告警规则模板只能引用语义位」。位到指标的解析在服务端逐台按实例自己的引擎完成，
+/// 所以接入第二个引擎时这一页一个字都不用改 —— 这正是位这层指向存在的理由，
+/// 而写死 `pg.tps` 就等于把那层指向绕过去了。
+const throughputSlot = 'throughput'
+const saturationSlot = 'connection_saturation'
 const trendWindowMinutes = 60
 
 export const instancesRoute = createRoute({
@@ -255,7 +260,7 @@ function useInstanceTrends(instances: readonly Instance[]) {
       params: {
         query: {
           instance_id: instanceIDs,
-          metric: [throughputMetric, saturationMetric],
+          slot: [throughputSlot, saturationSlot],
           from: range.from,
           to: range.to,
           step: '5m',
@@ -330,38 +335,32 @@ function InstanceFilterBar({ search, onChange, freshness }: {
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
       />
-      <MultiSelect<HealthStatusOption>
+      <FilterMultiSelect
         id="instance-filter-health-status"
-        className="instances-filters__control"
         titleText="主状态"
         label="全部状态"
-        items={healthStatusOptions}
-        itemToString={(item) => item?.label ?? ''}
+        options={healthStatusOptions}
+        selected={search.status}
+        onChange={(status) => onChange({ status })}
         // 浮层里可点的是选项自己的标签，「第几个选项」用角色和名字表达不出来，
         // 所以挂稳定测试标识（web/CLAUDE.md 的第 2 档定位方式）。
-        itemToElement={(item) => <span data-testid={`health-status-option-${item.value}`}>{item.label}</span>}
-        selectedItems={healthStatusOptions.filter((option) => search.status?.includes(option.value) ?? false)}
-        onChange={({ selectedItems }) => onChange({ status: (selectedItems ?? []).map((item) => item.value) })}
+        optionTestId={(value) => `health-status-option-${value}`}
       />
-      <MultiSelect<OrthogonalFlagOption>
+      <FilterMultiSelect
         id="instance-filter-flags"
-        className="instances-filters__control"
         titleText="正交标记"
         label="全部标记"
-        items={orthogonalFlagOptions}
-        itemToString={(item) => item?.label ?? ''}
-        selectedItems={orthogonalFlagOptions.filter((option) => search.flags?.includes(option.value) ?? false)}
-        onChange={({ selectedItems }) => onChange({ flags: (selectedItems ?? []).map((item) => item.value) })}
+        options={orthogonalFlagOptions}
+        selected={search.flags}
+        onChange={(flags) => onChange({ flags })}
       />
-      <MultiSelect<AlertSeverityOption>
+      <FilterMultiSelect
         id="instance-filter-alert-severity"
-        className="instances-filters__control"
         titleText="至少一条该级告警"
         label="不限"
-        items={alertSeverityOptions}
-        itemToString={(item) => item?.label ?? ''}
-        selectedItems={alertSeverityOptions.filter((option) => search.severity?.includes(option.value) ?? false)}
-        onChange={({ selectedItems }) => onChange({ severity: (selectedItems ?? []).map((item) => item.value) })}
+        options={alertSeverityOptions}
+        selected={search.severity}
+        onChange={(severity) => onChange({ severity })}
       />
       <Dropdown<SortOption>
         id="instance-filter-sort"
@@ -389,10 +388,39 @@ function InstanceFilterBar({ search, onChange, freshness }: {
   )
 }
 
-type HealthStatusOption = { value: HealthStatusValue; label: string }
-type OrthogonalFlagOption = { value: InstanceFlag; label: string }
-type AlertSeverityOption = { value: AlertSeverity; label: string }
-type SortOption = { value: InstanceListSort; label: string }
+/// 筛选控件的一个选项：一个取值，一句给人看的话。四个筛选器的选项形状本来就是同一个，
+/// 各写一份只会让它们迟早长得不一样。
+type FilterOption<Value extends string> = { value: Value; label: string }
+
+type SortOption = FilterOption<InstanceListSort>
+
+/// 三个多选筛选器唯一的差别是「选项从哪来、改完写回哪个字段」，其余（受控取值的对齐、
+/// 空数组的处理、中文外壳）三处逐字相同 —— 所以只写一次。
+function FilterMultiSelect<Value extends string>({ id, titleText, label, options, selected, onChange, optionTestId }: {
+  id: string
+  titleText: string
+  label: string
+  options: readonly FilterOption<Value>[]
+  selected: readonly Value[] | undefined
+  onChange: (values: Value[]) => void
+  optionTestId?: (value: Value) => string
+}) {
+  return (
+    <MultiSelect<FilterOption<Value>>
+      id={id}
+      className="instances-filters__control"
+      titleText={titleText}
+      label={label}
+      items={[...options]}
+      itemToString={(item) => item?.label ?? ''}
+      itemToElement={optionTestId === undefined
+        ? undefined
+        : (item) => <span data-testid={optionTestId(item.value)}>{item.label}</span>}
+      selectedItems={options.filter((option) => selected?.includes(option.value) ?? false)}
+      onChange={({ selectedItems }) => onChange((selectedItems ?? []).map((item) => item.value))}
+    />
+  )
+}
 
 function flagLabel(flag: InstanceFlag): string {
   switch (flag) {
@@ -443,9 +471,9 @@ function sortLabel(sort: InstanceListSort): string {
   }
 }
 
-const orthogonalFlagOptions: OrthogonalFlagOption[] = INSTANCE_FLAGS.map((value) => ({ value, label: flagLabel(value) }))
-const healthStatusOptions: HealthStatusOption[] = INSTANCE_HEALTH_STATUSES.map((value) => ({ value, label: healthLabel(value) }))
-const alertSeverityOptions: AlertSeverityOption[] = INSTANCE_ALERT_SEVERITIES.map((value) => ({ value, label: severityLabel(value) }))
+const orthogonalFlagOptions: FilterOption<InstanceFlag>[] = INSTANCE_FLAGS.map((value) => ({ value, label: flagLabel(value) }))
+const healthStatusOptions: FilterOption<HealthStatusValue>[] = INSTANCE_HEALTH_STATUSES.map((value) => ({ value, label: healthLabel(value) }))
+const alertSeverityOptions: FilterOption<AlertSeverity>[] = INSTANCE_ALERT_SEVERITIES.map((value) => ({ value, label: severityLabel(value) }))
 const sortOptions: SortOption[] = INSTANCE_LIST_SORTS.map((value) => ({ value, label: sortLabel(value) }))
 
 /// 行首色条只画严重与警告两档 —— 规范里这条 3px 色条说的是「这一行要处理」，
@@ -570,9 +598,9 @@ function instanceColumns(density: TableDensity, trends: InstancesMetricSeriesRes
       // 百分比而不是连接数：500 台里没人记得住每台的 max_connections。
       // 取不到就写破折号，不写 0 —— 0% 是一个具体的读数，缺数不是。
       cell: (instance) => {
-        const percent = latestValue(instanceMetricEntry(trends, instance.id, saturationMetric))
+        const percent = latestValue(instanceSlotEntry(trends, instance.id, saturationSlot))
         return (
-          <span className="instances-table__saturation dbs-numeric" data-tone={connectionSaturationTone(percent)}>
+          <span className="instances-table__saturation dbs-numeric" data-tone={usageTone(percent)}>
             {connectionSaturationLabel(percent)}
           </span>
         )
@@ -580,22 +608,24 @@ function instanceColumns(density: TableDensity, trends: InstancesMetricSeriesRes
     },
   ]
 
-  // 规范原话：32px 的密集行**丢掉缩略图，而不是把它压扁** —— 20px 的折线塞进 32px 的行里
-  // 只剩一团噪声。整列一起走，否则留下一列空格子，白占 72px 宽度。
-  // 这不是「在最小支持宽度下隐藏列」——那条规则说的是宽度，这一列的去留由用户自己按的档位决定。
-  if (density === 'standard') {
-    columns.push({
-      key: 'trend',
-      header: '吞吐趋势',
-      minWidth: 72,
-      cell: (instance) => (
-        <Sparkline
-          values={trendValues(instanceMetricEntry(trends, instance.id, throughputMetric))}
-          label={`${instance.name} 近 ${trendWindowMinutes} 分钟吞吐趋势`}
-        />
-      ),
-    })
-  }
+  // **八列在两个密度档下都是八列。** 丢列在任何宽度、任何档位下都是禁止的（列宽契约第 6 条，
+  // #219 的验收标准也逐字这么写）：密集档换来的是行高，不是少一列信息 —— 一个刚把表切成
+  // 密集档的读者不会预期「吞吐趋势」这一列跟着消失，而消失是没有任何提示的。
+  // 缩略图在 32px 的行里由 `Sparkline` 自己按行高收窄，不由这里删掉整列。
+  columns.push({
+    key: 'trend',
+    header: '吞吐趋势',
+    minWidth: 72,
+    // 密集档把图元收到 14px，而不是把整列拿掉：32px 的行放得下 14px 的折线，
+    // 走势看得出来；换来的行高本来就是密集档的全部意义。
+    cell: (instance) => (
+      <Sparkline
+        height={density === 'dense' ? 14 : 20}
+        values={trendValues(instanceSlotEntry(trends, instance.id, throughputSlot))}
+        label={`${instance.name} 近 ${trendWindowMinutes} 分钟吞吐趋势`}
+      />
+    ),
+  })
 
   columns.push({
     key: 'collected',

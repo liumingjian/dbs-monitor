@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { parseInstanceListSearch } from '../instances/instanceListSearch'
-import type { FleetCollectionHealth, FleetHealthCounts, TopSqlEntry } from './overview'
+import { parseInstanceListSearch } from '../../domain/instanceListSearch'
+import { usageTone } from '../../domain/instanceProjection'
+import type { TopSqlEntry } from '../../domain/topSql'
+import type { FleetCollectionHealth, FleetHealthCounts } from './overview'
 import {
   collectionCountTiles,
   healthCountTiles,
   storageRatio,
-  storageTone,
   topSqlSummaries,
   usagePercentLabel,
 } from './overview'
@@ -113,11 +114,11 @@ describe('fleet overview projections', () => {
     expect(topSqlSummaries([entry])[0]).toMatchObject({ ratio: 0, elapsed: '0.0 ms' })
   })
 
-  it('reads a watermark as a whole percent and only colours the top two bands', () => {
+  it('reads storage usage as a whole percent and only colours the top two bands', () => {
     expect(usagePercentLabel(91.4)).toBe('91%')
-    expect(storageTone(91)).toBe('critical')
-    expect(storageTone(75)).toBe('warning')
-    expect(storageTone(74.9)).toBeUndefined()
+    expect(usageTone(91)).toBe('critical')
+    expect(usageTone(75)).toBe('warning')
+    expect(usageTone(74.9)).toBeUndefined()
     expect(storageRatio(40)).toBeCloseTo(0.4)
   })
 })
