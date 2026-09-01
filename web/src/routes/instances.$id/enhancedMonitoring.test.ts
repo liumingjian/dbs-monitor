@@ -101,11 +101,12 @@ describe('enhanced monitoring', () => {
       { metric: 'host.cpu.usage_percent', unit: 'percent', unavailability: null, series: [{ labels: {}, points: [[1, 42], [6, null], [11, 45]] }] },
     ] as const
 
-    expect(buildEnhancedChartView('pg.tps', responses, 'average', 5)).toEqual({
+    const metricLabel = (id: string) => (id === 'host.cpu.usage_percent' ? 'CPU 使用率' : id)
+    expect(buildEnhancedChartView('pg.tps', responses, 'average', 5, metricLabel)).toEqual({
       series: [],
       unavailability: 'COLLECTION_FAILED',
     })
-    expect(buildEnhancedChartView('host.cpu.usage_percent', responses, 'average', 5)).toEqual({
+    expect(buildEnhancedChartView('host.cpu.usage_percent', responses, 'average', 5, metricLabel)).toEqual({
       series: [{ name: 'CPU 使用率', unit: 'percent', points: [[1, 42], [6, null], [11, 45]] }],
       unavailability: null,
     })

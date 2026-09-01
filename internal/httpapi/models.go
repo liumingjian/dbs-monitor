@@ -322,10 +322,25 @@ type MaintenanceWindowInstance struct {
 	InstanceID          pgtype.UUID
 }
 
+type MetricCatalog struct {
+	MetricID     string
+	Engine       string
+	Unit         string
+	DisplayName  string
+	SemanticSlot pgtype.Text
+	Level        string
+	Aggregation  string
+}
+
 type MetricSample struct {
 	SeriesID int64
 	Ts       pgtype.Timestamptz
 	Value    float64
+}
+
+type MetricSemanticSlot struct {
+	SlotID      string
+	DisplayName string
 }
 
 type MetricSeries struct {

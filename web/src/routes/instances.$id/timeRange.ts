@@ -1,5 +1,5 @@
 import type { MetricID } from './metricOptions'
-import { metricOptions } from './metricOptions'
+import { isMetricID } from './metricOptions'
 
 export type InvalidTimeRange = { error: string }
 export type MetricStep = 'auto' | '15s' | '1m' | '5m' | 'raw'
@@ -88,10 +88,6 @@ export function defaultTimeRange(now = new Date()): MonitoringSearch {
 
 export function isRFC3339(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value) && !Number.isNaN(Date.parse(value))
-}
-
-function isMetricID(value: unknown): value is MetricID {
-  return typeof value === 'string' && metricOptions.some((option) => option.id === value)
 }
 
 function isMetricStep(value: unknown): value is MetricStep {

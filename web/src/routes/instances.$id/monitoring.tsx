@@ -35,14 +35,13 @@ import {
   enhancedMonitoringDefaults,
   enhancedMonitoringGroups,
   enhancedMonitoringMetricIDs,
-  enhancedMonitoringMetricOptions,
   enhancedUnavailabilityDetail,
   enhancedWindowOptions,
   parseEnhancedPreferences,
   type EnhancedAggregation,
   type EnhancedPreferences,
 } from './enhancedMonitoring'
-import { metricOption, type MetricID, type MetricOption } from './metricOptions'
+import { useMetricCatalog, type MetricCatalog, type MetricID, type MetricOption } from './metricOptions'
 import { longQuerySamplesPageHref } from './sessionLayout'
 import {
   findStandardMonitoringChart,
@@ -184,6 +183,7 @@ function MonitoringViewTabs({ id, search }: { id: string; search: MonitoringSear
 /// 所以一张截图的链接发给同事，看到的是同一屏。
 function StandardMonitoringPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const navigate = standardMonitoringRoute.useNavigate()
+  const catalog = useMetricCatalog()
   const instanceQuery = $api.useQuery(
     'get',
     '/api/v1/instances/{id}',
@@ -264,7 +264,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
         <h2 id={`${group.key}-heading`} className="dbs-panel-title">{group.title}</h2>
         <div className="monitoring-page__grid" data-testid="metric-grid" data-columns={columns}>
           {group.charts.map((chart) => {
-            const view = buildChartView(chart, metricsQuery.data?.metrics)
+            const view = buildChartView(chart, metricsQuery.data?.metrics, catalog.label)
             const primaryMetric = chart.metrics[0]
             return (
               <Panel
@@ -310,6 +310,7 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
     <MetricDetails
       chart={selectedChart}
       metrics={metricsQuery.data?.metrics}
+      catalog={catalog}
       onClose={() => updateSearch({ metric: undefined })}
     />
   </div>
@@ -319,6 +320,8 @@ function StandardMonitoringPage({ id, search }: { id: string; search: Monitoring
 /// 时间窗口仍然是地址的一部分。
 function EnhancedMonitoringPage({ id, search }: { id: string; search: MonitoringSearch }) {
   const navigate = standardMonitoringRoute.useNavigate()
+  const catalog = useMetricCatalog()
+  const enhancedOptions = catalog.options(enhancedMonitoringMetricIDs)
   const [preferences, setPreferences] = useState<EnhancedPreferences>(() => readEnhancedPreferences(id))
   const windowMinutes = enhancedWindowMinutes(new Date(search.from), new Date(search.to)) ?? enhancedMonitoringDefaults.windowMinutes
   const bucketSeconds = enhancedDisplayBucketSeconds(windowMinutes)
@@ -379,8 +382,8 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
         <h2 id={`enhanced-${group.key}-heading`} className="dbs-panel-title">{group.title}</h2>
         <div className="monitoring-page__grid" data-testid="metric-grid" data-columns={preferences.columns}>
           {selectedMetrics.map((metricID) => {
-            const option = metricOption(metricID)
-            const view = buildEnhancedChartView(metricID, metricsQuery.data?.metrics, preferences.aggregation, bucketSeconds)
+            const option = catalog.option(metricID)
+            const view = buildEnhancedChartView(metricID, metricsQuery.data?.metrics, preferences.aggregation, bucketSeconds, catalog.label)
             const taskResult = collectionTaskResult(tasksQuery.data, metricID)
             return <Panel
               key={metricID}
@@ -436,9 +439,9 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
           size="md"
           titleText="指标管理"
           label={`已选 ${preferences.metrics.length} 个指标`}
-          items={enhancedMonitoringMetricOptions}
+          items={enhancedOptions}
           itemToString={(item) => item?.label ?? ''}
-          selectedItems={enhancedMonitoringMetricOptions.filter((option) => preferences.metrics.includes(option.id))}
+          selectedItems={enhancedOptions.filter((option) => preferences.metrics.includes(option.id))}
           onChange={({ selectedItems }) => {
             // 回来的顺序跟着点选顺序走。按指标字典的固定顺序重排，请求里的 `metric`
             // 参数才稳定，查询键也就不会因为点选先后而抖动。
@@ -494,6 +497,7 @@ function EnhancedMonitoringPage({ id, search }: { id: string; search: Monitoring
     <EnhancedMetricDetails
       metric={selectedMetric}
       response={metricsQuery.data?.metrics.find((item) => item.metric === selectedMetric)}
+      catalog={catalog}
       onClose={() => updateSearch({ metric: undefined })}
     />
   </div>
@@ -527,6 +531,7 @@ function ColumnSwitcher({ name, label, columns, onChange }: {
 function buildChartView(
   chart: StandardMonitoringChart,
   responseMetrics: ResponseMetric[] | undefined,
+  metricLabel: (id: MetricID) => string,
 ): { series: MetricChartSeries[]; unavailability: Unavailability | null } {
   const returned = chart.metrics.map((metricID) => ({
     metricID,
@@ -535,7 +540,7 @@ function buildChartView(
   const series = returned.flatMap(({ metricID, response }) => {
     if (!response || response.unavailability !== null) return []
     return response.series.map((item) => ({
-      name: seriesName(metricID, item.labels),
+      name: seriesName(metricLabel(metricID), item.labels),
       unit: response.unit,
       points: item.points,
     }))
@@ -547,9 +552,8 @@ function buildChartView(
   }
 }
 
-function seriesName(metric: MetricID, labels: Record<string, string>): string {
+function seriesName(label: string, labels: Record<string, string>): string {
   const dimensions = Object.entries(labels).map(([key, value]) => `${key}=${value}`).join(', ')
-  const label = metricOption(metric).label
   return dimensions ? `${label} · ${dimensions}` : label
 }
 
@@ -587,9 +591,10 @@ function MetricKeyValues({ label, items }: {
   </StructuredListWrapper>
 }
 
-function MetricDetails({ chart, metrics, onClose }: {
+function MetricDetails({ chart, metrics, catalog, onClose }: {
   chart: StandardMonitoringChart | undefined
   metrics: ResponseMetric[] | undefined
+  catalog: MetricCatalog
   onClose: () => void
 }) {
   return <Modal
@@ -605,7 +610,7 @@ function MetricDetails({ chart, metrics, onClose }: {
         const response = metrics?.find((item) => item.metric === metric)
         return {
           key: metric,
-          label: metricOption(metric).label,
+          label: catalog.label(metric),
           value: <><code>{metric}</code>{response ? ` · ${response.unit}` : ''}</>,
         }
       })} />
@@ -613,15 +618,16 @@ function MetricDetails({ chart, metrics, onClose }: {
   </Modal>
 }
 
-function EnhancedMetricDetails({ metric, response, onClose }: {
+function EnhancedMetricDetails({ metric, response, catalog, onClose }: {
   metric: MetricID | undefined
   response: ResponseMetric | undefined
+  catalog: MetricCatalog
   onClose: () => void
 }) {
   return <Modal
     passiveModal
     open={metric !== undefined}
-    modalHeading={metric ? metricOption(metric).label : '指标详情'}
+    modalHeading={metric ? catalog.label(metric) : '指标详情'}
     closeButtonLabel="关闭指标详情"
     onRequestClose={onClose}
   >

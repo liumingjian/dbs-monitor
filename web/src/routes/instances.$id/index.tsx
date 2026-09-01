@@ -23,7 +23,7 @@ import {
 } from '../instanceProjection'
 import { rootRoute } from '../root'
 import { FlashOnChange } from '../../primitives/FlashOnChange'
-import { metricOption, type MetricID } from './metricOptions'
+import { useMetricCatalog, type MetricID } from './metricOptions'
 import {
   latestMetricFacts,
   overviewDestinations,
@@ -301,12 +301,13 @@ function MetricFact({ id, search, metricID, snapshot }: {
   metricID: MetricID
   snapshot: LatestMetricFacts
 }) {
+  const catalog = useMetricCatalog()
   const name = <Link
     className="cds--link"
     to="/instances/$id/monitoring"
     params={{ id }}
     search={{ ...search, metric: metricID }}
-  >{metricOption(metricID).label}</Link>
+  >{catalog.label(metricID)}</Link>
 
   if (snapshot.unavailability) {
     const destinations = overviewDestinations(id, { ...search, metric: metricID })

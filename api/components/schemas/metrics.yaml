@@ -36,3 +36,33 @@ MetricSeriesResponse:
                       type: number
                       nullable: true
                       x-go-type: "*float64"
+MetricCatalogEntry:
+  type: object
+  required: [metric_id, engine, unit, display_name, semantic_slot, level, aggregation]
+  properties:
+    metric_id: { type: string }
+    engine: { $ref: ../enums.yaml#/MetricEngine }
+    unit: { type: string }
+    display_name: { type: string }
+    semantic_slot:
+      nullable: true
+      allOf:
+        - $ref: ../enums.yaml#/SemanticSlot
+    level: { $ref: ../enums.yaml#/MetricLevel }
+    aggregation: { $ref: ../enums.yaml#/MetricAggregation }
+SemanticSlotDeclaration:
+  type: object
+  required: [slot_id, display_name]
+  properties:
+    slot_id: { $ref: ../enums.yaml#/SemanticSlot }
+    display_name: { type: string }
+MetricCatalog:
+  type: object
+  required: [metrics, semantic_slots]
+  properties:
+    metrics:
+      type: array
+      items: { $ref: '#/MetricCatalogEntry' }
+    semantic_slots:
+      type: array
+      items: { $ref: '#/SemanticSlotDeclaration' }

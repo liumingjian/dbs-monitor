@@ -65,3 +65,14 @@
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/metrics/catalog:
+  get:
+    tags: [metrics]
+    operationId: getMetricCatalog
+    x-required-role: READONLY
+    responses:
+      '200':
+        description: The metric catalogue and the semantic slots it fills
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/metrics.yaml#/MetricCatalog }

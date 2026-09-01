@@ -43,3 +43,11 @@ _Avoid_: Contact, member
 **Instance removal**:
 Deleting an instance's configuration and credentials immediately, closing all its unresolved alerts with an attributed reason, and letting its samples expire through retention. Re-onboarding the same database yields a new instance that inherits nothing.
 _Avoid_: Archive instance, soft delete
+
+**Metric catalogue**:
+The table of every metric the platform knows: its ID, engine, unit, display name, level (instance or database), how a database-level metric aggregates into the instance-level value, and which semantic slot it fills. It is data, not schema — a metric ID is legal because a catalogue row exists, not because a CHECK constraint lists it.
+_Avoid_: Metric enum, metric whitelist
+
+**Semantic slot**:
+An engine-neutral position in the metric model that resolves, per engine, to one concrete metric ID. A slot with no metric on a given engine is not applicable there — an explicit answer, never an empty metric ID. Engine-private metrics deliberately fill no slot.
+_Avoid_: Neutral metric name, metric alias

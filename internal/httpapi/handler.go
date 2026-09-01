@@ -1362,7 +1362,7 @@ var RequiredRoles = map[string]string{
 	"ListMaintenanceWindows": "READONLY", "CreateMaintenanceWindow": "ALERT_ADMIN",
 	"UpdateMaintenanceWindow": "ALERT_ADMIN", "EndMaintenanceWindow": "ALERT_ADMIN", "DeleteMaintenanceWindow": "ALERT_ADMIN",
 	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
-	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
+	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY", "GetMetricCatalog": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
 	"ListLongQuerySamples": "READONLY", "GetQueryStatisticsSnapshot": "READONLY", "GetSessionSnapshot": "READONLY",
 	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",

@@ -288,6 +288,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /api/v1/metrics/catalog:
+    get:
+      tags:
+        - metrics
+      operationId: getMetricCatalog
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: The metric catalogue and the semantic slots it fills
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricCatalog'
   /api/v1/instances/{id}/collection/tasks:
     parameters:
       - name: id
@@ -3830,6 +3843,105 @@ components:
                           type: number
                           nullable: true
                           x-go-type: '*float64'
+    MetricEngine:
+      type: string
+      enum:
+        - POSTGRESQL
+        - AGNOSTIC
+      x-enum-varnames:
+        - MetricEnginePostgreSQL
+        - MetricEngineAgnostic
+    SemanticSlot:
+      type: string
+      enum:
+        - throughput
+        - connections
+        - connection_saturation
+        - probe_latency
+        - rollback_rate
+        - replication_lag
+        - cache_hit_ratio
+        - storage_usage
+        - deadlocks
+      x-enum-varnames:
+        - SlotThroughput
+        - SlotConnections
+        - SlotConnectionSaturation
+        - SlotProbeLatency
+        - SlotRollbackRate
+        - SlotReplicationLag
+        - SlotCacheHitRatio
+        - SlotStorageUsage
+        - SlotDeadlocks
+    MetricLevel:
+      type: string
+      enum:
+        - INSTANCE
+        - DATABASE
+      x-enum-varnames:
+        - MetricLevelInstance
+        - MetricLevelDatabase
+    MetricAggregation:
+      type: string
+      enum:
+        - NONE
+        - SUM
+        - WEIGHTED_AVERAGE
+      x-enum-varnames:
+        - MetricAggregationNone
+        - MetricAggregationSum
+        - MetricAggregationWeightedAverage
+    MetricCatalogEntry:
+      type: object
+      required:
+        - metric_id
+        - engine
+        - unit
+        - display_name
+        - semantic_slot
+        - level
+        - aggregation
+      properties:
+        metric_id:
+          type: string
+        engine:
+          $ref: '#/components/schemas/MetricEngine'
+        unit:
+          type: string
+        display_name:
+          type: string
+        semantic_slot:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/SemanticSlot'
+        level:
+          $ref: '#/components/schemas/MetricLevel'
+        aggregation:
+          $ref: '#/components/schemas/MetricAggregation'
+    SemanticSlotDeclaration:
+      type: object
+      required:
+        - slot_id
+        - display_name
+      properties:
+        slot_id:
+          $ref: '#/components/schemas/SemanticSlot'
+        display_name:
+          type: string
+    MetricCatalog:
+      type: object
+      required:
+        - metrics
+        - semantic_slots
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricCatalogEntry'
+        semantic_slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/SemanticSlotDeclaration'
     AgentReport:
       type: object
       required:

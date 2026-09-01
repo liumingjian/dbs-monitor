@@ -34,43 +34,35 @@ CREATE TABLE instance_collect_state (
     PRIMARY KEY (instance_id, source)
 );
 
+-- 指标目录。原来这里是一串写死在 metric_series 上的 metric_id CHECK 枚举：加一个指标要动迁移，
+-- 接入第二个引擎时会变成每周一次。目录改成数据，行由 migrations.reconcileMetricCatalog 从
+-- internal/metric 的字典同步进来（内置告警规则也是这个路子，见 alerting_seed.go）。
+CREATE TABLE metric_semantic_slot (
+    slot_id text PRIMARY KEY,
+    display_name text NOT NULL
+);
+
+CREATE TABLE metric_catalog (
+    metric_id text PRIMARY KEY,
+    engine text NOT NULL CHECK (engine IN ('POSTGRESQL', 'AGNOSTIC')),
+    unit text NOT NULL,
+    display_name text NOT NULL,
+    semantic_slot text REFERENCES metric_semantic_slot(slot_id),
+    level text NOT NULL CHECK (level IN ('INSTANCE', 'DATABASE')),
+    aggregation text NOT NULL CHECK (aggregation IN ('NONE', 'SUM', 'WEIGHTED_AVERAGE')),
+    -- 实例级指标没有可聚合的东西；库级指标必须说清楚怎么收敛成实例级。
+    CONSTRAINT metric_catalog_aggregation_matches_level CHECK (
+        (level = 'INSTANCE' AND aggregation = 'NONE')
+        OR (level = 'DATABASE' AND aggregation <> 'NONE')
+    ),
+    -- 一个语义位在一个引擎下最多只能落到一个指标，否则「位 + 引擎 -> 指标 ID」不是函数。
+    UNIQUE (semantic_slot, engine)
+);
+
 CREATE TABLE metric_series (
     series_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     instance_id uuid NOT NULL REFERENCES instance(id) ON DELETE CASCADE,
-    metric_id text NOT NULL CHECK (metric_id IN (
-        'pg.availability.reachable',
-        'pg.probe.latency_ms',
-        'collector.last_success_time',
-        'agent.status',
-        'host.cpu.usage_percent',
-        'host.memory.usage_percent',
-        'host.disk.usage_percent',
-        'host.disk.free_bytes',
-        'host.disk.iops',
-        'host.disk.throughput_bytes_per_sec',
-        'host.network.bytes_per_sec',
-        'pg.connection.total',
-        'pg.connection.active',
-        'pg.connection.idle_in_transaction',
-        'pg.tps',
-        'pg.xact.commit_per_sec',
-        'pg.xact.rollback_per_sec',
-        'pg.tuples.read_per_sec',
-        'pg.tuples.write_per_sec',
-        'pg.temp.files_per_sec',
-        'pg.temp.bytes_per_sec',
-        'pg.transaction.long_count',
-        'pg.transaction.max_duration_sec',
-        'pg.lock.waiting_count',
-        'pg.session.blocked_count',
-        'pg.query.long_running_count',
-        'pg.prepared_xacts.count',
-        'pg.replication.role',
-        'pg.replication.connection_state',
-        'pg.replication.replay_lag_ms',
-        'pg.replication.wal_lag_bytes',
-        'pg.replication_slot.retained_wal_bytes'
-    )),
+    metric_id text NOT NULL REFERENCES metric_catalog(metric_id),
     labels jsonb NOT NULL DEFAULT '{}',
     labels_key text NOT NULL,
     first_seen timestamptz NOT NULL DEFAULT now(),

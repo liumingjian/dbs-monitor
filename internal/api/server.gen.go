@@ -233,6 +233,25 @@ const (
 	MaintenanceScheduled MaintenanceWindowStatus = "SCHEDULED"
 )
 
+// Defines values for MetricAggregation.
+const (
+	MetricAggregationNone            MetricAggregation = "NONE"
+	MetricAggregationSum             MetricAggregation = "SUM"
+	MetricAggregationWeightedAverage MetricAggregation = "WEIGHTED_AVERAGE"
+)
+
+// Defines values for MetricEngine.
+const (
+	MetricEngineAgnostic   MetricEngine = "AGNOSTIC"
+	MetricEnginePostgreSQL MetricEngine = "POSTGRESQL"
+)
+
+// Defines values for MetricLevel.
+const (
+	MetricLevelDatabase MetricLevel = "DATABASE"
+	MetricLevelInstance MetricLevel = "INSTANCE"
+)
+
 // Defines values for NoDataPolicy.
 const (
 	Ignore     NoDataPolicy = "ignore"
@@ -337,6 +356,19 @@ const (
 const (
 	SMTPImplicitTLS SMTPTransportSecurity = "IMPLICIT"
 	SMTPStartTLS    SMTPTransportSecurity = "STARTTLS"
+)
+
+// Defines values for SemanticSlot.
+const (
+	SlotCacheHitRatio        SemanticSlot = "cache_hit_ratio"
+	SlotConnectionSaturation SemanticSlot = "connection_saturation"
+	SlotConnections          SemanticSlot = "connections"
+	SlotDeadlocks            SemanticSlot = "deadlocks"
+	SlotProbeLatency         SemanticSlot = "probe_latency"
+	SlotReplicationLag       SemanticSlot = "replication_lag"
+	SlotRollbackRate         SemanticSlot = "rollback_rate"
+	SlotStorageUsage         SemanticSlot = "storage_usage"
+	SlotThroughput           SemanticSlot = "throughput"
 )
 
 // Defines values for Unavailability.
@@ -1020,6 +1052,32 @@ type MaintenanceWindowInput struct {
 // MaintenanceWindowStatus defines model for MaintenanceWindowStatus.
 type MaintenanceWindowStatus string
 
+// MetricAggregation defines model for MetricAggregation.
+type MetricAggregation string
+
+// MetricCatalog defines model for MetricCatalog.
+type MetricCatalog struct {
+	Metrics       []MetricCatalogEntry      `json:"metrics"`
+	SemanticSlots []SemanticSlotDeclaration `json:"semantic_slots"`
+}
+
+// MetricCatalogEntry defines model for MetricCatalogEntry.
+type MetricCatalogEntry struct {
+	Aggregation  MetricAggregation               `json:"aggregation"`
+	DisplayName  string                          `json:"display_name"`
+	Engine       MetricEngine                    `json:"engine"`
+	Level        MetricLevel                     `json:"level"`
+	MetricId     string                          `json:"metric_id"`
+	SemanticSlot nullable.Nullable[SemanticSlot] `json:"semantic_slot"`
+	Unit         string                          `json:"unit"`
+}
+
+// MetricEngine defines model for MetricEngine.
+type MetricEngine string
+
+// MetricLevel defines model for MetricLevel.
+type MetricLevel string
+
 // MetricSeriesResponse defines model for MetricSeriesResponse.
 type MetricSeriesResponse struct {
 	From    time.Time `json:"from"`
@@ -1318,6 +1376,15 @@ type SMTPTestInput struct {
 
 // SMTPTransportSecurity defines model for SMTPTransportSecurity.
 type SMTPTransportSecurity string
+
+// SemanticSlot defines model for SemanticSlot.
+type SemanticSlot string
+
+// SemanticSlotDeclaration defines model for SemanticSlotDeclaration.
+type SemanticSlotDeclaration struct {
+	DisplayName string       `json:"display_name"`
+	SlotId      SemanticSlot `json:"slot_id"`
+}
 
 // SessionSnapshot defines model for SessionSnapshot.
 type SessionSnapshot struct {
@@ -1726,6 +1793,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/metrics/catalog)
+	GetMetricCatalog(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/notification-channels/failures)
 	GetChannelFailures(w http.ResponseWriter, r *http.Request)
@@ -3264,6 +3334,20 @@ func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetMetricCatalog operation middleware
+func (siw *ServerInterfaceWrapper) GetMetricCatalog(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMetricCatalog(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetChannelFailures operation middleware
 func (siw *ServerInterfaceWrapper) GetChannelFailures(w http.ResponseWriter, r *http.Request) {
 
@@ -4002,6 +4086,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/maintenance-windows/{id}", wrapper.UpdateMaintenanceWindow)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/maintenance-windows/{id}/end", wrapper.EndMaintenanceWindow)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/metrics/catalog", wrapper.GetMetricCatalog)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/failures", wrapper.GetChannelFailures)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.GetSMTPChannel)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.UpdateSMTPChannel)
@@ -5394,6 +5479,22 @@ func (response GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetMetricCatalogRequestObject struct {
+}
+
+type GetMetricCatalogResponseObject interface {
+	VisitGetMetricCatalogResponse(w http.ResponseWriter) error
+}
+
+type GetMetricCatalog200JSONResponse MetricCatalog
+
+func (response GetMetricCatalog200JSONResponse) VisitGetMetricCatalogResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetChannelFailuresRequestObject struct {
 }
 
@@ -6342,6 +6443,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/me)
 	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
+
+	// (GET /api/v1/metrics/catalog)
+	GetMetricCatalog(ctx context.Context, request GetMetricCatalogRequestObject) (GetMetricCatalogResponseObject, error)
 
 	// (GET /api/v1/notification-channels/failures)
 	GetChannelFailures(ctx context.Context, request GetChannelFailuresRequestObject) (GetChannelFailuresResponseObject, error)
@@ -7966,6 +8070,30 @@ func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCurrentUserResponseObject); ok {
 		if err := validResponse.VisitGetCurrentUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetMetricCatalog operation middleware
+func (sh *strictHandler) GetMetricCatalog(w http.ResponseWriter, r *http.Request) {
+	var request GetMetricCatalogRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMetricCatalog(ctx, request.(GetMetricCatalogRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMetricCatalog")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMetricCatalogResponseObject); ok {
+		if err := validResponse.VisitGetMetricCatalogResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

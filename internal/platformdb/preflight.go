@@ -165,6 +165,8 @@ var platformRelations = []string{
 	"user_session",
 	"instance",
 	"instance_collect_state",
+	"metric_semantic_slot",
+	"metric_catalog",
 	"metric_series",
 	"metric_series_series_id_seq",
 	"metric_sample",

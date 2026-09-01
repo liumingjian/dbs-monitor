@@ -30,6 +30,8 @@ paths:
     $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}~1credentials
   /api/v1/instances/{id}/metrics/series:
     $ref: paths/metrics.yaml#/~1api~1v1~1instances~1{id}~1metrics~1series
+  /api/v1/metrics/catalog:
+    $ref: paths/metrics.yaml#/~1api~1v1~1metrics~1catalog
   /api/v1/instances/{id}/collection/tasks:
     $ref: paths/collection.yaml#/~1api~1v1~1instances~1{id}~1collection~1tasks
   /api/v1/instances/{id}/collection/capabilities:
@@ -286,6 +288,20 @@ components:
       $ref: components/schemas/collection.yaml#/CollectionPauseStatus
     MetricSeriesResponse:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
+    MetricEngine:
+      $ref: components/enums.yaml#/MetricEngine
+    SemanticSlot:
+      $ref: components/enums.yaml#/SemanticSlot
+    MetricLevel:
+      $ref: components/enums.yaml#/MetricLevel
+    MetricAggregation:
+      $ref: components/enums.yaml#/MetricAggregation
+    MetricCatalogEntry:
+      $ref: components/schemas/metrics.yaml#/MetricCatalogEntry
+    SemanticSlotDeclaration:
+      $ref: components/schemas/metrics.yaml#/SemanticSlotDeclaration
+    MetricCatalog:
+      $ref: components/schemas/metrics.yaml#/MetricCatalog
     AgentReport:
       $ref: components/schemas/agent.yaml#/AgentReport
     AgentReportAccepted:

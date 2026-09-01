@@ -102,3 +102,37 @@ PerformanceEventType:
     - EventActiveSessionsHigh
     - EventReplicationLag
     - EventTempFilesSurge
+MetricEngine:
+  type: string
+  enum: [POSTGRESQL, AGNOSTIC]
+  x-enum-varnames: [MetricEnginePostgreSQL, MetricEngineAgnostic]
+SemanticSlot:
+  type: string
+  enum:
+    - throughput
+    - connections
+    - connection_saturation
+    - probe_latency
+    - rollback_rate
+    - replication_lag
+    - cache_hit_ratio
+    - storage_usage
+    - deadlocks
+  x-enum-varnames:
+    - SlotThroughput
+    - SlotConnections
+    - SlotConnectionSaturation
+    - SlotProbeLatency
+    - SlotRollbackRate
+    - SlotReplicationLag
+    - SlotCacheHitRatio
+    - SlotStorageUsage
+    - SlotDeadlocks
+MetricLevel:
+  type: string
+  enum: [INSTANCE, DATABASE]
+  x-enum-varnames: [MetricLevelInstance, MetricLevelDatabase]
+MetricAggregation:
+  type: string
+  enum: [NONE, SUM, WEIGHTED_AVERAGE]
+  x-enum-varnames: [MetricAggregationNone, MetricAggregationSum, MetricAggregationWeightedAverage]
