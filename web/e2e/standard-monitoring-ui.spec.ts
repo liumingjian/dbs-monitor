@@ -1,11 +1,15 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { standardMonitoringMetricIDs } from '../src/routes/instances.$id/standardMonitoring'
+import { standardMonitoringGroups, standardMonitoringMetricIDs } from '../src/routes/instances.$id/standardMonitoring'
+
+// 卡片数就是目录里的图表数：写死一个数字只会在下次增删指标时变红，而这里要证明的是
+// 「标准监控把它该画的图一张不少地画了出来」。
+const chartCount = standardMonitoringGroups.reduce((total, group) => total + group.charts.length, 0)
 
 const instanceID = '11111111-1111-4111-8111-111111111111'
 const from = '2026-08-11T10:00:00.000Z'
 const to = '2026-08-11T11:00:00.000Z'
 
-test('22 connected charts remain usable on desktop and mobile', async ({ page }) => {
+test('every standard chart stays connected and usable on desktop and mobile', async ({ page }) => {
   await page.route('**/api/v1/me', (route) => route.fulfill({ json: { username: 'admin', role: 'PLATFORM_ADMIN' } }))
   await page.route(`**/api/v1/instances/${instanceID}`, (route) => route.fulfill({
     json: {
@@ -39,10 +43,10 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
 
   await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&step=auto&columns=3&connect=true`)
 
-  await expect(page.getByTestId('metric-card')).toHaveCount(22)
-  await expect(page.getByRole('figure')).toHaveCount(22)
-  await expect(page.getByText('实际粒度：30s')).toHaveCount(22)
-  await expect(page.getByTestId('metric-chart')).toHaveCount(22)
+  await expect(page.getByTestId('metric-card')).toHaveCount(chartCount)
+  await expect(page.getByRole('figure')).toHaveCount(chartCount)
+  await expect(page.getByText('实际粒度：30s')).toHaveCount(chartCount)
+  await expect(page.getByTestId('metric-chart')).toHaveCount(chartCount)
   await expectChartHasData(page.getByTestId('metric-chart').first())
   await expectChartHasData(page.getByTestId('metric-chart').last())
   await expectMultiColumn(page)
@@ -52,7 +56,7 @@ test('22 connected charts remain usable on desktop and mobile', async ({ page })
   await page.getByLabel('结束时间').fill('2026-08-11T12:00')
   await page.getByRole('button', { name: '应用时间范围' }).click()
   await expect(page).toHaveURL((url) => url.searchParams.get('from') === '2026-08-11T09:00:00.000Z' && url.searchParams.get('to') === '2026-08-11T12:00:00.000Z')
-  await expect(page.getByTestId('metric-chart')).toHaveCount(22)
+  await expect(page.getByTestId('metric-chart')).toHaveCount(chartCount)
   await expectChartHasData(page.getByTestId('metric-chart').last())
   await page.screenshot({ path: '/tmp/issue-85-standard-monitoring-desktop.png', fullPage: true })
 
@@ -122,9 +126,15 @@ async function pageOverflowElements(page: Page): Promise<string[]> {
   return page.evaluate(() => [...document.querySelectorAll('body *')].flatMap((element) => {
     const bounds = element.getBoundingClientRect()
     if (bounds.left >= -1 && bounds.right <= document.documentElement.clientWidth + 1) return []
-    // 被祖先容器横向裁剪的元素（如 AntD 页签导航的滚动区）不会造成页面横向滚动，不算溢出
+    // 被祖先容器横向裁剪的元素不会造成页面横向滚动，也一个像素都看不见，不算溢出。
+    // 裁剪有两种写法：`overflow` 的滚动区（如页签导航），以及 `clip-path`——
+    // 指标图的画布只能用后者（`MetricChart.css`：`overflow: hidden` 会把 y 轴最顶上那个
+    // 刻度切掉半行，所以那里裁的是 `clip-path: inset(...)`，而图表库量字宽用的那组
+    // `opacity: 0` 幽灵刻度正是靠它裁在画布里的）。两种都认，否则这条断言抓的是
+    // 看不见的几何，而不是使用者真会看见的溢出。
     for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
-      if (getComputedStyle(ancestor).overflowX !== 'visible') {
+      const style = getComputedStyle(ancestor)
+      if (style.overflowX !== 'visible' || style.clipPath !== 'none') {
         const box = ancestor.getBoundingClientRect()
         if (box.left >= -1 && box.right <= document.documentElement.clientWidth + 1) return []
       }

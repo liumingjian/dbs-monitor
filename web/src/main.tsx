@@ -14,6 +14,7 @@ import {
   policySettingsRoute,
 } from './routes/alert-settings'
 import { instanceRoute } from './routes/instances.$id'
+import { parseSearch, stringifySearch } from './routes/searchParams'
 import { performanceEventDetailRoute } from './routes/instances.$id/performanceEventDetail'
 import { performanceEventsRoute } from './routes/instances.$id/performanceEventsPage'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
@@ -67,6 +68,10 @@ const routeTree = rootRoute.addChildren([
 // 和路由器初始化时抛出的异常 —— 那两类发生在路由匹配之外，没有它就是整页白屏。
 const router = createRouter({
   routeTree,
+  // 查询参数的编解码整台路由器共用一份：多选筛选写成重复键，地址因此是能发给同事的
+  // 那种地址，也和服务端读同一批参数的写法一致（`web/src/routes/searchParams.ts`）。
+  parseSearch,
+  stringifySearch,
   defaultPreload: 'intent',
   defaultNotFoundComponent: NotFoundPage,
   defaultErrorComponent: RouteErrorPage,
