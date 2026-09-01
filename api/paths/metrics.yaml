@@ -47,6 +47,10 @@
     # 500 台时会打满后端连接池；这里合成一个往返。口径与单实例端点完全一致
     # （同一段代码），库级指标一律按目录里的聚合方式收敛成实例级——列表与总览
     # 不按库展开，所以这里没有 by_database。
+    #
+    # **两种寻址方式**：`metric` 是具体指标 ID，`slot` 是语义位。总览与实例列表只许用
+    # `slot`（ADR-0001）：位按**每台实例自己的引擎**在服务端解析成指标 ID，所以接入第二个
+    # 引擎时列表一行代码都不用改。至少给一个，两个都不给是 400。
     parameters:
       - name: instance_id
         in: query
@@ -59,10 +63,20 @@
           items: { type: string, format: uuid }
       - name: metric
         in: query
-        required: true
+        required: false
+        description: 具体指标 ID，可重复。与 slot 至少给一个。
         schema:
           type: array
           items: { $ref: ../components/enums.yaml#/MetricId }
+      - name: slot
+        in: query
+        required: false
+        description: >-
+          语义位，可重复。逐台按实例自己的引擎解析成具体指标；该引擎没有绑定这个位时，
+          响应里那一条带着 slot 与 NOT_APPLICABLE_ENGINE，而不是一个空指标 ID。
+        schema:
+          type: array
+          items: { $ref: ../components/enums.yaml#/SemanticSlot }
       - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
       - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
       - name: step
@@ -77,7 +91,7 @@
           application/json:
             schema: { $ref: ../components/schemas/metrics.yaml#/InstancesMetricSeriesResponse }
       '400':
-        description: Invalid time range, step, or instance list
+        description: Invalid time range, step, instance list, or metric/slot selection
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }

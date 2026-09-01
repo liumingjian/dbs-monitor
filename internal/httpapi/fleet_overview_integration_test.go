@@ -180,13 +180,13 @@ func TestFleetOverviewAggregates(t *testing.T) {
 	}
 
 	if len(overview.Storage) != 2 {
-		t.Fatalf("storage watermark = %+v, want two instances", overview.Storage)
+		t.Fatalf("storage usage = %+v, want two instances", overview.Storage)
 	}
 	if overview.Storage[0].InstanceName != "aa-healthy" || overview.Storage[0].UsagePercent != 91 {
-		t.Fatalf("storage watermark head = %+v, want aa-healthy at 91", overview.Storage[0])
+		t.Fatalf("storage usage head = %+v, want aa-healthy at 91", overview.Storage[0])
 	}
 	if overview.Storage[1].InstanceName != "cc-critical-one" || overview.Storage[1].UsagePercent != 77 {
-		t.Fatalf("storage watermark second = %+v, want cc-critical-one at 77", overview.Storage[1])
+		t.Fatalf("storage usage second = %+v, want cc-critical-one at 77", overview.Storage[1])
 	}
 
 	// 每个数字都下钻得到同样的一页：总览与列表共用同一份判定，这条断言是那句话的证据。

@@ -19,6 +19,7 @@ import (
 	"github.com/liumingjian/dbs-monitor/internal/db"
 	"github.com/liumingjian/dbs-monitor/internal/httpapi"
 	"github.com/liumingjian/dbs-monitor/internal/instance"
+	"github.com/liumingjian/dbs-monitor/internal/metric"
 	"github.com/liumingjian/dbs-monitor/migrations"
 )
 
@@ -276,6 +277,113 @@ func TestInstanceListPagingFilteringAndBatchedTrends(t *testing.T) {
 	missing := batchBody.Instances[2].Metrics[0]
 	if missing.Unavailability == nil || *missing.Unavailability != "NO_SAMPLES_YET" {
 		t.Fatalf("batch trend for uncollected instance = %+v", missing)
+	}
+
+	// ---- 语义位寻址 ----
+	// 列表只许按语义位取数（ADR-0001）：位在服务端按每台实例自己的引擎解析，
+	// 响应里回来的是解析结果加上位本身。前端因此不需要知道 pg.tps 这个名字。
+	slotAddress := fmt.Sprintf("%s/api/v1/instances/metrics/series?slot=throughput&from=%s&to=%s&step=5m",
+		server.URL, url.QueryEscape(from.Format(time.RFC3339Nano)), url.QueryEscape(to.Format(time.RFC3339Nano)))
+	for _, id := range requested {
+		slotAddress += "&instance_id=" + id.String()
+	}
+	slotResponse := getResponse(t, client, slotAddress)
+	defer slotResponse.Body.Close()
+	if slotResponse.StatusCode != http.StatusOK {
+		t.Fatalf("slot metric series status = %d", slotResponse.StatusCode)
+	}
+	var slotBody struct {
+		Instances []struct {
+			InstanceID uuid.UUID `json:"instance_id"`
+			Metrics    []struct {
+				Metric string  `json:"metric"`
+				Slot   *string `json:"slot"`
+				Series []struct {
+					Points [][]*float64 `json:"points"`
+				} `json:"series"`
+			} `json:"metrics"`
+		} `json:"instances"`
+	}
+	if err := json.NewDecoder(slotResponse.Body).Decode(&slotBody); err != nil {
+		t.Fatalf("decode slot metric series: %v", err)
+	}
+	if len(slotBody.Instances) != len(requested) {
+		t.Fatalf("slot batch covered %d instances, want %d", len(slotBody.Instances), len(requested))
+	}
+	for index, id := range requested {
+		entry := slotBody.Instances[index]
+		if entry.InstanceID != id {
+			t.Fatalf("slot batch instance %d = %s, want %s", index, entry.InstanceID, id)
+		}
+		if len(entry.Metrics) != 1 {
+			t.Fatalf("slot batch metrics for %s = %+v", id, entry.Metrics)
+		}
+		if entry.Metrics[0].Slot == nil || *entry.Metrics[0].Slot != "throughput" {
+			t.Fatalf("slot batch entry for %s lost the slot: %+v", id, entry.Metrics[0])
+		}
+		// 位在 PostgreSQL 上绑的就是 pg.tps；解析发生在服务端，调用方拿到的是结论。
+		if entry.Metrics[0].Metric != "pg.tps" {
+			t.Fatalf("slot throughput resolved to %q on PostgreSQL", entry.Metrics[0].Metric)
+		}
+	}
+	for index := 0; index < 2; index++ {
+		if len(slotBody.Instances[index].Metrics[0].Series) != 1 {
+			t.Fatalf("slot trend for %s has no series", slotBody.Instances[index].InstanceID)
+		}
+	}
+
+	// 该引擎没有绑定这个位时，回来的那一条**只带 slot、不带 metric**，并说清楚是引擎不适用。
+	// 今天只接了 PostgreSQL 一个引擎，九个位它全绑着，所以这里把绑定临时摘掉来走那条码路 ——
+	// 接第二个引擎时，「那个产品就没有这个数」正是这么答的：一个显式结论，不是空指标 ID，
+	// 也不是一条空序列（后者会在界面上被读成「采到了，是平的」）。
+	originalMetrics := metric.Metrics
+	unbound := make([]metric.Metric, 0, len(originalMetrics))
+	for _, item := range originalMetrics {
+		if item.Slot == metric.SlotThroughput {
+			continue
+		}
+		unbound = append(unbound, item)
+	}
+	metric.Metrics = unbound
+	unboundResponse := getResponse(t, client, slotAddress)
+	var unboundBody struct {
+		Instances []struct {
+			Metrics []struct {
+				Metric         *string `json:"metric"`
+				Slot           *string `json:"slot"`
+				Unavailability *string `json:"unavailability"`
+			} `json:"metrics"`
+		} `json:"instances"`
+	}
+	decodeErr := json.NewDecoder(unboundResponse.Body).Decode(&unboundBody)
+	unboundResponse.Body.Close()
+	metric.Metrics = originalMetrics
+	if decodeErr != nil {
+		t.Fatalf("decode unbound slot series: %v", decodeErr)
+	}
+	for _, entry := range unboundBody.Instances {
+		if len(entry.Metrics) != 1 {
+			t.Fatalf("unbound slot entry count = %d, want 1", len(entry.Metrics))
+		}
+		answer := entry.Metrics[0]
+		if answer.Slot == nil || *answer.Slot != "throughput" {
+			t.Fatalf("unbound slot answer lost the slot: %+v", answer)
+		}
+		if answer.Metric != nil {
+			t.Fatalf("unbound slot answer carries metric %q, want none", *answer.Metric)
+		}
+		if answer.Unavailability == nil || *answer.Unavailability != "NOT_APPLICABLE_ENGINE" {
+			t.Fatalf("unbound slot answer = %+v, want NOT_APPLICABLE_ENGINE", answer)
+		}
+	}
+
+	// 两种寻址方式一个都不给不是「取全部」，是一句说不清的请求。
+	neither := fmt.Sprintf("%s/api/v1/instances/metrics/series?from=%s&to=%s&instance_id=%s",
+		server.URL, url.QueryEscape(from.Format(time.RFC3339Nano)), url.QueryEscape(to.Format(time.RFC3339Nano)), requested[0])
+	neitherResponse := getResponse(t, client, neither)
+	defer neitherResponse.Body.Close()
+	if neitherResponse.StatusCode != http.StatusBadRequest {
+		t.Fatalf("batch without metric or slot status = %d, want 400", neitherResponse.StatusCode)
 	}
 
 	// 只读用户看得见同样的东西：这两个端点都是 READONLY。

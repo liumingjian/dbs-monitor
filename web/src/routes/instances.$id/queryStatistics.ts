@@ -31,6 +31,7 @@ function unavailableView(code: components['schemas']['Unavailability']): Extract
     case 'AGENT_OFFLINE':
     case 'VERSION_UNSUPPORTED':
     case 'NOT_APPLICABLE_ROLE':
+    case 'NOT_APPLICABLE_ENGINE':
       return { code, title: '暂时不可用', description: '当前无法取得可靠的查询统计快照，请检查采集状态后重试。', kind: 'unavailable' }
     default:
       return assertNever(code)

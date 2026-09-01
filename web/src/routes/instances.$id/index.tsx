@@ -21,7 +21,7 @@ import {
   attributionLabel,
   dataFreshnessLabel,
   lastCollectedAtLabel,
-} from '../instanceProjection'
+} from '../../domain/instanceProjection'
 import { rootRoute } from '../root'
 import { FlashOnChange } from '../../primitives/FlashOnChange'
 import { useMetricCatalog, type MetricID } from './metricOptions'

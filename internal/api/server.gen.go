@@ -450,19 +450,20 @@ const (
 
 // Defines values for Unavailability.
 const (
-	AGENTOFFLINE       Unavailability = "AGENT_OFFLINE"
-	COLLECTIONFAILED   Unavailability = "COLLECTION_FAILED"
-	COLLECTIONPAUSED   Unavailability = "COLLECTION_PAUSED"
-	COUNTERRESET       Unavailability = "COUNTER_RESET"
-	DBUNREACHABLE      Unavailability = "DB_UNREACHABLE"
-	EXTENSIONMISSING   Unavailability = "EXTENSION_MISSING"
-	FEATUREDISABLED    Unavailability = "FEATURE_DISABLED"
-	NODATAINRANGE      Unavailability = "NO_DATA_IN_RANGE"
-	NOSAMPLESYET       Unavailability = "NO_SAMPLES_YET"
-	NOTAPPLICABLEROLE  Unavailability = "NOT_APPLICABLE_ROLE"
-	PERMISSIONDENIED   Unavailability = "PERMISSION_DENIED"
-	STALE              Unavailability = "STALE"
-	VERSIONUNSUPPORTED Unavailability = "VERSION_UNSUPPORTED"
+	AGENTOFFLINE        Unavailability = "AGENT_OFFLINE"
+	COLLECTIONFAILED    Unavailability = "COLLECTION_FAILED"
+	COLLECTIONPAUSED    Unavailability = "COLLECTION_PAUSED"
+	COUNTERRESET        Unavailability = "COUNTER_RESET"
+	DBUNREACHABLE       Unavailability = "DB_UNREACHABLE"
+	EXTENSIONMISSING    Unavailability = "EXTENSION_MISSING"
+	FEATUREDISABLED     Unavailability = "FEATURE_DISABLED"
+	NODATAINRANGE       Unavailability = "NO_DATA_IN_RANGE"
+	NOSAMPLESYET        Unavailability = "NO_SAMPLES_YET"
+	NOTAPPLICABLEENGINE Unavailability = "NOT_APPLICABLE_ENGINE"
+	NOTAPPLICABLEROLE   Unavailability = "NOT_APPLICABLE_ROLE"
+	PERMISSIONDENIED    Unavailability = "PERMISSION_DENIED"
+	STALE               Unavailability = "STALE"
+	VERSIONUNSUPPORTED  Unavailability = "VERSION_UNSUPPORTED"
 )
 
 // Defines values for DownloadAgentBinaryParamsArch.
@@ -978,7 +979,7 @@ type FleetOverview struct {
 	Health FleetHealthCounts `json:"health"`
 
 	// Storage The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty.
-	Storage []StorageWatermarkEntry `json:"storage"`
+	Storage []StorageUsageEntry `json:"storage"`
 
 	// TopSql The five statements costing the fleet the most elapsed time, highest first. The full ranking lives on the SQL insight page; five is what fits on a landing page without turning it into a second table.
 	TopSql []TopSqlEntry `json:"top_sql"`
@@ -1202,13 +1203,14 @@ type MetricId string
 // MetricLevel defines model for MetricLevel.
 type MetricLevel string
 
-// MetricSeriesEntry defines model for MetricSeriesEntry.
+// MetricSeriesEntry One requested metric's series for one instance. Addressed by concrete metric id, `metric` is always present. Addressed by semantic slot, `slot` is always present and `metric` only when that instance's engine binds the slot: a slot with no binding is answered explicitly (`NOT_APPLICABLE_ENGINE`) rather than with an empty metric id.
 type MetricSeriesEntry struct {
-	Metric string `json:"metric"`
+	Metric *string `json:"metric,omitempty"`
 	Series []struct {
 		Labels map[string]string `json:"labels"`
 		Points [][]*float64      `json:"points"`
 	} `json:"series"`
+	Slot           *SemanticSlot                     `json:"slot,omitempty"`
 	Unavailability nullable.Nullable[Unavailability] `json:"unavailability"`
 	Unit           string                            `json:"unit"`
 }
@@ -1541,8 +1543,8 @@ type SessionSnapshotEntry struct {
 	WaitEventType         *string    `json:"wait_event_type,omitempty"`
 }
 
-// StorageWatermarkEntry One instance's highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing.
-type StorageWatermarkEntry struct {
+// StorageUsageEntry One instance's highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing.
+type StorageUsageEntry struct {
 	InstanceId   openapi_types.UUID `json:"instance_id"`
 	InstanceName string             `json:"instance_name"`
 	SampledAt    time.Time          `json:"sampled_at"`
@@ -1687,9 +1689,14 @@ type ListInstancesParams struct {
 type GetInstancesMetricSeriesParams struct {
 	// InstanceId 要取的实例，可重复。上限与列表页大小一致。
 	InstanceId []openapi_types.UUID `form:"instance_id" json:"instance_id"`
-	Metric     []MetricId           `form:"metric" json:"metric"`
-	From       time.Time            `form:"from" json:"from"`
-	To         time.Time            `form:"to" json:"to"`
+
+	// Metric 具体指标 ID，可重复。与 slot 至少给一个。
+	Metric *[]MetricId `form:"metric,omitempty" json:"metric,omitempty"`
+
+	// Slot 语义位，可重复。逐台按实例自己的引擎解析成具体指标；该引擎没有绑定这个位时， 响应里那一条带着 slot 与 NOT_APPLICABLE_ENGINE，而不是一个空指标 ID。
+	Slot *[]SemanticSlot `form:"slot,omitempty" json:"slot,omitempty"`
+	From time.Time       `form:"from" json:"from"`
+	To   time.Time       `form:"to" json:"to"`
 
 	// Step 缺省 auto。
 	Step *MetricStep `form:"step,omitempty" json:"step,omitempty"`
@@ -2837,18 +2844,19 @@ func (siw *ServerInterfaceWrapper) GetInstancesMetricSeries(w http.ResponseWrite
 		return
 	}
 
-	// ------------- Required query parameter "metric" -------------
+	// ------------- Optional query parameter "metric" -------------
 
-	if paramValue := r.URL.Query().Get("metric"); paramValue != "" {
-
-	} else {
-		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "metric"})
+	err = runtime.BindQueryParameter("form", true, false, "metric", r.URL.Query(), &params.Metric)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "metric", Err: err})
 		return
 	}
 
-	err = runtime.BindQueryParameter("form", true, true, "metric", r.URL.Query(), &params.Metric)
+	// ------------- Optional query parameter "slot" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "slot", r.URL.Query(), &params.Slot)
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "metric", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slot", Err: err})
 		return
 	}
 

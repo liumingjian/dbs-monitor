@@ -13,7 +13,7 @@ export type SparklineProps = {
    * 调用方知道这是哪一行的什么指标（例如「TPS 近 1 小时趋势」），这里不猜。
    */
   label: string
-  /** 高度 px。默认 20，配 DESIGN.md 的 40px 标准行高；32px 密集行不画缩略图。 */
+  /** 高度 px。默认 20，配 DESIGN.md 的 40px 标准行高；32px 的密集行传 14。 */
   height?: number
   /** 线色档位。不给就是中性的数据色 viz-1；状态色只在调用方确实要表达状态时给。 */
   tone?: StatusTone

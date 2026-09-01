@@ -1,9 +1,11 @@
+import type { StatusTone } from '../primitives/StatusBadge'
 import type { components } from '../api/schema'
 
 type Instance = components['schemas']['Instance']
 type InstanceAgentStatus = components['schemas']['InstanceAgentStatus']
 type MetricSeriesEntry = components['schemas']['MetricSeriesEntry']
 type InstancesMetricSeriesResponse = components['schemas']['InstancesMetricSeriesResponse']
+type SemanticSlot = components['schemas']['SemanticSlot']
 
 function assertNever(value: never): never {
   throw new Error(`unexpected instance projection value: ${String(value)}`)
@@ -69,25 +71,33 @@ export function connectionSaturationLabel(percent: number | null): string {
   return `${Math.round(percent)}%`
 }
 
-/// 饱和度的状态档位。只有「快满了」与「满了」两档，其余中性：
+/// 使用率的状态档位。只有「快满了」（75%）与「满了」（90%）两档上色，其余中性：
 /// 每一行都上色等于没有颜色。
-export function connectionSaturationTone(percent: number | null): 'critical' | 'warning' | undefined {
+///
+/// 连接饱和度与磁盘水位共用这一份阈值，两处读起来才是同一种紧张程度 —— 一个百分比在
+/// 一张列表里是黄的、在总览里同样的数字是白的，读者只能记住「这一页的规矩」。
+/// 缺数不上色：破折号不是一个令人放心的读数，但它也不是一个越界的读数。
+export function usageTone(percent: number | null): StatusTone | undefined {
   if (percent === null) return undefined
   if (percent >= 90) return 'critical'
   if (percent >= 75) return 'warning'
   return undefined
 }
 
-/// 从批量趋势响应里取出某台实例的某个指标。找不到就是 undefined —— 调用方据此
+/// 从批量趋势响应里取出某台实例的某个**语义位**。找不到就是 undefined —— 调用方据此
 /// 显示缺数，而不是拿一条空序列冒充「这台是平的」。
-export function instanceMetricEntry(
+///
+/// 按位取而不按指标 ID 取：位到指标的解析在服务端逐台按实例自己的引擎完成（ADR-0001），
+/// 所以同一个位在两台不同引擎的实例上可以是两个指标，而这里一句都不用改。
+/// 这也是「总览页、实例列表、告警规则模板只能引用语义位」在前端的落点。
+export function instanceSlotEntry(
   response: InstancesMetricSeriesResponse | undefined,
   instanceID: string,
-  metricID: string,
+  slot: SemanticSlot,
 ): MetricSeriesEntry | undefined {
   return response?.instances
     .find((entry) => entry.instance_id === instanceID)
-    ?.metrics.find((metric) => metric.metric === metricID)
+    ?.metrics.find((metric) => metric.slot === slot)
 }
 
 /// 缩略图要画的那串值。缺数保持 `null`（缩略图在那里断开），不补零 ——

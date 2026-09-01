@@ -10,6 +10,8 @@
 //     实例上，量的却是主机与采集自身，不属于任何数据库产品。
 package dbengine
 
+import "slices"
+
 // Engine is the database product. 新接入一个产品（MySQL）时，只在这里加一个常量、把它放进
 // InstanceEngines() 与 CatalogEngines()，再同步 DDL 的 CHECK 与 OpenAPI 的两个枚举。
 type Engine string
@@ -38,19 +40,10 @@ func CatalogEngines() []Engine {
 // ValidForInstance 报告 engine 能不能作为一台实例的引擎。空值与 Agnostic 都不行——
 // 前者要调用方先决定默认值，后者根本不是一个可连接的产品。
 func (engine Engine) ValidForInstance() bool {
-	return contains(InstanceEngines(), engine)
+	return slices.Contains(InstanceEngines(), engine)
 }
 
 // ValidForCatalog 报告 engine 能不能出现在指标目录的一行上。
 func (engine Engine) ValidForCatalog() bool {
-	return contains(CatalogEngines(), engine)
-}
-
-func contains(engines []Engine, wanted Engine) bool {
-	for _, known := range engines {
-		if known == wanted {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(CatalogEngines(), engine)
 }

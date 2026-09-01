@@ -109,57 +109,6 @@ func (q *Queries) LatestPoints(ctx context.Context, arg LatestPointsParams) ([]L
 	return items, nil
 }
 
-const latestSamplePerSeriesForMetric = `-- name: LatestSamplePerSeriesForMetric :many
-SELECT DISTINCT ON (series.series_id)
-       series.instance_id,
-       series.series_id,
-       sample.ts,
-       sample.value
-FROM metric_series series
-JOIN metric_sample sample ON sample.series_id = series.series_id
-WHERE series.metric_id = $1 AND sample.ts >= $2
-ORDER BY series.series_id, sample.ts DESC
-`
-
-type LatestSamplePerSeriesForMetricParams struct {
-	MetricID string
-	Since    pgtype.Timestamptz
-}
-
-type LatestSamplePerSeriesForMetricRow struct {
-	InstanceID pgtype.UUID
-	SeriesID   int64
-	Ts         pgtype.Timestamptz
-	Value      float64
-}
-
-// 一个指标在全机群的最新读数，每条序列一行（磁盘按挂载点分序列，实例级的取值由调用方
-// 在 Go 里收敛）。窗口是必需的：没有下限就会把几个月前停止上报的实例算成「当前水位」。
-func (q *Queries) LatestSamplePerSeriesForMetric(ctx context.Context, arg LatestSamplePerSeriesForMetricParams) ([]LatestSamplePerSeriesForMetricRow, error) {
-	rows, err := q.db.Query(ctx, latestSamplePerSeriesForMetric, arg.MetricID, arg.Since)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []LatestSamplePerSeriesForMetricRow
-	for rows.Next() {
-		var i LatestSamplePerSeriesForMetricRow
-		if err := rows.Scan(
-			&i.InstanceID,
-			&i.SeriesID,
-			&i.Ts,
-			&i.Value,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listTaskIntervals = `-- name: ListTaskIntervals :many
 SELECT task_id, interval_seconds
 FROM collection_task_config
@@ -220,6 +169,60 @@ func (q *Queries) PointsInRange(ctx context.Context, arg PointsInRangeParams) ([
 	for rows.Next() {
 		var i PointsInRangeRow
 		if err := rows.Scan(&i.Ts, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentValuePerSeriesForMetric = `-- name: RecentValuePerSeriesForMetric :many
+SELECT DISTINCT ON (series.series_id)
+       series.instance_id,
+       series.series_id,
+       sample.ts,
+       sample.value
+FROM metric_series series
+JOIN metric_sample sample ON sample.series_id = series.series_id
+WHERE series.metric_id = $1 AND sample.ts >= $2
+ORDER BY series.series_id, sample.ts DESC
+`
+
+type RecentValuePerSeriesForMetricParams struct {
+	MetricID string
+	Since    pgtype.Timestamptz
+}
+
+type RecentValuePerSeriesForMetricRow struct {
+	InstanceID pgtype.UUID
+	SeriesID   int64
+	Ts         pgtype.Timestamptz
+	Value      float64
+}
+
+// 一个指标在全机群的最近读数，每条序列一行（磁盘按挂载点分序列，实例级的取值由调用方
+// 在 Go 里收敛）。窗口是必需的：没有下限就会把几个月前停止上报的实例算成「现在的读数」。
+//
+// 名字里刻意不出现 latest sample time / watermark：CONTEXT.md 把这两个说法留给了
+// 采集完整性水位，那是「每个到期义务都满足到了哪一刻」，不是「某条序列最后一个点的值」。
+func (q *Queries) RecentValuePerSeriesForMetric(ctx context.Context, arg RecentValuePerSeriesForMetricParams) ([]RecentValuePerSeriesForMetricRow, error) {
+	rows, err := q.db.Query(ctx, recentValuePerSeriesForMetric, arg.MetricID, arg.Since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecentValuePerSeriesForMetricRow
+	for rows.Next() {
+		var i RecentValuePerSeriesForMetricRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.SeriesID,
+			&i.Ts,
+			&i.Value,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

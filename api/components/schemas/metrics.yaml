@@ -1,8 +1,16 @@
 MetricSeriesEntry:
   type: object
-  required: [metric, unit, unavailability, series]
+  description: >-
+    One requested metric's series for one instance. Addressed by concrete metric id, `metric`
+    is always present. Addressed by semantic slot, `slot` is always present and `metric` only
+    when that instance's engine binds the slot: a slot with no binding is answered explicitly
+    (`NOT_APPLICABLE_ENGINE`) rather than with an empty metric id.
+  required: [unit, unavailability, series]
   properties:
     metric: { type: string }
+    slot:
+      allOf:
+        - $ref: ../enums.yaml#/SemanticSlot
     unit: { type: string }
     unavailability:
       nullable: true

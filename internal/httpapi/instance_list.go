@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -103,10 +104,10 @@ func instanceMatches(item api.Instance, query instanceListQuery) bool {
 	if query.search != "" && !instanceMatchesSearch(item, query.search) {
 		return false
 	}
-	if len(query.engines) > 0 && !containsEngine(query.engines, item.Engine) {
+	if len(query.engines) > 0 && !slices.Contains(query.engines, item.Engine) {
 		return false
 	}
-	if len(query.statuses) > 0 && !containsStatus(query.statuses, item.Health.Status) {
+	if len(query.statuses) > 0 && !slices.Contains(query.statuses, item.Health.Status) {
 		return false
 	}
 	for _, flag := range query.flags {
@@ -135,24 +136,6 @@ func instanceMatchesSearch(item api.Instance, search string) bool {
 	address := item.Host + ":" + strconv.Itoa(item.Port)
 	return strings.Contains(strings.ToLower(item.Name), search) ||
 		strings.Contains(strings.ToLower(address), search)
-}
-
-func containsEngine(engines []api.InstanceEngine, engine api.InstanceEngine) bool {
-	for _, candidate := range engines {
-		if candidate == engine {
-			return true
-		}
-	}
-	return false
-}
-
-func containsStatus(statuses []api.HealthStatus, status api.HealthStatus) bool {
-	for _, candidate := range statuses {
-		if candidate == status {
-			return true
-		}
-	}
-	return false
 }
 
 func instanceHasFlag(item api.Instance, flag api.InstanceFlag) bool {
@@ -253,11 +236,17 @@ func sortInstances(instances []api.Instance, order api.InstanceListSort) {
 				return healthRank(first.Health.Status) > healthRank(second.Health.Status)
 			}
 		}
-		if first.Name != second.Name {
-			return first.Name < second.Name
-		}
-		return first.Id.String() < second.Id.String()
+		return instanceStableOrder(first, second)
 	})
+}
+
+// instanceStableOrder 是任何实例排序的最后两级：名称，再 id。列表与总览共用它 ——
+// 同序值的行如果每次查询顺序不同，翻页会重复或漏掉行，而「前十」也就不敢让人相信。
+func instanceStableOrder(first, second api.Instance) bool {
+	if first.Name != second.Name {
+		return first.Name < second.Name
+	}
+	return first.Id.String() < second.Id.String()
 }
 
 // instanceStaleness 是「落后了多少秒」。从来没采到过的排在最前面：它不是「很新鲜」，

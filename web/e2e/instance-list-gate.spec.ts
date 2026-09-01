@@ -76,28 +76,36 @@ test('instance list renders eight server-filtered columns for 50 instances', asy
     json: respondToInstanceList(new URL(route.request().url())),
   }))
   // 趋势与连接饱和度现在是**一次**批量请求：50 行不再各自打一次服务端。
+  // 而且列表按**语义位**要数（ADR-0001），位到指标的解析在服务端完成 —— 替身照做：
+  // 请求里给的每个位都答一条，条上同时带着位与它在这台实例的引擎上解析出来的指标 ID。
+  const slotAnswers: Record<string, { metric: string; unit: string; points: (number | null)[][] }> = {
+    throughput: {
+      metric: 'pg.tps',
+      unit: 'tx/s',
+      points: [[1770806400, 12], [1770806700, 18], [1770807000, null], [1770807300, 21]],
+    },
+    connection_saturation: {
+      metric: 'pg.connection.saturation_percent',
+      unit: 'percent',
+      points: [[1770806400, 40], [1770807300, 87.4]],
+    },
+  }
   await page.route(/\/api\/v1\/instances\/metrics\/series/, (route) => {
     const url = new URL(route.request().url())
+    const slots = url.searchParams.getAll('slot')
     return route.fulfill({ json: {
       from: '2026-08-11T11:00:00Z',
       to: '2026-08-11T12:00:00Z',
       step: '5m',
       instances: url.searchParams.getAll('instance_id').map((id) => ({
         instance_id: id,
-        metrics: [
-          {
-            metric: 'pg.tps',
-            unit: 'tx/s',
-            unavailability: null,
-            series: [{ labels: {}, points: [[1770806400, 12], [1770806700, 18], [1770807000, null], [1770807300, 21]] }],
-          },
-          {
-            metric: 'pg.connection.saturation_percent',
-            unit: 'percent',
-            unavailability: null,
-            series: [{ labels: {}, points: [[1770806400, 40], [1770807300, 87.4]] }],
-          },
-        ],
+        metrics: slots.map((slot) => ({
+          slot,
+          metric: slotAnswers[slot].metric,
+          unit: slotAnswers[slot].unit,
+          unavailability: null,
+          series: [{ labels: {}, points: slotAnswers[slot].points }],
+        })),
       })),
     } })
   })
@@ -152,13 +160,15 @@ test('instance list renders eight server-filtered columns for 50 instances', asy
   expect(await pageOverflows(page)).toBe(false)
   await page.screenshot({ path: test.info().outputPath('instance-list-1280.png') })
 
-  // 密集档：行高收到 32px，趋势缩略图整列让出去（规范是「丢掉缩略图而不是压扁它」），
+  // 密集档：行高收到 32px，**八列一列不少**（丢列在任何档位下都是禁止的），
   // 而且这个选择跨刷新保持。
   const rowHeight = async () => (await instanceRows.first().boundingBox())?.height
   expect(await rowHeight()).toBeCloseTo(40, 0)
   await page.getByRole('tab', { name: '紧凑行高' }).click()
-  await expect(page.getByRole('img', { name: /吞吐趋势$/ })).toHaveCount(0)
+  await expect(headerCells).toHaveText(wideColumns)
+  await expect(page.getByRole('img', { name: /吞吐趋势$/ })).toHaveCount(50)
   expect(await rowHeight()).toBeCloseTo(32, 0)
+  expect(await pageOverflows(page)).toBe(false)
   await page.reload()
   await expect(page.getByRole('tab', { name: '紧凑行高' })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: '标准行高' }).click()

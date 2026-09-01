@@ -1180,7 +1180,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        Unavailability: "NO_SAMPLES_YET" | "NO_DATA_IN_RANGE" | "STALE" | "COLLECTION_PAUSED" | "COLLECTION_FAILED" | "DB_UNREACHABLE" | "AGENT_OFFLINE" | "PERMISSION_DENIED" | "EXTENSION_MISSING" | "FEATURE_DISABLED" | "VERSION_UNSUPPORTED" | "NOT_APPLICABLE_ROLE" | "COUNTER_RESET";
+        Unavailability: "NO_SAMPLES_YET" | "NO_DATA_IN_RANGE" | "STALE" | "COLLECTION_PAUSED" | "COLLECTION_FAILED" | "DB_UNREACHABLE" | "AGENT_OFFLINE" | "PERMISSION_DENIED" | "EXTENSION_MISSING" | "FEATURE_DISABLED" | "VERSION_UNSUPPORTED" | "NOT_APPLICABLE_ROLE" | "NOT_APPLICABLE_ENGINE" | "COUNTER_RESET";
         /** @enum {string} */
         AlertStatus: "OK" | "PENDING" | "FIRING" | "NO_DATA" | "RECOVERED";
         /** @enum {string} */
@@ -1682,7 +1682,7 @@ export interface components {
             /** @description The instances that need handling first, ordered by health tier then alert severity. Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy and paused instances never appear here. */
             attention: components["schemas"]["Instance"][];
             /** @description The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty. */
-            storage: components["schemas"]["StorageWatermarkEntry"][];
+            storage: components["schemas"]["StorageUsageEntry"][];
             /** @description The five statements costing the fleet the most elapsed time, highest first. The full ranking lives on the SQL insight page; five is what fits on a landing page without turning it into a second table. */
             top_sql: components["schemas"]["TopSqlEntry"][];
         };
@@ -1704,7 +1704,7 @@ export interface components {
             paused: number;
         };
         /** @description One instance's highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing. */
-        StorageWatermarkEntry: {
+        StorageUsageEntry: {
             /** Format: uuid */
             instance_id: string;
             instance_name: string;
@@ -1863,8 +1863,10 @@ export interface components {
          * @enum {string}
          */
         MetricId: "pg.availability.reachable" | "pg.probe.latency_ms" | "collector.last_success_time" | "agent.status" | "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec" | "pg.connection.total" | "pg.connection.active" | "pg.connection.idle_in_transaction" | "pg.connection.max" | "pg.connection.saturation_percent" | "pg.tps" | "pg.xact.commit_per_sec" | "pg.xact.rollback_per_sec" | "pg.tuples.read_per_sec" | "pg.tuples.write_per_sec" | "pg.temp.files_per_sec" | "pg.temp.bytes_per_sec" | "pg.transaction.long_count" | "pg.transaction.max_duration_sec" | "pg.lock.waiting_count" | "pg.session.blocked_count" | "pg.query.long_running_count" | "pg.prepared_xacts.count" | "pg.replication.role" | "pg.replication.connection_state" | "pg.replication.replay_lag_ms" | "pg.replication.wal_lag_bytes" | "pg.replication_slot.retained_wal_bytes" | "pg.cache.hit_ratio" | "pg.cache.block_access_per_sec" | "pg.database.size_bytes" | "pg.deadlock.count";
+        /** @description One requested metric's series for one instance. Addressed by concrete metric id, `metric` is always present. Addressed by semantic slot, `slot` is always present and `metric` only when that instance's engine binds the slot: a slot with no binding is answered explicitly (`NOT_APPLICABLE_ENGINE`) rather than with an empty metric id. */
         MetricSeriesEntry: {
-            metric: string;
+            metric?: string;
+            slot?: components["schemas"]["SemanticSlot"];
             unit: string;
             unavailability: components["schemas"]["Unavailability"] | null;
             series: {
@@ -2569,7 +2571,10 @@ export interface operations {
             query: {
                 /** @description 要取的实例，可重复。上限与列表页大小一致。 */
                 instance_id: string[];
-                metric: components["schemas"]["MetricId"][];
+                /** @description 具体指标 ID，可重复。与 slot 至少给一个。 */
+                metric?: components["schemas"]["MetricId"][];
+                /** @description 语义位，可重复。逐台按实例自己的引擎解析成具体指标；该引擎没有绑定这个位时， 响应里那一条带着 slot 与 NOT_APPLICABLE_ENGINE，而不是一个空指标 ID。 */
+                slot?: components["schemas"]["SemanticSlot"][];
                 from: string;
                 to: string;
                 /** @description 缺省 auto。 */
@@ -2590,7 +2595,7 @@ export interface operations {
                     "application/json": components["schemas"]["InstancesMetricSeriesResponse"];
                 };
             };
-            /** @description Invalid time range, step, or instance list */
+            /** @description Invalid time range, step, instance list, or metric/slot selection */
             400: {
                 headers: {
                     [name: string]: unknown;

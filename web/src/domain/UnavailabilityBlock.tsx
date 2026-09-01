@@ -28,6 +28,9 @@ export function unavailabilityCopy(code: Unavailability): Copy {
     case 'FEATURE_DISABLED': return { title: '功能未启用', description: '目标数据库未启用该指标依赖的功能。', action: '启用数据库功能' }
     case 'VERSION_UNSUPPORTED': return { title: '版本不支持', description: '目标 PostgreSQL 版本不提供该指标。', action: '查看支持矩阵' }
     case 'NOT_APPLICABLE_ROLE': return { title: '当前角色不适用', description: '该指标不适用于当前主备角色或拓扑。', action: '查看实例角色' }
+    // 语义位在这台实例的引擎上没有绑定。这不是一次失败，是一句关于引擎的事实：
+    // 那个产品就没有这个数，等下去也不会有。
+    case 'NOT_APPLICABLE_ENGINE': return { title: '当前引擎不适用', description: '该语义位在这台实例的数据库引擎上没有对应指标。', action: '查看指标目录' }
     case 'COUNTER_RESET': return { title: '计数器已重置', description: '该点无法计算可靠速率，因此保留为断点。', action: '等待下一个采集周期' }
     default: return assertNever(code)
   }
@@ -49,6 +52,7 @@ export function unavailabilityHref(code: Unavailability, destinations: Destinati
     case 'FEATURE_DISABLED':
     case 'VERSION_UNSUPPORTED':
     case 'NOT_APPLICABLE_ROLE':
+    case 'NOT_APPLICABLE_ENGINE':
       return destinations.collection
     default:
       return assertNever(code)

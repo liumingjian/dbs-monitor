@@ -53,7 +53,7 @@
 }
 
 /* 容量水位：一行一台，两列自适应；十行在 974px 下正好一屏看完。 */
-.overview-watermarks {
+.overview-storage-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: var(--cds-spacing-04) var(--cds-spacing-06);
@@ -62,18 +62,18 @@
   list-style: none;
 }
 
-.overview-watermark {
+.overview-storage-entry {
   display: block;
   text-decoration: none;
   color: inherit;
   min-inline-size: 0;
 }
 
-.overview-watermark:hover {
+.overview-storage-entry:hover {
   background: var(--cds-layer-hover);
 }
 
-.overview-watermark:focus-visible {
+.overview-storage-entry:focus-visible {
   outline: 2px solid var(--cds-focus);
   outline-offset: 2px;
 }

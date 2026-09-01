@@ -94,14 +94,30 @@ var (
 //
 // 没有绑定时返回 ErrSlotNotApplicable，位本身不存在时返回 ErrUnknownSemanticSlot。调用方**必须**
 // 看 error：不适用是一个要显式呈现的结论（「该引擎没有这个指标」），不是空字符串，也不是 0。
+//
+// 引擎自己的绑定优先；没有时退到**引擎无关**的绑定（容量水位就是这一种：它由
+// host.disk.usage_percent 填，量的是主机的盘，与跑哪个数据库产品无关）。这条退路与
+// ResolveForEngine 里「引擎无关的指标在哪个引擎上都是它自己」是同一条规则，所以
+// 调用方不必先判断「这个位是不是主机侧的」再决定拿什么引擎来问——那种判断一旦写进
+// 调用方，位的这层指向就成了摆设。
 func ResolveSlot(slot SemanticSlot, engine Engine) (MetricID, error) {
 	if !SlotDeclared(slot) {
 		return "", fmt.Errorf("%w: %q", ErrUnknownSemanticSlot, slot)
 	}
+	agnostic := MetricID("")
 	for _, item := range Metrics {
-		if item.Slot == slot && item.Engine == engine {
+		if item.Slot != slot {
+			continue
+		}
+		if item.Engine == engine {
 			return item.ID, nil
 		}
+		if item.Engine == EngineAgnostic {
+			agnostic = item.ID
+		}
+	}
+	if agnostic != "" {
+		return agnostic, nil
 	}
 	return "", fmt.Errorf("%w: slot %q on engine %q", ErrSlotNotApplicable, slot, engine)
 }

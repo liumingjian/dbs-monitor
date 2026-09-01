@@ -146,7 +146,13 @@ var Metrics = []Metric{
 	// 200GB 主库崩到 60% 被同实例下二十个空库的 100% 稀释成 98%。
 	{ID: MetricCacheHitRatio, DisplayName: "缓存命中率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationWeightedAverage, Weight: MetricCacheBlockAccessPerS, Slot: SlotCacheHitRatio, Type: MetricTypeGauge, Unit: "percent", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricCacheBlockAccessPerS, DisplayName: "缓存块访问速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeRate, Unit: "blocks/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityConditional, Producer: ProducerServerTask},
-	{ID: MetricDatabaseSizeBytes, DisplayName: "数据库体积", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotStorageUsage, Type: MetricTypeGauge, Unit: "bytes", Dimensions: []string{"instance", "database"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityYes, Producer: ProducerServerTask},
+	// 数据库体积**不填语义位**。容量水位这个位量的是「盘要满了吗」，取值是百分比，
+	// 由引擎无关的 host.disk.usage_percent 填；体积是字节数。同一个位在一个引擎上解析出
+	// 百分比、在另一个引擎上解析出字节数，位就没法被通用地消费了——总览的水位榜、
+	// 告警模板的阈值都会在两种单位之间静默地换来换去。规范表里「容量水位」一行同时列了
+	// 这两个指标，落地时只把主机水位绑上位；体积仍在目录里，实例工作台按具体指标 ID 取它
+	// （工作台本来就允许下到具体 ID），「哪个库在吃磁盘」这条动线一个字都没少。
+	{ID: MetricDatabaseSizeBytes, DisplayName: "数据库体积", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Type: MetricTypeGauge, Unit: "bytes", Dimensions: []string{"instance", "database"}, Calculation: CalculationRaw, Standard: true, EnhancedCandidate: false, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 	{ID: MetricDeadlockCount, DisplayName: "死锁速率", Engine: EnginePostgreSQL, Level: LevelDatabase, Aggregation: AggregationSum, Slot: SlotDeadlocks, Type: MetricTypeRate, Unit: "count/s", Dimensions: []string{"instance", "database"}, Calculation: CalculationCounterDelta, Standard: true, EnhancedCandidate: true, Alertability: AlertabilityYes, Producer: ProducerServerTask},
 }
 

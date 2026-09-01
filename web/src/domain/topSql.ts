@@ -1,11 +1,11 @@
-import type { components } from '../../api/schema'
-import { withSessionTab } from '../instances.$id/sessionTabs'
-import { defaultTimeRange } from '../instances.$id/timeRange'
+import type { components } from '../api/schema'
 
 export type TopSqlEntry = components['schemas']['TopSqlEntry']
 
-/// SQL 洞察的投影函数。不认识 React、不取数，页面与总览第五块共用同一份读法 ——
-/// 两处显示同一条 SQL 时，文本、耗时与去处必须是同一句话。
+/// Top SQL 的读法。不认识 React、不取数、不认识路由：SQL 洞察页与总览第五块共用它 ——
+/// 两处显示同一条 SQL 时，文本、耗时与行的身份必须是同一句话。两个页面共用，所以它
+/// 住在 domain/ 而不是任何一个页面目录里（web/CLAUDE.md 的目录一节：页面私有件不上浮，
+/// 也不许横着去别的页面里拿）。
 
 /// 一行的稳定键：一条 SQL 由「哪台实例 + 哪个 queryid」唯一确定，
 /// 这也正是文本去重的键，所以榜上不可能出现两行同键。
@@ -30,10 +30,4 @@ export function elapsedLabel(milliseconds: number): string {
   if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(1)} s`
   if (milliseconds < 3_600_000) return `${(milliseconds / 60_000).toFixed(1)} min`
   return `${(milliseconds / 3_600_000).toFixed(1)} h`
-}
-
-/// 下钻到该实例的查询统计：会话与阻塞页的「查询统计排行」标签，带一份默认时间范围。
-/// 地址由路由器按那一页的契约拼，这里只负责给出一份合法的 search 对象。
-export function queryStatisticsDrilldown() {
-  return withSessionTab(defaultTimeRange(), 'query-statistics')
 }

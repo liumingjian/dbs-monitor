@@ -280,8 +280,8 @@ components:
       $ref: components/schemas/overview.yaml#/FleetHealthCounts
     FleetCollectionHealth:
       $ref: components/schemas/overview.yaml#/FleetCollectionHealth
-    StorageWatermarkEntry:
-      $ref: components/schemas/overview.yaml#/StorageWatermarkEntry
+    StorageUsageEntry:
+      $ref: components/schemas/overview.yaml#/StorageUsageEntry
     TopSqlEntry:
       $ref: components/schemas/sql-insight.yaml#/TopSqlEntry
     TopSqlList:

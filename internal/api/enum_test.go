@@ -99,6 +99,13 @@ var unavailabilityReconciliations = []unavailabilityReconciliation{
 		evidenceReference:   issue60EvidenceReference,
 	},
 	{
+		code:                api.NOTAPPLICABLEENGINE,
+		owner:               defaultUnavailabilityOwner,
+		producerDescription: "the semantic slot has no binding on this instance's engine",
+		producerReference:   "internal/httpapi/metric_series.go::api.NOTAPPLICABLEENGINE",
+		evidenceReference:   "internal/httpapi/instance_list_integration_test.go::TestInstanceListPagingFilteringAndBatchedTrends",
+	},
+	{
 		code:                api.COUNTERRESET,
 		owner:               defaultUnavailabilityOwner,
 		producerDescription: "a cumulative source counter decreased between samples",
@@ -133,7 +140,7 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 			api.COLLECTIONPAUSED: "", api.COLLECTIONFAILED: "", api.DBUNREACHABLE: "",
 			api.AGENTOFFLINE: "", api.PERMISSIONDENIED: "", api.EXTENSIONMISSING: "",
 			api.FEATUREDISABLED: "", api.VERSIONUNSUPPORTED: "", api.NOTAPPLICABLEROLE: "",
-			api.COUNTERRESET: "",
+			api.NOTAPPLICABLEENGINE: "", api.COUNTERRESET: "",
 		})},
 		{"AlertStatus", mapKeys(map[api.AlertStatus]string{
 			api.OK: "", api.PENDING: "", api.FIRING: "", api.NODATA: "", api.RECOVERED: "",
