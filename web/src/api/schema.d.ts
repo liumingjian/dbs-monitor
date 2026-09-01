@@ -1229,11 +1229,14 @@ export interface components {
         AlertRuleEnabledInput: {
             enabled: boolean;
         };
+        /** @description A read-only built-in alert rule template. `engine` and `semantic_slot` are its engine ownership: a template that fills a semantic slot can create rules on every engine that binds that slot, an AGNOSTIC template (host/agent/collector metrics) is offered everywhere, and any other template is offered only on instances of its own engine. Pass `engine` to the listing endpoint to get exactly the templates offerable there. */
         AlertRuleTemplate: {
             id: string;
             version: number;
             name: string;
             metric_id: string;
+            engine: components["schemas"]["MetricEngine"];
+            semantic_slot: components["schemas"]["SemanticSlot"] | null;
             aggregation: components["schemas"]["AlertAggregation"];
             operator: components["schemas"]["AlertOperator"];
             /** Format: double */
@@ -2842,7 +2845,10 @@ export interface operations {
     };
     listAlertRuleTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Keep only the templates that can create a rule on an instance running this engine. Omit it to list every template. A template addressing a semantic slot survives every engine that binds the slot; an engine-private one survives only its own engine. */
+                engine?: components["schemas"]["InstanceEngine"];
+            };
             header?: never;
             path?: never;
             cookie?: never;

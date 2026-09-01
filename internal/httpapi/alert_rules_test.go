@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/dbengine"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
 
@@ -215,4 +217,42 @@ func setCategoricalRule(rule *api.AlertRuleInput) {
 	rule.Threshold = 0
 	rule.RecoveryOperator = api.Equal
 	rule.RecoveryThreshold = &recoveryThreshold
+}
+
+// 规则作用域按引擎过滤：引擎私有指标的规则指派不到别的引擎的实例上，而拒绝要带理由——
+// 界面上那台实例是不可选的，使用者要看得见为什么，而不是发现列表里少了几台。
+//
+// 只有 PostgreSQL 一种引擎接进来，所以第二个引擎只存在于这个测试里，不进生产代码。
+func TestAlertRuleScopeEngineError(t *testing.T) {
+	const engineUnderTest = dbengine.Engine("ENGINE_UNDER_TEST")
+	for _, testCase := range []struct {
+		name       string
+		metricID   string
+		engine     dbengine.Engine
+		wantReject bool
+	}{
+		{name: "engine-private metric on its own engine", metricID: "pg.replication_slot.retained_wal_bytes", engine: dbengine.PostgreSQL},
+		{name: "engine-private metric on another engine", metricID: "pg.replication_slot.retained_wal_bytes", engine: engineUnderTest, wantReject: true},
+		{name: "slot metric on an engine that does not bind the slot", metricID: "pg.connection.total", engine: engineUnderTest, wantReject: true},
+		{name: "slot metric on its own engine", metricID: "pg.connection.total", engine: dbengine.PostgreSQL},
+		{name: "agnostic metric anywhere", metricID: "host.cpu.usage_percent", engine: engineUnderTest},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			scopeError, rejected := alertRuleScopeEngineError(testCase.metricID, "db-1", testCase.engine)
+			if rejected != testCase.wantReject {
+				t.Fatalf("rejected = %v, want %v", rejected, testCase.wantReject)
+			}
+			if !rejected {
+				return
+			}
+			if scopeError.field != "instance_ids" {
+				t.Errorf("rejected on field %q, want instance_ids", scopeError.field)
+			}
+			for _, fragment := range []string{"db-1", string(testCase.engine), testCase.metricID} {
+				if !strings.Contains(scopeError.message, fragment) {
+					t.Errorf("reason %q does not mention %q", scopeError.message, fragment)
+				}
+			}
+		})
+	}
 }

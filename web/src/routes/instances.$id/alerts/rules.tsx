@@ -42,7 +42,7 @@ import type { TableDensity } from '../../root/tableDensity'
 import { densityLabel, readTableDensity, writeTableDensity } from '../../root/tableDensity'
 import { defaultTimeRange } from '../timeRange'
 import { allMetricIDs, isMetricID, useMetricCatalog } from '../metricOptions'
-import type { MetricCatalog, MetricOption } from '../metricOptions'
+import type { EngineApplicability, MetricCatalog, MetricOption } from '../metricOptions'
 import { WorkbenchHeader } from '../workbench'
 import './rules.css'
 
@@ -80,9 +80,17 @@ function AlertRulesPage() {
   const { id } = alertRulesRoute.useParams()
   const catalog = useMetricCatalog()
   const rulesQuery = $api.useQuery('get', '/api/v1/alert-rules')
-  const templatesQuery = $api.useQuery('get', '/api/v1/alert-rule-templates')
   const instancesQuery = $api.useQuery('get', '/api/v1/instances')
   const instanceQuery = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } })
+  const engine = instanceQuery.data?.engine
+  // 模板按这台实例的引擎筛：引用语义位的模板一份两用，引用引擎私有指标的模板只在本引擎露面。
+  // 引擎未知时不发请求 —— 先列出全部再收回去，等于让使用者看见一份根本建不出规则的模板。
+  const templatesQuery = $api.useQuery(
+    'get',
+    '/api/v1/alert-rule-templates',
+    { params: { query: { engine } } },
+    { enabled: engine !== undefined },
+  )
   const tasksQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/tasks', { params: { path: { id } } })
   const capabilitiesQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/capabilities', { params: { path: { id } } })
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
@@ -244,6 +252,7 @@ function AlertRulesPage() {
     <RuleDrawer
       open={editorOpen}
       editingRule={editingRule}
+      catalog={catalog}
       instances={instancesQuery.data ?? []}
       policies={policiesQuery.data ?? []}
       onClose={() => setEditorOpen(false)}
@@ -445,14 +454,22 @@ function ruleValues(rule: AlertRule): AlertRuleValues {
   }
 }
 
+/// 一条建在 metricID 上的规则能不能指派到这台实例上。指标 ID 还不成形（新建表单的空串）时
+/// 不拦：此刻还没有「这条规则量的是什么」这回事。最终裁决在服务端，保存时会再判一次。
+function instanceApplicability(catalog: MetricCatalog, metricID: string, instance: Instance): EngineApplicability {
+  if (!isMetricID(metricID)) return { applicable: true }
+  return catalog.appliesToEngine(metricID, instance.engine)
+}
+
 /// 规则编辑器。抽屉而不是模态框 —— 焦点陷阱、Esc 关闭、`role="dialog"` 由
 /// `primitives/Drawer` 给，这里只管表单。
 ///
 /// 抽屉关闭时整棵子树从 DOM 里移除，所以表单状态跟着消失；`key` 换一条规则就换一份表单，
 /// 不需要在 effect 里手工 `reset`（那条路会在「打开 → 服务端返回新数据 → 覆盖用户输入」上翻车）。
-function RuleDrawer({ open, editingRule, instances, policies, onClose, onSaved }: {
+function RuleDrawer({ open, editingRule, catalog, instances, policies, onClose, onSaved }: {
   open: boolean
   editingRule: AlertRule | null
+  catalog: MetricCatalog
   instances: Instance[]
   policies: NotificationPolicy[]
   onClose: () => void
@@ -462,6 +479,7 @@ function RuleDrawer({ open, editingRule, instances, policies, onClose, onSaved }
   return <RuleDrawerForm
     key={editingRule?.id ?? 'new'}
     editingRule={editingRule}
+    catalog={catalog}
     instances={instances}
     policies={policies}
     onClose={onClose}
@@ -469,26 +487,33 @@ function RuleDrawer({ open, editingRule, instances, policies, onClose, onSaved }
   />
 }
 
-function RuleDrawerForm({ editingRule, instances, policies, onClose, onSaved }: {
+function RuleDrawerForm({ editingRule, catalog, instances, policies, onClose, onSaved }: {
   editingRule: AlertRule | null
+  catalog: MetricCatalog
   instances: Instance[]
   policies: NotificationPolicy[]
   onClose: () => void
   onSaved: () => void
 }) {
-  const metricItems: MetricOption[] = useMetricCatalog().options(alertableMetricIDs)
+  const metricItems: MetricOption[] = catalog.options(alertableMetricIDs)
   const createMutation = $api.useMutation('post', '/api/v1/alert-rules')
   const updateMutation = $api.useMutation('put', '/api/v1/alert-rules/{id}')
   const form = useForm<AlertRuleValues>({
     resolver: zodResolver(alertRuleSchema),
     defaultValues: editingRule === null ? defaultRuleValues : ruleValues(editingRule),
   })
-  const { control, formState, handleSubmit, register, setError, setValue, watch } = form
+  const { control, formState, getValues, handleSubmit, register, setError, setValue, watch } = form
   const [failure, setFailure] = useState('')
   const isBuiltin = editingRule?.is_builtin === true
   const pending = createMutation.isPending || updateMutation.isPending
 
   const scope = watch('scope')
+  const metricID = watch('metric_id')
+  const selectableInstances = instances.filter((instance) => instanceApplicability(catalog, metricID, instance).applicable)
+  const blockedInstances = instances.flatMap((instance) => {
+    const applicability = instanceApplicability(catalog, metricID, instance)
+    return applicability.applicable ? [] : [{ name: instance.name, reason: applicability.reason }]
+  })
   const consecutiveCount = watch('consecutive_count')
   const evaluationInterval = watch('evaluation_interval_seconds')
 
@@ -565,7 +590,16 @@ function RuleDrawerForm({ editingRule, instances, policies, onClose, onSaved }: 
             selectedItem={metricItems.find((option) => option.id === metric.value) ?? null}
             invalid={field.invalid}
             aria-describedby={field.describedBy}
-            onChange={({ selectedItem }) => metric.onChange(selectedItem?.id ?? '')}
+            onChange={({ selectedItem }) => {
+              const chosen = selectedItem?.id ?? ''
+              metric.onChange(chosen)
+              // 换了指标，作用域里对新指标不适用的实例要跟着清掉：它们已经不在可选列表里，
+              // 留着只会在保存时换来一条使用者点不掉的错误。
+              setValue('instance_ids', getValues('instance_ids').filter((instanceID) => {
+                const scoped = instances.find((candidate) => candidate.id === instanceID)
+                return scoped === undefined || instanceApplicability(catalog, chosen, scoped).applicable
+              }))
+            }}
           />}
         />}
       </FormField>
@@ -705,10 +739,16 @@ function RuleDrawerForm({ editingRule, instances, policies, onClose, onSaved }: 
         </Select>}
       </FormField>
 
+      {/* 作用域按引擎过滤：这条规则的指标在哪种引擎上不存在，那种引擎的实例就选不了。
+          不可选的实例不是从列表里悄悄消失 —— 名字与理由一并写在字段下方，否则使用者
+          只会看到一份莫名其妙短了几台的清单。 */}
       <FormField
         className="alert-rules-form__wide"
         label="实例"
         required={scope === 'INSTANCES'}
+        helperText={blockedInstances.length === 0
+          ? undefined
+          : `不可选：${blockedInstances.map((blocked) => `${blocked.name}（${blocked.reason}）`).join('；')}`}
         errorText={formState.errors.instance_ids?.message}
       >
         {(field) => <Controller
@@ -719,9 +759,9 @@ function RuleDrawerForm({ editingRule, instances, policies, onClose, onSaved }: 
             titleText=""
             label={scope === 'INSTANCES' ? '选择实例' : '全部实例'}
             disabled={scope !== 'INSTANCES' || isBuiltin}
-            items={instances}
+            items={selectableInstances}
             itemToString={(item) => item?.name ?? ''}
-            selectedItems={instances.filter((instance) => selected.value.includes(instance.id))}
+            selectedItems={selectableInstances.filter((instance) => selected.value.includes(instance.id))}
             invalid={field.invalid}
             aria-describedby={field.describedBy}
             onChange={({ selectedItems }) => selected.onChange((selectedItems ?? []).map((item) => item.id))}

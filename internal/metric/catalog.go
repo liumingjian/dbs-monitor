@@ -151,3 +151,66 @@ func WeightMetricFor(id MetricID) (MetricID, bool) {
 	}
 	return item.Weight, true
 }
+
+var (
+	// ErrMetricNotInCatalog 表示这个指标 ID 根本不在目录里。
+	ErrMetricNotInCatalog = errors.New("metric: metric is not in the catalogue")
+	// ErrMetricEngineMismatch 表示这个指标是另一个引擎的私有指标——它没有语义位，
+	// 所以在别的引擎上既没有对应物，也不该被悄悄换成一个近似的东西。
+	ErrMetricEngineMismatch = errors.New("metric: metric is private to another engine")
+)
+
+// EngineFor 是这个指标的归属引擎。目录里没有的指标返回 false——调用方要能区分
+// 「不属于任何引擎」（Agnostic）与「根本不认识」。
+func EngineFor(id MetricID) (Engine, bool) {
+	item, exists := Lookup(id)
+	if !exists {
+		return "", false
+	}
+	return item.Engine, true
+}
+
+// SlotFor 是这个指标填的语义位；没填位就是空串。
+//
+// 位与指标在一个引擎下是一一对应的（metric_catalog 上 UNIQUE (semantic_slot, engine)），
+// 所以「指标 ID」与「(位, 引擎)」互为反函数：告警规则存下具体指标 ID 就等于存下了位，
+// 不必在 alert_rule 上再开一列。ResolveForEngine 走的正是这条反函数。
+func SlotFor(id MetricID) SemanticSlot {
+	item, exists := Lookup(id)
+	if !exists {
+		return ""
+	}
+	return item.Slot
+}
+
+// ResolveForEngine 回答「这条按 id 写下的规则，放到一台跑 engine 的实例上，量的是哪个指标」。
+//
+// 三种归属，三种答案：
+//   - 引擎无关的指标（host.* / agent.* / collector.*）在哪个引擎上都是它自己；
+//   - 填了语义位的指标解析到该引擎绑定在这个位上的指标——这是模板一份两用的机制；
+//   - 既不无关、又没有位的指标是该引擎的私有指标（WAL 保留、复制槽、prepared xacts……），
+//     换个引擎就返回 ErrMetricEngineMismatch。
+//
+// 不适用时返回空 ID **并且**返回 error，和 ResolveSlot 一样：不适用是一个要显式呈现的结论。
+func ResolveForEngine(id MetricID, engine Engine) (MetricID, error) {
+	item, exists := Lookup(id)
+	if !exists {
+		return "", fmt.Errorf("%w: %q", ErrMetricNotInCatalog, id)
+	}
+	if item.Engine == EngineAgnostic {
+		return item.ID, nil
+	}
+	if item.Slot != "" {
+		return ResolveSlot(item.Slot, engine)
+	}
+	if item.Engine == engine {
+		return item.ID, nil
+	}
+	return "", fmt.Errorf("%w: metric %q belongs to engine %q, not %q", ErrMetricEngineMismatch, id, item.Engine, engine)
+}
+
+// AppliesToEngine 报告一条建在这个指标上的告警规则能不能指派到跑 engine 的实例上。
+func AppliesToEngine(id MetricID, engine Engine) bool {
+	_, err := ResolveForEngine(id, engine)
+	return err == nil
+}

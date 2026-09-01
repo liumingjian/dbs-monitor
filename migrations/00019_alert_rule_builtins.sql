@@ -45,11 +45,22 @@ ALTER TABLE alert_rule
         (source_template_id IS NULL) = (source_template_version IS NULL)
     );
 
+-- 模板带引擎归属：模板引用的指标属于哪个引擎，模板就属于哪个引擎，填的是哪个语义位就带哪个位。
+-- 两列都是 metric_catalog 那一行的转写，由 alerting_seed.go 从 internal/alerting 的模板表落进来。
+-- 可见性由这两列一起决定：带位的模板一份两用（任何绑定了这个位的引擎都看得见），
+-- AGNOSTIC 的模板处处可见，其余只在本引擎的实例上可见。
 CREATE TABLE alert_rule_template (
     identifier text PRIMARY KEY CHECK (identifier <> ''),
     version integer NOT NULL CHECK (version > 0),
     name text NOT NULL CHECK (name <> ''),
     metric_id text NOT NULL,
+    engine text NOT NULL CHECK (engine IN ('POSTGRESQL', 'AGNOSTIC')),
+    -- 与引擎无关的指标（host.* / agent.* / collector.*）不占位：它们本来就处处可用，
+    -- 再给一个位只会让「容量水位」这个位在同一台实例上指向两个指标。
+    semantic_slot text REFERENCES metric_semantic_slot(slot_id),
+    CONSTRAINT alert_rule_template_agnostic_has_no_slot CHECK (
+        engine <> 'AGNOSTIC' OR semantic_slot IS NULL
+    ),
     aggregation text NOT NULL CHECK (aggregation IN ('latest', 'avg', 'max', 'min', 'sum', 'count')),
     operator text NOT NULL CHECK (operator IN ('>', '>=', '<', '<=', '=', '!=')),
     threshold double precision NOT NULL,

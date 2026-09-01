@@ -733,23 +733,27 @@ type AlertRuleInput struct {
 // AlertRuleScope defines model for AlertRuleScope.
 type AlertRuleScope string
 
-// AlertRuleTemplate defines model for AlertRuleTemplate.
+// AlertRuleTemplate A read-only built-in alert rule template. `engine` and `semantic_slot` are its engine ownership: a template that fills a semantic slot can create rules on every engine that binds that slot, an AGNOSTIC template (host/agent/collector metrics) is offered everywhere, and any other template is offered only on instances of its own engine. Pass `engine` to the listing endpoint to get exactly the templates offerable there.
 type AlertRuleTemplate struct {
-	Aggregation               AlertAggregation `json:"aggregation"`
-	ConsecutiveCount          int              `json:"consecutive_count"`
-	EvaluationIntervalSeconds int              `json:"evaluation_interval_seconds"`
-	Id                        string           `json:"id"`
-	MetricId                  string           `json:"metric_id"`
-	Name                      string           `json:"name"`
-	NoDataPolicy              NoDataPolicy     `json:"no_data_policy"`
-	Operator                  AlertOperator    `json:"operator"`
-	RecoveryConsecutiveCount  int              `json:"recovery_consecutive_count"`
-	RecoveryOperator          AlertOperator    `json:"recovery_operator"`
-	RecoveryThreshold         float64          `json:"recovery_threshold"`
-	Severity                  AlertSeverity    `json:"severity"`
-	Threshold                 float64          `json:"threshold"`
-	Version                   int              `json:"version"`
-	WindowSeconds             int              `json:"window_seconds"`
+	Aggregation      AlertAggregation `json:"aggregation"`
+	ConsecutiveCount int              `json:"consecutive_count"`
+
+	// Engine Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
+	Engine                    MetricEngine                    `json:"engine"`
+	EvaluationIntervalSeconds int                             `json:"evaluation_interval_seconds"`
+	Id                        string                          `json:"id"`
+	MetricId                  string                          `json:"metric_id"`
+	Name                      string                          `json:"name"`
+	NoDataPolicy              NoDataPolicy                    `json:"no_data_policy"`
+	Operator                  AlertOperator                   `json:"operator"`
+	RecoveryConsecutiveCount  int                             `json:"recovery_consecutive_count"`
+	RecoveryOperator          AlertOperator                   `json:"recovery_operator"`
+	RecoveryThreshold         float64                         `json:"recovery_threshold"`
+	SemanticSlot              nullable.Nullable[SemanticSlot] `json:"semantic_slot"`
+	Severity                  AlertSeverity                   `json:"severity"`
+	Threshold                 float64                         `json:"threshold"`
+	Version                   int                             `json:"version"`
+	WindowSeconds             int                             `json:"window_seconds"`
 }
 
 // AlertRuleTemplateInstantiationInput defines model for AlertRuleTemplateInstantiationInput.
@@ -1506,6 +1510,12 @@ type DownloadAgentBinaryParams struct {
 // DownloadAgentBinaryParamsArch defines parameters for DownloadAgentBinary.
 type DownloadAgentBinaryParamsArch string
 
+// ListAlertRuleTemplatesParams defines parameters for ListAlertRuleTemplates.
+type ListAlertRuleTemplatesParams struct {
+	// Engine Keep only the templates that can create a rule on an instance running this engine. Omit it to list every template. A template addressing a semantic slot survives every engine that binds the slot; an engine-private one survives only its own engine.
+	Engine *InstanceEngine `form:"engine,omitempty" json:"engine,omitempty"`
+}
+
 // ListCurrentAlertsParams defines parameters for ListCurrentAlerts.
 type ListCurrentAlertsParams struct {
 	InstanceId    *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
@@ -1683,7 +1693,7 @@ type ServerInterface interface {
 	GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/alert-rule-templates)
-	ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request)
+	ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request, params ListAlertRuleTemplatesParams)
 
 	// (POST /api/v1/alert-rule-templates/{id}/alert-rules)
 	CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request, id string)
@@ -2139,8 +2149,21 @@ func (siw *ServerInterfaceWrapper) GetAlertTriggerSnapshot(w http.ResponseWriter
 // ListAlertRuleTemplates operation middleware
 func (siw *ServerInterfaceWrapper) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertRuleTemplatesParams
+
+	// ------------- Optional query parameter "engine" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "engine", r.URL.Query(), &params.Engine)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "engine", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAlertRuleTemplates(w, r)
+		siw.Handler.ListAlertRuleTemplates(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4414,6 +4437,7 @@ func (response GetAlertTriggerSnapshot404JSONResponse) VisitGetAlertTriggerSnaps
 }
 
 type ListAlertRuleTemplatesRequestObject struct {
+	Params ListAlertRuleTemplatesParams
 }
 
 type ListAlertRuleTemplatesResponseObject interface {
@@ -6825,8 +6849,10 @@ func (sh *strictHandler) GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.
 }
 
 // ListAlertRuleTemplates operation middleware
-func (sh *strictHandler) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request, params ListAlertRuleTemplatesParams) {
 	var request ListAlertRuleTemplatesRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListAlertRuleTemplates(ctx, request.(ListAlertRuleTemplatesRequestObject))

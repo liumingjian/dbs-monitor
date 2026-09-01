@@ -112,6 +112,8 @@ type AlertRuleTemplate struct {
 	Version                   int32
 	Name                      string
 	MetricID                  string
+	Engine                    string
+	SemanticSlot              pgtype.Text
 	Aggregation               string
 	Operator                  string
 	Threshold                 float64

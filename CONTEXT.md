@@ -67,3 +67,7 @@ _Avoid_: Metric enum, metric whitelist
 **Semantic slot**:
 An engine-neutral position in the metric model that resolves, per engine, to one concrete metric ID. A slot with no metric on a given engine is not applicable there — an explicit answer, never an empty metric ID. Engine-private metrics deliberately fill no slot.
 _Avoid_: Neutral metric name, metric alias
+
+**Alert rule template**:
+A read-only built-in starting point for an alert rule. It belongs to the engine of the metric it addresses: a template addressing a semantic slot is offered on every engine that binds the slot and creates one rule that spans them, an engine-agnostic one is offered everywhere, and any other is offered only on instances of its own engine. A rule keeps addressing the metric it was written on; on an instance of another engine it evaluates whichever metric that engine binds to the same slot, and a rule on an engine-private metric cannot be scoped to such an instance at all.
+_Avoid_: One template per engine, rule library entry

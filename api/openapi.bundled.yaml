@@ -741,6 +741,13 @@ paths:
         - alert-rules
       operationId: listAlertRuleTemplates
       x-required-role: READONLY
+      parameters:
+        - name: engine
+          in: query
+          required: false
+          description: Keep only the templates that can create a rule on an instance running this engine. Omit it to list every template. A template addressing a semantic slot survives every engine that binds the slot; an engine-private one survives only its own engine.
+          schema:
+            $ref: '#/components/schemas/InstanceEngine'
       responses:
         '200':
           description: Read-only built-in alert rule templates
@@ -2563,11 +2570,14 @@ components:
           type: boolean
     AlertRuleTemplate:
       type: object
+      description: 'A read-only built-in alert rule template. `engine` and `semantic_slot` are its engine ownership: a template that fills a semantic slot can create rules on every engine that binds that slot, an AGNOSTIC template (host/agent/collector metrics) is offered everywhere, and any other template is offered only on instances of its own engine. Pass `engine` to the listing endpoint to get exactly the templates offerable there.'
       required:
         - id
         - version
         - name
         - metric_id
+        - engine
+        - semantic_slot
         - aggregation
         - operator
         - threshold
@@ -2588,6 +2598,12 @@ components:
           type: string
         metric_id:
           type: string
+        engine:
+          $ref: '#/components/schemas/MetricEngine'
+        semantic_slot:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/SemanticSlot'
         aggregation:
           $ref: '#/components/schemas/AlertAggregation'
         operator:

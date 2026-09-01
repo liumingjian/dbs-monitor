@@ -119,7 +119,7 @@ type ClientInterface interface {
 	GetAlertTriggerSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAlertRuleTemplates request
-	ListAlertRuleTemplates(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListAlertRuleTemplates(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateAlertRuleFromTemplateWithBody request with any body
 	CreateAlertRuleFromTemplateWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -529,8 +529,8 @@ func (c *Client) GetAlertTriggerSnapshot(ctx context.Context, id openapi_types.U
 	return c.Client.Do(req)
 }
 
-func (c *Client) ListAlertRuleTemplates(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListAlertRuleTemplatesRequest(c.Server)
+func (c *Client) ListAlertRuleTemplates(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertRuleTemplatesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2104,7 +2104,7 @@ func NewGetAlertTriggerSnapshotRequest(server string, id openapi_types.UUID) (*h
 }
 
 // NewListAlertRuleTemplatesRequest generates requests for ListAlertRuleTemplates
-func NewListAlertRuleTemplatesRequest(server string) (*http.Request, error) {
+func NewListAlertRuleTemplatesRequest(server string, params *ListAlertRuleTemplatesParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -2120,6 +2120,28 @@ func NewListAlertRuleTemplatesRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Engine != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "engine", runtime.ParamLocationQuery, *params.Engine); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5325,7 +5347,7 @@ type ClientWithResponsesInterface interface {
 	GetAlertTriggerSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertTriggerSnapshotResponse, error)
 
 	// ListAlertRuleTemplatesWithResponse request
-	ListAlertRuleTemplatesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error)
+	ListAlertRuleTemplatesWithResponse(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error)
 
 	// CreateAlertRuleFromTemplateWithBodyWithResponse request with any body
 	CreateAlertRuleFromTemplateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlertRuleFromTemplateResponse, error)
@@ -7660,8 +7682,8 @@ func (c *ClientWithResponses) GetAlertTriggerSnapshotWithResponse(ctx context.Co
 }
 
 // ListAlertRuleTemplatesWithResponse request returning *ListAlertRuleTemplatesResponse
-func (c *ClientWithResponses) ListAlertRuleTemplatesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error) {
-	rsp, err := c.ListAlertRuleTemplates(ctx, reqEditors...)
+func (c *ClientWithResponses) ListAlertRuleTemplatesWithResponse(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error) {
+	rsp, err := c.ListAlertRuleTemplates(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

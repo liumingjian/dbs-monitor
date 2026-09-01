@@ -531,10 +531,10 @@ func TestAlertingSeedsAreIdempotentAndTemplatesAreReplaced(t *testing.T) {
 		t.Fatalf("modify read-only template fixture: %v", err)
 	}
 	if _, err := database.ExecContext(ctx, `INSERT INTO alert_rule_template
-		(identifier, version, name, metric_id, aggregation, operator, threshold,
+		(identifier, version, name, metric_id, engine, semantic_slot, aggregation, operator, threshold,
 		recovery_operator, recovery_threshold, window_seconds, consecutive_count,
 		recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds)
-		SELECT 'obsolete', version, name, metric_id, aggregation, operator, threshold,
+		SELECT 'obsolete', version, name, metric_id, engine, semantic_slot, aggregation, operator, threshold,
 		recovery_operator, recovery_threshold, window_seconds, consecutive_count,
 		recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds
 		FROM alert_rule_template LIMIT 1`); err != nil {

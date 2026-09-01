@@ -1,6 +1,10 @@
 import { useMemo } from 'react'
 import { $api } from '../../api/client'
-import type { operations } from '../../api/schema'
+import type { components, operations } from '../../api/schema'
+
+type MetricCatalogEntry = components['schemas']['MetricCatalogEntry']
+type SemanticSlotDeclaration = components['schemas']['SemanticSlotDeclaration']
+import { instanceEngineLabel, type InstanceEngine } from '../../domain/instanceEngine'
 
 export type MetricID = operations['getMetricSeries']['parameters']['query']['metric'][number]
 
@@ -107,11 +111,20 @@ export function isEnhancedCandidate(id: MetricID): boolean {
   }
 }
 
+/// 一个指标能不能用在跑某种引擎的实例上。不适用时必须带理由：作用域里那台实例是不可选的，
+/// 使用者要看得见为什么，而不是发现列表里少了几台。
+export type EngineApplicability =
+  | { applicable: true }
+  | { applicable: false; reason: string }
+
 export type MetricCatalog = {
   /// 展示名。目录还在路上时给出指标 ID —— 一个真实的、能照着搜的事实，不是编出来的文案。
   label: (id: MetricID) => string
   option: (id: MetricID) => MetricOption
   options: (ids: readonly MetricID[]) => MetricOption[]
+  /// 与服务端 metric.ResolveForEngine 同一条规则，读的也是同一份目录：引擎无关的指标处处可用；
+  /// 填了语义位的指标在任何绑定了这个位的引擎上都可用；既不无关又没有位的是引擎私有指标。
+  appliesToEngine: (id: MetricID, engine: InstanceEngine) => EngineApplicability
 }
 
 /// 指标目录由服务端给：展示名与单位都在 `metric_catalog` 里，前端不再自持一份 —— 跨引擎之后
@@ -120,12 +133,39 @@ export type MetricCatalog = {
 export function useMetricCatalog(): MetricCatalog {
   const catalogQuery = $api.useQuery('get', '/api/v1/metrics/catalog', {}, catalogQueryOptions)
   const entries = catalogQuery.data?.metrics
-  return useMemo(() => {
-    const names = new Map<string, string>((entries ?? []).map((entry) => [entry.metric_id, entry.display_name]))
-    const label = (id: MetricID) => names.get(id) ?? id
-    const option = (id: MetricID): MetricOption => ({ id, label: label(id) })
-    return { label, option, options: (ids: readonly MetricID[]) => ids.map(option) }
-  }, [entries])
+  const slots = catalogQuery.data?.semantic_slots
+  return useMemo(() => metricCatalogFrom(entries ?? [], slots ?? []), [entries, slots])
+}
+
+/// 目录的读法本身不依赖 React：取数在 hook 里，问答在这里，测试直接问这一个函数。
+export function metricCatalogFrom(rows: MetricCatalogEntry[], slots: SemanticSlotDeclaration[]): MetricCatalog {
+  const names = new Map<string, string>(rows.map((entry) => [entry.metric_id, entry.display_name]))
+  const byID = new Map(rows.map((entry) => [entry.metric_id, entry]))
+  const slotNames = new Map(slots.map((slot) => [slot.slot_id, slot.display_name]))
+  const label = (id: MetricID) => names.get(id) ?? id
+  const option = (id: MetricID): MetricOption => ({ id, label: label(id) })
+  const appliesToEngine = (id: MetricID, engine: InstanceEngine): EngineApplicability => {
+    const entry = byID.get(id)
+    // 目录还没到手就不拦：可选性的最终裁决在服务端，保存时会再判一次。
+    if (entry === undefined || entry.engine === 'AGNOSTIC' || entry.engine === engine) {
+      return { applicable: true }
+    }
+    if (entry.semantic_slot === null) {
+      return {
+        applicable: false,
+        reason: `${label(id)}是 ${instanceEngineLabel(entry.engine)} 的专有指标，${instanceEngineLabel(engine)} 实例上没有对应物`,
+      }
+    }
+    const slot = entry.semantic_slot
+    if (rows.some((candidate) => candidate.semantic_slot === slot && candidate.engine === engine)) {
+      return { applicable: true }
+    }
+    return {
+      applicable: false,
+      reason: `${instanceEngineLabel(engine)} 还没有「${slotNames.get(slot) ?? slot}」这个指标`,
+    }
+  }
+  return { label, option, options: (ids: readonly MetricID[]) => ids.map(option), appliesToEngine }
 }
 
 const catalogQueryOptions = { staleTime: Infinity, gcTime: Infinity }
