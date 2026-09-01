@@ -108,11 +108,19 @@ AlertRuleEnabledInput:
     enabled: { type: boolean }
 AlertRuleTemplate:
   type: object
+  description: >-
+    A read-only built-in alert rule template. `engine` and `semantic_slot` are its engine
+    ownership: a template that fills a semantic slot can create rules on every engine that
+    binds that slot, an AGNOSTIC template (host/agent/collector metrics) is offered
+    everywhere, and any other template is offered only on instances of its own engine.
+    Pass `engine` to the listing endpoint to get exactly the templates offerable there.
   required:
     - id
     - version
     - name
     - metric_id
+    - engine
+    - semantic_slot
     - aggregation
     - operator
     - threshold
@@ -129,6 +137,11 @@ AlertRuleTemplate:
     version: { type: integer }
     name: { type: string }
     metric_id: { type: string }
+    engine: { $ref: ../enums.yaml#/MetricEngine }
+    semantic_slot:
+      nullable: true
+      allOf:
+        - $ref: ../enums.yaml#/SemanticSlot
     aggregation: { $ref: ../enums.yaml#/AlertAggregation }
     operator: { $ref: ../enums.yaml#/AlertOperator }
     threshold: { type: number, format: double }

@@ -162,3 +162,101 @@ func TestEverySemanticSlotBindsOnPostgreSQL(t *testing.T) {
 		}
 	}
 }
+
+// 只有 PostgreSQL 一种引擎接进来，跨引擎的行为在界面上看不见，但它在这里看得见：
+// 造一个只在测试里存在的第二引擎，把一个指标绑到某个位上，看解析怎么走。
+// **这个引擎不进生产代码**——生产代码里的引擎全集只有 internal/dbengine 那一份。
+const engineUnderTest = metric.Engine("ENGINE_UNDER_TEST")
+
+// withTestEngineBinding 把一条「第二引擎」的目录行临时挂进目录，返回时恢复原样。
+func withTestEngineBinding(t *testing.T, id metric.MetricID, slot metric.SemanticSlot) {
+	t.Helper()
+	original := metric.Metrics
+	restored := make([]metric.Metric, len(original))
+	copy(restored, original)
+	metric.Metrics = append(restored, metric.Metric{
+		ID: id, DisplayName: string(id), Engine: engineUnderTest,
+		Level: metric.LevelInstance, Aggregation: metric.AggregationNone, Slot: slot,
+	})
+	t.Cleanup(func() { metric.Metrics = original })
+}
+
+// 引用语义位的规则跨引擎：同一条规则在两种引擎上解析到各自的具体指标。
+func TestResolveForEngineFollowsTheSlotAcrossEngines(t *testing.T) {
+	withTestEngineBinding(t, "other.connection.total", metric.SlotConnections)
+
+	resolved, err := metric.ResolveForEngine("pg.connection.total", engineUnderTest)
+	if err != nil {
+		t.Fatalf("resolve pg.connection.total on the second engine: %v", err)
+	}
+	if resolved != "other.connection.total" {
+		t.Errorf("resolved to %q, want the second engine's binding", resolved)
+	}
+
+	resolved, err = metric.ResolveForEngine("pg.connection.total", metric.EnginePostgreSQL)
+	if err != nil {
+		t.Fatalf("resolve pg.connection.total on PostgreSQL: %v", err)
+	}
+	if resolved != "pg.connection.total" {
+		t.Errorf("resolved to %q on its own engine, want itself", resolved)
+	}
+}
+
+// 引擎私有指标（没有位）换个引擎就不适用，而且必须以 error 的形式说出来。
+func TestResolveForEngineRejectsEnginePrivateMetrics(t *testing.T) {
+	for _, id := range []metric.MetricID{
+		"pg.replication_slot.retained_wal_bytes",
+		"pg.prepared_xacts.count",
+		"pg.temp.bytes_per_sec",
+		"pg.replication.wal_lag_bytes",
+	} {
+		resolved, err := metric.ResolveForEngine(id, engineUnderTest)
+		if !errors.Is(err, metric.ErrMetricEngineMismatch) {
+			t.Errorf("resolve %q on another engine: err = %v, want ErrMetricEngineMismatch", id, err)
+		}
+		if resolved != "" {
+			t.Errorf("resolve %q on another engine returned %q alongside the error", id, resolved)
+		}
+		if metric.AppliesToEngine(id, engineUnderTest) {
+			t.Errorf("metric %q claims to apply to another engine", id)
+		}
+		if !metric.AppliesToEngine(id, metric.EnginePostgreSQL) {
+			t.Errorf("metric %q does not apply to its own engine", id)
+		}
+	}
+}
+
+// 位没有在这个引擎上绑定时，答案是「不适用」，不是一个 PostgreSQL 的兜底指标。
+func TestResolveForEngineReportsUnboundSlots(t *testing.T) {
+	resolved, err := metric.ResolveForEngine("pg.cache.hit_ratio", engineUnderTest)
+	if !errors.Is(err, metric.ErrSlotNotApplicable) {
+		t.Fatalf("err = %v, want ErrSlotNotApplicable", err)
+	}
+	if resolved != "" {
+		t.Errorf("resolved to %q alongside the error", resolved)
+	}
+}
+
+// 引擎无关的指标（host.* / agent.* / collector.*）在任何引擎上都是它自己。
+// 磁盘使用率填的是容量水位这个位，但它不属于任何数据库产品，所以在 PostgreSQL 实例上
+// 也不该被换成 pg.database.size_bytes——一条「磁盘满了」的规则量的始终是磁盘。
+func TestResolveForEngineKeepsAgnosticMetricsThemselves(t *testing.T) {
+	for _, id := range []metric.MetricID{"host.disk.usage_percent", "host.cpu.usage_percent", "agent.status"} {
+		for _, engine := range []metric.Engine{metric.EnginePostgreSQL, engineUnderTest} {
+			resolved, err := metric.ResolveForEngine(id, engine)
+			if err != nil {
+				t.Errorf("resolve %q on %s: %v", id, engine, err)
+				continue
+			}
+			if resolved != id {
+				t.Errorf("resolve %q on %s = %q, want itself", id, engine, resolved)
+			}
+		}
+	}
+}
+
+func TestResolveForEngineRejectsUncataloguedMetrics(t *testing.T) {
+	if _, err := metric.ResolveForEngine("pg.not.a.metric", metric.EnginePostgreSQL); !errors.Is(err, metric.ErrMetricNotInCatalog) {
+		t.Fatalf("err = %v, want ErrMetricNotInCatalog", err)
+	}
+}

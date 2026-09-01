@@ -4,15 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/oapi-codegen/nullable"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
 	"github.com/liumingjian/dbs-monitor/internal/api"
+	"github.com/liumingjian/dbs-monitor/internal/dbengine"
 	"github.com/liumingjian/dbs-monitor/internal/metric"
 )
 
@@ -57,13 +60,20 @@ func (handler *Handler) GetAlertRule(ctx context.Context, request api.GetAlertRu
 	return api.GetAlertRule200JSONResponse(response), nil
 }
 
-func (handler *Handler) ListAlertRuleTemplates(ctx context.Context, _ api.ListAlertRuleTemplatesRequestObject) (api.ListAlertRuleTemplatesResponseObject, error) {
+// ListAlertRuleTemplates 列出内置模板；带 engine 时只列在那种引擎的实例上能用的那些。
+//
+// 过滤走 metric.AppliesToEngine——与规则作用域校验、与评估时的解析是同一条规则：
+// 引用语义位的模板一份两用，引用引擎私有指标的模板只在本引擎露面。
+func (handler *Handler) ListAlertRuleTemplates(ctx context.Context, request api.ListAlertRuleTemplatesRequestObject) (api.ListAlertRuleTemplatesResponseObject, error) {
 	templates, err := alerting.New(handler.platform).ListAlertRuleTemplates(ctx)
 	if err != nil {
 		return nil, err
 	}
 	response := make(api.ListAlertRuleTemplates200JSONResponse, 0, len(templates))
 	for _, template := range templates {
+		if request.Params.Engine != nil && !metric.AppliesToEngine(metric.MetricID(template.MetricID), dbengine.Engine(*request.Params.Engine)) {
+			continue
+		}
 		response = append(response, toAPIAlertRuleTemplate(template))
 	}
 	return response, nil
@@ -513,12 +523,15 @@ func (handler *Handler) validateAlertRuleReferences(ctx context.Context, rule ap
 	queries := alerting.New(handler.platform)
 	if rule.Scope == api.INSTANCES {
 		for _, instanceID := range rule.InstanceIds {
-			exists, err := queries.AlertRuleTargetInstanceExists(ctx, pgtype.UUID{Bytes: instanceID, Valid: true})
+			target, err := queries.GetAlertRuleTargetInstance(ctx, pgtype.UUID{Bytes: instanceID, Valid: true})
+			if errors.Is(err, pgx.ErrNoRows) {
+				return []fieldError{{field: "instance_ids", message: "contains an unknown instance"}}, nil
+			}
 			if err != nil {
 				return nil, err
 			}
-			if !exists {
-				return []fieldError{{field: "instance_ids", message: "contains an unknown instance"}}, nil
+			if scopeError, rejected := alertRuleScopeEngineError(rule.MetricId, target.Name, dbengine.Engine(target.Engine)); rejected {
+				return []fieldError{scopeError}, nil
 			}
 		}
 	}
@@ -532,6 +545,21 @@ func (handler *Handler) validateAlertRuleReferences(ctx context.Context, rule ap
 		}
 	}
 	return nil, nil
+}
+
+// alertRuleScopeEngineError 说清楚一台实例为什么进不了这条规则的作用域。
+//
+// 拒绝必须带理由：界面上这些实例是不可选的，使用者要看得到「为什么这台不能选」，
+// 而不是发现列表里少了几台。规则本身用的是与评估同一条解析规则（metric.ResolveForEngine），
+// 所以「能不能选」和「选了会不会评估」永远是同一个答案。
+func alertRuleScopeEngineError(metricID string, instanceName string, engine dbengine.Engine) (fieldError, bool) {
+	if metric.AppliesToEngine(metric.MetricID(metricID), engine) {
+		return fieldError{}, false
+	}
+	return fieldError{
+		field:   "instance_ids",
+		message: fmt.Sprintf("contains instance %q, which runs %s: metric %q is not available on that engine", instanceName, engine, metricID),
+	}, true
 }
 
 func saveAlertRuleVersion(
@@ -735,6 +763,8 @@ func toAPIAlertRuleTemplate(template alerting.AlertRuleTemplate) api.AlertRuleTe
 		Version:                   int(template.Version),
 		Name:                      template.Name,
 		MetricId:                  template.MetricID,
+		Engine:                    api.MetricEngine(template.Engine),
+		SemanticSlot:              toAPISemanticSlot(template.SemanticSlot),
 		Aggregation:               api.AlertAggregation(template.Aggregation),
 		Operator:                  api.AlertOperator(template.Operator),
 		Threshold:                 template.Threshold,
@@ -747,6 +777,15 @@ func toAPIAlertRuleTemplate(template alerting.AlertRuleTemplate) api.AlertRuleTe
 		NoDataPolicy:              api.NoDataPolicy(template.NoDataPolicy),
 		EvaluationIntervalSeconds: int(template.EvaluationIntervalSeconds),
 	}
+}
+
+// toAPISemanticSlot 把模板行上的语义位翻成 API 的可空字段。空位不是空串，是 null：
+// 「这份模板不占位」与「它占了一个叫空串的位」在跨引擎可见性上是两件事。
+func toAPISemanticSlot(slot pgtype.Text) nullable.Nullable[api.SemanticSlot] {
+	if !slot.Valid {
+		return nullable.NewNullNullable[api.SemanticSlot]()
+	}
+	return nullable.NewNullableWithValue(api.SemanticSlot(slot.String))
 }
 
 func toOptionalAPIUUID(id pgtype.UUID) *openapi_types.UUID {

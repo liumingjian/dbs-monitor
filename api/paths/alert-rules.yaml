@@ -161,6 +161,15 @@
     tags: [alert-rules]
     operationId: listAlertRuleTemplates
     x-required-role: READONLY
+    parameters:
+      - name: engine
+        in: query
+        required: false
+        description: >-
+          Keep only the templates that can create a rule on an instance running this engine.
+          Omit it to list every template. A template addressing a semantic slot survives every
+          engine that binds the slot; an engine-private one survives only its own engine.
+        schema: { $ref: ../components/enums.yaml#/InstanceEngine }
     responses:
       '200':
         description: Read-only built-in alert rule templates

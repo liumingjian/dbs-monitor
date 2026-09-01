@@ -93,6 +93,27 @@ func TestAlertRuleVersionEnablementNoDataAndDedupSemantics(t *testing.T) {
 		t.Fatalf("CPU template = %+v", cpuTemplate)
 	}
 
+	// 模板的引擎归属：CPU 是引擎无关的（处处可见、不占位），连接数填的是 connections 这个位
+	// （一份两用），Slot 积压既不无关又没有位，是 PostgreSQL 私有。
+	templateByID := make(map[string]api.AlertRuleTemplate, len(templates))
+	for _, template := range templates {
+		templateByID[template.Id] = template
+	}
+	assertTemplateOwnership(t, templateByID["cpu_high"], api.MetricEngineAgnostic, "")
+	assertTemplateOwnership(t, templateByID["connections_high"], api.MetricEnginePostgreSQL, api.SlotConnections)
+	assertTemplateOwnership(t, templateByID["replication_slot_backlog"], api.MetricEnginePostgreSQL, "")
+
+	// 按引擎筛选：PostgreSQL 上十五条全在（今天唯一接入的引擎，行为与从前一致）；
+	// 换一个什么位都还没绑定的引擎，只剩下三条引擎无关的模板——引擎私有的模板不在那里露面。
+	// 第二个引擎只存在于这个测试里，生产代码里的引擎全集仍然只有 PostgreSQL。
+	if listed := listTemplateIDsForEngine(t, client, server.URL, "POSTGRESQL"); len(listed) != 15 {
+		t.Fatalf("templates on POSTGRESQL = %d, want 15", len(listed))
+	}
+	elsewhere := listTemplateIDsForEngine(t, client, server.URL, "ENGINE_UNDER_TEST")
+	if !reflect.DeepEqual(elsewhere, []string{"cpu_high", "disk_usage_high", "memory_high"}) {
+		t.Fatalf("templates on an engine that binds no slot = %v, want the three engine-agnostic ones", elsewhere)
+	}
+
 	fromTemplateResponse := requestJSON(t, client, http.MethodPost,
 		server.URL+"/api/v1/alert-rule-templates/cpu_high/alert-rules",
 		map[string]any{"name": "Custom CPU", "threshold": 90, "severity": "critical"}, "")
@@ -965,3 +986,35 @@ func (clock *fixedClock) Ticker(time.Duration) (<-chan time.Time, func()) {
 func (clock *fixedClock) Advance(duration time.Duration) { clock.now = clock.now.Add(duration) }
 
 var _ clock.Clock = (*fixedClock)(nil)
+
+func assertTemplateOwnership(t *testing.T, template api.AlertRuleTemplate, engine api.MetricEngine, slot api.SemanticSlot) {
+	t.Helper()
+	if template.Engine != engine {
+		t.Errorf("template %q engine = %q, want %q", template.Id, template.Engine, engine)
+	}
+	got, err := template.SemanticSlot.Get()
+	if slot == "" {
+		if err == nil {
+			t.Errorf("template %q fills slot %q, want none", template.Id, got)
+		}
+		return
+	}
+	if err != nil || got != slot {
+		t.Errorf("template %q slot = %q (%v), want %q", template.Id, got, err, slot)
+	}
+}
+
+func listTemplateIDsForEngine(t *testing.T, client *http.Client, baseURL string, engine string) []string {
+	t.Helper()
+	response := getResponse(t, client, baseURL+"/api/v1/alert-rule-templates?engine="+engine)
+	defer response.Body.Close()
+	var templates []api.AlertRuleTemplate
+	if response.StatusCode != http.StatusOK || json.NewDecoder(response.Body).Decode(&templates) != nil {
+		t.Fatalf("list templates for engine %q status = %d", engine, response.StatusCode)
+	}
+	identifiers := make([]string, 0, len(templates))
+	for _, template := range templates {
+		identifiers = append(identifiers, template.Id)
+	}
+	return identifiers
+}
