@@ -47,6 +47,17 @@ InstanceCreated:
   properties:
     instance:
       $ref: '#/Instance'
+InstanceListPage:
+  type: object
+  required: [items, total]
+  properties:
+    items:
+      type: array
+      items: { $ref: '#/Instance' }
+    total:
+      type: integer
+      minimum: 0
+      description: Number of instances matching the filters, before paging.
 HealthAttribution:
   type: object
   required: [rule_name]

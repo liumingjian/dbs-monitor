@@ -198,7 +198,10 @@ export function MaintenancePanel({ canManage, initialInstanceID, openInitially, 
   onEditorOpened: () => void
 }) {
   const windowsQuery = $api.useQuery('get', '/api/v1/maintenance-windows')
-  const instancesQuery = $api.useQuery('get', '/api/v1/instances')
+  const instancesQuery = $api.useQuery('get', '/api/v1/instances', {
+    // 选实例的下拉框要的是全部实例，不是当页；列表接口分页之后，这里显式要一整页。
+    params: { query: { page_size: 500, sort: 'name' as const } },
+  })
   const endMutation = $api.useMutation('post', '/api/v1/maintenance-windows/{id}/end')
   const deleteMutation = $api.useMutation('delete', '/api/v1/maintenance-windows/{id}')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
@@ -209,7 +212,7 @@ export function MaintenancePanel({ canManage, initialInstanceID, openInitially, 
 
   const windows = windowsQuery.data ?? []
   const grouped = groupMaintenanceWindows(windows)
-  const instances = instancesQuery.data ?? []
+  const instances = instancesQuery.data?.items ?? []
   const instanceNames = new Map(instances.map((instance) => [instance.id, instance.name]))
   const instanceOptions: InstanceOption[] = instances.map((instance) => ({ id: instance.id, label: instance.name }))
 

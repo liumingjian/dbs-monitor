@@ -248,14 +248,14 @@ func readRemovalFacts(t *testing.T, ctx context.Context, platform *db.Pool, inst
 
 func assertRemovedInstanceAbsent(t *testing.T, ctx context.Context, client *api.ClientWithResponses, instanceID uuid.UUID) {
 	t.Helper()
-	response, err := client.ListInstancesWithResponse(ctx)
+	response, err := client.ListInstancesWithResponse(ctx, &api.ListInstancesParams{})
 	if err != nil {
 		t.Fatalf("list instances after removal: %v", err)
 	}
 	if response.StatusCode() != http.StatusOK || response.JSON200 == nil {
 		t.Fatalf("list instances after removal status/body = %d/%s", response.StatusCode(), response.Body)
 	}
-	for _, candidate := range *response.JSON200 {
+	for _, candidate := range response.JSON200.Items {
 		if candidate.Id == instanceID {
 			t.Fatalf("removed instance %s remains in active instance list", instanceID)
 		}

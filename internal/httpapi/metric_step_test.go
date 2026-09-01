@@ -11,7 +11,7 @@ func TestChooseMetricStep(t *testing.T) {
 	from := time.Date(2026, 8, 3, 0, 0, 0, 0, time.UTC)
 	tests := []struct {
 		name      string
-		requested api.GetMetricSeriesParamsStep
+		requested api.MetricStep
 		span      time.Duration
 		want      string
 		wantError bool

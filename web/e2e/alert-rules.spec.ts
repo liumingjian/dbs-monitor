@@ -79,7 +79,8 @@ test('creates alert rules and keeps built-in protections visible', async ({ page
 
   await page.route('**/api/v1/me', (route) => route.fulfill({ json: { username: 'alert-admin', role: 'ALERT_ADMIN' } }))
   await page.route(`**/api/v1/instances/${instanceID}`, (route) => route.fulfill({ json: instance }))
-  await page.route('**/api/v1/instances', (route) => route.fulfill({ json: [instance] }))
+  // 列表接口分页化之后返回的是 { items, total }；地址上带着 query，所以用正则匹配。
+  await page.route(/\/api\/v1\/instances(\?|$)/, (route) => route.fulfill({ json: { items: [instance], total: 1 } }))
   await page.route(`**/api/v1/instances/${instanceID}/collection/tasks`, (route) => route.fulfill({ json: [] }))
   await page.route(`**/api/v1/instances/${instanceID}/collection/capabilities`, (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/alert-rule-templates', (route) => route.fulfill({ json: [template] }))

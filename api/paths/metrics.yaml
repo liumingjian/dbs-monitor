@@ -10,56 +10,14 @@
         required: true
         schema:
           type: array
-          items:
-            type: string
-            enum:
-              - pg.availability.reachable
-              - pg.probe.latency_ms
-              - collector.last_success_time
-              - agent.status
-              - host.cpu.usage_percent
-              - host.memory.usage_percent
-              - host.disk.usage_percent
-              - host.disk.free_bytes
-              - host.disk.iops
-              - host.disk.throughput_bytes_per_sec
-              - host.network.bytes_per_sec
-              - pg.connection.total
-              - pg.connection.active
-              - pg.connection.idle_in_transaction
-              - pg.connection.max
-              - pg.connection.saturation_percent
-              - pg.tps
-              - pg.xact.commit_per_sec
-              - pg.xact.rollback_per_sec
-              - pg.tuples.read_per_sec
-              - pg.tuples.write_per_sec
-              - pg.temp.files_per_sec
-              - pg.temp.bytes_per_sec
-              - pg.transaction.long_count
-              - pg.transaction.max_duration_sec
-              - pg.lock.waiting_count
-              - pg.session.blocked_count
-              - pg.query.long_running_count
-              - pg.prepared_xacts.count
-              - pg.replication.role
-              - pg.replication.connection_state
-              - pg.replication.replay_lag_ms
-              - pg.replication.wal_lag_bytes
-              - pg.replication_slot.retained_wal_bytes
-              - pg.cache.hit_ratio
-              - pg.cache.block_access_per_sec
-              - pg.database.size_bytes
-              - pg.deadlock.count
+          items: { $ref: ../components/enums.yaml#/MetricId }
       - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
       - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
       - name: step
         in: query
         required: false
-        schema:
-          type: string
-          enum: [auto, 15s, 1m, 5m, raw]
-          default: auto
+        description: 缺省 auto。
+        schema: { $ref: ../components/enums.yaml#/MetricStep }
       # 库级指标（TPS、提交回滚、元组读写、临时文件……）默认按目录里的聚合方式收敛成实例级的
       # 一条序列。置真则逐库展开，库名以 `database` 出现在序列的 labels 里——只有实例工作台
       # 会这么要，列表与总览一律看实例级值。实例级指标不受这个开关影响。
@@ -77,6 +35,49 @@
             schema: { $ref: ../components/schemas/metrics.yaml#/MetricSeriesResponse }
       '400':
         description: Invalid time range or step
+        content:
+          application/json:
+            schema: { $ref: ../components/errors.yaml#/Error }
+/api/v1/instances/metrics/series:
+  get:
+    tags: [metrics]
+    operationId: getInstancesMetricSeries
+    x-required-role: READONLY
+    # 一次取回多台实例的同一批指标。列表页当页 50 行原本是 50 个 series 请求，
+    # 500 台时会打满后端连接池；这里合成一个往返。口径与单实例端点完全一致
+    # （同一段代码），库级指标一律按目录里的聚合方式收敛成实例级——列表与总览
+    # 不按库展开，所以这里没有 by_database。
+    parameters:
+      - name: instance_id
+        in: query
+        required: true
+        description: 要取的实例，可重复。上限与列表页大小一致。
+        schema:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items: { type: string, format: uuid }
+      - name: metric
+        in: query
+        required: true
+        schema:
+          type: array
+          items: { $ref: ../components/enums.yaml#/MetricId }
+      - { name: from, in: query, required: true, schema: { type: string, format: date-time } }
+      - { name: to, in: query, required: true, schema: { type: string, format: date-time } }
+      - name: step
+        in: query
+        required: false
+        description: 缺省 auto。
+        schema: { $ref: ../components/enums.yaml#/MetricStep }
+    responses:
+      '200':
+        description: Metric series for every requested instance
+        content:
+          application/json:
+            schema: { $ref: ../components/schemas/metrics.yaml#/InstancesMetricSeriesResponse }
+      '400':
+        description: Invalid time range, step, or instance list
         content:
           application/json:
             schema: { $ref: ../components/errors.yaml#/Error }

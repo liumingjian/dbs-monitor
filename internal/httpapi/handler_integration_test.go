@@ -719,7 +719,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 
 	rawStep := api.Raw
 	longQueryMetricResponse, err := apiClient.GetMetricSeriesWithResponse(ctx, createBody.Instance.Id, &api.GetMetricSeriesParams{
-		Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetricPgQueryLongRunningCount},
+		Metric: []api.MetricId{api.MetricIdPgQueryLongRunningCount},
 		From:   queryWindowStart,
 		To:     queryWindowEnd,
 		Step:   &rawStep,

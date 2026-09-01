@@ -323,7 +323,7 @@ func waitForAgentMetric(t *testing.T, client *api.ClientWithResponses, instanceI
 	for time.Now().Before(deadline) {
 		now := time.Now().UTC()
 		response, err := client.GetMetricSeriesWithResponse(context.Background(), instanceID, &api.GetMetricSeriesParams{
-			Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetricHostCpuUsagePercent},
+			Metric: []api.MetricId{api.MetricIdHostCpuUsagePercent},
 			From:   now.Add(-time.Minute), To: now.Add(time.Second), Step: &step,
 		})
 		if err == nil && response.StatusCode() == http.StatusOK && response.JSON200 != nil {

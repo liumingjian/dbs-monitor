@@ -407,9 +407,9 @@ func issue60DictionaryIDs() []metric.MetricID {
 }
 
 func readIssue60Metrics(client *api.ClientWithResponses, instanceID uuid.UUID, metricIDs []metric.MetricID, from, to time.Time) (map[metric.MetricID]issue60MetricResult, string) {
-	requested := make([]api.GetMetricSeriesParamsMetric, 0, len(metricIDs))
+	requested := make([]api.MetricId, 0, len(metricIDs))
 	for _, metricID := range metricIDs {
-		requested = append(requested, api.GetMetricSeriesParamsMetric(metricID))
+		requested = append(requested, api.MetricId(metricID))
 	}
 	step := api.Raw
 	response, err := client.GetMetricSeriesWithResponse(context.Background(), instanceID, &api.GetMetricSeriesParams{

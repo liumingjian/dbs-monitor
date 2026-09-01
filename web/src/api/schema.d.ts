@@ -104,6 +104,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/metrics/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getInstancesMetricSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/metrics/catalog": {
         parameters: {
             query?: never;
@@ -1139,6 +1155,21 @@ export interface components {
         HealthStatus: "CRITICAL" | "WARNING" | "UNKNOWN" | "HEALTHY" | "PAUSED";
         /** @enum {string} */
         InstanceAgentStatus: "offline" | "online" | "not_installed" | "permission_denied" | "error";
+        /**
+         * @description Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
+         * @enum {string}
+         */
+        InstanceEngine: "POSTGRESQL";
+        /**
+         * @description Orthogonal marker on an instance's health rollup, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced.
+         * @enum {string}
+         */
+        InstanceFlag: "NO_DATA" | "MAINTENANCE" | "RECENTLY_RECOVERED" | "IGNORED" | "CONFIGURATION_MISSING";
+        /**
+         * @description Instance list ordering. health puts the rows that need handling first; stalest puts the instances whose collection is furthest behind first. Ties always fall back to name then id, so paging through the list never repeats or skips a row.
+         * @enum {string}
+         */
+        InstanceListSort: "health" | "name" | "-name" | "stalest";
         /** @enum {string} */
         CapabilityStatus: "PRESENT" | "MISSING" | "NOT_APPLICABLE" | "UNKNOWN";
         /** @enum {string} */
@@ -1602,6 +1633,11 @@ export interface components {
             data_freshness_seconds?: number;
             collection_pause: components["schemas"]["CollectionPauseStatus"];
         };
+        InstanceListPage: {
+            items: components["schemas"]["Instance"][];
+            /** @description Number of instances matching the filters, before paging. */
+            total: number;
+        };
         InstanceHealth: {
             status: components["schemas"]["HealthStatus"];
             attribution?: components["schemas"]["HealthAttribution"];
@@ -1725,23 +1761,47 @@ export interface components {
             updated_at?: string;
             reason?: string;
         };
+        /**
+         * @description Resolution asked of a series endpoint. auto lets the server pick from the range; raw returns stored samples untouched and is capped at six hours.
+         * @enum {string}
+         */
+        MetricStep: "auto" | "15s" | "1m" | "5m" | "raw";
+        /**
+         * @description A metric id from the catalogue. The list is shared by every series endpoint, so a new metric is declared once here instead of once per path.
+         * @enum {string}
+         */
+        MetricId: "pg.availability.reachable" | "pg.probe.latency_ms" | "collector.last_success_time" | "agent.status" | "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec" | "pg.connection.total" | "pg.connection.active" | "pg.connection.idle_in_transaction" | "pg.connection.max" | "pg.connection.saturation_percent" | "pg.tps" | "pg.xact.commit_per_sec" | "pg.xact.rollback_per_sec" | "pg.tuples.read_per_sec" | "pg.tuples.write_per_sec" | "pg.temp.files_per_sec" | "pg.temp.bytes_per_sec" | "pg.transaction.long_count" | "pg.transaction.max_duration_sec" | "pg.lock.waiting_count" | "pg.session.blocked_count" | "pg.query.long_running_count" | "pg.prepared_xacts.count" | "pg.replication.role" | "pg.replication.connection_state" | "pg.replication.replay_lag_ms" | "pg.replication.wal_lag_bytes" | "pg.replication_slot.retained_wal_bytes" | "pg.cache.hit_ratio" | "pg.cache.block_access_per_sec" | "pg.database.size_bytes" | "pg.deadlock.count";
+        MetricSeriesEntry: {
+            metric: string;
+            unit: string;
+            unavailability: components["schemas"]["Unavailability"] | null;
+            series: {
+                labels: {
+                    [key: string]: string;
+                };
+                points: (number | null)[][];
+            }[];
+        };
         MetricSeriesResponse: {
             /** Format: date-time */
             from: string;
             /** Format: date-time */
             to: string;
             step: string;
-            metrics: {
-                metric: string;
-                unit: string;
-                unavailability: components["schemas"]["Unavailability"] | null;
-                series: {
-                    labels: {
-                        [key: string]: string;
-                    };
-                    points: (number | null)[][];
-                }[];
-            }[];
+            metrics: components["schemas"]["MetricSeriesEntry"][];
+        };
+        InstanceMetricSeries: {
+            /** Format: uuid */
+            instance_id: string;
+            metrics: components["schemas"]["MetricSeriesEntry"][];
+        };
+        InstancesMetricSeriesResponse: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            step: string;
+            instances: components["schemas"]["InstanceMetricSeries"][];
         };
         /**
          * @description Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
@@ -1911,11 +1971,6 @@ export interface components {
                 }[];
             };
         };
-        /**
-         * @description Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
-         * @enum {string}
-         */
-        InstanceEngine: "POSTGRESQL";
         /** @enum {string} */
         CollectionTaskResult: "SUCCESS" | "FAILED" | "TIMED_OUT" | "SKIPPED_BACKPRESSURE" | "BACKOFF";
         SessionSnapshotEntry: {
@@ -2157,20 +2212,37 @@ export interface operations {
     };
     listInstances: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 页码，从 1 开始。超出末页时返回空的 items 与真实的 total。 */
+                page?: number;
+                /** @description 每页条数。上限按机群规模给到 500，一次取全量是选实例的下拉框在用。 */
+                page_size?: number;
+                /** @description 搜索词，大小写不敏感的子串匹配，命中实例名或地址（主机与 host:port）。 地址不再单独占一列，但仍然留在搜索索引里。 */
+                q?: string;
+                /** @description 引擎筛选。可重复，多值之间是「或」。 */
+                engine?: components["schemas"]["InstanceEngine"][];
+                /** @description 健康档位筛选。可重复，多值之间是「或」。 */
+                status?: components["schemas"]["HealthStatus"][];
+                /** @description 正交标记筛选。可重复，多值之间是「与」——要的是同时带上这些标记的实例。 */
+                flags?: components["schemas"]["InstanceFlag"][];
+                /** @description 至少有一条该级别未恢复告警。可重复，多值之间是「或」。 */
+                severity?: components["schemas"]["AlertSeverity"][];
+                /** @description 排序，缺省 health。同序值内一律按名称、再按 id 定序，翻页因此稳定。 */
+                sort?: components["schemas"]["InstanceListSort"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Instances */
+            /** @description One page of instances plus the total after filtering */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Instance"][];
+                    "application/json": components["schemas"]["InstanceListPage"];
                 };
             };
         };
@@ -2323,10 +2395,11 @@ export interface operations {
     getMetricSeries: {
         parameters: {
             query: {
-                metric: ("pg.availability.reachable" | "pg.probe.latency_ms" | "collector.last_success_time" | "agent.status" | "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec" | "pg.connection.total" | "pg.connection.active" | "pg.connection.idle_in_transaction" | "pg.connection.max" | "pg.connection.saturation_percent" | "pg.tps" | "pg.xact.commit_per_sec" | "pg.xact.rollback_per_sec" | "pg.tuples.read_per_sec" | "pg.tuples.write_per_sec" | "pg.temp.files_per_sec" | "pg.temp.bytes_per_sec" | "pg.transaction.long_count" | "pg.transaction.max_duration_sec" | "pg.lock.waiting_count" | "pg.session.blocked_count" | "pg.query.long_running_count" | "pg.prepared_xacts.count" | "pg.replication.role" | "pg.replication.connection_state" | "pg.replication.replay_lag_ms" | "pg.replication.wal_lag_bytes" | "pg.replication_slot.retained_wal_bytes" | "pg.cache.hit_ratio" | "pg.cache.block_access_per_sec" | "pg.database.size_bytes" | "pg.deadlock.count")[];
+                metric: components["schemas"]["MetricId"][];
                 from: string;
                 to: string;
-                step?: "auto" | "15s" | "1m" | "5m" | "raw";
+                /** @description 缺省 auto。 */
+                step?: components["schemas"]["MetricStep"];
                 by_database?: boolean;
             };
             header?: never;
@@ -2347,6 +2420,43 @@ export interface operations {
                 };
             };
             /** @description Invalid time range or step */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getInstancesMetricSeries: {
+        parameters: {
+            query: {
+                /** @description 要取的实例，可重复。上限与列表页大小一致。 */
+                instance_id: string[];
+                metric: components["schemas"]["MetricId"][];
+                from: string;
+                to: string;
+                /** @description 缺省 auto。 */
+                step?: components["schemas"]["MetricStep"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metric series for every requested instance */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstancesMetricSeriesResponse"];
+                };
+            };
+            /** @description Invalid time range, step, or instance list */
             400: {
                 headers: {
                     [name: string]: unknown;

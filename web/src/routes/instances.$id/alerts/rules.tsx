@@ -81,7 +81,10 @@ function AlertRulesPage() {
   const catalog = useMetricCatalog()
   const rulesQuery = $api.useQuery('get', '/api/v1/alert-rules')
   const templatesQuery = $api.useQuery('get', '/api/v1/alert-rule-templates')
-  const instancesQuery = $api.useQuery('get', '/api/v1/instances')
+  const instancesQuery = $api.useQuery('get', '/api/v1/instances', {
+    // 选实例的下拉框要的是全部实例，不是当页；列表接口分页之后，这里显式要一整页。
+    params: { query: { page_size: 500, sort: 'name' as const } },
+  })
   const instanceQuery = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } })
   const tasksQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/tasks', { params: { path: { id } } })
   const capabilitiesQuery = $api.useQuery('get', '/api/v1/instances/{id}/collection/capabilities', { params: { path: { id } } })
@@ -244,7 +247,7 @@ function AlertRulesPage() {
     <RuleDrawer
       open={editorOpen}
       editingRule={editingRule}
-      instances={instancesQuery.data ?? []}
+      instances={instancesQuery.data?.items ?? []}
       policies={policiesQuery.data ?? []}
       onClose={() => setEditorOpen(false)}
       onSaved={() => {

@@ -1,3 +1,32 @@
+MetricSeriesEntry:
+  type: object
+  required: [metric, unit, unavailability, series]
+  properties:
+    metric: { type: string }
+    unit: { type: string }
+    unavailability:
+      nullable: true
+      allOf:
+        - $ref: ../enums.yaml#/Unavailability
+    series:
+      type: array
+      items:
+        type: object
+        required: [labels, points]
+        properties:
+          labels:
+            type: object
+            additionalProperties: { type: string }
+          points:
+            type: array
+            items:
+              type: array
+              minItems: 2
+              maxItems: 2
+              items:
+                type: number
+                nullable: true
+                x-go-type: "*float64"
 MetricSeriesResponse:
   type: object
   required: [from, to, step, metrics]
@@ -7,35 +36,25 @@ MetricSeriesResponse:
     step: { type: string }
     metrics:
       type: array
-      items:
-        type: object
-        required: [metric, unit, unavailability, series]
-        properties:
-          metric: { type: string }
-          unit: { type: string }
-          unavailability:
-            nullable: true
-            allOf:
-              - $ref: ../enums.yaml#/Unavailability
-          series:
-            type: array
-            items:
-              type: object
-              required: [labels, points]
-              properties:
-                labels:
-                  type: object
-                  additionalProperties: { type: string }
-                points:
-                  type: array
-                  items:
-                    type: array
-                    minItems: 2
-                    maxItems: 2
-                    items:
-                      type: number
-                      nullable: true
-                      x-go-type: "*float64"
+      items: { $ref: '#/MetricSeriesEntry' }
+InstanceMetricSeries:
+  type: object
+  required: [instance_id, metrics]
+  properties:
+    instance_id: { type: string, format: uuid }
+    metrics:
+      type: array
+      items: { $ref: '#/MetricSeriesEntry' }
+InstancesMetricSeriesResponse:
+  type: object
+  required: [from, to, step, instances]
+  properties:
+    from: { type: string, format: date-time }
+    to: { type: string, format: date-time }
+    step: { type: string }
+    instances:
+      type: array
+      items: { $ref: '#/InstanceMetricSeries' }
 MetricCatalogEntry:
   type: object
   required: [metric_id, engine, unit, display_name, semantic_slot, level, aggregation]

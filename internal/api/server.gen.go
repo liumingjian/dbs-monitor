@@ -233,6 +233,23 @@ const (
 	InstanceEnginePostgreSQL InstanceEngine = "POSTGRESQL"
 )
 
+// Defines values for InstanceFlag.
+const (
+	InstanceFlagConfigurationMissing InstanceFlag = "CONFIGURATION_MISSING"
+	InstanceFlagIgnored              InstanceFlag = "IGNORED"
+	InstanceFlagMaintenance          InstanceFlag = "MAINTENANCE"
+	InstanceFlagNoData               InstanceFlag = "NO_DATA"
+	InstanceFlagRecentlyRecovered    InstanceFlag = "RECENTLY_RECOVERED"
+)
+
+// Defines values for InstanceListSort.
+const (
+	InstanceSortHealth         InstanceListSort = "health"
+	InstanceSortName           InstanceListSort = "name"
+	InstanceSortNameDescending InstanceListSort = "-name"
+	InstanceSortStalest        InstanceListSort = "stalest"
+)
+
 // Defines values for MaintenanceWindowStatus.
 const (
 	MaintenanceActive    MaintenanceWindowStatus = "ACTIVE"
@@ -253,10 +270,61 @@ const (
 	MetricEnginePostgreSQL MetricEngine = "POSTGRESQL"
 )
 
+// Defines values for MetricId.
+const (
+	MetricIdAgentStatus                       MetricId = "agent.status"
+	MetricIdCollectorLastSuccessTime          MetricId = "collector.last_success_time"
+	MetricIdHostCpuUsagePercent               MetricId = "host.cpu.usage_percent"
+	MetricIdHostDiskFreeBytes                 MetricId = "host.disk.free_bytes"
+	MetricIdHostDiskIops                      MetricId = "host.disk.iops"
+	MetricIdHostDiskThroughputBytesPerSec     MetricId = "host.disk.throughput_bytes_per_sec"
+	MetricIdHostDiskUsagePercent              MetricId = "host.disk.usage_percent"
+	MetricIdHostMemoryUsagePercent            MetricId = "host.memory.usage_percent"
+	MetricIdHostNetworkBytesPerSec            MetricId = "host.network.bytes_per_sec"
+	MetricIdPgAvailabilityReachable           MetricId = "pg.availability.reachable"
+	MetricIdPgCacheBlockAccessPerSec          MetricId = "pg.cache.block_access_per_sec"
+	MetricIdPgCacheHitRatio                   MetricId = "pg.cache.hit_ratio"
+	MetricIdPgConnectionActive                MetricId = "pg.connection.active"
+	MetricIdPgConnectionIdleInTransaction     MetricId = "pg.connection.idle_in_transaction"
+	MetricIdPgConnectionMax                   MetricId = "pg.connection.max"
+	MetricIdPgConnectionSaturationPercent     MetricId = "pg.connection.saturation_percent"
+	MetricIdPgConnectionTotal                 MetricId = "pg.connection.total"
+	MetricIdPgDatabaseSizeBytes               MetricId = "pg.database.size_bytes"
+	MetricIdPgDeadlockCount                   MetricId = "pg.deadlock.count"
+	MetricIdPgLockWaitingCount                MetricId = "pg.lock.waiting_count"
+	MetricIdPgPreparedXactsCount              MetricId = "pg.prepared_xacts.count"
+	MetricIdPgProbeLatencyMs                  MetricId = "pg.probe.latency_ms"
+	MetricIdPgQueryLongRunningCount           MetricId = "pg.query.long_running_count"
+	MetricIdPgReplicationConnectionState      MetricId = "pg.replication.connection_state"
+	MetricIdPgReplicationReplayLagMs          MetricId = "pg.replication.replay_lag_ms"
+	MetricIdPgReplicationRole                 MetricId = "pg.replication.role"
+	MetricIdPgReplicationSlotRetainedWalBytes MetricId = "pg.replication_slot.retained_wal_bytes"
+	MetricIdPgReplicationWalLagBytes          MetricId = "pg.replication.wal_lag_bytes"
+	MetricIdPgSessionBlockedCount             MetricId = "pg.session.blocked_count"
+	MetricIdPgTempBytesPerSec                 MetricId = "pg.temp.bytes_per_sec"
+	MetricIdPgTempFilesPerSec                 MetricId = "pg.temp.files_per_sec"
+	MetricIdPgTps                             MetricId = "pg.tps"
+	MetricIdPgTransactionLongCount            MetricId = "pg.transaction.long_count"
+	MetricIdPgTransactionMaxDurationSec       MetricId = "pg.transaction.max_duration_sec"
+	MetricIdPgTuplesReadPerSec                MetricId = "pg.tuples.read_per_sec"
+	MetricIdPgTuplesWritePerSec               MetricId = "pg.tuples.write_per_sec"
+	MetricIdPgXactCommitPerSec                MetricId = "pg.xact.commit_per_sec"
+	MetricIdPgXactRollbackPerSec              MetricId = "pg.xact.rollback_per_sec"
+)
+
 // Defines values for MetricLevel.
 const (
 	MetricLevelDatabase MetricLevel = "DATABASE"
 	MetricLevelInstance MetricLevel = "INSTANCE"
+)
+
+// Defines values for MetricStep.
+const (
+	Auto MetricStep = "auto"
+	N15s MetricStep = "15s"
+	N1m  MetricStep = "1m"
+	N5m  MetricStep = "5m"
+	Raw  MetricStep = "raw"
 )
 
 // Defines values for NoDataPolicy.
@@ -399,57 +467,6 @@ const (
 const (
 	Linuxamd64 DownloadAgentBinaryParamsArch = "linux/amd64"
 	Linuxarm64 DownloadAgentBinaryParamsArch = "linux/arm64"
-)
-
-// Defines values for GetMetricSeriesParamsMetric.
-const (
-	GetMetricSeriesParamsMetricAgentStatus                       GetMetricSeriesParamsMetric = "agent.status"
-	GetMetricSeriesParamsMetricCollectorLastSuccessTime          GetMetricSeriesParamsMetric = "collector.last_success_time"
-	GetMetricSeriesParamsMetricHostCpuUsagePercent               GetMetricSeriesParamsMetric = "host.cpu.usage_percent"
-	GetMetricSeriesParamsMetricHostDiskFreeBytes                 GetMetricSeriesParamsMetric = "host.disk.free_bytes"
-	GetMetricSeriesParamsMetricHostDiskIops                      GetMetricSeriesParamsMetric = "host.disk.iops"
-	GetMetricSeriesParamsMetricHostDiskThroughputBytesPerSec     GetMetricSeriesParamsMetric = "host.disk.throughput_bytes_per_sec"
-	GetMetricSeriesParamsMetricHostDiskUsagePercent              GetMetricSeriesParamsMetric = "host.disk.usage_percent"
-	GetMetricSeriesParamsMetricHostMemoryUsagePercent            GetMetricSeriesParamsMetric = "host.memory.usage_percent"
-	GetMetricSeriesParamsMetricHostNetworkBytesPerSec            GetMetricSeriesParamsMetric = "host.network.bytes_per_sec"
-	GetMetricSeriesParamsMetricPgAvailabilityReachable           GetMetricSeriesParamsMetric = "pg.availability.reachable"
-	GetMetricSeriesParamsMetricPgCacheBlockAccessPerSec          GetMetricSeriesParamsMetric = "pg.cache.block_access_per_sec"
-	GetMetricSeriesParamsMetricPgCacheHitRatio                   GetMetricSeriesParamsMetric = "pg.cache.hit_ratio"
-	GetMetricSeriesParamsMetricPgConnectionActive                GetMetricSeriesParamsMetric = "pg.connection.active"
-	GetMetricSeriesParamsMetricPgConnectionIdleInTransaction     GetMetricSeriesParamsMetric = "pg.connection.idle_in_transaction"
-	GetMetricSeriesParamsMetricPgConnectionMax                   GetMetricSeriesParamsMetric = "pg.connection.max"
-	GetMetricSeriesParamsMetricPgConnectionSaturationPercent     GetMetricSeriesParamsMetric = "pg.connection.saturation_percent"
-	GetMetricSeriesParamsMetricPgConnectionTotal                 GetMetricSeriesParamsMetric = "pg.connection.total"
-	GetMetricSeriesParamsMetricPgDatabaseSizeBytes               GetMetricSeriesParamsMetric = "pg.database.size_bytes"
-	GetMetricSeriesParamsMetricPgDeadlockCount                   GetMetricSeriesParamsMetric = "pg.deadlock.count"
-	GetMetricSeriesParamsMetricPgLockWaitingCount                GetMetricSeriesParamsMetric = "pg.lock.waiting_count"
-	GetMetricSeriesParamsMetricPgPreparedXactsCount              GetMetricSeriesParamsMetric = "pg.prepared_xacts.count"
-	GetMetricSeriesParamsMetricPgProbeLatencyMs                  GetMetricSeriesParamsMetric = "pg.probe.latency_ms"
-	GetMetricSeriesParamsMetricPgQueryLongRunningCount           GetMetricSeriesParamsMetric = "pg.query.long_running_count"
-	GetMetricSeriesParamsMetricPgReplicationConnectionState      GetMetricSeriesParamsMetric = "pg.replication.connection_state"
-	GetMetricSeriesParamsMetricPgReplicationReplayLagMs          GetMetricSeriesParamsMetric = "pg.replication.replay_lag_ms"
-	GetMetricSeriesParamsMetricPgReplicationRole                 GetMetricSeriesParamsMetric = "pg.replication.role"
-	GetMetricSeriesParamsMetricPgReplicationSlotRetainedWalBytes GetMetricSeriesParamsMetric = "pg.replication_slot.retained_wal_bytes"
-	GetMetricSeriesParamsMetricPgReplicationWalLagBytes          GetMetricSeriesParamsMetric = "pg.replication.wal_lag_bytes"
-	GetMetricSeriesParamsMetricPgSessionBlockedCount             GetMetricSeriesParamsMetric = "pg.session.blocked_count"
-	GetMetricSeriesParamsMetricPgTempBytesPerSec                 GetMetricSeriesParamsMetric = "pg.temp.bytes_per_sec"
-	GetMetricSeriesParamsMetricPgTempFilesPerSec                 GetMetricSeriesParamsMetric = "pg.temp.files_per_sec"
-	GetMetricSeriesParamsMetricPgTps                             GetMetricSeriesParamsMetric = "pg.tps"
-	GetMetricSeriesParamsMetricPgTransactionLongCount            GetMetricSeriesParamsMetric = "pg.transaction.long_count"
-	GetMetricSeriesParamsMetricPgTransactionMaxDurationSec       GetMetricSeriesParamsMetric = "pg.transaction.max_duration_sec"
-	GetMetricSeriesParamsMetricPgTuplesReadPerSec                GetMetricSeriesParamsMetric = "pg.tuples.read_per_sec"
-	GetMetricSeriesParamsMetricPgTuplesWritePerSec               GetMetricSeriesParamsMetric = "pg.tuples.write_per_sec"
-	GetMetricSeriesParamsMetricPgXactCommitPerSec                GetMetricSeriesParamsMetric = "pg.xact.commit_per_sec"
-	GetMetricSeriesParamsMetricPgXactRollbackPerSec              GetMetricSeriesParamsMetric = "pg.xact.rollback_per_sec"
-)
-
-// Defines values for GetMetricSeriesParamsStep.
-const (
-	Auto GetMetricSeriesParamsStep = "auto"
-	N15s GetMetricSeriesParamsStep = "15s"
-	N1m  GetMetricSeriesParamsStep = "1m"
-	N5m  GetMetricSeriesParamsStep = "5m"
-	Raw  GetMetricSeriesParamsStep = "raw"
 )
 
 // AgentInstallation defines model for AgentInstallation.
@@ -1012,6 +1029,9 @@ type InstanceCredentialUpdated struct {
 // InstanceEngine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
 type InstanceEngine string
 
+// InstanceFlag Orthogonal marker on an instance's health rollup, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced.
+type InstanceFlag string
+
 // InstanceHealth defines model for InstanceHealth.
 type InstanceHealth struct {
 	Attribution *HealthAttribution `json:"attribution,omitempty"`
@@ -1020,6 +1040,17 @@ type InstanceHealth struct {
 	Status      HealthStatus       `json:"status"`
 }
 
+// InstanceListPage defines model for InstanceListPage.
+type InstanceListPage struct {
+	Items []Instance `json:"items"`
+
+	// Total Number of instances matching the filters, before paging.
+	Total int `json:"total"`
+}
+
+// InstanceListSort Instance list ordering. health puts the rows that need handling first; stalest puts the instances whose collection is furthest behind first. Ties always fall back to name then id, so paging through the list never repeats or skips a row.
+type InstanceListSort string
+
 // InstanceMetadataInput defines model for InstanceMetadataInput.
 type InstanceMetadataInput struct {
 	// Database Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept.
@@ -1027,6 +1058,20 @@ type InstanceMetadataInput struct {
 	Host     string `json:"host"`
 	Name     string `json:"name"`
 	Port     int    `json:"port"`
+}
+
+// InstanceMetricSeries defines model for InstanceMetricSeries.
+type InstanceMetricSeries struct {
+	InstanceId openapi_types.UUID  `json:"instance_id"`
+	Metrics    []MetricSeriesEntry `json:"metrics"`
+}
+
+// InstancesMetricSeriesResponse defines model for InstancesMetricSeriesResponse.
+type InstancesMetricSeriesResponse struct {
+	From      time.Time              `json:"from"`
+	Instances []InstanceMetricSeries `json:"instances"`
+	Step      string                 `json:"step"`
+	To        time.Time              `json:"to"`
 }
 
 // LongQuerySample defines model for LongQuerySample.
@@ -1103,24 +1148,33 @@ type MetricCatalogEntry struct {
 // MetricEngine Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
 type MetricEngine string
 
+// MetricId A metric id from the catalogue. The list is shared by every series endpoint, so a new metric is declared once here instead of once per path.
+type MetricId string
+
 // MetricLevel defines model for MetricLevel.
 type MetricLevel string
 
+// MetricSeriesEntry defines model for MetricSeriesEntry.
+type MetricSeriesEntry struct {
+	Metric string `json:"metric"`
+	Series []struct {
+		Labels map[string]string `json:"labels"`
+		Points [][]*float64      `json:"points"`
+	} `json:"series"`
+	Unavailability nullable.Nullable[Unavailability] `json:"unavailability"`
+	Unit           string                            `json:"unit"`
+}
+
 // MetricSeriesResponse defines model for MetricSeriesResponse.
 type MetricSeriesResponse struct {
-	From    time.Time `json:"from"`
-	Metrics []struct {
-		Metric string `json:"metric"`
-		Series []struct {
-			Labels map[string]string `json:"labels"`
-			Points [][]*float64      `json:"points"`
-		} `json:"series"`
-		Unavailability nullable.Nullable[Unavailability] `json:"unavailability"`
-		Unit           string                            `json:"unit"`
-	} `json:"metrics"`
-	Step string    `json:"step"`
-	To   time.Time `json:"to"`
+	From    time.Time           `json:"from"`
+	Metrics []MetricSeriesEntry `json:"metrics"`
+	Step    string              `json:"step"`
+	To      time.Time           `json:"to"`
 }
+
+// MetricStep Resolution asked of a series endpoint. auto lets the server pick from the range; raw returns stored samples untouched and is capped at six hours.
+type MetricStep string
 
 // NoDataPolicy defines model for NoDataPolicy.
 type NoDataPolicy string
@@ -1521,6 +1575,45 @@ type ListAlertHistoryParams struct {
 	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// ListInstancesParams defines parameters for ListInstances.
+type ListInstancesParams struct {
+	// Page 页码，从 1 开始。超出末页时返回空的 items 与真实的 total。
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// PageSize 每页条数。上限按机群规模给到 500，一次取全量是选实例的下拉框在用。
+	PageSize *int `form:"page_size,omitempty" json:"page_size,omitempty"`
+
+	// Q 搜索词，大小写不敏感的子串匹配，命中实例名或地址（主机与 host:port）。 地址不再单独占一列，但仍然留在搜索索引里。
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Engine 引擎筛选。可重复，多值之间是「或」。
+	Engine *[]InstanceEngine `form:"engine,omitempty" json:"engine,omitempty"`
+
+	// Status 健康档位筛选。可重复，多值之间是「或」。
+	Status *[]HealthStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Flags 正交标记筛选。可重复，多值之间是「与」——要的是同时带上这些标记的实例。
+	Flags *[]InstanceFlag `form:"flags,omitempty" json:"flags,omitempty"`
+
+	// Severity 至少有一条该级别未恢复告警。可重复，多值之间是「或」。
+	Severity *[]AlertSeverity `form:"severity,omitempty" json:"severity,omitempty"`
+
+	// Sort 排序，缺省 health。同序值内一律按名称、再按 id 定序，翻页因此稳定。
+	Sort *InstanceListSort `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
+// GetInstancesMetricSeriesParams defines parameters for GetInstancesMetricSeries.
+type GetInstancesMetricSeriesParams struct {
+	// InstanceId 要取的实例，可重复。上限与列表页大小一致。
+	InstanceId []openapi_types.UUID `form:"instance_id" json:"instance_id"`
+	Metric     []MetricId           `form:"metric" json:"metric"`
+	From       time.Time            `form:"from" json:"from"`
+	To         time.Time            `form:"to" json:"to"`
+
+	// Step 缺省 auto。
+	Step *MetricStep `form:"step,omitempty" json:"step,omitempty"`
+}
+
 // ListLongQuerySamplesParams defines parameters for ListLongQuerySamples.
 type ListLongQuerySamplesParams struct {
 	From   time.Time `form:"from" json:"from"`
@@ -1532,18 +1625,14 @@ type ListLongQuerySamplesParams struct {
 
 // GetMetricSeriesParams defines parameters for GetMetricSeries.
 type GetMetricSeriesParams struct {
-	Metric     []GetMetricSeriesParamsMetric `form:"metric" json:"metric"`
-	From       time.Time                     `form:"from" json:"from"`
-	To         time.Time                     `form:"to" json:"to"`
-	Step       *GetMetricSeriesParamsStep    `form:"step,omitempty" json:"step,omitempty"`
-	ByDatabase *bool                         `form:"by_database,omitempty" json:"by_database,omitempty"`
+	Metric []MetricId `form:"metric" json:"metric"`
+	From   time.Time  `form:"from" json:"from"`
+	To     time.Time  `form:"to" json:"to"`
+
+	// Step 缺省 auto。
+	Step       *MetricStep `form:"step,omitempty" json:"step,omitempty"`
+	ByDatabase *bool       `form:"by_database,omitempty" json:"by_database,omitempty"`
 }
-
-// GetMetricSeriesParamsMetric defines parameters for GetMetricSeries.
-type GetMetricSeriesParamsMetric string
-
-// GetMetricSeriesParamsStep defines parameters for GetMetricSeries.
-type GetMetricSeriesParamsStep string
 
 // ListPerformanceEventsParams defines parameters for ListPerformanceEvents.
 type ListPerformanceEventsParams struct {
@@ -1737,10 +1826,13 @@ type ServerInterface interface {
 	GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/instances)
-	ListInstances(w http.ResponseWriter, r *http.Request)
+	ListInstances(w http.ResponseWriter, r *http.Request, params ListInstancesParams)
 
 	// (POST /api/v1/instances)
 	CreateInstance(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/instances/metrics/series)
+	GetInstancesMetricSeries(w http.ResponseWriter, r *http.Request, params GetInstancesMetricSeriesParams)
 
 	// (DELETE /api/v1/instances/{id})
 	DeleteInstance(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -2523,8 +2615,77 @@ func (siw *ServerInterfaceWrapper) GetSchedulerDiagnostics(w http.ResponseWriter
 // ListInstances operation middleware
 func (siw *ServerInterfaceWrapper) ListInstances(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListInstancesParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page_size" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page_size", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "engine" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "engine", r.URL.Query(), &params.Engine)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "engine", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "flags" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "flags", r.URL.Query(), &params.Flags)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "flags", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "severity" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "severity", r.URL.Query(), &params.Severity)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "severity", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListInstances(w, r)
+		siw.Handler.ListInstances(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2539,6 +2700,93 @@ func (siw *ServerInterfaceWrapper) CreateInstance(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateInstance(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetInstancesMetricSeries operation middleware
+func (siw *ServerInterfaceWrapper) GetInstancesMetricSeries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetInstancesMetricSeriesParams
+
+	// ------------- Required query parameter "instance_id" -------------
+
+	if paramValue := r.URL.Query().Get("instance_id"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instance_id"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "instance_id", r.URL.Query(), &params.InstanceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance_id", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "metric" -------------
+
+	if paramValue := r.URL.Query().Get("metric"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "metric"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "metric", r.URL.Query(), &params.Metric)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "metric", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "from" -------------
+
+	if paramValue := r.URL.Query().Get("from"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "from", r.URL.Query(), &params.From)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	if paramValue := r.URL.Query().Get("to"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "to", r.URL.Query(), &params.To)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "step" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "step", r.URL.Query(), &params.Step)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "step", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInstancesMetricSeries(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4096,6 +4344,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/scheduler", wrapper.GetSchedulerDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances", wrapper.ListInstances)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances", wrapper.CreateInstance)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/metrics/series", wrapper.GetInstancesMetricSeries)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}", wrapper.GetInstance)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}", wrapper.UpdateInstance)
@@ -4840,13 +5089,14 @@ func (response GetSchedulerDiagnostics200JSONResponse) VisitGetSchedulerDiagnost
 }
 
 type ListInstancesRequestObject struct {
+	Params ListInstancesParams
 }
 
 type ListInstancesResponseObject interface {
 	VisitListInstancesResponse(w http.ResponseWriter) error
 }
 
-type ListInstances200JSONResponse []Instance
+type ListInstances200JSONResponse InstanceListPage
 
 func (response ListInstances200JSONResponse) VisitListInstancesResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -4875,6 +5125,32 @@ func (response CreateInstance201JSONResponse) VisitCreateInstanceResponse(w http
 type CreateInstance400JSONResponse Error
 
 func (response CreateInstance400JSONResponse) VisitCreateInstanceResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetInstancesMetricSeriesRequestObject struct {
+	Params GetInstancesMetricSeriesParams
+}
+
+type GetInstancesMetricSeriesResponseObject interface {
+	VisitGetInstancesMetricSeriesResponse(w http.ResponseWriter) error
+}
+
+type GetInstancesMetricSeries200JSONResponse InstancesMetricSeriesResponse
+
+func (response GetInstancesMetricSeries200JSONResponse) VisitGetInstancesMetricSeriesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetInstancesMetricSeries400JSONResponse Error
+
+func (response GetInstancesMetricSeries400JSONResponse) VisitGetInstancesMetricSeriesResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
 
@@ -6400,6 +6676,9 @@ type StrictServerInterface interface {
 	// (POST /api/v1/instances)
 	CreateInstance(ctx context.Context, request CreateInstanceRequestObject) (CreateInstanceResponseObject, error)
 
+	// (GET /api/v1/instances/metrics/series)
+	GetInstancesMetricSeries(ctx context.Context, request GetInstancesMetricSeriesRequestObject) (GetInstancesMetricSeriesResponseObject, error)
+
 	// (DELETE /api/v1/instances/{id})
 	DeleteInstance(ctx context.Context, request DeleteInstanceRequestObject) (DeleteInstanceResponseObject, error)
 
@@ -7308,8 +7587,10 @@ func (sh *strictHandler) GetSchedulerDiagnostics(w http.ResponseWriter, r *http.
 }
 
 // ListInstances operation middleware
-func (sh *strictHandler) ListInstances(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListInstances(w http.ResponseWriter, r *http.Request, params ListInstancesParams) {
 	var request ListInstancesRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListInstances(ctx, request.(ListInstancesRequestObject))
@@ -7355,6 +7636,32 @@ func (sh *strictHandler) CreateInstance(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateInstanceResponseObject); ok {
 		if err := validResponse.VisitCreateInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetInstancesMetricSeries operation middleware
+func (sh *strictHandler) GetInstancesMetricSeries(w http.ResponseWriter, r *http.Request, params GetInstancesMetricSeriesParams) {
+	var request GetInstancesMetricSeriesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInstancesMetricSeries(ctx, request.(GetInstancesMetricSeriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInstancesMetricSeries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetInstancesMetricSeriesResponseObject); ok {
+		if err := validResponse.VisitGetInstancesMetricSeriesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

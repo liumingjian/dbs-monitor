@@ -223,17 +223,20 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	pausedRuleResponse.Body.Close()
 
 	instances := getResponse(t, client, server.URL+"/api/v1/instances")
-	var instanceList []struct {
-		CollectionPause struct {
-			Paused bool `json:"paused"`
-		} `json:"collection_pause"`
+	var instanceList struct {
+		Items []struct {
+			CollectionPause struct {
+				Paused bool `json:"paused"`
+			} `json:"collection_pause"`
+		} `json:"items"`
+		Total int `json:"total"`
 	}
 	if err := json.NewDecoder(instances.Body).Decode(&instanceList); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	instances.Body.Close()
 	pausedCount := 0
-	for _, found := range instanceList {
+	for _, found := range instanceList.Items {
 		if found.CollectionPause.Paused {
 			pausedCount++
 		}
