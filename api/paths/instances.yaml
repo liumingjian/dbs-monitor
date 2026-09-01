@@ -3,14 +3,66 @@
     tags: [instances]
     operationId: listInstances
     x-required-role: READONLY
+    # 分页、筛选、排序全部在服务端完成，浏览器不再持有全量实例。返回的是当页数据加总数，
+    # 不是裸数组：500 台时「先全量下发再在浏览器里筛」既慢又装不下。
+    # 不同筛选组之间是「与」，同一组内多值的合并方式逐组写在各自的说明里。
+    parameters:
+      - name: page
+        in: query
+        required: false
+        description: 页码，从 1 开始。超出末页时返回空的 items 与真实的 total。
+        schema: { type: integer, minimum: 1, default: 1 }
+      - name: page_size
+        in: query
+        required: false
+        description: 每页条数。上限按机群规模给到 500，一次取全量是选实例的下拉框在用。
+        schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      - name: q
+        in: query
+        required: false
+        description: >-
+          搜索词，大小写不敏感的子串匹配，命中实例名或地址（主机与 host:port）。
+          地址不再单独占一列，但仍然留在搜索索引里。
+        schema: { type: string }
+      - name: engine
+        in: query
+        required: false
+        description: 引擎筛选。可重复，多值之间是「或」。
+        schema:
+          type: array
+          items: { $ref: ../components/enums.yaml#/InstanceEngine }
+      - name: status
+        in: query
+        required: false
+        description: 健康档位筛选。可重复，多值之间是「或」。
+        schema:
+          type: array
+          items: { $ref: ../components/enums.yaml#/HealthStatus }
+      - name: flags
+        in: query
+        required: false
+        description: 正交标记筛选。可重复，多值之间是「与」——要的是同时带上这些标记的实例。
+        schema:
+          type: array
+          items: { $ref: ../components/enums.yaml#/InstanceFlag }
+      - name: severity
+        in: query
+        required: false
+        description: 至少有一条该级别未恢复告警。可重复，多值之间是「或」。
+        schema:
+          type: array
+          items: { $ref: ../components/enums.yaml#/AlertSeverity }
+      - name: sort
+        in: query
+        required: false
+        description: 排序，缺省 health。同序值内一律按名称、再按 id 定序，翻页因此稳定。
+        schema: { $ref: ../components/enums.yaml#/InstanceListSort }
     responses:
       '200':
-        description: Instances
+        description: One page of instances plus the total after filtering
         content:
           application/json:
-            schema:
-              type: array
-              items: { $ref: ../components/schemas/instances.yaml#/Instance }
+            schema: { $ref: ../components/schemas/instances.yaml#/InstanceListPage }
   post:
     tags: [instances]
     operationId: createInstance

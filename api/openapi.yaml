@@ -30,6 +30,8 @@ paths:
     $ref: paths/instances.yaml#/~1api~1v1~1instances~1{id}~1credentials
   /api/v1/instances/{id}/metrics/series:
     $ref: paths/metrics.yaml#/~1api~1v1~1instances~1{id}~1metrics~1series
+  /api/v1/instances/metrics/series:
+    $ref: paths/metrics.yaml#/~1api~1v1~1instances~1metrics~1series
   /api/v1/metrics/catalog:
     $ref: paths/metrics.yaml#/~1api~1v1~1metrics~1catalog
   /api/v1/instances/{id}/collection/tasks:
@@ -162,6 +164,12 @@ components:
       $ref: components/enums.yaml#/HealthStatus
     InstanceAgentStatus:
       $ref: components/enums.yaml#/InstanceAgentStatus
+    InstanceEngine:
+      $ref: components/enums.yaml#/InstanceEngine
+    InstanceFlag:
+      $ref: components/enums.yaml#/InstanceFlag
+    InstanceListSort:
+      $ref: components/enums.yaml#/InstanceListSort
     CapabilityStatus:
       $ref: components/enums.yaml#/CapabilityStatus
     AlertAggregation:
@@ -258,6 +266,8 @@ components:
       $ref: components/schemas/instances.yaml#/InstanceCredentialUpdated
     Instance:
       $ref: components/schemas/instances.yaml#/Instance
+    InstanceListPage:
+      $ref: components/schemas/instances.yaml#/InstanceListPage
     InstanceHealth:
       $ref: components/schemas/instances.yaml#/InstanceHealth
     HealthAttribution:
@@ -286,8 +296,18 @@ components:
       $ref: components/schemas/collection.yaml#/CollectionPauseInput
     CollectionPauseStatus:
       $ref: components/schemas/collection.yaml#/CollectionPauseStatus
+    MetricStep:
+      $ref: components/enums.yaml#/MetricStep
+    MetricId:
+      $ref: components/enums.yaml#/MetricId
+    MetricSeriesEntry:
+      $ref: components/schemas/metrics.yaml#/MetricSeriesEntry
     MetricSeriesResponse:
       $ref: components/schemas/metrics.yaml#/MetricSeriesResponse
+    InstanceMetricSeries:
+      $ref: components/schemas/metrics.yaml#/InstanceMetricSeries
+    InstancesMetricSeriesResponse:
+      $ref: components/schemas/metrics.yaml#/InstancesMetricSeriesResponse
     MetricEngine:
       $ref: components/enums.yaml#/MetricEngine
     SemanticSlot:

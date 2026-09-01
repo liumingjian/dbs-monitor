@@ -20,6 +20,17 @@ export function instanceEngineLabel(engine: InstanceEngine): string {
   }
 }
 
+/// 引擎在表格里的短名。实例列表的引擎列只有 56px（列宽预算里它是最窄的一列），
+/// 放不下产品全名；全名进悬停提示。短名仍然是产品自己的写法，不是缩写规则算出来的。
+export function instanceEngineShortLabel(engine: InstanceEngine): string {
+  switch (engine) {
+    case 'POSTGRESQL':
+      return 'PG'
+    default:
+      return assertNever(engine)
+  }
+}
+
 /// Bootstrap database 在两个表单里的说明文案。它只用来建立连接，
 /// **不限定被监控的范围** —— 这条连接下的所有库都归这台实例。
 export const bootstrapDatabaseLabel = 'Bootstrap 数据库'

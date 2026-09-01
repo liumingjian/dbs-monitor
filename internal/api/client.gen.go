@@ -183,12 +183,15 @@ type ClientInterface interface {
 	GetSchedulerDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListInstances request
-	ListInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListInstances(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateInstanceWithBody request with any body
 	CreateInstanceWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	CreateInstance(ctx context.Context, body CreateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetInstancesMetricSeries request
+	GetInstancesMetricSeries(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteInstance request
 	DeleteInstance(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -805,8 +808,8 @@ func (c *Client) GetSchedulerDiagnostics(ctx context.Context, reqEditors ...Requ
 	return c.Client.Do(req)
 }
 
-func (c *Client) ListInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListInstancesRequest(c.Server)
+func (c *Client) ListInstances(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListInstancesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -831,6 +834,18 @@ func (c *Client) CreateInstanceWithBody(ctx context.Context, contentType string,
 
 func (c *Client) CreateInstance(ctx context.Context, body CreateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateInstanceRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetInstancesMetricSeries(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetInstancesMetricSeriesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2843,7 +2858,7 @@ func NewGetSchedulerDiagnosticsRequest(server string) (*http.Request, error) {
 }
 
 // NewListInstancesRequest generates requests for ListInstances
-func NewListInstancesRequest(server string) (*http.Request, error) {
+func NewListInstancesRequest(server string, params *ListInstancesParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -2859,6 +2874,140 @@ func NewListInstancesRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, *params.Page); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PageSize != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page_size", runtime.ParamLocationQuery, *params.PageSize); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "q", runtime.ParamLocationQuery, *params.Q); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Engine != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "engine", runtime.ParamLocationQuery, *params.Engine); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Flags != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "flags", runtime.ParamLocationQuery, *params.Flags); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Severity != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "severity", runtime.ParamLocationQuery, *params.Severity); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -2905,6 +3054,103 @@ func NewCreateInstanceRequestWithBody(server string, contentType string, body io
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetInstancesMetricSeriesRequest generates requests for GetInstancesMetricSeries
+func NewGetInstancesMetricSeriesRequest(server string, params *GetInstancesMetricSeriesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/metrics/series")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance_id", runtime.ParamLocationQuery, params.InstanceId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "metric", runtime.ParamLocationQuery, params.Metric); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Step != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "step", runtime.ParamLocationQuery, *params.Step); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -5411,12 +5657,15 @@ type ClientWithResponsesInterface interface {
 	GetSchedulerDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSchedulerDiagnosticsResponse, error)
 
 	// ListInstancesWithResponse request
-	ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error)
+	ListInstancesWithResponse(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error)
 
 	// CreateInstanceWithBodyWithResponse request with any body
 	CreateInstanceWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateInstanceResponse, error)
 
 	CreateInstanceWithResponse(ctx context.Context, body CreateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateInstanceResponse, error)
+
+	// GetInstancesMetricSeriesWithResponse request
+	GetInstancesMetricSeriesWithResponse(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetInstancesMetricSeriesResponse, error)
 
 	// DeleteInstanceWithResponse request
 	DeleteInstanceWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteInstanceResponse, error)
@@ -6236,7 +6485,7 @@ func (r GetSchedulerDiagnosticsResponse) StatusCode() int {
 type ListInstancesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]Instance
+	JSON200      *InstanceListPage
 }
 
 // Status returns HTTPResponse.Status
@@ -6272,6 +6521,29 @@ func (r CreateInstanceResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r CreateInstanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetInstancesMetricSeriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InstancesMetricSeriesResponse
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetInstancesMetricSeriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetInstancesMetricSeriesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7884,8 +8156,8 @@ func (c *ClientWithResponses) GetSchedulerDiagnosticsWithResponse(ctx context.Co
 }
 
 // ListInstancesWithResponse request returning *ListInstancesResponse
-func (c *ClientWithResponses) ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error) {
-	rsp, err := c.ListInstances(ctx, reqEditors...)
+func (c *ClientWithResponses) ListInstancesWithResponse(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error) {
+	rsp, err := c.ListInstances(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -7907,6 +8179,15 @@ func (c *ClientWithResponses) CreateInstanceWithResponse(ctx context.Context, bo
 		return nil, err
 	}
 	return ParseCreateInstanceResponse(rsp)
+}
+
+// GetInstancesMetricSeriesWithResponse request returning *GetInstancesMetricSeriesResponse
+func (c *ClientWithResponses) GetInstancesMetricSeriesWithResponse(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetInstancesMetricSeriesResponse, error) {
+	rsp, err := c.GetInstancesMetricSeries(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetInstancesMetricSeriesResponse(rsp)
 }
 
 // DeleteInstanceWithResponse request returning *DeleteInstanceResponse
@@ -9466,7 +9747,7 @@ func ParseListInstancesResponse(rsp *http.Response) (*ListInstancesResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []Instance
+		var dest InstanceListPage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9497,6 +9778,39 @@ func ParseCreateInstanceResponse(rsp *http.Response) (*CreateInstanceResponse, e
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetInstancesMetricSeriesResponse parses an HTTP response from a GetInstancesMetricSeriesWithResponse call
+func ParseGetInstancesMetricSeriesResponse(rsp *http.Response) (*GetInstancesMetricSeriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetInstancesMetricSeriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest InstancesMetricSeriesResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Error

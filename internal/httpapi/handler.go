@@ -18,7 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/oapi-codegen/nullable"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
@@ -304,7 +303,12 @@ func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.Platfor
 	}
 }
 
-func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
+// ListInstances 返回当页实例与筛选后的总数。
+//
+// 这是一次**破坏性变更**：这个端点过去返回裸数组。不做兼容层、不加版本号——自用 API、
+// 前后端同一个仓库、同一个二进制，没有第三方消费者；可选分页会带来两条码路各自维护，
+// 保护的却是一个不存在的调用方。
+func (handler *Handler) ListInstances(ctx context.Context, request api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
 	rows, err := instance.New(handler.platform).ListInstances(ctx)
 	if err != nil {
 		return nil, err
@@ -314,7 +318,7 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 	if err != nil {
 		return nil, err
 	}
-	response := make(api.ListInstances200JSONResponse, 0, len(rows))
+	instances := make([]api.Instance, 0, len(rows))
 	for _, row := range rows {
 		projection, err := projectInstanceHealth(instanceHealthProjectionInput{
 			paused:                 row.CollectionPaused,
@@ -330,7 +334,7 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 		if err != nil {
 			return nil, err
 		}
-		response = append(response, toAPIInstance(
+		instances = append(instances, toAPIInstance(
 			row.ID,
 			row.Name,
 			row.Engine,
@@ -344,7 +348,8 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 			projection,
 		))
 	}
-	return response, nil
+	items, total := selectInstances(instances, newInstanceListQuery(request.Params))
+	return api.ListInstances200JSONResponse(api.InstanceListPage{Items: items, Total: total}), nil
 }
 
 func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateInstanceRequestObject) (api.CreateInstanceResponseObject, error) {
@@ -863,176 +868,6 @@ func (handler *Handler) collectionTaskStates(ctx context.Context, instanceID pgt
 	return states, nil
 }
 
-func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetricSeriesRequestObject) (api.GetMetricSeriesResponseObject, error) {
-	requested := api.Auto
-	if request.Params.Step != nil {
-		requested = *request.Params.Step
-	}
-	step, err := chooseMetricStep(requested, request.Params.From, request.Params.To)
-	if err != nil {
-		return api.GetMetricSeries400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
-	}
-	result := api.MetricSeriesResponse{From: request.Params.From, To: request.Params.To, Step: step.name}
-	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
-	pause, err := New(handler.platform).GetCollectionPause(ctx, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	queries := metric.New(handler.platform)
-	controlPlaneFacts, err := metric.ReadControlPlaneFacts(ctx, handler.platform, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	now := handler.clock.Now().UTC()
-	agentStatus := metric.AgentStatusAt(controlPlaneFacts, now)
-	var capabilityStates map[metric.CapabilityID]metric.CapabilityStatus
-	capabilityStatesLoaded := false
-	for _, requestedMetricID := range request.Params.Metric {
-		metricID := metric.MetricID(requestedMetricID)
-		entry := struct {
-			Metric string `json:"metric"`
-			Series []struct {
-				Labels map[string]string `json:"labels"`
-				Points [][]*float64      `json:"points"`
-			} `json:"series"`
-			Unavailability nullable.Nullable[api.Unavailability] `json:"unavailability"`
-			Unit           string                                `json:"unit"`
-		}{Metric: metricID.String(), Unit: metricUnit(metricID.String()), Series: []struct {
-			Labels map[string]string `json:"labels"`
-			Points [][]*float64      `json:"points"`
-		}{}, Unavailability: nullable.NewNullNullable[api.Unavailability]()}
-		counterReset := false
-		if pause.CollectionPaused {
-			entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONPAUSED)
-			result.Metrics = append(result.Metrics, entry)
-			continue
-		}
-
-		switch metric.ProducerFor(metricID) {
-		case metric.ProducerControlPlane:
-			projected, hasProjection := metric.ProjectControlPlaneMetric(metricID, controlPlaneFacts, now)
-			if !hasProjection {
-				reason := api.NOSAMPLESYET
-				if controlPlaneFacts.CollectorLastErrorCode != "" {
-					reason = api.COLLECTIONFAILED
-				}
-				entry.Unavailability = nullable.NewNullableWithValue(reason)
-			} else if projected.ObservedAt.Before(request.Params.From) || projected.ObservedAt.After(request.Params.To) {
-				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
-			} else {
-				timestamp, value := float64(projected.ObservedAt.Unix()), projected.Value
-				entry.Series = append(entry.Series, struct {
-					Labels map[string]string `json:"labels"`
-					Points [][]*float64      `json:"points"`
-				}{Labels: projected.Labels, Points: [][]*float64{{&timestamp, &value}}})
-			}
-			result.Metrics = append(result.Metrics, entry)
-			continue
-		case metric.ProducerAgent:
-			if reason, unavailable := agentMetricUnavailability(controlPlaneFacts, agentStatus); unavailable {
-				entry.Unavailability = nullable.NewNullableWithValue(reason)
-				result.Metrics = append(result.Metrics, entry)
-				continue
-			}
-		}
-
-		collectionState := metricCollectionState{}
-		if strings.HasPrefix(metricID.String(), "pg.") {
-			var probeResult pgtype.Text
-			err := handler.platform.QueryRow(ctx, `SELECT last_result FROM instance_collection_task_state
-				WHERE instance_id = $1 AND task_id = 'pg.probe'`, instanceID).Scan(&probeResult)
-			if err == nil && probeResult.Valid {
-				switch api.CollectionTaskResult(probeResult.String) {
-				case api.FAILED, api.TIMEDOUT:
-					entry.Unavailability = nullable.NewNullableWithValue(api.DBUNREACHABLE)
-					result.Metrics = append(result.Metrics, entry)
-					continue
-				}
-			}
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return nil, err
-			}
-			if !capabilityStatesLoaded {
-				capabilityStates, _, err = handler.currentCapabilitySnapshot(ctx, instanceID)
-				if err != nil {
-					return nil, err
-				}
-				capabilityStatesLoaded = true
-			}
-			if reason, blocked := metric.MetricCapabilityBlockReason(metricID, capabilityStates); blocked {
-				entry.Unavailability = nullable.NewNullableWithValue(api.Unavailability(reason))
-				result.Metrics = append(result.Metrics, entry)
-				continue
-			}
-			counterReset, err = handler.metricCounterReset(ctx, instanceID, metricID)
-			if err != nil {
-				return nil, err
-			}
-			collectionState, err = handler.readMetricCollectionState(
-				ctx, instanceID, metricID, controlPlaneFacts.CollectorLastSuccessAt, now, request.Params.To,
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		series, err := readMetricSeries(ctx, queries, instanceID, metricID, step, request.Params.From, request.Params.To)
-		if err != nil {
-			return nil, err
-		}
-		// 「有没有序列」要在收敛之前数：收敛之后永远是一条，会把「还没采到任何东西」
-		// （NO_SAMPLES_YET）说成「这段时间里没有点」（NO_DATA_IN_RANGE）。
-		storedSeriesCount := len(series)
-		// 库级指标默认收敛成实例级的一条序列：列表与总览只显示实例级值，否则一个连接下
-		// 几十个库会把行数以另一种方式撑爆。逐库明细是工作台显式要来的（by_database=true），
-		// 那时库名放进 labels，和 replica / slot 一样成为图例上的一维。
-		if metric.LevelFor(metricID) == metric.LevelDatabase && !byDatabase(request.Params.ByDatabase) {
-			aggregated, err := aggregateSeriesToInstance(
-				ctx, queries, instanceID, metricID, step, request.Params.From, request.Params.To, series,
-			)
-			if err != nil {
-				return nil, err
-			}
-			series = []fetchedSeries{{labels: map[string]string{}, points: aggregated}}
-		}
-		for _, found := range series {
-			if len(found.points) == 0 {
-				continue
-			}
-			item := struct {
-				Labels map[string]string `json:"labels"`
-				Points [][]*float64      `json:"points"`
-			}{Labels: map[string]string{}, Points: make([][]*float64, 0, len(found.points))}
-			for key, value := range found.labels {
-				item.Labels[key] = value
-			}
-			if found.databaseName != "" {
-				item.Labels[metric.DimensionDatabase] = found.databaseName
-			}
-			for _, point := range found.points {
-				timestamp, value := float64(point.ts.Unix()), point.value
-				item.Points = append(item.Points, []*float64{&timestamp, &value})
-			}
-			entry.Series = append(entry.Series, item)
-		}
-		if len(entry.Series) == 0 {
-			if counterReset {
-				entry.Unavailability = nullable.NewNullableWithValue(api.COUNTERRESET)
-			} else if collectionState.failed {
-				entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONFAILED)
-			} else if collectionState.stale {
-				entry.Unavailability = nullable.NewNullableWithValue(api.STALE)
-			} else if storedSeriesCount == 0 {
-				entry.Unavailability = nullable.NewNullableWithValue(api.NOSAMPLESYET)
-			} else {
-				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
-			}
-		}
-		result.Metrics = append(result.Metrics, entry)
-	}
-	return api.GetMetricSeries200JSONResponse(result), nil
-}
-
 func agentMetricUnavailability(facts metric.ControlPlaneFacts, agentStatus string) (api.Unavailability, bool) {
 	switch {
 	case !facts.AgentExpected:
@@ -1362,6 +1197,7 @@ var RequiredRoles = map[string]string{
 	"UpdateMaintenanceWindow": "ALERT_ADMIN", "EndMaintenanceWindow": "ALERT_ADMIN", "DeleteMaintenanceWindow": "ALERT_ADMIN",
 	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY", "GetMetricCatalog": "READONLY",
+	"GetInstancesMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
 	"ListLongQuerySamples": "READONLY", "GetQueryStatisticsSnapshot": "READONLY", "GetSessionSnapshot": "READONLY",
 	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",

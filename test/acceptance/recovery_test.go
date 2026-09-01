@@ -105,11 +105,11 @@ func TestAcceptance_REC_3(t *testing.T) {
 		}
 		stack := newRecoveryStackWithKey(t, restoredURL, keyDirectory, time.Second, 24*time.Hour)
 		client := stack.waitForApplication(t)
-		instances, err := client.ListInstancesWithResponse(context.Background())
+		instances, err := client.ListInstancesWithResponse(context.Background(), &api.ListInstancesParams{})
 		if err != nil {
 			t.Fatalf("list restored instances: %v", err)
 		}
-		if instances.StatusCode() != http.StatusOK || instances.JSON200 == nil || len(*instances.JSON200) == 0 {
+		if instances.StatusCode() != http.StatusOK || instances.JSON200 == nil || len(instances.JSON200.Items) == 0 {
 			t.Fatalf("restored instances = status %d body %s", instances.StatusCode(), instances.Body)
 		}
 		rules, err := client.ListAlertRulesWithResponse(context.Background())
@@ -180,7 +180,7 @@ func TestAcceptance_REC_6(t *testing.T) {
 		assertPlatformUnavailable(t, client)
 		composeService(t, "recovery", "up", "-d", "--wait", "acceptance-recovery-platform")
 		client = stack.waitForApplication(t)
-		instances, err := client.ListInstancesWithResponse(context.Background())
+		instances, err := client.ListInstancesWithResponse(context.Background(), &api.ListInstancesParams{})
 		if err != nil {
 			t.Fatalf("list instances after database recovery: %v", err)
 		}
@@ -263,7 +263,7 @@ func TestAcceptance_REC_10(t *testing.T) {
 		second := newRecoveryStackWithKey(t, databaseURL, newRecoveryKeyDirectory(t), time.Minute, 24*time.Hour)
 		waitForProcessExit(t, second.process, 30*time.Second)
 		assertRecoveryLogContains(t, second.process, "another monitor-server instance is already running")
-		instances, err := client.ListInstancesWithResponse(context.Background())
+		instances, err := client.ListInstancesWithResponse(context.Background(), &api.ListInstancesParams{})
 		if err != nil {
 			t.Fatalf("list instances from first server: %v", err)
 		}
@@ -333,7 +333,7 @@ func TestAcceptance_REC_12(t *testing.T) {
 		}
 		assertRecoveryLogContains(t, stack.process, "PLATFORM_DATABASE_INSTANCE_SHARED")
 		assertRecoveryLogContains(t, stack.process, "platform_database_prerequisite_warning")
-		instances, err := client.ListInstancesWithResponse(context.Background())
+		instances, err := client.ListInstancesWithResponse(context.Background(), &api.ListInstancesParams{})
 		if err != nil {
 			t.Fatalf("list instances with warning-only preflight: %v", err)
 		}
@@ -654,7 +654,7 @@ func recoveryMetricPoints(t *testing.T, client *api.ClientWithResponses, instanc
 	t.Helper()
 	step := api.Raw
 	response, err := client.GetMetricSeriesWithResponse(context.Background(), instanceID, &api.GetMetricSeriesParams{
-		Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetricHostCpuUsagePercent}, From: from, To: to, Step: &step,
+		Metric: []api.MetricId{api.MetricIdHostCpuUsagePercent}, From: from, To: to, Step: &step,
 	})
 	if err != nil {
 		t.Fatalf("read recovery metrics: %v", err)
@@ -701,7 +701,7 @@ func waitForRecoveryMetricID(t *testing.T, client *api.ClientWithResponses, inst
 	for time.Now().Before(deadline) {
 		step := api.Raw
 		response, err := client.GetMetricSeriesWithResponse(context.Background(), instanceID, &api.GetMetricSeriesParams{
-			Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetric(metricID)},
+			Metric: []api.MetricId{api.MetricId(metricID)},
 			From:   time.Now().Add(-time.Minute), To: time.Now().Add(time.Second), Step: &step,
 		})
 		if err == nil && response.JSON200 != nil {
@@ -1097,7 +1097,7 @@ func assertPlatformUnavailable(t *testing.T, client *api.ClientWithResponses) {
 	if health.JSON200 == nil || string(health.JSON200.Status) != "FAILED" {
 		t.Fatalf("unavailable database health = %+v; want FAILED", health.JSON200)
 	}
-	instances, err := client.ListInstancesWithResponse(context.Background())
+	instances, err := client.ListInstancesWithResponse(context.Background(), &api.ListInstancesParams{})
 	if err != nil {
 		t.Fatalf("list instances during database outage: %v", err)
 	}

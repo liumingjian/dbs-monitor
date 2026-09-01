@@ -81,15 +81,75 @@ paths:
         - instances
       operationId: listInstances
       x-required-role: READONLY
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: 页码，从 1 开始。超出末页时返回空的 items 与真实的 total。
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          description: 每页条数。上限按机群规模给到 500，一次取全量是选实例的下拉框在用。
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - name: q
+          in: query
+          required: false
+          description: 搜索词，大小写不敏感的子串匹配，命中实例名或地址（主机与 host:port）。 地址不再单独占一列，但仍然留在搜索索引里。
+          schema:
+            type: string
+        - name: engine
+          in: query
+          required: false
+          description: 引擎筛选。可重复，多值之间是「或」。
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/InstanceEngine'
+        - name: status
+          in: query
+          required: false
+          description: 健康档位筛选。可重复，多值之间是「或」。
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/HealthStatus'
+        - name: flags
+          in: query
+          required: false
+          description: 正交标记筛选。可重复，多值之间是「与」——要的是同时带上这些标记的实例。
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/InstanceFlag'
+        - name: severity
+          in: query
+          required: false
+          description: 至少有一条该级别未恢复告警。可重复，多值之间是「或」。
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/AlertSeverity'
+        - name: sort
+          in: query
+          required: false
+          description: 排序，缺省 health。同序值内一律按名称、再按 id 定序，翻页因此稳定。
+          schema:
+            $ref: '#/components/schemas/InstanceListSort'
       responses:
         '200':
-          description: Instances
+          description: One page of instances plus the total after filtering
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Instance'
+                $ref: '#/components/schemas/InstanceListPage'
     post:
       tags:
         - instances
@@ -217,46 +277,7 @@ paths:
           schema:
             type: array
             items:
-              type: string
-              enum:
-                - pg.availability.reachable
-                - pg.probe.latency_ms
-                - collector.last_success_time
-                - agent.status
-                - host.cpu.usage_percent
-                - host.memory.usage_percent
-                - host.disk.usage_percent
-                - host.disk.free_bytes
-                - host.disk.iops
-                - host.disk.throughput_bytes_per_sec
-                - host.network.bytes_per_sec
-                - pg.connection.total
-                - pg.connection.active
-                - pg.connection.idle_in_transaction
-                - pg.connection.max
-                - pg.connection.saturation_percent
-                - pg.tps
-                - pg.xact.commit_per_sec
-                - pg.xact.rollback_per_sec
-                - pg.tuples.read_per_sec
-                - pg.tuples.write_per_sec
-                - pg.temp.files_per_sec
-                - pg.temp.bytes_per_sec
-                - pg.transaction.long_count
-                - pg.transaction.max_duration_sec
-                - pg.lock.waiting_count
-                - pg.session.blocked_count
-                - pg.query.long_running_count
-                - pg.prepared_xacts.count
-                - pg.replication.role
-                - pg.replication.connection_state
-                - pg.replication.replay_lag_ms
-                - pg.replication.wal_lag_bytes
-                - pg.replication_slot.retained_wal_bytes
-                - pg.cache.hit_ratio
-                - pg.cache.block_access_per_sec
-                - pg.database.size_bytes
-                - pg.deadlock.count
+              $ref: '#/components/schemas/MetricId'
         - name: from
           in: query
           required: true
@@ -272,15 +293,9 @@ paths:
         - name: step
           in: query
           required: false
+          description: 缺省 auto。
           schema:
-            type: string
-            enum:
-              - auto
-              - 15s
-              - 1m
-              - 5m
-              - raw
-            default: auto
+            $ref: '#/components/schemas/MetricStep'
         - name: by_database
           in: query
           required: false
@@ -296,6 +311,62 @@ paths:
                 $ref: '#/components/schemas/MetricSeriesResponse'
         '400':
           description: Invalid time range or step
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/instances/metrics/series:
+    get:
+      tags:
+        - metrics
+      operationId: getInstancesMetricSeries
+      x-required-role: READONLY
+      parameters:
+        - name: instance_id
+          in: query
+          required: true
+          description: 要取的实例，可重复。上限与列表页大小一致。
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 500
+            items:
+              type: string
+              format: uuid
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/MetricId'
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: step
+          in: query
+          required: false
+          description: 缺省 auto。
+          schema:
+            $ref: '#/components/schemas/MetricStep'
+      responses:
+        '200':
+          description: Metric series for every requested instance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstancesMetricSeriesResponse'
+        '400':
+          description: Invalid time range, step, or instance list
           content:
             application/json:
               schema:
@@ -2292,6 +2363,41 @@ components:
         - InstanceAgentNotInstalled
         - InstanceAgentPermissionDenied
         - InstanceAgentError
+    InstanceEngine:
+      type: string
+      description: 'Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.'
+      enum:
+        - POSTGRESQL
+      x-enum-varnames:
+        - InstanceEnginePostgreSQL
+    InstanceFlag:
+      type: string
+      description: 'Orthogonal marker on an instance''s health rollup, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced.'
+      enum:
+        - NO_DATA
+        - MAINTENANCE
+        - RECENTLY_RECOVERED
+        - IGNORED
+        - CONFIGURATION_MISSING
+      x-enum-varnames:
+        - InstanceFlagNoData
+        - InstanceFlagMaintenance
+        - InstanceFlagRecentlyRecovered
+        - InstanceFlagIgnored
+        - InstanceFlagConfigurationMissing
+    InstanceListSort:
+      type: string
+      description: Instance list ordering. health puts the rows that need handling first; stalest puts the instances whose collection is furthest behind first. Ties always fall back to name then id, so paging through the list never repeats or skips a row.
+      enum:
+        - health
+        - name
+        - '-name'
+        - stalest
+      x-enum-varnames:
+        - InstanceSortHealth
+        - InstanceSortName
+        - InstanceSortNameDescending
+        - InstanceSortStalest
     CapabilityStatus:
       type: string
       enum:
@@ -3517,6 +3623,20 @@ components:
           minimum: 0
         collection_pause:
           $ref: '#/components/schemas/CollectionPauseStatus'
+    InstanceListPage:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Instance'
+        total:
+          type: integer
+          minimum: 0
+          description: Number of instances matching the filters, before paging.
     InstanceHealth:
       type: object
       required:
@@ -3825,6 +3945,101 @@ components:
           format: date-time
         reason:
           type: string
+    MetricStep:
+      type: string
+      description: Resolution asked of a series endpoint. auto lets the server pick from the range; raw returns stored samples untouched and is capped at six hours.
+      enum:
+        - auto
+        - 15s
+        - 1m
+        - 5m
+        - raw
+      x-enum-varnames:
+        - Auto
+        - N15s
+        - N1m
+        - N5m
+        - Raw
+    MetricId:
+      type: string
+      description: A metric id from the catalogue. The list is shared by every series endpoint, so a new metric is declared once here instead of once per path.
+      enum:
+        - pg.availability.reachable
+        - pg.probe.latency_ms
+        - collector.last_success_time
+        - agent.status
+        - host.cpu.usage_percent
+        - host.memory.usage_percent
+        - host.disk.usage_percent
+        - host.disk.free_bytes
+        - host.disk.iops
+        - host.disk.throughput_bytes_per_sec
+        - host.network.bytes_per_sec
+        - pg.connection.total
+        - pg.connection.active
+        - pg.connection.idle_in_transaction
+        - pg.connection.max
+        - pg.connection.saturation_percent
+        - pg.tps
+        - pg.xact.commit_per_sec
+        - pg.xact.rollback_per_sec
+        - pg.tuples.read_per_sec
+        - pg.tuples.write_per_sec
+        - pg.temp.files_per_sec
+        - pg.temp.bytes_per_sec
+        - pg.transaction.long_count
+        - pg.transaction.max_duration_sec
+        - pg.lock.waiting_count
+        - pg.session.blocked_count
+        - pg.query.long_running_count
+        - pg.prepared_xacts.count
+        - pg.replication.role
+        - pg.replication.connection_state
+        - pg.replication.replay_lag_ms
+        - pg.replication.wal_lag_bytes
+        - pg.replication_slot.retained_wal_bytes
+        - pg.cache.hit_ratio
+        - pg.cache.block_access_per_sec
+        - pg.database.size_bytes
+        - pg.deadlock.count
+    MetricSeriesEntry:
+      type: object
+      required:
+        - metric
+        - unit
+        - unavailability
+        - series
+      properties:
+        metric:
+          type: string
+        unit:
+          type: string
+        unavailability:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Unavailability'
+        series:
+          type: array
+          items:
+            type: object
+            required:
+              - labels
+              - points
+            properties:
+              labels:
+                type: object
+                additionalProperties:
+                  type: string
+              points:
+                type: array
+                items:
+                  type: array
+                  minItems: 2
+                  maxItems: 2
+                  items:
+                    type: number
+                    nullable: true
+                    x-go-type: '*float64'
     MetricSeriesResponse:
       type: object
       required:
@@ -3844,43 +4059,40 @@ components:
         metrics:
           type: array
           items:
-            type: object
-            required:
-              - metric
-              - unit
-              - unavailability
-              - series
-            properties:
-              metric:
-                type: string
-              unit:
-                type: string
-              unavailability:
-                nullable: true
-                allOf:
-                  - $ref: '#/components/schemas/Unavailability'
-              series:
-                type: array
-                items:
-                  type: object
-                  required:
-                    - labels
-                    - points
-                  properties:
-                    labels:
-                      type: object
-                      additionalProperties:
-                        type: string
-                    points:
-                      type: array
-                      items:
-                        type: array
-                        minItems: 2
-                        maxItems: 2
-                        items:
-                          type: number
-                          nullable: true
-                          x-go-type: '*float64'
+            $ref: '#/components/schemas/MetricSeriesEntry'
+    InstanceMetricSeries:
+      type: object
+      required:
+        - instance_id
+        - metrics
+      properties:
+        instance_id:
+          type: string
+          format: uuid
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricSeriesEntry'
+    InstancesMetricSeriesResponse:
+      type: object
+      required:
+        - from
+        - to
+        - step
+        - instances
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        step:
+          type: string
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/InstanceMetricSeries'
     MetricEngine:
       type: string
       description: 'Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.'
@@ -4324,13 +4536,6 @@ components:
                     type: string
                   message:
                     type: string
-    InstanceEngine:
-      type: string
-      description: 'Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.'
-      enum:
-        - POSTGRESQL
-      x-enum-varnames:
-        - InstanceEnginePostgreSQL
     CollectionTaskResult:
       type: string
       enum:

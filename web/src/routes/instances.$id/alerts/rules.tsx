@@ -80,7 +80,10 @@ function AlertRulesPage() {
   const { id } = alertRulesRoute.useParams()
   const catalog = useMetricCatalog()
   const rulesQuery = $api.useQuery('get', '/api/v1/alert-rules')
-  const instancesQuery = $api.useQuery('get', '/api/v1/instances')
+  const instancesQuery = $api.useQuery('get', '/api/v1/instances', {
+    // 选实例的下拉框要的是全部实例，不是当页；列表接口分页之后，这里显式要一整页。
+    params: { query: { page_size: 500, sort: 'name' as const } },
+  })
   const instanceQuery = $api.useQuery('get', '/api/v1/instances/{id}', { params: { path: { id } } })
   const engine = instanceQuery.data?.engine
   // 模板按这台实例的引擎筛：引用语义位的模板一份两用，引用引擎私有指标的模板只在本引擎露面。
@@ -253,7 +256,7 @@ function AlertRulesPage() {
       open={editorOpen}
       editingRule={editingRule}
       catalog={catalog}
-      instances={instancesQuery.data ?? []}
+      instances={instancesQuery.data?.items ?? []}
       policies={policiesQuery.data ?? []}
       onClose={() => setEditorOpen(false)}
       onSaved={() => {

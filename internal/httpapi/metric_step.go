@@ -14,7 +14,7 @@ type metricStep struct {
 	raw    bool
 }
 
-func chooseMetricStep(requested api.GetMetricSeriesParamsStep, from, to time.Time) (metricStep, error) {
+func chooseMetricStep(requested api.MetricStep, from, to time.Time) (metricStep, error) {
 	span := to.Sub(from)
 	if span <= 0 {
 		return metricStep{}, fmt.Errorf("from must be before to")

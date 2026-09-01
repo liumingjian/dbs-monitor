@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { instanceEngineLabel, instanceEngines } from './instanceEngine'
+import { instanceEngineLabel, instanceEngineShortLabel, instanceEngines } from './instanceEngine'
 
 describe('instance engine', () => {
   it('spells each engine the way its product does', () => {
     expect(instanceEngineLabel('POSTGRESQL')).toBe('PostgreSQL')
+    // 列表的引擎列只有 56px，放的是短名；全名进悬停提示。
+    expect(instanceEngineShortLabel('POSTGRESQL')).toBe('PG')
   })
 
   it('offers every engine the API knows about', () => {
@@ -11,6 +13,7 @@ describe('instance engine', () => {
     expect([...instanceEngines]).toEqual(['POSTGRESQL'])
     for (const engine of instanceEngines) {
       expect(instanceEngineLabel(engine)).not.toBe('')
+      expect(instanceEngineShortLabel(engine)).not.toBe('')
     }
   })
 })
