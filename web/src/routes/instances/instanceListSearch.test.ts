@@ -39,7 +39,7 @@ describe('instance list search params', () => {
   // 而这个地址存在的理由就是「发给同事」。
   it('rejects values it does not recognise instead of silently dropping them', () => {
     expect(parseInstanceListSearch({ status: ['CRITICAL', 'NOPE'] })).toEqual({ error: '健康档位筛选取值无效' })
-    expect(parseInstanceListSearch({ flags: 'AGENT_OFFLINE' })).toEqual({ error: '标记筛选取值无效' })
+    expect(parseInstanceListSearch({ flags: 'DISK_FULL' })).toEqual({ error: '标记筛选取值无效' })
     expect(parseInstanceListSearch({ severity: 'fatal' })).toEqual({ error: '告警级别筛选取值无效' })
     expect(parseInstanceListSearch({ engine: 'ORACLE' })).toEqual({ error: '引擎筛选取值无效' })
     expect(parseInstanceListSearch({ sort: 'name_asc' })).toEqual({ error: '排序取值无效' })

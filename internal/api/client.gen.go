@@ -379,6 +379,9 @@ type ClientInterface interface {
 	// GetNotificationPolicySettings request
 	GetNotificationPolicySettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetFleetOverview request
+	GetFleetOverview(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ChangeOwnPasswordWithBody request with any body
 	ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -1662,6 +1665,18 @@ func (c *Client) UpdateNotificationPolicy(ctx context.Context, id openapi_types.
 
 func (c *Client) GetNotificationPolicySettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetNotificationPolicySettingsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetFleetOverview(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetFleetOverviewRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -5225,6 +5240,33 @@ func NewGetNotificationPolicySettingsRequest(server string) (*http.Request, erro
 	return req, nil
 }
 
+// NewGetFleetOverviewRequest generates requests for GetFleetOverview
+func NewGetFleetOverviewRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/overview")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewChangeOwnPasswordRequest calls the generic ChangeOwnPassword builder with application/json body
 func NewChangeOwnPasswordRequest(server string, body ChangeOwnPasswordJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -5852,6 +5894,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetNotificationPolicySettingsWithResponse request
 	GetNotificationPolicySettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPolicySettingsResponse, error)
+
+	// GetFleetOverviewWithResponse request
+	GetFleetOverviewWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetFleetOverviewResponse, error)
 
 	// ChangeOwnPasswordWithBodyWithResponse request with any body
 	ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
@@ -7680,6 +7725,28 @@ func (r GetNotificationPolicySettingsResponse) StatusCode() int {
 	return 0
 }
 
+type GetFleetOverviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *FleetOverview
+}
+
+// Status returns HTTPResponse.Status
+func (r GetFleetOverviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetFleetOverviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ChangeOwnPasswordResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -8782,6 +8849,15 @@ func (c *ClientWithResponses) GetNotificationPolicySettingsWithResponse(ctx cont
 		return nil, err
 	}
 	return ParseGetNotificationPolicySettingsResponse(rsp)
+}
+
+// GetFleetOverviewWithResponse request returning *GetFleetOverviewResponse
+func (c *ClientWithResponses) GetFleetOverviewWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetFleetOverviewResponse, error) {
+	rsp, err := c.GetFleetOverview(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetFleetOverviewResponse(rsp)
 }
 
 // ChangeOwnPasswordWithBodyWithResponse request with arbitrary body returning *ChangeOwnPasswordResponse
@@ -11318,6 +11394,32 @@ func ParseGetNotificationPolicySettingsResponse(rsp *http.Response) (*GetNotific
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest NotificationPolicySettings
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetFleetOverviewResponse parses an HTTP response from a GetFleetOverviewWithResponse call
+func ParseGetFleetOverviewResponse(rsp *http.Response) (*GetFleetOverviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFleetOverviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FleetOverview
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

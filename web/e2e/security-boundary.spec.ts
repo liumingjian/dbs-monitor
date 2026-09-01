@@ -23,6 +23,9 @@ test('[SEC-10] production CSP keeps the login-to-chart path functional', async (
   await page.getByLabel('密码').fill(process.env.SECURITY_E2E_PASSWORD ?? '')
   await page.getByRole('button', { name: /登\s*录/ }).click()
 
+  // 落地页是机群总览；这条用例要的是「登录到图表」这条路走得通，所以从侧栏进实例列表。
+  await expect(page.getByRole('heading', { name: '机群总览' })).toBeVisible()
+  await page.getByRole('link', { name: '实例列表' }).click()
   await expect(page).toHaveURL(/\/instances$/)
   const instanceName = process.env.SECURITY_E2E_INSTANCE ?? 'SEC-10 browser target'
   const row = page.getByRole('row', { name: new RegExp(instanceName) })

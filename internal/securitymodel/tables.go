@@ -35,6 +35,8 @@ var (
 var PageAuthorizations = []PageAuthorization{
 	{Path: AuthenticatedShell, Sources: []string{"web/src/routes/root/index.tsx"}, Visible: allRoles},
 	{Path: "/login", Sources: []string{"web/src/routes/login.tsx"}, Visible: allRoles},
+	// 机群总览是登录后的落地页，地址就是 `/`。
+	{Path: "/", Sources: []string{"web/src/routes/overview/index.tsx"}, Visible: allRoles},
 	{Path: "/instances", Sources: []string{"web/src/routes/instances/index.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id", Sources: []string{"web/src/routes/instances.$id/index.tsx"}, Visible: allRoles},
 	{Path: "/instances/$id/monitoring", Sources: []string{"web/src/routes/instances.$id/monitoring.tsx"}, Visible: allRoles},

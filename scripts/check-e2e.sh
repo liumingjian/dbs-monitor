@@ -9,6 +9,11 @@ server_config_file=$(mktemp)
 cookie_file=$(mktemp)
 server_log=$(mktemp)
 compose_project="dbs-monitor-e2e-$$"
+# 端口可覆盖，与 scripts/qa-up.sh 同一套约定：同一台机器上可能已经有一个问答栈
+# 占着 55442 / 18443，那时 e2e 只能换一段端口，否则连容器都起不来。
+platform_port="${E2E_PLATFORM_PORT:-55442}"
+listen_port="${E2E_LISTEN_PORT:-18443}"
+export QA_PLATFORM_PORT="$platform_port"
 server_pid=
 
 cleanup() {
@@ -38,14 +43,14 @@ export ACCEPTANCE_PLATFORM_TLS_DIR="$platform_tls_dir"
 docker compose -p "$compose_project" --profile acceptance \
   up -d --wait acceptance-platform
 
-platform_database_url="postgres://dbs_monitor:dbs_monitor@127.0.0.1:55442/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$platform_tls_dir/ca.crt"
+platform_database_url="postgres://dbs_monitor:dbs_monitor@127.0.0.1:$platform_port/dbs_monitor?search_path=dbsmon&sslmode=verify-full&sslrootcert=$platform_tls_dir/ca.crt"
 printf 'platform_database_url: "%s"\nmaster_key_path: "%s"\nagent_binary_dir: "%s"\n' \
   "$platform_database_url" "$master_key_dir" "$root" >"$server_config_file"
 chmod 0600 "$server_config_file"
 
 DBS_MONITOR_CONFIG_FILE="$server_config_file" \
 INITIAL_ADMIN_PASSWORD=t11-playwright-password \
-LISTEN_ADDR=127.0.0.1:18443 \
+LISTEN_ADDR=127.0.0.1:$listen_port \
 PUBLIC_HOST=127.0.0.1 \
 CERT_DIR="$server_tls_dir" \
 "$root/dbs-monitor-server" >"$server_log" 2>&1 &
@@ -53,7 +58,7 @@ server_pid=$!
 
 ready=0
 for _ in $(seq 1 60); do
-  if curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" https://127.0.0.1:18443/login >/dev/null 2>&1; then
+  if curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" https://127.0.0.1:$listen_port/login >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -69,15 +74,17 @@ if [ "$ready" -ne 1 ]; then
 fi
 
 curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" -c "$cookie_file" \
-  -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/login \
+  -H 'Content-Type: application/json' -X POST https://127.0.0.1:$listen_port/api/v1/login \
   --data '{"username":"admin","password":"t11-playwright-password"}' >/dev/null
 instance_id=$(node -e 'process.stdout.write(JSON.stringify({name:"T11 smoke instance",host:process.env.PGHOST || "localhost",port:Number(process.env.PGPORT || 55432),database:process.env.PGDATABASE || "dbs_monitor",username:process.env.PGUSER || "dbs_monitor",password:process.env.PGPASSWORD}))' \
   | curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" -b "$cookie_file" \
-  -H 'Content-Type: application/json' -X POST https://127.0.0.1:18443/api/v1/instances \
+  -H 'Content-Type: application/json' -X POST https://127.0.0.1:$listen_port/api/v1/instances \
   --data-binary @- \
   | node -e "let body=''; process.stdin.on('data', chunk => body += chunk); process.stdin.on('end', () => process.stdout.write(JSON.parse(body).instance.id))")
-series_from=$(date -u -d '1 minute ago' +%Y-%m-%dT%H:%M:%SZ)
-series_to=$(date -u -d '1 minute' +%Y-%m-%dT%H:%M:%SZ)
+# 用 node 算这两个时刻而不是 `date -d`：`-d` 是 GNU 扩展，BSD date（macOS）不认，
+# 脚本会在这里直接退出。node 本来就是这个脚本的依赖。
+series_from=$(node -e 'process.stdout.write(new Date(Date.now() - 60000).toISOString().replace(/\.\d+Z$/, "Z"))')
+series_to=$(node -e 'process.stdout.write(new Date(Date.now() + 60000).toISOString().replace(/\.\d+Z$/, "Z"))')
 samples_ready=0
 for _ in $(seq 1 80); do
   if curl --noproxy '*' --silent --fail --cacert "$server_tls_dir/ca.crt" -b "$cookie_file" --get \
@@ -85,7 +92,7 @@ for _ in $(seq 1 80); do
     --data-urlencode "from=$series_from" \
     --data-urlencode "to=$series_to" \
     --data-urlencode 'step=raw' \
-    "https://127.0.0.1:18443/api/v1/instances/$instance_id/metrics/series" \
+    "https://127.0.0.1:$listen_port/api/v1/instances/$instance_id/metrics/series" \
     | node -e '
 let body = ""
 process.stdin.on("data", (chunk) => { body += chunk })
@@ -109,4 +116,5 @@ fi
 cd "$root/web"
 SECURITY_E2E_PASSWORD=t11-playwright-password \
 SECURITY_E2E_INSTANCE='T11 smoke instance' \
+E2E_BASE_URL="https://127.0.0.1:$listen_port" \
 npm run e2e

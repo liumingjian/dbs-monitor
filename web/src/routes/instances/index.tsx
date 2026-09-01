@@ -406,6 +406,10 @@ function flagLabel(flag: InstanceFlag): string {
       return '已忽略'
     case 'CONFIGURATION_MISSING':
       return '配置缺失'
+    case 'STALE_DATA':
+      return '数据不新鲜'
+    case 'AGENT_OFFLINE':
+      return 'Agent 离线'
     default:
       return assertNever(flag)
   }

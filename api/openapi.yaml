@@ -17,11 +17,14 @@ tags:
   - name: platform-events
   - name: diagnostics
   - name: notification-settings
+  - name: overview
 paths:
   /api/v1/login:
     $ref: paths/auth.yaml#/~1api~1v1~1login
   /api/v1/logout:
     $ref: paths/auth.yaml#/~1api~1v1~1logout
+  /api/v1/overview:
+    $ref: paths/overview.yaml#/~1api~1v1~1overview
   /api/v1/instances:
     $ref: paths/instances.yaml#/~1api~1v1~1instances
   /api/v1/instances/{id}:
@@ -268,6 +271,14 @@ components:
       $ref: components/schemas/instances.yaml#/Instance
     InstanceListPage:
       $ref: components/schemas/instances.yaml#/InstanceListPage
+    FleetOverview:
+      $ref: components/schemas/overview.yaml#/FleetOverview
+    FleetHealthCounts:
+      $ref: components/schemas/overview.yaml#/FleetHealthCounts
+    FleetCollectionHealth:
+      $ref: components/schemas/overview.yaml#/FleetCollectionHealth
+    StorageWatermarkEntry:
+      $ref: components/schemas/overview.yaml#/StorageWatermarkEntry
     InstanceHealth:
       $ref: components/schemas/instances.yaml#/InstanceHealth
     HealthAttribution:

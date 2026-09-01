@@ -16,7 +16,7 @@ import {
 } from '@carbon/react'
 import { Link, Outlet, createRootRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentProps, ComponentType, ReactNode } from 'react'
 import { $api } from '../../api/client'
 import { apiErrorMessage } from '../../api/errors'
 import type { components } from '../../api/schema'
@@ -109,7 +109,7 @@ function RootLayout() {
               onClick={toggleNav}
             />
           )}
-          <HeaderName as={Link} to="/instances" prefix="">DBS Monitor</HeaderName>
+          <HeaderName as={Link} to="/" prefix="">DBS Monitor</HeaderName>
           {inShell && <ShellGlobalBar onOpenPassword={() => setPasswordOpen(true)} />}
         </Header>
       </Theme>
@@ -227,7 +227,8 @@ function PasswordChangeGate({ open, onClose }: { open: boolean; onClose: () => v
   )
 }
 
-/// 侧栏。三组：监控 / 告警 / 管理。
+/// 侧栏。三组六项：监控（总览 · 实例列表 · SQL 洞察）/ 告警（全局告警 · 告警设置）/
+/// 系统（用户管理）。分组按「这一项回答的是哪一类问题」，不按「谁有权限改它」。
 ///
 /// 折叠时**不渲染**标签与分组标题（而不是把它们淡出）：淡出会在每个标题原来的位置留下一条
 /// 空带，48px 的窄轨一条都留不起。名称改由 `title` 悬停提示与 `aria-label` 承担，
@@ -242,15 +243,27 @@ function ShellSideNav({ collapsed }: { collapsed: boolean }) {
   )
   const unread = currentAlerts.data?.total
   const at = (prefix: string) => location.pathname.startsWith(prefix)
+  // 总览的地址是 `/`，`startsWith('/')` 对每一条路径都成立，所以它只能精确匹配。
+  const atOverview = location.pathname === '/'
 
   // Carbon 的 `as` 槽只收一个组件，路由属性没法跟着一起传（`search` 的类型与 `to` 绑定，
   // 转一手就退化成任意对象）。所以每条链接的去处写死在这里的闭包里，`as` 拿到的是一个
   // 已经知道自己去哪儿的组件；没有依赖，跨渲染是同一个身份，不会重挂锚点。
   const links = useMemo(() => ({
+    overview: (props: object) => <Link {...props} to="/" />,
     instances: (props: object) => <Link {...props} to="/instances" />,
     alerts: (props: object) => <Link {...props} to="/alerts" search={{ tab: 'current', include_paused: false }} />,
     users: (props: object) => <Link {...props} to="/users" />,
     alertSettings: (props: object) => <Link {...props} to="/alert-settings/notifications" />,
+  }), [])
+
+  // 还没有页面可去的导航项。渲染成 `span` 而不是锚点：给一个指向 404 的假链接，
+  // 中键新开、复制链接、悬停预取全都会落空，而那正是导航项被信任的地方。
+  // 身份同样用 useMemo 固定住，理由与上面的链接闭包一样。
+  const upcoming = useMemo(() => ({
+    sqlInsight: ({ className, ...props }: ComponentProps<'span'>) => (
+      <span {...props} className={['dbs-shell-nav__upcoming', className].filter(Boolean).join(' ')} />
+    ),
   }), [])
 
   return (
@@ -266,8 +279,22 @@ function ShellSideNav({ collapsed }: { collapsed: boolean }) {
       <SideNavItems>
         <ShellNavGroup heading="监控" collapsed={collapsed} first>
           <SideNavLink
+            as={links.overview}
+            {...navLinkProps({ label: '总览', icon: 'dashboard', collapsed, active: atOverview })}
+          />
+          <SideNavLink
             as={links.instances}
             {...navLinkProps({ label: '实例列表', icon: 'database', collapsed, active: at('/instances') })}
+          />
+          {/* SQL 洞察的页面在下一张票交付。入口先占位，而且**不是链接**：一条点开是
+              404 的导航项比没有入口更糟。它保持不可用态并把话说明白，下一张票把
+              `as` 换成一个真链接、加上 active 判定即可，位置不用再谈一次。 */}
+          <SideNavLink
+            as={upcoming.sqlInsight}
+            {...navLinkProps({ label: 'SQL 洞察', icon: 'chartColumn', collapsed, active: false })}
+            aria-label="SQL 洞察（即将上线）"
+            title="SQL 洞察（即将上线）"
+            aria-disabled="true"
           />
         </ShellNavGroup>
         <ShellNavGroup heading="告警" collapsed={collapsed}>
@@ -275,15 +302,15 @@ function ShellSideNav({ collapsed }: { collapsed: boolean }) {
             as={links.alerts}
             {...navLinkProps({ label: '全局告警', icon: 'notification', collapsed, active: at('/alerts'), count: unread })}
           />
-        </ShellNavGroup>
-        <ShellNavGroup heading="管理" collapsed={collapsed}>
-          <SideNavLink
-            as={links.users}
-            {...navLinkProps({ label: '用户管理', icon: 'userAvatar', collapsed, active: at('/users') })}
-          />
           <SideNavLink
             as={links.alertSettings}
             {...navLinkProps({ label: '告警设置', icon: 'settings', collapsed, active: at('/alert-settings') })}
+          />
+        </ShellNavGroup>
+        <ShellNavGroup heading="系统" collapsed={collapsed}>
+          <SideNavLink
+            as={links.users}
+            {...navLinkProps({ label: '用户管理', icon: 'userAvatar', collapsed, active: at('/users') })}
           />
         </ShellNavGroup>
       </SideNavItems>

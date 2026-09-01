@@ -17,6 +17,7 @@ tags:
   - name: platform-events
   - name: diagnostics
   - name: notification-settings
+  - name: overview
 paths:
   /api/v1/login:
     post:
@@ -75,6 +76,19 @@ paths:
                 type: string
         '401':
           description: Authentication required
+  /api/v1/overview:
+    get:
+      tags:
+        - overview
+      operationId: getFleetOverview
+      x-required-role: READONLY
+      responses:
+        '200':
+          description: Fleet-wide aggregates for the overview page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetOverview'
   /api/v1/instances:
     get:
       tags:
@@ -2372,19 +2386,23 @@ components:
         - InstanceEnginePostgreSQL
     InstanceFlag:
       type: string
-      description: 'Orthogonal marker on an instance''s health rollup, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced.'
+      description: 'Orthogonal marker on an instance''s health rollup or on its collection, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced. STALE_DATA and AGENT_OFFLINE describe collection itself rather than the alert rollup. They exist because the fleet overview''s collection self-monitoring counts have to drill down into this same list, and a number that cannot be clicked through is a dead end.'
       enum:
         - NO_DATA
         - MAINTENANCE
         - RECENTLY_RECOVERED
         - IGNORED
         - CONFIGURATION_MISSING
+        - STALE_DATA
+        - AGENT_OFFLINE
       x-enum-varnames:
         - InstanceFlagNoData
         - InstanceFlagMaintenance
         - InstanceFlagRecentlyRecovered
         - InstanceFlagIgnored
         - InstanceFlagConfigurationMissing
+        - InstanceFlagStaleData
+        - InstanceFlagAgentOffline
     InstanceListSort:
       type: string
       description: Instance list ordering. health puts the rows that need handling first; stalest puts the instances whose collection is furthest behind first. Ties always fall back to name then id, so paging through the list never repeats or skips a row.
@@ -3637,6 +3655,101 @@ components:
           type: integer
           minimum: 0
           description: Number of instances matching the filters, before paging.
+    FleetOverview:
+      type: object
+      description: 'The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, and which disks are filling up.'
+      required:
+        - total
+        - health
+        - collection
+        - attention
+        - storage
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: Number of monitored instances.
+        health:
+          $ref: '#/components/schemas/FleetHealthCounts'
+        collection:
+          $ref: '#/components/schemas/FleetCollectionHealth'
+        attention:
+          type: array
+          maxItems: 10
+          description: 'The instances that need handling first, ordered by health tier then alert severity. Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy and paused instances never appear here.'
+          items:
+            $ref: '#/components/schemas/Instance'
+        storage:
+          type: array
+          maxItems: 10
+          description: The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty.
+          items:
+            $ref: '#/components/schemas/StorageWatermarkEntry'
+    FleetHealthCounts:
+      type: object
+      description: How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size.
+      required:
+        - critical
+        - warning
+        - unknown
+        - healthy
+        - paused
+      properties:
+        critical:
+          type: integer
+          minimum: 0
+        warning:
+          type: integer
+          minimum: 0
+        unknown:
+          type: integer
+          minimum: 0
+        healthy:
+          type: integer
+          minimum: 0
+        paused:
+          type: integer
+          minimum: 0
+    FleetCollectionHealth:
+      type: object
+      description: 'Collection self-monitoring. These three overlap with the health tiers on purpose: an instance whose collection rotted silently is usually still HEALTHY, because no rule can fire on data that never arrived.'
+      required:
+        - stale_data
+        - agent_offline
+        - paused
+      properties:
+        stale_data:
+          type: integer
+          minimum: 0
+          description: 'Instances whose collection is behind, or that were never collected at all. Paused instances are excluded: a paused instance is not rotting, it is switched off. Same predicate as the STALE_DATA instance-list flag.'
+        agent_offline:
+          type: integer
+          minimum: 0
+          description: Instances whose Agent is expected but has stopped reporting.
+        paused:
+          type: integer
+          minimum: 0
+          description: Instances whose collection is paused.
+    StorageWatermarkEntry:
+      type: object
+      description: 'One instance''s highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing.'
+      required:
+        - instance_id
+        - instance_name
+        - usage_percent
+        - sampled_at
+      properties:
+        instance_id:
+          type: string
+          format: uuid
+        instance_name:
+          type: string
+        usage_percent:
+          type: number
+          format: double
+        sampled_at:
+          type: string
+          format: date-time
     InstanceHealth:
       type: object
       required:

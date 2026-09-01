@@ -38,6 +38,8 @@ const timeQuery = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponen
 /// 认不到就跳过那一张并在日志里说清楚——空库不该让整条流水失败。
 function desktopRoutes({ instanceID, alertPath, eventPath }) {
   const routes = [
+    // 机群总览是登录后的落地页，所以它排在实例列表前面。
+    ['01a-overview', '/'],
     ['02-instances', '/instances'],
     ['03-instance-overview', `/instances/${instanceID}?${timeQuery}`],
     ['04-monitoring', `/instances/${instanceID}/monitoring?${timeQuery}`, { settle: 4000 }],

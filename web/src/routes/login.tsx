@@ -62,7 +62,8 @@ function LoginPage() {
       setValue('password', '')
       return
     }
-    await navigate({ to: '/instances' })
+    // 登录后落地到机群总览：先回答「整体还好吗」，再由读者决定看谁。
+    await navigate({ to: '/' })
   })
 
   return (

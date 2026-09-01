@@ -309,6 +309,18 @@ func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.Platfor
 // 前后端同一个仓库、同一个二进制，没有第三方消费者；可选分页会带来两条码路各自维护，
 // 保护的却是一个不存在的调用方。
 func (handler *Handler) ListInstances(ctx context.Context, request api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
+	instances, err := handler.listInstancesWithHealth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, total := selectInstances(instances, newInstanceListQuery(request.Params))
+	return api.ListInstances200JSONResponse(api.InstanceListPage{Items: items, Total: total}), nil
+}
+
+// listInstancesWithHealth 是「全部实例 + 它们此刻的健康投影」这一份读取，列表与机群总览
+// 共用。两处必须共用同一份投影：总览的计数与列表的筛选如果各算各的，读者点开一个数字
+// 会看到行数对不上的一页，而那种不一致没有任何提示。
+func (handler *Handler) listInstancesWithHealth(ctx context.Context) ([]api.Instance, error) {
 	rows, err := instance.New(handler.platform).ListInstances(ctx)
 	if err != nil {
 		return nil, err
@@ -348,8 +360,7 @@ func (handler *Handler) ListInstances(ctx context.Context, request api.ListInsta
 			projection,
 		))
 	}
-	items, total := selectInstances(instances, newInstanceListQuery(request.Params))
-	return api.ListInstances200JSONResponse(api.InstanceListPage{Items: items, Total: total}), nil
+	return instances, nil
 }
 
 func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateInstanceRequestObject) (api.CreateInstanceResponseObject, error) {
@@ -1196,6 +1207,7 @@ var RequiredRoles = map[string]string{
 	"ListMaintenanceWindows": "READONLY", "CreateMaintenanceWindow": "ALERT_ADMIN",
 	"UpdateMaintenanceWindow": "ALERT_ADMIN", "EndMaintenanceWindow": "ALERT_ADMIN", "DeleteMaintenanceWindow": "ALERT_ADMIN",
 	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
+	"GetFleetOverview": "READONLY",
 	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY", "GetMetricCatalog": "READONLY",
 	"GetInstancesMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
