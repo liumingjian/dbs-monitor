@@ -18,7 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/oapi-codegen/nullable"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/liumingjian/dbs-monitor/internal/alerting"
@@ -304,7 +303,24 @@ func toAPIPlatformHealthSource(source platformhealth.SourceSnapshot) api.Platfor
 	}
 }
 
-func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
+// ListInstances 返回当页实例与筛选后的总数。
+//
+// 这是一次**破坏性变更**：这个端点过去返回裸数组。不做兼容层、不加版本号——自用 API、
+// 前后端同一个仓库、同一个二进制，没有第三方消费者；可选分页会带来两条码路各自维护，
+// 保护的却是一个不存在的调用方。
+func (handler *Handler) ListInstances(ctx context.Context, request api.ListInstancesRequestObject) (api.ListInstancesResponseObject, error) {
+	instances, err := handler.listInstancesWithHealth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items, total := selectInstances(instances, newInstanceListQuery(request.Params))
+	return api.ListInstances200JSONResponse(api.InstanceListPage{Items: items, Total: total}), nil
+}
+
+// listInstancesWithHealth 是「全部实例 + 它们此刻的健康投影」这一份读取，列表与机群总览
+// 共用。两处必须共用同一份投影：总览的计数与列表的筛选如果各算各的，读者点开一个数字
+// 会看到行数对不上的一页，而那种不一致没有任何提示。
+func (handler *Handler) listInstancesWithHealth(ctx context.Context) ([]api.Instance, error) {
 	rows, err := instance.New(handler.platform).ListInstances(ctx)
 	if err != nil {
 		return nil, err
@@ -314,7 +330,7 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 	if err != nil {
 		return nil, err
 	}
-	response := make(api.ListInstances200JSONResponse, 0, len(rows))
+	instances := make([]api.Instance, 0, len(rows))
 	for _, row := range rows {
 		projection, err := projectInstanceHealth(instanceHealthProjectionInput{
 			paused:                 row.CollectionPaused,
@@ -330,9 +346,10 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 		if err != nil {
 			return nil, err
 		}
-		response = append(response, toAPIInstance(
+		instances = append(instances, toAPIInstance(
 			row.ID,
 			row.Name,
+			row.Engine,
 			row.Host,
 			row.Port,
 			row.DatabaseName,
@@ -343,17 +360,26 @@ func (handler *Handler) ListInstances(ctx context.Context, _ api.ListInstancesRe
 			projection,
 		))
 	}
-	return response, nil
+	return instances, nil
 }
 
 func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateInstanceRequestObject) (api.CreateInstanceResponseObject, error) {
 	if request.Body == nil {
 		return nil, errors.New("instance body is required")
 	}
+	engine := instance.EnginePostgreSQL
+	if request.Body.Engine != nil {
+		engine = instance.Engine(*request.Body.Engine)
+	}
+	if !engine.ValidForInstance() {
+		return api.CreateInstance400JSONResponse(errorBody(api.VALIDATIONFAILED, "不支持的数据库引擎")), nil
+	}
+	// bootstrap database 只是建连接用的库名，留空就按引擎取默认库；它不限定被监控的范围。
+	bootstrapDatabase := instance.ResolveBootstrapDatabase(engine, request.Body.Database)
 	if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
 		host:     request.Body.Host,
 		port:     request.Body.Port,
-		database: request.Body.Database,
+		database: bootstrapDatabase,
 		username: request.Body.Username,
 		password: request.Body.Password,
 	}); err != nil {
@@ -370,9 +396,10 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 	row, err := instance.New(handler.platform).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID:                 pgtype.UUID{Bytes: id, Valid: true},
 		Name:               request.Body.Name,
+		Engine:             string(engine),
 		Host:               request.Body.Host,
 		Port:               int32(request.Body.Port),
-		DatabaseName:       request.Body.Database,
+		DatabaseName:       instance.BootstrapDatabaseColumn(bootstrapDatabase),
 		Username:           request.Body.Username,
 		PasswordCiphertext: ciphertext,
 		PasswordKeyVersion: keyVersion,
@@ -385,6 +412,7 @@ func (handler *Handler) CreateInstance(ctx context.Context, request api.CreateIn
 		Instance: toAPIInstance(
 			row.ID,
 			row.Name,
+			row.Engine,
 			row.Host,
 			row.Port,
 			row.DatabaseName,
@@ -426,6 +454,7 @@ func (handler *Handler) GetInstance(ctx context.Context, request api.GetInstance
 	return api.GetInstance200JSONResponse(toAPIInstance(
 		row.ID,
 		row.Name,
+		row.Engine,
 		row.Host,
 		row.Port,
 		row.DatabaseName,
@@ -449,9 +478,13 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		if err != nil {
 			return err
 		}
+		bootstrapDatabase := instance.ResolveBootstrapDatabase(
+			instance.Engine(storedInstance.Engine),
+			request.Body.Database,
+		)
 		connectionTargetChanged := storedInstance.Host != request.Body.Host ||
 			storedInstance.Port != int32(request.Body.Port) ||
-			storedInstance.DatabaseName != request.Body.Database
+			storedInstance.DatabaseName.String != bootstrapDatabase
 		if connectionTargetChanged {
 			password, err := handler.keyring.DecryptPassword(
 				request.Id,
@@ -464,7 +497,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 			if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
 				host:     request.Body.Host,
 				port:     request.Body.Port,
-				database: request.Body.Database,
+				database: bootstrapDatabase,
 				username: storedInstance.Username,
 				password: password,
 			}); err != nil {
@@ -476,7 +509,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 			Name:         request.Body.Name,
 			Host:         request.Body.Host,
 			Port:         int32(request.Body.Port),
-			DatabaseName: request.Body.Database,
+			DatabaseName: instance.BootstrapDatabaseColumn(bootstrapDatabase),
 		})
 		return err
 	})
@@ -504,7 +537,7 @@ func (handler *Handler) UpdateInstance(ctx context.Context, request api.UpdateIn
 		return nil, err
 	}
 	return api.UpdateInstance200JSONResponse(toAPIInstance(
-		row.ID, row.Name, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion,
+		row.ID, row.Name, row.Engine, row.Host, row.Port, row.DatabaseName, row.Username, row.AgentVersion,
 		row.AgentMetricsEnabled,
 		toAPICollectionPauseStatus(row.CollectionPaused, row.CollectionPauseUpdatedBy, row.CollectionPauseUpdatedAt, row.CollectionPauseReason),
 		projection,
@@ -529,7 +562,7 @@ func (handler *Handler) UpdateInstanceCredential(ctx context.Context, request ap
 		if err := validateTargetConnection(ctx, handler.dialer, targetConnectionInput{
 			host:     storedInstance.Host,
 			port:     int(storedInstance.Port),
-			database: storedInstance.DatabaseName,
+			database: storedInstance.DatabaseName.String,
 			username: request.Body.Username,
 			password: request.Body.Password,
 		}); err != nil {
@@ -844,194 +877,6 @@ func (handler *Handler) collectionTaskStates(ctx context.Context, instanceID pgt
 		states = append(states, state)
 	}
 	return states, nil
-}
-
-func (handler *Handler) GetMetricSeries(ctx context.Context, request api.GetMetricSeriesRequestObject) (api.GetMetricSeriesResponseObject, error) {
-	requested := api.Auto
-	if request.Params.Step != nil {
-		requested = *request.Params.Step
-	}
-	step, err := chooseMetricStep(requested, request.Params.From, request.Params.To)
-	if err != nil {
-		return api.GetMetricSeries400JSONResponse(errorBody(api.VALIDATIONFAILED, err.Error())), nil
-	}
-	result := api.MetricSeriesResponse{From: request.Params.From, To: request.Params.To, Step: step.name}
-	instanceID := pgtype.UUID{Bytes: request.Id, Valid: true}
-	pause, err := New(handler.platform).GetCollectionPause(ctx, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	queries := metric.New(handler.platform)
-	controlPlaneFacts, err := metric.ReadControlPlaneFacts(ctx, handler.platform, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	now := handler.clock.Now().UTC()
-	agentStatus := metric.AgentStatusAt(controlPlaneFacts, now)
-	var capabilityStates map[metric.CapabilityID]metric.CapabilityStatus
-	capabilityStatesLoaded := false
-	for _, requestedMetricID := range request.Params.Metric {
-		metricID := metric.MetricID(requestedMetricID)
-		entry := struct {
-			Metric string `json:"metric"`
-			Series []struct {
-				Labels map[string]string `json:"labels"`
-				Points [][]*float64      `json:"points"`
-			} `json:"series"`
-			Unavailability nullable.Nullable[api.Unavailability] `json:"unavailability"`
-			Unit           string                                `json:"unit"`
-		}{Metric: metricID.String(), Unit: metricUnit(metricID.String()), Series: []struct {
-			Labels map[string]string `json:"labels"`
-			Points [][]*float64      `json:"points"`
-		}{}, Unavailability: nullable.NewNullNullable[api.Unavailability]()}
-		counterReset := false
-		if pause.CollectionPaused {
-			entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONPAUSED)
-			result.Metrics = append(result.Metrics, entry)
-			continue
-		}
-
-		switch metric.ProducerFor(metricID) {
-		case metric.ProducerControlPlane:
-			projected, hasProjection := metric.ProjectControlPlaneMetric(metricID, controlPlaneFacts, now)
-			if !hasProjection {
-				reason := api.NOSAMPLESYET
-				if controlPlaneFacts.CollectorLastErrorCode != "" {
-					reason = api.COLLECTIONFAILED
-				}
-				entry.Unavailability = nullable.NewNullableWithValue(reason)
-			} else if projected.ObservedAt.Before(request.Params.From) || projected.ObservedAt.After(request.Params.To) {
-				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
-			} else {
-				timestamp, value := float64(projected.ObservedAt.Unix()), projected.Value
-				entry.Series = append(entry.Series, struct {
-					Labels map[string]string `json:"labels"`
-					Points [][]*float64      `json:"points"`
-				}{Labels: projected.Labels, Points: [][]*float64{{&timestamp, &value}}})
-			}
-			result.Metrics = append(result.Metrics, entry)
-			continue
-		case metric.ProducerAgent:
-			if reason, unavailable := agentMetricUnavailability(controlPlaneFacts, agentStatus); unavailable {
-				entry.Unavailability = nullable.NewNullableWithValue(reason)
-				result.Metrics = append(result.Metrics, entry)
-				continue
-			}
-		}
-
-		collectionState := metricCollectionState{}
-		if strings.HasPrefix(metricID.String(), "pg.") {
-			var probeResult pgtype.Text
-			err := handler.platform.QueryRow(ctx, `SELECT last_result FROM instance_collection_task_state
-				WHERE instance_id = $1 AND task_id = 'pg.probe'`, instanceID).Scan(&probeResult)
-			if err == nil && probeResult.Valid {
-				switch api.CollectionTaskResult(probeResult.String) {
-				case api.FAILED, api.TIMEDOUT:
-					entry.Unavailability = nullable.NewNullableWithValue(api.DBUNREACHABLE)
-					result.Metrics = append(result.Metrics, entry)
-					continue
-				}
-			}
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return nil, err
-			}
-			if !capabilityStatesLoaded {
-				capabilityStates, _, err = handler.currentCapabilitySnapshot(ctx, instanceID)
-				if err != nil {
-					return nil, err
-				}
-				capabilityStatesLoaded = true
-			}
-			if reason, blocked := metric.MetricCapabilityBlockReason(metricID, capabilityStates); blocked {
-				entry.Unavailability = nullable.NewNullableWithValue(api.Unavailability(reason))
-				result.Metrics = append(result.Metrics, entry)
-				continue
-			}
-			counterReset, err = handler.metricCounterReset(ctx, instanceID, metricID)
-			if err != nil {
-				return nil, err
-			}
-			collectionState, err = handler.readMetricCollectionState(
-				ctx, instanceID, metricID, controlPlaneFacts.CollectorLastSuccessAt, now, request.Params.To,
-			)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		series, err := queries.SeriesForMetric(ctx, metric.SeriesForMetricParams{
-			InstanceID: instanceID, MetricID: metricID.String(),
-		})
-		if err != nil {
-			return nil, err
-		}
-		for _, found := range series {
-			points := make([]struct {
-				ts    time.Time
-				value float64
-			}, 0)
-			if step.raw {
-				raw, err := queries.PointsInRange(ctx, metric.PointsInRangeParams{
-					SeriesID: found.SeriesID,
-					Ts:       pgtype.Timestamptz{Time: request.Params.From, Valid: true},
-					Ts_2:     pgtype.Timestamptz{Time: request.Params.To, Valid: true},
-				})
-				if err != nil {
-					return nil, err
-				}
-				for _, point := range raw {
-					points = append(points, struct {
-						ts    time.Time
-						value float64
-					}{point.Ts.Time, point.Value})
-				}
-			} else {
-				bucketed, err := queries.BucketedPointsInRange(ctx, metric.BucketedPointsInRangeParams{
-					SeriesID: found.SeriesID,
-					Ts:       pgtype.Timestamptz{Time: request.Params.From, Valid: true},
-					Ts_2:     pgtype.Timestamptz{Time: request.Params.To, Valid: true},
-					Bucket:   step.bucket,
-				})
-				if err != nil {
-					return nil, err
-				}
-				for _, point := range bucketed {
-					points = append(points, struct {
-						ts    time.Time
-						value float64
-					}{point.Ts.Time, point.Value})
-				}
-			}
-			if len(points) == 0 {
-				continue
-			}
-			item := struct {
-				Labels map[string]string `json:"labels"`
-				Points [][]*float64      `json:"points"`
-			}{Labels: map[string]string{}, Points: make([][]*float64, 0, len(points))}
-			_ = json.Unmarshal(found.Labels, &item.Labels)
-			for _, point := range points {
-				timestamp, value := float64(point.ts.Unix()), point.value
-				item.Points = append(item.Points, []*float64{&timestamp, &value})
-			}
-			entry.Series = append(entry.Series, item)
-		}
-		if len(entry.Series) == 0 {
-			if counterReset {
-				entry.Unavailability = nullable.NewNullableWithValue(api.COUNTERRESET)
-			} else if collectionState.failed {
-				entry.Unavailability = nullable.NewNullableWithValue(api.COLLECTIONFAILED)
-			} else if collectionState.stale {
-				entry.Unavailability = nullable.NewNullableWithValue(api.STALE)
-			} else if len(series) == 0 {
-				entry.Unavailability = nullable.NewNullableWithValue(api.NOSAMPLESYET)
-			} else {
-				entry.Unavailability = nullable.NewNullableWithValue(api.NODATAINRANGE)
-			}
-		}
-		result.Metrics = append(result.Metrics, entry)
-	}
-	return api.GetMetricSeries200JSONResponse(result), nil
 }
 
 func agentMetricUnavailability(facts metric.ControlPlaneFacts, agentStatus string) (api.Unavailability, bool) {
@@ -1362,7 +1207,10 @@ var RequiredRoles = map[string]string{
 	"ListMaintenanceWindows": "READONLY", "CreateMaintenanceWindow": "ALERT_ADMIN",
 	"UpdateMaintenanceWindow": "ALERT_ADMIN", "EndMaintenanceWindow": "ALERT_ADMIN", "DeleteMaintenanceWindow": "ALERT_ADMIN",
 	"ListPerformanceEvents": "READONLY", "GetPerformanceEvent": "READONLY",
-	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY",
+	"GetFleetOverview": "READONLY",
+	"ListTopSql": "READONLY",
+	"ListInstances": "READONLY", "GetInstance": "READONLY", "GetMetricSeries": "READONLY", "GetMetricCatalog": "READONLY",
+	"GetInstancesMetricSeries": "READONLY",
 	"ListCapabilitySnapshot": "READONLY", "ListCollectionTaskStates": "READONLY", "GetCollectionPause": "READONLY",
 	"ListLongQuerySamples": "READONLY", "GetQueryStatisticsSnapshot": "READONLY", "GetSessionSnapshot": "READONLY",
 	"UpdateCollectionTaskInterval": "PLATFORM_ADMIN", "UpdateCollectionPause": "PLATFORM_ADMIN",

@@ -15,6 +15,8 @@ CollectionTaskState:
         - pg.replication_slot
         - pg.prepared_xacts
         - pg.role
+        - pg.settings
+        - pg.database_size
         - pg.stat_statements
     kind:
       type: string
@@ -120,6 +122,13 @@ QueryStatisticsEntry:
     queryid:
       type: string
       description: Native PostgreSQL query identifier represented as a string to preserve int64 precision.
+    query_text:
+      type: string
+      description: >-
+        Normalised statement text for this identifier, deduplicated per (instance, queryid).
+        Literals are already placeholders; raw statement text with real literals is never
+        stored, so it can never appear here. Absent when no text has been captured yet for
+        that identifier — absent is not the same as empty.
     database_oid: { type: integer, format: int64, minimum: 0 }
     user_oid: { type: integer, format: int64, minimum: 0 }
     calls: { type: integer, format: int64, minimum: 0 }

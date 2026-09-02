@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"sort"
 	"testing"
 
@@ -157,9 +156,63 @@ func TestMetricListsMatchGeneratedContracts(t *testing.T) {
 	}
 	assertSetEqual(t, "agent metric enum", agentMetricIDs(), enumStrings(metricProperty.Value.Enum))
 
-	for _, ids := range migrationMetricLists(t) {
-		assertSetEqual(t, "migration metric constraint", metricIDs(), ids)
+	assertEnumMatches(t, doc, "MetricEngine", engineValues())
+	assertEnumMatches(t, doc, "SemanticSlot", semanticSlotIDs())
+	assertEnumMatches(t, doc, "MetricLevel", metricLevelValues())
+	assertEnumMatches(t, doc, "MetricAggregation", metricAggregationValues())
+
+	catalogSchema := doc.Components.Schemas["MetricCatalogEntry"]
+	if catalogSchema == nil || catalogSchema.Value == nil {
+		t.Fatal("MetricCatalogEntry schema is missing")
 	}
+	for _, property := range []string{"metric_id", "engine", "unit", "display_name", "semantic_slot", "level", "aggregation"} {
+		if catalogSchema.Value.Properties[property] == nil {
+			t.Errorf("MetricCatalogEntry is missing the %q property", property)
+		}
+	}
+}
+
+// 指标目录已经从 metric_id 的 CHECK 枚举搬进 metric_catalog，行由 migrations 从这份字典同步；
+// 因此这里改成盯住对外契约里的四个枚举，DDL 与字典是否一致由 migrations 的集成测试断言。
+func assertEnumMatches(t *testing.T, doc *openapi3.T, schemaName string, want []string) {
+	t.Helper()
+	schema := doc.Components.Schemas[schemaName]
+	if schema == nil || schema.Value == nil {
+		t.Fatalf("%s schema is missing", schemaName)
+	}
+	assertSetEqual(t, schemaName+" enum", want, enumStrings(schema.Value.Enum))
+}
+
+func semanticSlotIDs() []string {
+	ids := make([]string, 0, len(metric.SemanticSlots))
+	for _, slot := range metric.SemanticSlots {
+		ids = append(ids, string(slot.ID))
+	}
+	return ids
+}
+
+func engineValues() []string {
+	values := make([]string, 0, len(metric.Engines))
+	for _, engine := range metric.Engines {
+		values = append(values, string(engine))
+	}
+	return values
+}
+
+func metricLevelValues() []string {
+	values := make([]string, 0, len(metric.MetricLevels))
+	for _, level := range metric.MetricLevels {
+		values = append(values, string(level))
+	}
+	return values
+}
+
+func metricAggregationValues() []string {
+	values := make([]string, 0, len(metric.MetricAggregations))
+	for _, aggregation := range metric.MetricAggregations {
+		values = append(values, string(aggregation))
+	}
+	return values
 }
 
 func metricIDs() []string {
@@ -204,34 +257,6 @@ func enumStrings(values []interface{}) []string {
 			panic("OpenAPI enum contains a non-string value")
 		}
 		result = append(result, text)
-	}
-	return result
-}
-
-func migrationMetricLists(t *testing.T) [][]string {
-	t.Helper()
-	pattern := regexp.MustCompile(`(?s)metric_id\s+IN\s*\((.*?)\)`)
-	entries, err := os.ReadDir(filepath.Join(projectRoot(t), "migrations"))
-	if err != nil {
-		t.Fatalf("read migrations: %v", err)
-	}
-	var result [][]string
-	for _, entry := range entries {
-		if filepath.Ext(entry.Name()) != ".sql" {
-			continue
-		}
-		contents := readProjectFile(t, filepath.Join("migrations", entry.Name()))
-		for _, match := range pattern.FindAllStringSubmatch(contents, -1) {
-			values := regexp.MustCompile(`'([^']+)'`).FindAllStringSubmatch(match[1], -1)
-			ids := make([]string, 0, len(values))
-			for _, value := range values {
-				ids = append(ids, value[1])
-			}
-			result = append(result, ids)
-		}
-	}
-	if len(result) == 0 {
-		t.Fatal("no metric_id IN constraint found in migrations")
 	}
 	return result
 }
@@ -281,15 +306,6 @@ func assertSetEqual(t *testing.T, name string, want, got []string) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("%s = %v, want %v", name, got, want)
 	}
-}
-
-func readProjectFile(t *testing.T, name string) string {
-	t.Helper()
-	contents, err := os.ReadFile(filepath.Join(projectRoot(t), name))
-	if err != nil {
-		t.Fatalf("read %s: %v", name, err)
-	}
-	return string(contents)
 }
 
 func projectRoot(t *testing.T) string {

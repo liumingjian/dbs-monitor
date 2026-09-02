@@ -166,9 +166,10 @@ func toAPIInstanceHealth(rollup alerting.HealthRollup) api.InstanceHealth {
 
 func toAPIInstance(
 	id pgtype.UUID,
-	name, host string,
+	name, engine, host string,
 	port int32,
-	database, username string,
+	database pgtype.Text,
+	username string,
 	agentVersion pgtype.Text,
 	agentMetricsEnabled bool,
 	pause api.CollectionPauseStatus,
@@ -177,9 +178,10 @@ func toAPIInstance(
 	result := api.Instance{
 		Id:                   id.Bytes,
 		Name:                 name,
+		Engine:               api.InstanceEngine(engine),
 		Host:                 host,
 		Port:                 int(port),
-		Database:             database,
+		Database:             database.String,
 		Username:             username,
 		AgentMetricsEnabled:  agentMetricsEnabled,
 		AlertStatus:          projection.alertStatus,

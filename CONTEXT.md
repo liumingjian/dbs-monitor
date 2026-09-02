@@ -4,6 +4,22 @@ This context names the domain facts shared by collection, alerting, and the oper
 
 ## Language
 
+**Monitored instance**:
+A database service endpoint watched as one unit: one connection to one server, which may hold many databases. Health, alerts, collection configuration, and Agent enrollment attach to the instance and to nothing smaller.
+_Avoid_: Monitored database, host
+
+**Engine**:
+The database product something belongs to. A monitored instance runs exactly one: it decides which collection tasks apply and which metrics exist for that instance, is chosen at onboarding, and does not change afterwards — changing it would mean a different instance whose history no longer holds. Every metric catalogue row names one too, and there the vocabulary has one more value: a metric that measures the host or the collection itself rather than a database product is engine-agnostic. An instance is never engine-agnostic.
+_Avoid_: Database type, driver, dialect
+
+**Bootstrap database**:
+The database named when opening the connection to a monitored instance. It does not delimit what is monitored: every database reachable through that connection belongs to the same instance. PostgreSQL needs one and defaults to `postgres`; an engine without the concept leaves it empty.
+_Avoid_: Monitored database, instance scope
+
+**Database**:
+A dimension a metric value can carry, not a monitored entity. A database has no health status, no alerts, and no collection configuration of its own; what a list or an overview shows is the instance-level value aggregated across the databases under one connection.
+_Avoid_: Sub-instance, monitored database
+
 **Collection task**:
 A declared unit of server-direct collection that produces one or more metrics for one monitored instance on its own schedule.
 _Avoid_: Metric job, collector query
@@ -41,5 +57,21 @@ An operator account that signs in to the control plane, carrying exactly one of 
 _Avoid_: Contact, member
 
 **Instance removal**:
-Deleting an instance's configuration and credentials immediately, closing all its unresolved alerts with an attributed reason, and letting its samples expire through retention. Re-onboarding the same database yields a new instance that inherits nothing.
+Deleting an instance's configuration and credentials immediately, closing all its unresolved alerts with an attributed reason, and letting its samples expire through retention. Re-onboarding the same endpoint yields a new instance that inherits nothing.
 _Avoid_: Archive instance, soft delete
+
+**Metric catalogue**:
+The table of every metric the platform knows: its ID, engine, unit, display name, level (instance or database), how a database-level metric aggregates into the instance-level value, and which semantic slot it fills. It is data, not schema — a metric ID is legal because a catalogue row exists, not because a CHECK constraint lists it.
+_Avoid_: Metric enum, metric whitelist
+
+**Semantic slot**:
+An engine-neutral position in the metric model that resolves, per engine, to one concrete metric ID. A slot with no metric on a given engine is not applicable there — an explicit answer, never an empty metric ID. Engine-private metrics deliberately fill no slot.
+_Avoid_: Neutral metric name, metric alias
+
+**Alert rule template**:
+A read-only built-in starting point for an alert rule. It belongs to the engine of the metric it addresses: a template addressing a semantic slot is offered on every engine that binds the slot and creates one rule that spans them, an engine-agnostic one is offered everywhere, and any other is offered only on instances of its own engine. A rule keeps addressing the metric it was written on; on an instance of another engine it evaluates whichever metric that engine binds to the same slot, and a rule on an engine-private metric cannot be scoped to such an instance at all.
+_Avoid_: One template per engine, rule library entry
+
+**Normalised statement text**:
+The form of a SQL statement in which literal values have already been replaced by placeholders by the database engine itself — `pg_stat_statements.query` on PostgreSQL, `events_statements_summary_by_digest.digest_text` on MySQL. It is the only statement text the platform stores, kept once per (instance, statement identifier) rather than per snapshot. The raw statement text carried by a live session is a different fact: it holds real literals, which may be personal data or credentials, and is never stored — a long-query sample therefore reports duration, wait events and blocking relationships and nothing else.
+_Avoid_: SQL text, query, statement

@@ -13,6 +13,7 @@ test('enhanced monitoring opens raw curves and isolates protected collection gap
       name: '生产库 primary',
       host: '10.20.1.15',
       port: 5432,
+      engine: 'POSTGRESQL',
       database: 'orders',
       username: 'monitor',
       alert_status: 'OK',
@@ -62,7 +63,8 @@ test('enhanced monitoring opens raw curves and isolates protected collection gap
   await page.goto(`/instances/${instanceID}/monitoring?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&monitoring=enhanced&step=raw`)
 
   await expect(page.getByRole('tab', { name: '增强监控' })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByTestId('enhanced-metric-card')).toHaveCount(27)
+  // 一个候选指标一张卡：数量取自指标目录，增删指标不必回来改这个数字。
+  await expect(page.getByTestId('enhanced-metric-card')).toHaveCount(enhancedMonitoringMetricIDs.length)
   await expect(page.getByRole('figure', { name: 'CPU 使用率趋势' })).toBeVisible()
   await expect(page.getByText('实际粒度：raw')).toBeVisible()
   await expect(page.getByText(/平台自我保护：最近一次采集因背压被跳过/)).toBeVisible()

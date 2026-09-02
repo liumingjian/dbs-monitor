@@ -31,7 +31,10 @@ import (
 )
 
 func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// 这条端到端用例把一整个采集 + 告警生命周期跑十来轮，每轮把所有采集任务都过一遍，
+	// 所以它的耗时随任务数线性增长——本轮新增两个任务（pg.settings、pg.database_size）之后
+	// 实测 ~37s，原来的 30s 安全网变成了偶发红。安全网抬到 60s：它防的是卡死，不是慢。
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	databaseName := fmt.Sprintf("dbs_monitor_collect_%d", os.Getpid())
@@ -73,7 +76,8 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	}
 	_, err = instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgID, Name: "target", Host: env("PGHOST", "localhost"),
-		Port: int32(envInt("PGPORT", 55432)), DatabaseName: env("PGDATABASE", "dbs_monitor"),
+		Port: int32(envInt("PGPORT", 55432)), Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn(env("PGDATABASE", "dbs_monitor")),
 		Username: env("PGUSER", "dbs_monitor"), PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	})
 	if err != nil {
@@ -426,6 +430,17 @@ func TestAcceptance_AC_09_F5_ServerDirectCollectionAndAlertLifecycle(t *testing.
 	if queryStatisticsEntries == 0 || queryStatisticsEntries > queryStatisticsSnapshotLimit {
 		t.Fatalf("query statistics snapshot entries = %d, want 1..%d", queryStatisticsEntries, queryStatisticsSnapshotLimit)
 	}
+	// 归一化 SQL 文本与指标一起落地，而且是每个 queryid 一行：接口显示的是语句而不是
+	// queryid，全靠这一步真的从 pg_stat_statements 把文本取回来。
+	var statementTexts, distinctQueryIDs int
+	if err := pool.QueryRow(ctx, `SELECT count(*), count(DISTINCT queryid) FROM query_statement_text
+		WHERE instance_id = $1 AND query_text <> ''`, pgID).Scan(&statementTexts, &distinctQueryIDs); err != nil {
+		t.Fatalf("count normalised statement texts: %v", err)
+	}
+	if statementTexts == 0 || statementTexts != distinctQueryIDs {
+		t.Fatalf("normalised statement texts = %d rows over %d queryids, want one row per queryid",
+			statementTexts, distinctQueryIDs)
+	}
 	assertReplicationSlotSemantics(t, ctx, admin, platform, collector, targets[0], pgID, currentClock)
 }
 
@@ -590,7 +605,9 @@ func TestSlowProbeDoesNotBlockAnotherInstance(t *testing.T) {
 		}
 		if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 			ID: pgtype.UUID{Bytes: id, Valid: true}, Name: host, Host: host, Port: 5432,
-			DatabaseName: "postgres", Username: "monitor", PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
+			Engine: string(instance.EnginePostgreSQL),
+			DatabaseName: instance.BootstrapDatabaseColumn("postgres"), Username: "monitor",
+			PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 		}); err != nil {
 			t.Fatalf("create %s instance: %v", host, err)
 		}
@@ -693,7 +710,8 @@ func TestCapabilityProbeGatesTasksAndFailsAtomically(t *testing.T) {
 	}
 	if _, err := instance.New(pool).CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgID, Name: "capability-target", Host: env("PGHOST", "localhost"),
-		Port: int32(envInt("PGPORT", 55432)), DatabaseName: databaseName,
+		Port: int32(envInt("PGPORT", 55432)), Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn(databaseName),
 		Username: roleName, PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create capability target: %v", err)

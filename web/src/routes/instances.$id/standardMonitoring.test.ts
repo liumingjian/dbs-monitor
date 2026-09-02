@@ -26,6 +26,12 @@ const expectedMetricIDs = [
   'pg.session.blocked_count',
   'pg.query.long_running_count',
   'pg.prepared_xacts.count',
+  'pg.connection.saturation_percent',
+  'pg.connection.max',
+  'pg.cache.hit_ratio',
+  'pg.cache.block_access_per_sec',
+  'pg.database.size_bytes',
+  'pg.deadlock.count',
   'pg.replication.role',
   'pg.replication.connection_state',
   'pg.replication.wal_lag_bytes',
@@ -34,17 +40,17 @@ const expectedMetricIDs = [
 ]
 
 describe('standard monitoring definition', () => {
-  it('lays out exactly 5 resource, 12 database, and 5 replication charts', () => {
+  it('lays out exactly 5 resource, 16 database, and 5 replication charts', () => {
     expect(standardMonitoringGroups.map((group) => [group.title, group.charts.length])).toEqual([
       ['资源指标', 5],
-      ['数据库指标', 12],
+      ['数据库指标', 16],
       ['复制指标', 5],
     ])
   })
 
   it('requests every standard monitoring metric exactly once', () => {
-    expect(standardMonitoringMetricIDs).toHaveLength(28)
-    expect(new Set(standardMonitoringMetricIDs).size).toBe(28)
+    expect(standardMonitoringMetricIDs).toHaveLength(34)
+    expect(new Set(standardMonitoringMetricIDs).size).toBe(34)
     expect(standardMonitoringMetricIDs).toEqual(expect.arrayContaining(expectedMetricIDs))
   })
 

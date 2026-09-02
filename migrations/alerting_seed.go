@@ -69,12 +69,17 @@ func reconcileAlertingSeeds(ctx context.Context, database *sql.DB) error {
 		return fmt.Errorf("replace alert rule templates: %w", err)
 	}
 	for _, template := range alerting.BuiltinRuleTemplates {
+		var semanticSlot any
+		if template.Slot != "" {
+			semanticSlot = template.Slot
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO alert_rule_template (
-			identifier, version, name, metric_id, aggregation, operator, threshold,
+			identifier, version, name, metric_id, engine, semantic_slot, aggregation, operator, threshold,
 			recovery_operator, recovery_threshold, window_seconds, consecutive_count,
 			recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
 			template.Identifier, template.Version, template.Name, template.MetricID,
+			template.Engine.String(), semanticSlot,
 			template.Aggregation, template.Operator, template.Threshold,
 			template.RecoveryOperator, template.RecoveryThreshold, template.WindowSeconds,
 			template.ConsecutiveCount, template.RecoveryConsecutiveCount,

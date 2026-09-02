@@ -15,7 +15,7 @@ export QA_PLATFORM_PORT="$platform_port" QA_TARGET_PORT="$target_port"
 # take the master key, TLS material, or the running pids with it.
 state="${QA_STATE_DIR:-$HOME/.dbs-monitor-qa}"
 tls_dir="${QA_TLS_HOME:-$HOME/.dbs-monitor-acceptance-tls}"
-admin_password="${QA_ADMIN_PASSWORD:-qa-admin-password}"
+admin_password="${QA_ADMIN_PASSWORD:-admin}"
 instance_name="${QA_INSTANCE_NAME:-QA target pg17}"
 listen_port="${QA_PORT:-18443}"
 base_url="https://127.0.0.1:$listen_port"
@@ -109,7 +109,7 @@ curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -c "$cookie" \
   --data "{\"username\":\"admin\",\"password\":\"$admin_password\"}" >/dev/null
 
 existing=$(curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -b "$cookie" "$base_url/api/v1/instances" \
-  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b)||[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
+  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b).items??[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
 if [ -z "$existing" ]; then
   curl --noproxy '*' -sf --cacert "$state/server-tls/ca.crt" -b "$cookie" \
     -H 'Content-Type: application/json' -X POST "$base_url/api/v1/instances" \

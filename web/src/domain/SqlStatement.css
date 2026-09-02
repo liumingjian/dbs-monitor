@@ -1,0 +1,66 @@
+/*
+ * SQL 全文块。字体档位走 `.dbs-numeric`（等宽 14px），颜色全部是语义令牌，
+ * 语法色见 `styles/_product-tokens.scss` 的 `--dbs-syntax-*`。
+ */
+
+.sql-statement-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dbs-spacing-xxs);
+}
+
+/* 说明文字在左、复制按钮贴右。复制按钮是 32px 的方块，基线对不齐，所以按盒子居中。 */
+.sql-statement-block__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--dbs-spacing-md);
+}
+
+.sql-statement {
+  margin: 0;
+  padding: var(--dbs-spacing-sm);
+  overflow: auto;
+  /* 上限而不是定高：短语句不该在下面留一大片空白。超过就滚，滚动区是可聚焦的。 */
+  max-block-size: 24rem;
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle-01);
+  color: var(--cds-text-primary);
+  /* 折行由 `formatSql` 定死；这里再自动换行会把它排好的缩进冲掉。 */
+  white-space: pre;
+  tab-size: 2;
+}
+
+.sql-statement > code {
+  /* 等宽正文的 1.43 在代码块里太挤，缩进层级看不出来。 */
+  line-height: 1.6;
+}
+
+.sql-statement:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+.sql-statement__keyword {
+  color: var(--dbs-syntax-keyword);
+  font-weight: 600;
+}
+
+.sql-statement__string {
+  color: var(--dbs-syntax-string);
+}
+
+.sql-statement__number {
+  color: var(--dbs-syntax-number);
+}
+
+/* 归一化文本里 `$1` 就是原本的字面量所在处，读者最先找的往往是它。 */
+.sql-statement__parameter {
+  color: var(--dbs-syntax-parameter);
+  font-weight: 600;
+}
+
+.sql-statement__comment {
+  color: var(--dbs-syntax-comment);
+  font-style: italic;
+}

@@ -1,7 +1,7 @@
 import type { components } from '../../api/schema'
 import type { MetricChartSeries } from '../../domain/MetricChart'
 import type { Unavailability } from '../../domain/UnavailabilityBlock'
-import { metricOptions, type MetricID } from './metricOptions'
+import { allMetricIDs, isEnhancedCandidate, type MetricID } from './metricOptions'
 import { findStandardMonitoringChart } from './standardMonitoring'
 import type { ChartColumns, EnhancedWindowMinutes } from './timeRange'
 
@@ -23,11 +23,7 @@ export const enhancedMonitoringDefaults = {
   columns: 2,
 } as const
 
-export const enhancedMonitoringMetricOptions = metricOptions
-  .filter((option) => option.enhancedCandidate)
-
-export const enhancedMonitoringMetricIDs: MetricID[] = enhancedMonitoringMetricOptions
-  .map((option) => option.id)
+export const enhancedMonitoringMetricIDs: MetricID[] = allMetricIDs.filter(isEnhancedCandidate)
 
 export const enhancedWindowOptions = [
   { minutes: 30, label: '30 分钟' },
@@ -97,7 +93,9 @@ export function aggregateEnhancedPoints(
 }
 
 type EnhancedResponseMetric = {
-  metric: string
+  // 可选：批量端点按语义位取数时，位没有绑定的那一条没有指标 ID（那正是「不适用」这个
+  // 显式结论）。增强监控永远按具体指标 ID 取，所以这里只是与生成的类型对齐。
+  metric?: string
   unit: string
   unavailability: Unavailability | null
   series: readonly {
@@ -111,13 +109,14 @@ export function buildEnhancedChartView(
   responseMetrics: readonly EnhancedResponseMetric[] | undefined,
   aggregation: EnhancedAggregation,
   bucketSeconds: number,
+  metricLabel: (id: MetricID) => string,
 ): { series: MetricChartSeries[]; unavailability: Unavailability | null } {
   const response = responseMetrics?.find((metric) => metric.metric === metricID)
   if (!response) return { series: [], unavailability: 'NO_SAMPLES_YET' }
   if (response.unavailability !== null) return { series: [], unavailability: response.unavailability }
   return {
     series: response.series.map((item) => ({
-      name: enhancedSeriesName(metricID, item.labels),
+      name: enhancedSeriesName(metricLabel(metricID), item.labels),
       unit: response.unit,
       points: aggregateEnhancedPoints(item.points, aggregation, bucketSeconds),
     })),
@@ -125,11 +124,10 @@ export function buildEnhancedChartView(
   }
 }
 
-function enhancedSeriesName(metricID: MetricID, labels: Record<string, string>): string {
+function enhancedSeriesName(label: string, labels: Record<string, string>): string {
   const dimensions = Object.entries(labels)
     .map(([key, value]) => `${key}=${value}`)
     .join(', ')
-  const label = metricOptions.find((option) => option.id === metricID)?.label ?? metricID
   return dimensions ? `${label} · ${dimensions}` : label
 }
 

@@ -112,6 +112,8 @@ type AlertRuleTemplate struct {
 	Version                   int32
 	Name                      string
 	MetricID                  string
+	Engine                    string
+	SemanticSlot              pgtype.Text
 	Aggregation               string
 	Operator                  string
 	Threshold                 float64
@@ -184,9 +186,10 @@ type CollectionTaskConfig struct {
 type Instance struct {
 	ID                     pgtype.UUID
 	Name                   string
+	Engine                 string
 	Host                   string
 	Port                   int32
-	DatabaseName           string
+	DatabaseName           pgtype.Text
 	Username               string
 	AgentTokenHash         []byte
 	CreatedAt              pgtype.Timestamptz
@@ -322,20 +325,37 @@ type MaintenanceWindowInstance struct {
 	InstanceID          pgtype.UUID
 }
 
+type MetricCatalog struct {
+	MetricID          string
+	Engine            string
+	Unit              string
+	DisplayName       string
+	SemanticSlot      pgtype.Text
+	Level             string
+	Aggregation       string
+	AggregationWeight pgtype.Text
+}
+
 type MetricSample struct {
 	SeriesID int64
 	Ts       pgtype.Timestamptz
 	Value    float64
 }
 
+type MetricSemanticSlot struct {
+	SlotID      string
+	DisplayName string
+}
+
 type MetricSeries struct {
-	SeriesID   int64
-	InstanceID pgtype.UUID
-	MetricID   string
-	Labels     []byte
-	LabelsKey  string
-	FirstSeen  pgtype.Timestamptz
-	LastSeen   pgtype.Timestamptz
+	SeriesID     int64
+	InstanceID   pgtype.UUID
+	MetricID     string
+	DatabaseName string
+	Labels       []byte
+	LabelsKey    string
+	FirstSeen    pgtype.Timestamptz
+	LastSeen     pgtype.Timestamptz
 }
 
 type NotificationAttempt struct {
@@ -430,6 +450,13 @@ type PlatformEvent struct {
 	ActorID      pgtype.UUID
 	ActorSubject pgtype.Text
 	SubjectID    pgtype.UUID
+}
+
+type QueryStatementText struct {
+	InstanceID pgtype.UUID
+	Queryid    int64
+	QueryText  string
+	UpdatedAt  pgtype.Timestamptz
 }
 
 type QueryStatisticsSnapshot struct {

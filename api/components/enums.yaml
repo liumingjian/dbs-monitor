@@ -13,6 +13,7 @@ Unavailability:
     - FEATURE_DISABLED
     - VERSION_UNSUPPORTED
     - NOT_APPLICABLE_ROLE
+    - NOT_APPLICABLE_ENGINE
     - COUNTER_RESET
 AlertStatus:
   type: string
@@ -25,6 +26,47 @@ InstanceAgentStatus:
   type: string
   enum: [offline, online, not_installed, permission_denied, error]
   x-enum-varnames: [InstanceAgentOffline, InstanceAgentOnline, InstanceAgentNotInstalled, InstanceAgentPermissionDenied, InstanceAgentError]
+InstanceEngine:
+  type: string
+  description: >-
+    Database product a monitored instance runs. Decides which collection tasks apply and
+    which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and
+    fixed afterwards.
+    Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is
+    always a connection to one concrete product, so AGNOSTIC is not offered here.
+    Both map onto the one Go type internal/dbengine.Engine.
+  enum: [POSTGRESQL]
+  x-enum-varnames: [InstanceEnginePostgreSQL]
+InstanceFlag:
+  type: string
+  description: >-
+    Orthogonal marker on an instance's health rollup or on its collection, as used by the
+    instance list filter. These are not health statuses: an instance carries any combination
+    of them alongside whatever status the alert counting produced.
+    STALE_DATA and AGENT_OFFLINE describe collection itself rather than the alert rollup.
+    They exist because the fleet overview's collection self-monitoring counts have to drill
+    down into this same list, and a number that cannot be clicked through is a dead end.
+  enum: [NO_DATA, MAINTENANCE, RECENTLY_RECOVERED, IGNORED, CONFIGURATION_MISSING, STALE_DATA, AGENT_OFFLINE]
+  x-enum-varnames:
+    - InstanceFlagNoData
+    - InstanceFlagMaintenance
+    - InstanceFlagRecentlyRecovered
+    - InstanceFlagIgnored
+    - InstanceFlagConfigurationMissing
+    - InstanceFlagStaleData
+    - InstanceFlagAgentOffline
+InstanceListSort:
+  type: string
+  description: >-
+    Instance list ordering. health puts the rows that need handling first; stalest puts the
+    instances whose collection is furthest behind first. Ties always fall back to name then
+    id, so paging through the list never repeats or skips a row.
+  enum: [health, name, -name, stalest]
+  x-enum-varnames:
+    - InstanceSortHealth
+    - InstanceSortName
+    - InstanceSortNameDescending
+    - InstanceSortStalest
 CapabilityStatus:
   type: string
   enum: [PRESENT, MISSING, NOT_APPLICABLE, UNKNOWN]
@@ -102,3 +144,93 @@ PerformanceEventType:
     - EventActiveSessionsHigh
     - EventReplicationLag
     - EventTempFilesSurge
+MetricStep:
+  type: string
+  description: >-
+    Resolution asked of a series endpoint. auto lets the server pick from the range; raw
+    returns stored samples untouched and is capped at six hours.
+  enum: [auto, 15s, 1m, 5m, raw]
+  x-enum-varnames: [Auto, N15s, N1m, N5m, Raw]
+MetricId:
+  type: string
+  description: >-
+    A metric id from the catalogue. The list is shared by every series endpoint, so a new
+    metric is declared once here instead of once per path.
+  enum:
+    - pg.availability.reachable
+    - pg.probe.latency_ms
+    - collector.last_success_time
+    - agent.status
+    - host.cpu.usage_percent
+    - host.memory.usage_percent
+    - host.disk.usage_percent
+    - host.disk.free_bytes
+    - host.disk.iops
+    - host.disk.throughput_bytes_per_sec
+    - host.network.bytes_per_sec
+    - pg.connection.total
+    - pg.connection.active
+    - pg.connection.idle_in_transaction
+    - pg.connection.max
+    - pg.connection.saturation_percent
+    - pg.tps
+    - pg.xact.commit_per_sec
+    - pg.xact.rollback_per_sec
+    - pg.tuples.read_per_sec
+    - pg.tuples.write_per_sec
+    - pg.temp.files_per_sec
+    - pg.temp.bytes_per_sec
+    - pg.transaction.long_count
+    - pg.transaction.max_duration_sec
+    - pg.lock.waiting_count
+    - pg.session.blocked_count
+    - pg.query.long_running_count
+    - pg.prepared_xacts.count
+    - pg.replication.role
+    - pg.replication.connection_state
+    - pg.replication.replay_lag_ms
+    - pg.replication.wal_lag_bytes
+    - pg.replication_slot.retained_wal_bytes
+    - pg.cache.hit_ratio
+    - pg.cache.block_access_per_sec
+    - pg.database.size_bytes
+    - pg.deadlock.count
+MetricEngine:
+  type: string
+  description: >-
+    Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine
+    plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics
+    hang off an instance but measure the host and the collection itself, not any database
+    product. Both map onto the one Go type internal/dbengine.Engine.
+  enum: [POSTGRESQL, AGNOSTIC]
+  x-enum-varnames: [MetricEnginePostgreSQL, MetricEngineAgnostic]
+SemanticSlot:
+  type: string
+  enum:
+    - throughput
+    - connections
+    - connection_saturation
+    - probe_latency
+    - rollback_rate
+    - replication_lag
+    - cache_hit_ratio
+    - storage_usage
+    - deadlocks
+  x-enum-varnames:
+    - SlotThroughput
+    - SlotConnections
+    - SlotConnectionSaturation
+    - SlotProbeLatency
+    - SlotRollbackRate
+    - SlotReplicationLag
+    - SlotCacheHitRatio
+    - SlotStorageUsage
+    - SlotDeadlocks
+MetricLevel:
+  type: string
+  enum: [INSTANCE, DATABASE]
+  x-enum-varnames: [MetricLevelInstance, MetricLevelDatabase]
+MetricAggregation:
+  type: string
+  enum: [NONE, SUM, WEIGHTED_AVERAGE]
+  x-enum-varnames: [MetricAggregationNone, MetricAggregationSum, MetricAggregationWeightedAverage]

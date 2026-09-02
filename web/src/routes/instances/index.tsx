@@ -1,6 +1,6 @@
-import { Button, Checkbox, ContentSwitcher, Switch, TextInput } from '@carbon/react'
-import { Link, createRoute } from '@tanstack/react-router'
-import { useState } from 'react'
+import { Button, ContentSwitcher, Select, SelectItem, Switch, TextInput } from '@carbon/react'
+import { Link, createRoute, useNavigate } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import type { FieldPath } from 'react-hook-form'
@@ -10,7 +10,14 @@ import { apiErrorMessage, applyApiFieldErrors } from '../../api/errors'
 import { pollingIntervals } from '../../api/polling'
 import type { components } from '../../api/schema'
 import { Freshness } from '../../domain/Freshness'
-import { HEALTH_STATUSES, HealthStatus, healthLabel } from '../../domain/HealthStatus'
+import { HealthStatus, healthLabel } from '../../domain/HealthStatus'
+import {
+  bootstrapDatabaseHelperText,
+  bootstrapDatabaseLabel,
+  instanceEngineLabel,
+  instanceEngineShortLabel,
+  instanceEngines,
+} from '../../domain/instanceEngine'
 import { SuppressionTags } from '../../domain/SuppressionTags'
 import { zodResolver } from '../../forms/zodResolver'
 import type { DataGridColumn } from '../../primitives/DataGrid'
@@ -24,122 +31,106 @@ import { NotificationBar } from '../../primitives/NotificationBar'
 import { NumberInput } from '../../primitives/NumberInput'
 import { Pagination } from '../../primitives/Pagination'
 import { Panel } from '../../primitives/Panel'
-import { SkeletonBlock } from '../../primitives/SkeletonBlock'
 import { Sparkline } from '../../primitives/Sparkline'
 import type { StatusTone } from '../../primitives/StatusBadge'
-import { StatusDot } from '../../primitives/StatusDot'
 import { TruncatedText } from '../../primitives/TruncatedText'
 import {
   attributionLabel,
-  dataFreshnessLabel,
-  lastCollectedAtLabel,
-} from '../instanceProjection'
+  collectionFreshnessLabel,
+  collectionFreshnessTitle,
+  connectionSaturationLabel,
+  instanceSlotEntry,
+  latestValue,
+  trendValues,
+  usageTone,
+} from '../../domain/instanceProjection'
 import { defaultTimeRange } from '../instances.$id/timeRange'
 import { rootRoute } from '../root'
 import { browserStorage } from '../root/navCollapse'
 import type { TableDensity } from '../root/tableDensity'
 import { densityLabel, readTableDensity, writeTableDensity } from '../root/tableDensity'
+import type {
+  AlertSeverity,
+  HealthStatusValue,
+  InstanceFlag,
+  InstanceListSearch,
+  InstanceListSort,
+  InvalidInstanceListSearch,
+} from '../../domain/instanceListSearch'
+import {
+  INSTANCE_ALERT_SEVERITIES,
+  INSTANCE_FLAGS,
+  INSTANCE_HEALTH_STATUSES,
+  INSTANCE_LIST_SORTS,
+  INSTANCE_PAGE_SIZES,
+  currentPage,
+  currentPageSize,
+  currentSort,
+  defaultInstanceListSearch,
+  hasInstanceFilters,
+  instanceListQuery,
+  parseInstanceListSearch,
+  withInstanceFilters,
+} from '../../domain/instanceListSearch'
 import './instances.css'
 
 type InstanceCreateInput = components['schemas']['InstanceCreateInput']
 type Instance = components['schemas']['Instance']
-type HealthStatusValue = components['schemas']['HealthStatus']
-type AlertSeverity = components['schemas']['AlertSeverity']
-export type OrthogonalFlag = 'NO_DATA' | 'MAINTENANCE' | 'RECENTLY_RECOVERED' | 'IGNORED' | 'CONFIGURATION_MISSING'
-
-export type InstanceFilters = {
-  statuses?: readonly HealthStatusValue[]
-  flags?: readonly OrthogonalFlag[]
-  alertSeverity?: AlertSeverity
-  hasInfo?: boolean
-  hasConfigurationMissing?: boolean
-}
+type InstancesMetricSeriesResponse = components['schemas']['InstancesMetricSeriesResponse']
 
 function assertNever(value: never): never {
-  throw new Error(`unexpected instance projection value: ${value}`)
+  throw new Error(`unexpected instance list value: ${String(value)}`)
 }
 
-function healthRank(status: HealthStatusValue): number {
-  switch (status) {
-    case 'CRITICAL':
-      return 5
-    case 'WARNING':
-      return 4
-    case 'UNKNOWN':
-      return 3
-    case 'HEALTHY':
-      return 2
-    case 'PAUSED':
-      return 1
-    default:
-      return assertNever(status)
-  }
-}
-
-function hasFlag(instance: Instance, flag: OrthogonalFlag): boolean {
-  switch (flag) {
-    case 'NO_DATA':
-      return instance.health.flags.no_data
-    case 'MAINTENANCE':
-      return instance.health.flags.in_maintenance
-    case 'RECENTLY_RECOVERED':
-      return instance.health.flags.recently_recovered
-    case 'IGNORED':
-      return instance.health.flags.ignored > 0
-    case 'CONFIGURATION_MISSING':
-      return instance.health.flags.configuration_missing > 0
-    default:
-      return assertNever(flag)
-  }
-}
-
-function hasSeverity(instance: Instance, severity: AlertSeverity): boolean {
-  switch (severity) {
-    case 'critical':
-      return instance.health.counts.critical > 0
-    case 'warning':
-      return instance.health.counts.warning > 0
-    case 'info':
-      return instance.health.counts.info > 0
-    default:
-      return assertNever(severity)
-  }
-}
-
-export function filterAndSortInstances(instances: readonly Instance[], filters: InstanceFilters): Instance[] {
-  return instances.filter((instance) => {
-    if (filters.statuses?.length && !filters.statuses.includes(instance.health.status)) {
-      return false
-    }
-    if (filters.flags?.length && !filters.flags.every((flag) => hasFlag(instance, flag))) {
-      return false
-    }
-    if (filters.alertSeverity && !hasSeverity(instance, filters.alertSeverity)) {
-      return false
-    }
-    if (filters.hasInfo && instance.health.counts.info === 0) {
-      return false
-    }
-    if (filters.hasConfigurationMissing && instance.health.flags.configuration_missing === 0) {
-      return false
-    }
-    return true
-  }).sort(compareInstances)
-}
-
-function compareInstances(left: Instance, right: Instance): number {
-  const healthDifference = healthRank(right.health.status) - healthRank(left.health.status)
-  if (healthDifference !== 0) {
-    return healthDifference
-  }
-  return left.name.localeCompare(right.name)
-}
+/// 吞吐与连接饱和度是列表上仅有的两个指标读数，一次批量请求一起取回。
+///
+/// 趋势从连接数换成**吞吐**：连接数已经由饱和度列用一个百分比说清楚了，
+/// 折线再画一遍是同一件事说两次。
+///
+/// 两者都写成**语义位**，不写具体指标 ID：规范与 ADR-0001 都说「总览页、实例列表、
+/// 告警规则模板只能引用语义位」。位到指标的解析在服务端逐台按实例自己的引擎完成，
+/// 所以接入第二个引擎时这一页一个字都不用改 —— 这正是位这层指向存在的理由，
+/// 而写死 `pg.tps` 就等于把那层指向绕过去了。
+const throughputSlot = 'throughput'
+const saturationSlot = 'connection_saturation'
+const trendWindowMinutes = 60
 
 export const instancesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/instances',
-  component: InstancesPage,
+  // 筛选与排序进地址栏：一个筛好的视图要能整条发给同事，总览页的下钻链接也直接落成
+  // 这套查询参数。解析失败不静默兜底 —— 同一个地址必须给同一个视图。
+  validateSearch: (search): InstanceListSearch | InvalidInstanceListSearch =>
+    parseInstanceListSearch(search),
+  component: InstancesRoutePage,
 })
+
+function InstancesRoutePage() {
+  const search = instancesRoute.useSearch()
+  if ('error' in search) return <InvalidInstanceSearchNotice message={search.error} />
+  return <InstancesPage search={search} />
+}
+
+function InvalidInstanceSearchNotice({ message }: { message: string }) {
+  const navigate = useNavigate()
+  return (
+    <div className="instances-page">
+      <header className="instances-page__header">
+        <h1 className="dbs-page-title">PostgreSQL 实例</h1>
+      </header>
+      <NotificationBar
+        tone="critical"
+        title={message}
+        action={{
+          label: '重置筛选',
+          onClick: () => void navigate({ to: '/instances', search: defaultInstanceListSearch() }),
+        }}
+      >
+        地址栏里的筛选条件读不懂，所以没有去猜一个视图给你看。
+      </NotificationBar>
+    </div>
+  )
+}
 
 /// 实例列表。
 ///
@@ -147,29 +138,32 @@ export const instancesRoute = createRoute({
 ///   1. 页头 —— `h1` + 该页唯一的主操作；
 ///   2. 工具条 —— 筛选控件与数据新鲜度，和表格分开，不塞进面板标题栏；
 ///   3. 一个 `flush` 的 `Panel` 包住 `DataGrid`，分页放在面板的 footer 里。
-/// 面板标题栏右侧放的是「作用于这张表的视图开关」（这里是密集模式），主操作留在页头 ——
-/// 这条分工让后面每一页的按钮都有一个不用再想的去处。
-function InstancesPage() {
-  const instancesQuery = $api.useQuery('get', '/api/v1/instances', {}, { refetchInterval: pollingIntervals.instances })
+///
+/// **分页、筛选、排序都在服务端**：接口收 `page` / `page_size` / `q` / `engine` /
+/// `status` / `flags` / `severity` / `sort`，返回当页与总数。浏览器不再持有全量实例，
+/// 500 台时这是「页面还能用」与「页面卡住」的分界。
+function InstancesPage({ search }: { search: InstanceListSearch }) {
+  const navigate = useNavigate()
+  const instancesQuery = $api.useQuery(
+    'get',
+    '/api/v1/instances',
+    { params: { query: instanceListQuery(search) } },
+    { refetchInterval: pollingIntervals.instances },
+  )
   const currentUserQuery = $api.useQuery('get', '/api/v1/me')
   const [createOpen, setCreateOpen] = useState(false)
-  const [filters, setFilters] = useState<InstanceFilters>({})
   const [density, setDensity] = useState<TableDensity>(() => readTableDensity(browserStorage))
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
   const canCreate = currentUserQuery.data?.role === 'PLATFORM_ADMIN'
   const createDisabledReason = canCreate ? undefined : '需要平台管理员角色'
 
-  const visibleInstances = filterAndSortInstances(instancesQuery.data ?? [], filters)
-  // 数据变少（改了筛选、实例被删）之后停在一个空页上，看起来和「没有实例」一样，所以夹住页码。
-  const lastPage = Math.max(1, Math.ceil(visibleInstances.length / pageSize))
-  const currentPage = Math.min(page, lastPage)
-  const pageInstances = visibleInstances.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  const pageInstances = instancesQuery.data?.items ?? []
+  // 还没有结果时写 0：这是「这一页还没回来」，骨架行同时在说这件事，
+  // 不是「筛出来 0 条」——后者由空态自己说。
+  const total = instancesQuery.data === undefined ? 0 : instancesQuery.data.total
+  const trends = useInstanceTrends(pageInstances)
 
-  // 每次改筛选都回到第一页：留在第 3 页看一个只剩 4 条的结果集是没有意义的。
-  function changeFilters(next: (current: InstanceFilters) => InstanceFilters) {
-    setFilters(next)
-    setPage(1)
+  function changeSearch(changes: Partial<Omit<InstanceListSearch, 'page'>>) {
+    void navigate({ to: '/instances', search: withInstanceFilters(search, changes) })
   }
 
   function changeDensity(next: TableDensity) {
@@ -193,8 +187,8 @@ function InstancesPage() {
       )}
 
       <InstanceFilterBar
-        filters={filters}
-        onChange={changeFilters}
+        search={search}
+        onChange={changeSearch}
         freshness={instancesQuery.dataUpdatedAt > 0
           ? <Freshness dataUpdatedAt={instancesQuery.dataUpdatedAt} collectionInterval={pollingIntervals.instances} />
           : undefined}
@@ -202,18 +196,23 @@ function InstancesPage() {
 
       <Panel
         flush
-        title={`实例（${visibleInstances.length}）`}
+        title={`实例（${total}）`}
         actions={<DensitySwitcher density={density} onChange={changeDensity} />}
         footer={<Pagination
           className="instances-pagination"
           size="md"
-          page={currentPage}
-          pageSize={pageSize}
-          pageSizes={[25, 50, 100]}
-          totalItems={visibleInstances.length}
+          page={currentPage(search)}
+          pageSize={currentPageSize(search)}
+          pageSizes={[...INSTANCE_PAGE_SIZES]}
+          totalItems={total}
           onChange={({ page: nextPage, pageSize: nextPageSize }) => {
-            setPage(nextPage)
-            setPageSize(nextPageSize)
+            // 页大小变了就回第一页：同一个页码在两种页大小下指的不是同一批行。
+            void navigate({
+              to: '/instances',
+              search: nextPageSize === currentPageSize(search)
+                ? { ...search, page: nextPage }
+                : withInstanceFilters(search, { page_size: nextPageSize }),
+            })
           }}
         />}
       >
@@ -226,7 +225,7 @@ function InstancesPage() {
           rowKey={(instance) => instance.id}
           rowTestId="instance-row"
           rowTone={severityBarTone}
-          columns={instanceColumns(density)}
+          columns={instanceColumns(density, trends)}
           empty={{
             title: '没有符合条件的实例',
             description: '调整筛选条件，或新建一个实例开始采集。',
@@ -246,14 +245,49 @@ function InstancesPage() {
   )
 }
 
+/// 当页所有实例的吞吐趋势与连接饱和度，**一次请求**。
+///
+/// 从前每一行各发一次 `/instances/{id}/metrics/series`，一页 50 行就是 50 个并发请求；
+/// 500 台的机群里这不只是慢，会打满后端连接池。批量端点按 `instance_id` 收多台，
+/// 响应里每台一段，缺数的那台也在，带着缺数原因。
+function useInstanceTrends(instances: readonly Instance[]) {
+  const range = trendWindow(Date.now())
+  const instanceIDs = instances.map((instance) => instance.id)
+  const trendsQuery = $api.useQuery(
+    'get',
+    '/api/v1/instances/metrics/series',
+    {
+      params: {
+        query: {
+          instance_id: instanceIDs,
+          slot: [throughputSlot, saturationSlot],
+          from: range.from,
+          to: range.to,
+          step: '5m',
+        },
+      },
+    },
+    { enabled: instanceIDs.length > 0, retry: false, refetchOnWindowFocus: false },
+  )
+  return trendsQuery.data
+}
+
+/// 缩略图的时间窗，**按 5 分钟对齐**。直接拿 `Date.now()` 的话每次渲染都是一个新的查询键，
+/// 整页就会永远在重新取数；对齐之后同一个 5 分钟里键是稳定的，到点自然翻新。
+export function trendWindow(now: number): { from: string; to: string } {
+  const bucket = 5 * 60 * 1000
+  const to = Math.floor(now / bucket) * bucket
+  return {
+    from: new Date(to - trendWindowMinutes * 60 * 1000).toISOString(),
+    to: new Date(to).toISOString(),
+  }
+}
+
 /// 密集模式切换。
 ///
 /// 分段单选而不是开关：两档都是明确的档位，开关只说得出「开 / 关」，读起来会是
 /// 「密集模式：关」而不是「标准行高」。当前档位由 Carbon `ContentSwitcher` 的
 /// `aria-selected` 表达，颜色不是唯一信号。
-///
-/// 偏好跨页面保持（`routes/root/tableDensity.ts`）：在实例列表调紧了行高，走到会话列表
-/// 还是紧的。后续页面照这十行接一遍即可 —— 存储读写只有那一个模块，不要各自再写一份。
 function DensitySwitcher({ density, onChange }: { density: TableDensity; onChange: (density: TableDensity) => void }) {
   const densities = ['standard', 'dense'] as const satisfies readonly TableDensity[]
   return (
@@ -272,97 +306,175 @@ function DensitySwitcher({ density, onChange }: { density: TableDensity; onChang
   )
 }
 
-function InstanceFilterBar({ filters, onChange, freshness }: {
-  filters: InstanceFilters
-  onChange: (next: (current: InstanceFilters) => InstanceFilters) => void
+/// 工具条。每个控件改的都是地址栏里的一个查询参数，不是组件里的一份局部状态 ——
+/// 筛完之后地址本身就是这个视图，可以整条发出去。
+function InstanceFilterBar({ search, onChange, freshness }: {
+  search: InstanceListSearch
+  onChange: (changes: Partial<Omit<InstanceListSearch, 'page'>>) => void
   freshness: ReactNode
 }) {
+  // 搜索框是受控输入，但地址栏不该每敲一个字就变一次；输入停下来之后才提交。
+  const [draft, setDraft] = useState(search.q === undefined ? '' : search.q)
+  const committed = search.q === undefined ? '' : search.q
+  useEffect(() => {
+    setDraft(committed)
+  }, [committed])
+  useEffect(() => {
+    if (draft === committed) return
+    const timer = setTimeout(() => onChange({ q: draft === '' ? undefined : draft }), 300)
+    return () => clearTimeout(timer)
+  }, [draft, committed, onChange])
+
   return (
     <div className="instances-filters" role="group" aria-label="实例筛选">
-      <MultiSelect<HealthStatusOption>
-        id="instance-filter-health-status"
+      <TextInput
+        id="instance-filter-search"
         className="instances-filters__control"
+        labelText="搜索"
+        placeholder="实例名或地址"
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <FilterMultiSelect
+        id="instance-filter-health-status"
         titleText="主状态"
         label="全部状态"
-        items={healthStatusOptions}
-        itemToString={(item) => item?.label ?? ''}
+        options={healthStatusOptions}
+        selected={search.status}
+        onChange={(status) => onChange({ status })}
         // 浮层里可点的是选项自己的标签，「第几个选项」用角色和名字表达不出来，
         // 所以挂稳定测试标识（web/CLAUDE.md 的第 2 档定位方式）。
-        itemToElement={(item) => <span data-testid={`health-status-option-${item.value}`}>{item.label}</span>}
-        selectedItems={healthStatusOptions.filter((option) => filters.statuses?.includes(option.value) ?? false)}
-        onChange={({ selectedItems }) => onChange((current) => ({
-          ...current,
-          statuses: (selectedItems ?? []).map((item) => item.value),
-        }))}
+        optionTestId={(value) => `health-status-option-${value}`}
       />
-      <MultiSelect<OrthogonalFlagOption>
+      <FilterMultiSelect
         id="instance-filter-flags"
-        className="instances-filters__control"
         titleText="正交标记"
         label="全部标记"
-        items={orthogonalFlagOptions}
-        itemToString={(item) => item?.label ?? ''}
-        selectedItems={orthogonalFlagOptions.filter((option) => filters.flags?.includes(option.value) ?? false)}
-        onChange={({ selectedItems }) => onChange((current) => ({
-          ...current,
-          flags: (selectedItems ?? []).map((item) => item.value),
-        }))}
+        options={orthogonalFlagOptions}
+        selected={search.flags}
+        onChange={(flags) => onChange({ flags })}
       />
-      <Dropdown<AlertSeverityOption>
+      <FilterMultiSelect
         id="instance-filter-alert-severity"
-        className="instances-filters__control"
         titleText="至少一条该级告警"
         label="不限"
-        items={alertSeverityOptions}
-        itemToString={(item) => item?.label ?? ''}
-        // 「不限」是清单里的一项而不是一个清除按钮：单选下拉没有可控的「空选中项」，
-        // 用 undefined 当选中项会让控件退回非受控，清除筛选之后显示的还是上一次的选择。
-        selectedItem={alertSeverityOptions.find((option) => option.value === filters.alertSeverity) ?? alertSeverityOptions[0]}
-        onChange={({ selectedItem }) => onChange((current) => ({
-          ...current,
-          alertSeverity: selectedItem?.value,
-        }))}
+        options={alertSeverityOptions}
+        selected={search.severity}
+        onChange={(severity) => onChange({ severity })}
       />
-      <div className="instances-filters__checks">
-        <Checkbox
-          id="instance-filter-has-info"
-          labelText="存在 info"
-          checked={filters.hasInfo === true}
-          onChange={(_event, { checked }) => onChange((current) => ({ ...current, hasInfo: checked }))}
-        />
-        <Checkbox
-          id="instance-filter-has-configuration-missing"
-          labelText="存在配置缺失"
-          checked={filters.hasConfigurationMissing === true}
-          onChange={(_event, { checked }) => onChange((current) => ({ ...current, hasConfigurationMissing: checked }))}
-        />
-      </div>
-      <Button kind="ghost" size="md" renderIcon={Icon.glyph.filterRemove} onClick={() => onChange(() => ({}))}>清除筛选</Button>
+      <Dropdown<SortOption>
+        id="instance-filter-sort"
+        className="instances-filters__control"
+        titleText="排序"
+        label="健康优先"
+        items={sortOptions}
+        itemToString={(item) => item?.label ?? ''}
+        selectedItem={sortOptions.find((option) => option.value === currentSort(search))}
+        onChange={({ selectedItem }) => onChange({ sort: selectedItem?.value })}
+      />
+      <Button
+        kind="ghost"
+        size="md"
+        renderIcon={Icon.glyph.filterRemove}
+        // 一个筛选都没设时它无事可做：禁用比点下去什么都不变更诚实。排序不算筛选，
+        // 它不改「看到哪些行」，只改「先看到谁」，所以清除筛选不动它。
+        disabled={!hasInstanceFilters(search)}
+        onClick={() => onChange({ q: undefined, engine: undefined, status: undefined, flags: undefined, severity: undefined })}
+      >
+        清除筛选
+      </Button>
       {freshness !== undefined && <span className="instances-filters__freshness">{freshness}</span>}
     </div>
   )
 }
 
-type HealthStatusOption = { value: HealthStatusValue; label: string }
-type OrthogonalFlagOption = { value: OrthogonalFlag; label: string }
-type AlertSeverityOption = { value?: AlertSeverity; label: string }
+/// 筛选控件的一个选项：一个取值，一句给人看的话。四个筛选器的选项形状本来就是同一个，
+/// 各写一份只会让它们迟早长得不一样。
+type FilterOption<Value extends string> = { value: Value; label: string }
 
-const orthogonalFlagOptions: OrthogonalFlagOption[] = [
-  { value: 'NO_DATA', label: '无数据' },
-  { value: 'MAINTENANCE', label: '维护中' },
-  { value: 'RECENTLY_RECOVERED', label: '近期恢复' },
-  { value: 'IGNORED', label: '已忽略' },
-  { value: 'CONFIGURATION_MISSING', label: '配置缺失' },
-]
+type SortOption = FilterOption<InstanceListSort>
 
-const healthStatusOptions: HealthStatusOption[] = HEALTH_STATUSES.map((value) => ({ value, label: healthLabel(value) }))
+/// 三个多选筛选器唯一的差别是「选项从哪来、改完写回哪个字段」，其余（受控取值的对齐、
+/// 空数组的处理、中文外壳）三处逐字相同 —— 所以只写一次。
+function FilterMultiSelect<Value extends string>({ id, titleText, label, options, selected, onChange, optionTestId }: {
+  id: string
+  titleText: string
+  label: string
+  options: readonly FilterOption<Value>[]
+  selected: readonly Value[] | undefined
+  onChange: (values: Value[]) => void
+  optionTestId?: (value: Value) => string
+}) {
+  return (
+    <MultiSelect<FilterOption<Value>>
+      id={id}
+      className="instances-filters__control"
+      titleText={titleText}
+      label={label}
+      items={[...options]}
+      itemToString={(item) => item?.label ?? ''}
+      itemToElement={optionTestId === undefined
+        ? undefined
+        : (item) => <span data-testid={optionTestId(item.value)}>{item.label}</span>}
+      selectedItems={options.filter((option) => selected?.includes(option.value) ?? false)}
+      onChange={({ selectedItems }) => onChange((selectedItems ?? []).map((item) => item.value))}
+    />
+  )
+}
 
-const alertSeverityOptions: AlertSeverityOption[] = [
-  { label: '不限' },
-  { value: 'critical', label: '严重告警' },
-  { value: 'warning', label: '警告告警' },
-  { value: 'info', label: 'Info 告警' },
-]
+function flagLabel(flag: InstanceFlag): string {
+  switch (flag) {
+    case 'NO_DATA':
+      return '无数据'
+    case 'MAINTENANCE':
+      return '维护中'
+    case 'RECENTLY_RECOVERED':
+      return '近期恢复'
+    case 'IGNORED':
+      return '已忽略'
+    case 'CONFIGURATION_MISSING':
+      return '配置缺失'
+    case 'STALE_DATA':
+      return '数据不新鲜'
+    case 'AGENT_OFFLINE':
+      return 'Agent 离线'
+    default:
+      return assertNever(flag)
+  }
+}
+
+function severityLabel(severity: AlertSeverity): string {
+  switch (severity) {
+    case 'critical':
+      return '严重告警'
+    case 'warning':
+      return '警告告警'
+    case 'info':
+      return 'Info 告警'
+    default:
+      return assertNever(severity)
+  }
+}
+
+function sortLabel(sort: InstanceListSort): string {
+  switch (sort) {
+    case 'health':
+      return '健康优先'
+    case 'name':
+      return '名称升序'
+    case '-name':
+      return '名称降序'
+    case 'stalest':
+      return '最不新鲜优先'
+    default:
+      return assertNever(sort)
+  }
+}
+
+const orthogonalFlagOptions: FilterOption<InstanceFlag>[] = INSTANCE_FLAGS.map((value) => ({ value, label: flagLabel(value) }))
+const healthStatusOptions: FilterOption<HealthStatusValue>[] = INSTANCE_HEALTH_STATUSES.map((value) => ({ value, label: healthLabel(value) }))
+const alertSeverityOptions: FilterOption<AlertSeverity>[] = INSTANCE_ALERT_SEVERITIES.map((value) => ({ value, label: severityLabel(value) }))
+const sortOptions: SortOption[] = INSTANCE_LIST_SORTS.map((value) => ({ value, label: sortLabel(value) }))
 
 /// 行首色条只画严重与警告两档 —— 规范里这条 3px 色条说的是「这一行要处理」，
 /// 每一行都上色等于没有色条。它重复的是同一行「健康」列已经写着的字，不是唯一信号。
@@ -378,40 +490,6 @@ function severityBarTone(instance: Instance): StatusTone | undefined {
       return undefined
     default:
       return assertNever(instance.health.status)
-  }
-}
-
-function agentStatusLabel(status: components['schemas']['InstanceAgentStatus']): string {
-  switch (status) {
-    case 'online':
-      return '在线'
-    case 'offline':
-      return '离线'
-    case 'not_installed':
-      return '未安装'
-    case 'permission_denied':
-      return '权限不足'
-    case 'error':
-      return '异常'
-    default:
-      return assertNever(status)
-  }
-}
-
-function agentStatusTone(status: components['schemas']['InstanceAgentStatus']): StatusTone {
-  switch (status) {
-    case 'online':
-      return 'normal'
-    case 'offline':
-      return 'unknown'
-    case 'not_installed':
-      return 'unknown'
-    case 'permission_denied':
-      return 'warning'
-    case 'error':
-      return 'critical'
-    default:
-      return assertNever(status)
   }
 }
 
@@ -435,31 +513,25 @@ function countTone(severity: AlertSeverity, count: number): StatusTone {
 /// 由 `primitives/DataGrid` 结构性地保证（fixed 布局 + 按最小宽度比例分配的百分比列宽 +
 /// 省略号悬停提示），页面只负责说明每列至少值多少像素。
 ///
-/// 每一格都是**一行**内容：40px 的标准行高放不下两行，所以迁移前挤在「实例健康」一格里的
-/// 名称 / 归因 / 计数 / 标记被拆成四列 —— 一格一个事实，列与列之间扫视时对得齐。
+/// 八列，974px 预算（1280 − 256px 侧栏 − 页边距，实测）里正好排满：
+/// 实例(230) · 引擎(56) · 健康(90) · 告警(90) · 告警归因(213) · 连接饱和度(96) ·
+/// 吞吐趋势(72) · 采集新鲜度(127) = 974。各列一律 `grow: 1`（`grow` 不是优先级旋钮：
+/// 一旦不等，低的那列会分到低于自己 `minWidth` 的宽度，先被截掉的是表头）。
 ///
-/// 宽度按 web/CLAUDE.md 的列宽契约给（在浏览器里量出来的，不是估的）：每列 `minWidth`
-/// = max(表头自然宽, 这一格里压不动的内容宽) + 组件库的 32px 内边距，各列一律 `grow: 1`。
-/// **`grow` 不再当优先级旋钮用** —— 各列 `grow` 一旦不等，分到的宽度就可能低于自己的
-/// `minWidth`，先被截掉的是表头（「采集新鲜度」原本就差 2px 被截成「采集新鲜...」）。
-/// 合计 883 ≤ 974，因此 1280px 下每列都不低于自己的下限，富余按下限比例分给长文本列。
-///
-/// 压不动的：健康状态点、C/W/I 计数、Agent 状态点、趋势缩略图。
-/// 压得动的：实例名、告警归因、地址、采集新鲜度 —— 截断并带悬停全文。
-///
-/// **实例名是第一列，也是这一行的去处。** 行内不再另有一列图标操作：两个去处
-/// （总览、接入设置）在工作台页头上都还在，而每一行重复同样的两颗图标既占 72px，
-/// 又让「点哪儿进去」有两个答案。列表里点名字进详情是读者本来就会做的事。
-function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
+/// 相对上一版的取舍，判据是「这一列帮不帮我决定要不要点进这一行」：
+///   - **地址整列去掉**。500 台时没人靠 IP 认机器，靠名字；地址进详情页，
+///     并且仍然在搜索索引里（`q` 命中名称与地址）。
+///   - **标记并入健康列**：暂停 / 维护 / 无数据是健康状态的后缀，不是另一个问题。
+///   - **Agent 并入采集新鲜度**：「Agent 离线」本来就是新鲜度失效的一种。
+///   - **趋势从连接数换成吞吐**：连接数已经由饱和度列用百分比说清楚了。
+function instanceColumns(density: TableDensity, trends: InstancesMetricSeriesResponse | undefined): DataGridColumn<Instance>[] {
   const columns: DataGridColumn<Instance>[] = [
     {
       key: 'name',
       header: '实例',
-      minWidth: 127,
+      minWidth: 230,
       // 实例名是这一行的身份，也是它的入口：截断它等于让读者认不出这是谁，
       // 所以富余宽度优先给它，装不下的那一截由省略号截断、全文进悬停提示。
-      // 蓝色在这里表示「可交互」，与状态色互不借用；加粗撤掉了 —— 链接色已经把
-      // 「这是这一行的标题」说清楚，再加一道字重会让 50 行的表整片发黑。
       cell: (instance) => (
         <Link
           className="instances-table__name cds--link"
@@ -472,13 +544,29 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
       ),
     },
     {
+      key: 'engine',
+      header: '引擎',
+      minWidth: 56,
+      // 56px 放得下短名放不下产品全名，全名进悬停提示。混着 PG 与 MySQL 时，
+      // 「我在看什么」必须一眼看得出来，所以这一列不能省。
+      cell: (instance) => (
+        <TruncatedText title={instanceEngineLabel(instance.engine)}>
+          {instanceEngineShortLabel(instance.engine)}
+        </TruncatedText>
+      ),
+    },
+    {
       key: 'health',
       header: '健康',
       minWidth: 90,
       // 健康状态整块交给 domain/HealthStatus：文案、档位、暂停时长都在那里定义一次，
       // 实例总览读的是同一个组件（也是同一个 data-testid），两处因此不可能各说各的。
+      // 正交标记接在后面：它们是这个状态的后缀，不是另一个问题，所以不再单独占一列。
       cell: (instance) => (
-        <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
+        <span className="instances-table__health">
+          <HealthStatus status={instance.health.status} pausedAt={instance.collection_pause.updated_at} />
+          <SuppressionTags className="instances-table__markers" flags={instance.health.flags} />
+        </span>
       ),
     },
     {
@@ -499,104 +587,62 @@ function instanceColumns(density: TableDensity): DataGridColumn<Instance>[] {
     {
       key: 'attribution',
       header: '告警归因',
-      minWidth: 92,
+      minWidth: 213,
       cell: (instance) => <TruncatedText data-testid="instance-attribution">{attributionLabel(instance)}</TruncatedText>,
     },
     {
-      key: 'markers',
-      header: '标记',
-      minWidth: 92,
-      cell: (instance) => <SuppressionTags className="instances-table__markers" flags={instance.health.flags} />,
-    },
-    {
-      key: 'address',
-      header: '地址',
-      minWidth: 117,
-      cell: (instance) => <TruncatedText className="dbs-numeric">{`${instance.host}:${instance.port}`}</TruncatedText>,
-    },
-    {
-      key: 'agent',
-      header: 'Agent',
-      minWidth: 76,
-      cell: (instance) => (
-        <StatusDot tone={agentStatusTone(instance.agent_status)}>{agentStatusLabel(instance.agent_status)}</StatusDot>
-      ),
-    },
-    {
-      key: 'collected',
-      header: '采集新鲜度',
-      minWidth: 127,
-      // 数值列：右对齐 + 等宽表格数字，行与行之间小数点和冒号都对得齐。
+      key: 'saturation',
+      header: '连接饱和度',
+      minWidth: 96,
       numeric: true,
-      // 采集时刻与新鲜度是同一件事的两种读法（「多久以前」与「什么时候」），并成一格
-      // 比各占一列省一列宽度，两个事实都还在。**先写新鲜度**：绝对时间戳有 20 多个字符，
-      // 放前面一挤就只剩日期，而扫视时先看的本来就是「多久没采到了」。
-      // 装不下的那一截由单元格省略号截断，全文在悬停提示里。
-      cell: (instance) => (
-        <TruncatedText>
-          {`${dataFreshnessLabel(instance.data_freshness_seconds)} · ${lastCollectedAtLabel(instance.last_collected_at)}`}
-        </TruncatedText>
-      ),
+      // 百分比而不是连接数：500 台里没人记得住每台的 max_connections。
+      // 取不到就写破折号，不写 0 —— 0% 是一个具体的读数，缺数不是。
+      cell: (instance) => {
+        const percent = latestValue(instanceSlotEntry(trends, instance.id, saturationSlot))
+        return (
+          <span className="instances-table__saturation dbs-numeric" data-tone={usageTone(percent)}>
+            {connectionSaturationLabel(percent)}
+          </span>
+        )
+      },
     },
   ]
 
-  // 规范原话：32px 的密集行**丢掉缩略图，而不是把它压扁** —— 20px 的折线塞进 32px 的行里
-  // 只剩一团噪声。整列一起走，否则留下一列空格子，白占 80px 宽度。
-  // 这不是「在最小支持宽度下隐藏列」——那条规则说的是宽度，这一列的去留由用户自己按的档位决定。
-  if (density === 'standard') {
-    columns.push({
-      key: 'trend',
-      header: '趋势',
-      minWidth: 72,
-      cell: (instance) => <InstanceTrend instanceID={instance.id} instanceName={instance.name} />,
-    })
-  }
+  // **八列在两个密度档下都是八列。** 丢列在任何宽度、任何档位下都是禁止的（列宽契约第 6 条，
+  // #219 的验收标准也逐字这么写）：密集档换来的是行高，不是少一列信息 —— 一个刚把表切成
+  // 密集档的读者不会预期「吞吐趋势」这一列跟着消失，而消失是没有任何提示的。
+  // 缩略图在 32px 的行里由 `Sparkline` 自己按行高收窄，不由这里删掉整列。
+  columns.push({
+    key: 'trend',
+    header: '吞吐趋势',
+    minWidth: 72,
+    // 密集档把图元收到 14px，而不是把整列拿掉：32px 的行放得下 14px 的折线，
+    // 走势看得出来；换来的行高本来就是密集档的全部意义。
+    cell: (instance) => (
+      <Sparkline
+        height={density === 'dense' ? 14 : 20}
+        values={trendValues(instanceSlotEntry(trends, instance.id, throughputSlot))}
+        label={`${instance.name} 近 ${trendWindowMinutes} 分钟吞吐趋势`}
+      />
+    ),
+  })
+
+  columns.push({
+    key: 'collected',
+    header: '采集新鲜度',
+    minWidth: 127,
+    // 数值列：右对齐 + 等宽表格数字，行与行之间对得齐。
+    numeric: true,
+    // 「多久没采到了」是扫视时先看的那一个，所以它写在格子里；绝对时刻与 Agent 的
+    // 失效原因进悬停提示。Agent 单独一列已经取消：它说的是同一件事。
+    cell: (instance) => (
+      <TruncatedText title={collectionFreshnessTitle(instance)}>
+        {collectionFreshnessLabel(instance)}
+      </TruncatedText>
+    ),
+  })
 
   return columns
-}
-
-const trendMetric = 'pg.connection.total'
-const trendWindowMinutes = 60
-
-/// 缩略图的时间窗，**按 5 分钟对齐**。直接拿 `Date.now()` 的话每次渲染都是一个新的查询键，
-/// 一屏 50 行就会永远在重新取数；对齐之后同一个 5 分钟里键是稳定的，到点自然翻新，
-/// 不需要再给它单独配一个轮询。
-export function trendWindow(now: number): { from: string; to: string } {
-  const bucket = 5 * 60 * 1000
-  const to = Math.floor(now / bucket) * bucket
-  return {
-    from: new Date(to - trendWindowMinutes * 60 * 1000).toISOString(),
-    to: new Date(to).toISOString(),
-  }
-}
-
-/// 从指标响应里取出缩略图要画的那串值。缺数保持 `null`（缩略图在那里断开），
-/// 不补零 —— 补零会把「没采到」画成「掉到 0」。
-export function trendValues(response: components['schemas']['MetricSeriesResponse'] | undefined): (number | null)[] {
-  const points = response?.metrics.find((metric) => metric.metric === trendMetric)?.series[0]?.points
-  if (points === undefined) return []
-  return points.map((point) => (typeof point[1] === 'number' ? point[1] : null))
-}
-
-/// 行内趋势缩略图。
-///
-/// 一行一个查询：接口只有 `/instances/{id}/metrics/series`，没有一次取多个实例的入口，
-/// 所以整页缩略图就是「当前这一页的行数」个请求（组件只在渲染出来的行里挂载）。
-/// 失败不重试、不轮询 —— 一个行内缩略图不值得为它反复打服务端。
-/// 批量取多实例趋势的接口是值得补的，见结题报告。
-function InstanceTrend({ instanceID, instanceName }: { instanceID: string; instanceName: string }) {
-  const range = trendWindow(Date.now())
-  const series = $api.useQuery(
-    'get',
-    '/api/v1/instances/{id}/metrics/series',
-    { params: { path: { id: instanceID }, query: { metric: [trendMetric], from: range.from, to: range.to, step: '5m' } } },
-    { retry: false, refetchOnWindowFocus: false },
-  )
-
-  if (series.isPending) {
-    return <SkeletonBlock lines={1} height="1.25rem" decorative />
-  }
-  return <Sparkline values={trendValues(series.data)} label={`${instanceName} 近 ${trendWindowMinutes} 分钟连接数趋势`} />
 }
 
 /// 新建实例表单的校验规则。
@@ -606,9 +652,12 @@ function InstanceTrend({ instanceID, instanceName }: { instanceID: string; insta
 /// schema 里不写 `transform` / `default` —— 表单值就是提交值，trim 放在提交处，看得见。
 const instanceCreateSchema = z.object({
   name: z.string().refine((value) => value.trim() !== '', '请输入实例名称'),
+  engine: z.enum(instanceEngines, { error: '请选择数据库引擎' }),
   host: z.string().refine((value) => value.trim() !== '', '请输入主机地址'),
   port: z.number({ error: '请输入端口' }).int('端口必须是整数').min(1, '端口范围 1–65535').max(65535, '端口范围 1–65535'),
-  database: z.string().refine((value) => value.trim() !== '', '请输入数据库名'),
+  // bootstrap database 只是建连接用的库名，不限定监控范围，所以它可以留空：
+  // 留空时由服务端按引擎补默认库（PostgreSQL 是 postgres）。
+  database: z.string(),
   username: z.string().refine((value) => value.trim() !== '', '请输入用户名'),
   password: z.string().min(1, '请输入密码'),
 }) satisfies z.ZodType<InstanceCreateInput>
@@ -620,6 +669,7 @@ type InstanceCreateValues = z.infer<typeof instanceCreateSchema>
 /// 永远显示不出来、也永远清不掉的错误。
 const instanceCreateFields = [
   'name',
+  'engine',
   'host',
   'port',
   'database',
@@ -628,11 +678,14 @@ const instanceCreateFields = [
 ] as const satisfies readonly FieldPath<InstanceCreateValues>[]
 
 function instanceCreateBody(values: InstanceCreateValues): InstanceCreateInput {
+  const database = values.database.trim()
   return {
     name: values.name.trim(),
+    engine: values.engine,
     host: values.host.trim(),
     port: values.port,
-    database: values.database.trim(),
+    // 留空就整个字段不发：默认库由服务端按引擎决定，前端不替它挑。
+    ...(database === '' ? {} : { database }),
     username: values.username.trim(),
     password: values.password,
   }
@@ -640,6 +693,7 @@ function instanceCreateBody(values: InstanceCreateValues): InstanceCreateInput {
 
 const emptyInstanceCreateValues: InstanceCreateValues = {
   name: '',
+  engine: 'POSTGRESQL',
   host: '',
   port: 5432,
   database: '',
@@ -708,6 +762,27 @@ function CreateInstanceModal({ open, onClose, onCreated }: {
             {...register('name')}
           />}
         </FormField>
+        <FormField
+          label="引擎"
+          required
+          helperText="实例运行的数据库产品，接入后不可更改。"
+          errorText={formState.errors.engine?.message}
+        >
+          {(field) => <Select
+            id={field.id}
+            labelText=""
+            noLabel
+            invalid={field.invalid}
+            aria-describedby={field.describedBy}
+            {...register('engine')}
+          >
+            {instanceEngines.map((engine) => <SelectItem
+              key={engine}
+              value={engine}
+              text={instanceEngineLabel(engine)}
+            />)}
+          </Select>}
+        </FormField>
         <FormField label="主机" required errorText={formState.errors.host?.message}>
           {(field) => <TextInput
             id={field.id}
@@ -740,11 +815,16 @@ function CreateInstanceModal({ open, onClose, onCreated }: {
             />}
           />}
         </FormField>
-        <FormField label="数据库" required errorText={formState.errors.database?.message}>
+        <FormField
+          label={bootstrapDatabaseLabel}
+          helperText={bootstrapDatabaseHelperText}
+          errorText={formState.errors.database?.message}
+        >
           {(field) => <TextInput
             id={field.id}
             labelText=""
             hideLabel
+            placeholder="postgres"
             invalid={field.invalid}
             aria-describedby={field.describedBy}
             {...register('database')}

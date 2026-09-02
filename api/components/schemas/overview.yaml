@@ -1,0 +1,85 @@
+FleetHealthCounts:
+  type: object
+  description: >-
+    How many instances sit in each health tier. The five tiers are exhaustive and disjoint,
+    so they always add up to the fleet size.
+  required: [critical, warning, unknown, healthy, paused]
+  properties:
+    critical: { type: integer, minimum: 0 }
+    warning: { type: integer, minimum: 0 }
+    unknown: { type: integer, minimum: 0 }
+    healthy: { type: integer, minimum: 0 }
+    paused: { type: integer, minimum: 0 }
+FleetCollectionHealth:
+  type: object
+  description: >-
+    Collection self-monitoring. These three overlap with the health tiers on purpose: an
+    instance whose collection rotted silently is usually still HEALTHY, because no rule can
+    fire on data that never arrived.
+  required: [stale_data, agent_offline, paused]
+  properties:
+    stale_data:
+      type: integer
+      minimum: 0
+      description: >-
+        Instances whose collection is behind, or that were never collected at all. Paused
+        instances are excluded: a paused instance is not rotting, it is switched off.
+        Same predicate as the STALE_DATA instance-list flag.
+    agent_offline:
+      type: integer
+      minimum: 0
+      description: Instances whose Agent is expected but has stopped reporting.
+    paused:
+      type: integer
+      minimum: 0
+      description: Instances whose collection is paused.
+StorageUsageEntry:
+  type: object
+  description: >-
+    One instance's highest disk usage. The value is the worst mount on that host, not an
+    average across mounts: a full mount is a full mount whatever the others are doing.
+  required: [instance_id, instance_name, usage_percent, sampled_at]
+  properties:
+    instance_id: { type: string, format: uuid }
+    instance_name: { type: string }
+    usage_percent: { type: number, format: double }
+    sampled_at: { type: string, format: date-time }
+FleetOverview:
+  type: object
+  description: >-
+    The fleet landing page in one request: how the fleet is doing, whether collection itself
+    is healthy, who to look at now, which disks are filling up, and which statements cost the
+    most.
+  required: [total, health, collection, attention, storage, top_sql]
+  properties:
+    total:
+      type: integer
+      minimum: 0
+      description: Number of monitored instances.
+    health:
+      $ref: '#/FleetHealthCounts'
+    collection:
+      $ref: '#/FleetCollectionHealth'
+    attention:
+      type: array
+      maxItems: 10
+      description: >-
+        The instances that need handling first, ordered by health tier then alert severity.
+        Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy
+        and paused instances never appear here.
+      items: { $ref: instances.yaml#/Instance }
+    storage:
+      type: array
+      maxItems: 10
+      description: >-
+        The ten highest disk usages, highest first. Instances with no disk sample are absent
+        rather than reported as 0 — never measured is not the same as empty.
+      items: { $ref: '#/StorageUsageEntry' }
+    top_sql:
+      type: array
+      maxItems: 5
+      description: >-
+        The five statements costing the fleet the most elapsed time, highest first. The full
+        ranking lives on the SQL insight page; five is what fits on a landing page without
+        turning it into a second table.
+      items: { $ref: sql-insight.yaml#/TopSqlEntry }

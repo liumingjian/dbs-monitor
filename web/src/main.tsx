@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RouterProvider, createRoute, createRouter, redirect } from '@tanstack/react-router'
+import { RouterProvider, createRouter } from '@tanstack/react-router'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { alertsRoute } from './routes/alerts'
@@ -14,6 +14,7 @@ import {
   policySettingsRoute,
 } from './routes/alert-settings'
 import { instanceRoute } from './routes/instances.$id'
+import { parseSearch, stringifySearch } from './routes/searchParams'
 import { performanceEventDetailRoute } from './routes/instances.$id/performanceEventDetail'
 import { performanceEventsRoute } from './routes/instances.$id/performanceEventsPage'
 import { collectionManagementRoute } from './routes/instances.$id/collection'
@@ -23,7 +24,9 @@ import { instanceSettingsRoute } from './routes/instances.$id/settings'
 import { longQuerySamplesRoute, queryStatisticsRoute, sessionsRoute } from './routes/instances.$id/sessions'
 import { instancesRoute } from './routes/instances'
 import { loginRoute } from './routes/login'
+import { overviewRoute } from './routes/overview'
 import { rootRoute } from './routes/root'
+import { sqlInsightRoute } from './routes/sql-insight'
 import { AppErrorBoundary, NotFoundPage, RouteErrorPage } from './routes/root/errorBoundary'
 import { usersRoute } from './routes/users'
 // Carbon 令牌层。全应用唯一的 Sass 入口，必须只 import 一次；见 styles/index.scss 顶部。
@@ -31,18 +34,15 @@ import { usersRoute } from './routes/users'
 import './styles/index.scss'
 import './styles.css'
 
-// `/` matched nothing, so the entry URL rendered a bare English "Not Found".
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  beforeLoad: () => { throw redirect({ to: '/instances' }) },
-})
+// 落地页是机群总览，地址就是 `/`（从前它只是一条跳到 `/instances` 的重定向）。
+// `/instances` 原样保留：那个地址被人存过书签、发过给同事，不能因为改了落地页就失效。
 
 const routeTree = rootRoute.addChildren([
-  indexRoute,
+  overviewRoute,
   loginRoute,
   alertsRoute,
   instancesRoute,
+  sqlInsightRoute,
   instanceRoute,
   standardMonitoringRoute,
   performanceEventsRoute,
@@ -70,6 +70,10 @@ const routeTree = rootRoute.addChildren([
 // 和路由器初始化时抛出的异常 —— 那两类发生在路由匹配之外，没有它就是整页白屏。
 const router = createRouter({
   routeTree,
+  // 查询参数的编解码整台路由器共用一份：多选筛选写成重复键，地址因此是能发给同事的
+  // 那种地址，也和服务端读同一批参数的写法一致（`web/src/routes/searchParams.ts`）。
+  parseSearch,
+  stringifySearch,
   defaultPreload: 'intent',
   defaultNotFoundComponent: NotFoundPage,
   defaultErrorComponent: RouteErrorPage,

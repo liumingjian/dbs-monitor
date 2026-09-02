@@ -22,7 +22,7 @@ const { chromium } = createRequire(`${process.cwd()}/`)('@playwright/test')
 
 const base = process.env.QA_BASE_URL ?? 'https://127.0.0.1:18443'
 const out = process.env.QA_SHOT_DIR ?? '/tmp/qa-shots'
-const password = process.env.QA_ADMIN_PASSWORD ?? 'qa-admin-password'
+const password = process.env.QA_ADMIN_PASSWORD ?? 'admin'
 
 /// 常规审阅宽度与最小支持宽度。移动档单列在 `mobileRoutes` 里单独走。
 const viewports = [
@@ -38,7 +38,11 @@ const timeQuery = `from=${encodeURIComponent(range.from)}&to=${encodeURIComponen
 /// 认不到就跳过那一张并在日志里说清楚——空库不该让整条流水失败。
 function desktopRoutes({ instanceID, alertPath, eventPath }) {
   const routes = [
+    // 机群总览是登录后的落地页，所以它排在实例列表前面。
+    ['01a-overview', '/'],
     ['02-instances', '/instances'],
+    // SQL 洞察：跨实例 Top SQL，挂在侧栏「监控」组下。
+    ['02a-sql-insight', '/sql-insight'],
     ['03-instance-overview', `/instances/${instanceID}?${timeQuery}`],
     ['04-monitoring', `/instances/${instanceID}/monitoring?${timeQuery}`, { settle: 4000 }],
     // 会话与阻塞：三个视图合并成一个地址的三个页签（#200），每个页签都是一张。
@@ -102,7 +106,8 @@ async function signIn(page) {
   await page.fill('#username, input[autocomplete="username"]', 'admin')
   await page.fill('input[autocomplete="current-password"]', password)
   await page.click('button[type="submit"]')
-  await page.waitForURL('**/instances', { timeout: 15000 })
+  // 登录后的落地页是机群总览（`/`），不再是实例列表。
+  await page.waitForURL((url) => url.pathname === '/', { timeout: 15000 })
 }
 
 /// 从当前页面里认第一条匹配的链接。列表页给得出详情地址，就不必去猜 API 的形状。

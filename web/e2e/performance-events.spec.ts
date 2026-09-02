@@ -61,6 +61,7 @@ function instance() {
     name: 'payments-primary',
     host: '127.0.0.1',
     port: 5432,
+    engine: 'POSTGRESQL',
     database: 'payments',
     username: 'monitor',
     agent_metrics_enabled: true,

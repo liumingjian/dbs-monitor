@@ -1,3 +1,40 @@
+MetricSeriesEntry:
+  type: object
+  description: >-
+    One requested metric's series for one instance. Addressed by concrete metric id, `metric`
+    is always present. Addressed by semantic slot, `slot` is always present and `metric` only
+    when that instance's engine binds the slot: a slot with no binding is answered explicitly
+    (`NOT_APPLICABLE_ENGINE`) rather than with an empty metric id.
+  required: [unit, unavailability, series]
+  properties:
+    metric: { type: string }
+    slot:
+      allOf:
+        - $ref: ../enums.yaml#/SemanticSlot
+    unit: { type: string }
+    unavailability:
+      nullable: true
+      allOf:
+        - $ref: ../enums.yaml#/Unavailability
+    series:
+      type: array
+      items:
+        type: object
+        required: [labels, points]
+        properties:
+          labels:
+            type: object
+            additionalProperties: { type: string }
+          points:
+            type: array
+            items:
+              type: array
+              minItems: 2
+              maxItems: 2
+              items:
+                type: number
+                nullable: true
+                x-go-type: "*float64"
 MetricSeriesResponse:
   type: object
   required: [from, to, step, metrics]
@@ -7,32 +44,52 @@ MetricSeriesResponse:
     step: { type: string }
     metrics:
       type: array
-      items:
-        type: object
-        required: [metric, unit, unavailability, series]
-        properties:
-          metric: { type: string }
-          unit: { type: string }
-          unavailability:
-            nullable: true
-            allOf:
-              - $ref: ../enums.yaml#/Unavailability
-          series:
-            type: array
-            items:
-              type: object
-              required: [labels, points]
-              properties:
-                labels:
-                  type: object
-                  additionalProperties: { type: string }
-                points:
-                  type: array
-                  items:
-                    type: array
-                    minItems: 2
-                    maxItems: 2
-                    items:
-                      type: number
-                      nullable: true
-                      x-go-type: "*float64"
+      items: { $ref: '#/MetricSeriesEntry' }
+InstanceMetricSeries:
+  type: object
+  required: [instance_id, metrics]
+  properties:
+    instance_id: { type: string, format: uuid }
+    metrics:
+      type: array
+      items: { $ref: '#/MetricSeriesEntry' }
+InstancesMetricSeriesResponse:
+  type: object
+  required: [from, to, step, instances]
+  properties:
+    from: { type: string, format: date-time }
+    to: { type: string, format: date-time }
+    step: { type: string }
+    instances:
+      type: array
+      items: { $ref: '#/InstanceMetricSeries' }
+MetricCatalogEntry:
+  type: object
+  required: [metric_id, engine, unit, display_name, semantic_slot, level, aggregation]
+  properties:
+    metric_id: { type: string }
+    engine: { $ref: ../enums.yaml#/MetricEngine }
+    unit: { type: string }
+    display_name: { type: string }
+    semantic_slot:
+      nullable: true
+      allOf:
+        - $ref: ../enums.yaml#/SemanticSlot
+    level: { $ref: ../enums.yaml#/MetricLevel }
+    aggregation: { $ref: ../enums.yaml#/MetricAggregation }
+SemanticSlotDeclaration:
+  type: object
+  required: [slot_id, display_name]
+  properties:
+    slot_id: { $ref: ../enums.yaml#/SemanticSlot }
+    display_name: { type: string }
+MetricCatalog:
+  type: object
+  required: [metrics, semantic_slots]
+  properties:
+    metrics:
+      type: array
+      items: { $ref: '#/MetricCatalogEntry' }
+    semantic_slots:
+      type: array
+      items: { $ref: '#/SemanticSlotDeclaration' }

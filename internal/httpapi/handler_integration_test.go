@@ -425,6 +425,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("connection metadata update did not preserve ciphertext and advance version: version %d", credentialVersion)
 	}
 
+	assertMetricCatalog(t, client, server.URL+"/api/v1/metrics/catalog")
+
 	tasksURL := fmt.Sprintf("%s/api/v1/instances/%s/collection/tasks", server.URL, instanceID)
 	tasks := getResponse(t, client, tasksURL)
 	if tasks.StatusCode != http.StatusOK {
@@ -435,8 +437,8 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("decode collection task states: %v", err)
 	}
 	tasks.Body.Close()
-	if len(taskStates) != 8 {
-		t.Fatalf("collection task state count = %d, want 8", len(taskStates))
+	if len(taskStates) != 10 {
+		t.Fatalf("collection task state count = %d, want 10", len(taskStates))
 	}
 	var activityTask *api.CollectionTaskState
 	for index := range taskStates {
@@ -455,7 +457,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 		t.Fatalf("capability count = %d, want 4", len(capabilities))
 	}
 	roleCapability := capabilityByID(t, capabilities, "role.pg_monitor")
-	if roleCapability.Status != "UNKNOWN" || roleCapability.ObservedAt != nil || roleCapability.AffectedMetricCount != 19 || roleCapability.FixHint == nil {
+	if roleCapability.Status != "UNKNOWN" || roleCapability.ObservedAt != nil || roleCapability.AffectedMetricCount != 24 || roleCapability.FixHint == nil {
 		t.Fatalf("initial pg_monitor capability = %+v", roleCapability)
 	}
 	capabilityCases := []struct {
@@ -617,10 +619,34 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 	if len(queryStats.Items) == 0 {
 		t.Fatal("query statistics snapshot has no entries")
 	}
-	for _, forbidden := range []string{"query", "sql", "query_text", "sql_text"} {
+	// 带真实字面量的原始语句一个字段都不许有；归一化文本（`query_text`，与
+	// `/api/v1/top-sql` 同一张 `query_statement_text` 表）则是刻意给出的 ——
+	// 少了它，工作台的排行又只剩一个没人认得的 queryid。理由与守卫的另一半见
+	// internal/api/query_statistics_test.go。
+	for _, forbidden := range []string{"query", "sql", "sql_text"} {
 		if _, exists := queryStats.Items[0][forbidden]; exists {
-			t.Fatalf("query statistics entry exposes %q", forbidden)
+			t.Fatalf("query statistics entry exposes raw SQL text field %q", forbidden)
 		}
+	}
+	// 归一化文本要真的接得上：它与排行分表存放（按 (实例, queryid) 去重），
+	// 少了那次 LEFT JOIN，接口照样 200，页面上却又只剩 queryid。
+	normalisedTexts := 0
+	for _, item := range queryStats.Items {
+		raw, exists := item["query_text"]
+		if !exists {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			t.Fatalf("decode query_text: %v", err)
+		}
+		if text == "" {
+			t.Fatal("query statistics entry carries an empty query_text; absent and empty must stay distinguishable")
+		}
+		normalisedTexts++
+	}
+	if normalisedTexts == 0 {
+		t.Fatal("no query statistics entry carries query_text; the normalised text join is not wired up")
 	}
 	assertMetricSeriesHasPoints(t, client, seriesURL)
 	assertMetricSeriesHasPoints(t, client, strings.Replace(seriesURL, "pg.connection.total", "pg.prepared_xacts.count", 1))
@@ -717,7 +743,7 @@ func TestHTTPSAPIAndAgentPush(t *testing.T) {
 
 	rawStep := api.Raw
 	longQueryMetricResponse, err := apiClient.GetMetricSeriesWithResponse(ctx, createBody.Instance.Id, &api.GetMetricSeriesParams{
-		Metric: []api.GetMetricSeriesParamsMetric{api.GetMetricSeriesParamsMetricPgQueryLongRunningCount},
+		Metric: []api.MetricId{api.MetricIdPgQueryLongRunningCount},
 		From:   queryWindowStart,
 		To:     queryWindowEnd,
 		Step:   &rawStep,
@@ -1194,6 +1220,60 @@ func assertAgentState(t *testing.T, ctx context.Context, pool *pgxpool.Pool, ins
 	}
 	if gotVersion != version || gotCode.String != code || gotMessage.String != message {
 		t.Fatalf("Agent state = (%q, %q, %q), want (%q, %q, %q)", gotVersion, gotCode.String, gotMessage.String, version, code, message)
+	}
+}
+
+// 指标目录由服务端交付：展示名与单位从这里来，前端不再自己留一份。
+func assertMetricCatalog(t *testing.T, client *http.Client, address string) {
+	t.Helper()
+	response := getResponse(t, client, address)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("metric catalog status = %d, want 200", response.StatusCode)
+	}
+	var body api.MetricCatalog
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode metric catalog: %v", err)
+	}
+	if len(body.Metrics) != len(metric.Metrics) {
+		t.Fatalf("catalog metric count = %d, want %d", len(body.Metrics), len(metric.Metrics))
+	}
+	if len(body.SemanticSlots) != len(metric.SemanticSlots) {
+		t.Fatalf("catalog semantic slot count = %d, want %d", len(body.SemanticSlots), len(metric.SemanticSlots))
+	}
+	var throughput *api.MetricCatalogEntry
+	for index := range body.Metrics {
+		if body.Metrics[index].MetricId == metric.MetricTPS.String() {
+			throughput = &body.Metrics[index]
+			break
+		}
+	}
+	if throughput == nil {
+		t.Fatal("catalog is missing pg.tps")
+	}
+	slot, err := throughput.SemanticSlot.Get()
+	if err != nil || slot != api.SlotThroughput {
+		t.Fatalf("pg.tps semantic slot = %v (err %v), want %q", slot, err, api.SlotThroughput)
+	}
+	// TPS 是库级的：一条连接下每个库各有自己的 TPS，实例级值是它们的和（#217）。
+	if throughput.DisplayName != "TPS" || throughput.Unit != "tx/s" ||
+		throughput.Engine != api.MetricEnginePostgreSQL || throughput.Level != api.MetricLevelDatabase ||
+		throughput.Aggregation != api.MetricAggregationSum {
+		t.Fatalf("pg.tps catalog entry = %+v", *throughput)
+	}
+	// 连接数是实例级的，没有可聚合的东西——库维度不该蔓延到实例级指标上。
+	for index := range body.Metrics {
+		if body.Metrics[index].MetricId != metric.MetricConnectionTotal.String() {
+			continue
+		}
+		if body.Metrics[index].Level != api.MetricLevelInstance || body.Metrics[index].Aggregation != api.MetricAggregationNone {
+			t.Fatalf("pg.connection.total catalog entry = %+v", body.Metrics[index])
+		}
+	}
+	for index := range body.Metrics {
+		if body.Metrics[index].DisplayName == "" {
+			t.Fatalf("catalog entry %q has no display name", body.Metrics[index].MetricId)
+		}
 	}
 }
 

@@ -8,6 +8,11 @@ import { z } from 'zod'
 import { $api } from '../../api/client'
 import { apiErrorMessage, applyApiFieldErrors } from '../../api/errors'
 import type { components } from '../../api/schema'
+import {
+  bootstrapDatabaseHelperText,
+  bootstrapDatabaseLabel,
+  instanceEngineLabel,
+} from '../../domain/instanceEngine'
 import { zodResolver } from '../../forms/zodResolver'
 import { FormField } from '../../primitives/FormField'
 import { Icon } from '../../primitives/Icon'
@@ -228,7 +233,9 @@ const metadataSchema = z.object({
   name: z.string().refine((value) => value.trim() !== '', '请输入实例名称'),
   host: z.string().refine((value) => value.trim() !== '', '请输入主机地址'),
   port: z.number({ error: '请输入端口' }).int('端口必须是整数').min(1, '端口范围 1–65535').max(65535, '端口范围 1–65535'),
-  database: z.string().refine((value) => value.trim() !== '', '请输入数据库名'),
+  // bootstrap database 只是建连接用的库名，不限定监控范围，所以它可以留空：
+  // 留空时由服务端按引擎补默认库（PostgreSQL 是 postgres）。引擎本身接入后不可改，不在表单里。
+  database: z.string(),
 }) satisfies z.ZodType<InstanceMetadataInput>
 
 type MetadataValues = z.infer<typeof metadataSchema>
@@ -239,11 +246,13 @@ type MetadataValues = z.infer<typeof metadataSchema>
 const metadataFields = ['name', 'host', 'port', 'database'] as const satisfies readonly FieldPath<MetadataValues>[]
 
 function metadataBody(values: MetadataValues): InstanceMetadataInput {
+  const database = values.database.trim()
   return {
     name: values.name.trim(),
     host: values.host.trim(),
     port: values.port,
-    database: values.database.trim(),
+    // 留空就整个字段不发：默认库由服务端按引擎决定，前端不替它挑。
+    ...(database === '' ? {} : { database }),
   }
 }
 
@@ -259,7 +268,7 @@ function InstanceMetadataSection({ instance, canEdit, onSaved }: {
       name: instance.name,
       host: instance.host,
       port: instance.port,
-      database: instance.database,
+      database: instance.database ?? '',
     },
   })
   const [failure, setFailure] = useState('')
@@ -297,6 +306,19 @@ function InstanceMetadataSection({ instance, canEdit, onSaved }: {
             {...register('name')}
           />}
         </FormField>
+        {/* 引擎接入时选定、之后不可改：改引擎等于换了一台实例，历史数据不再成立。
+            所以它在这里是一条只读事实，不是一个输入框。 */}
+        <FormField label="引擎" helperText="接入时选定，不可更改。">
+          {(field) => <TextInput
+            id={field.id}
+            labelText=""
+            hideLabel
+            readOnly
+            value={instanceEngineLabel(instance.engine)}
+            aria-describedby={field.describedBy}
+            onChange={() => undefined}
+          />}
+        </FormField>
         <FormField label="主机" required errorText={formState.errors.host?.message}>
           {(field) => <TextInput
             id={field.id}
@@ -331,11 +353,16 @@ function InstanceMetadataSection({ instance, canEdit, onSaved }: {
             />}
           />}
         </FormField>
-        <FormField label="数据库" required errorText={formState.errors.database?.message}>
+        <FormField
+          label={bootstrapDatabaseLabel}
+          helperText={bootstrapDatabaseHelperText}
+          errorText={formState.errors.database?.message}
+        >
           {(field) => <TextInput
             id={field.id}
             labelText=""
             hideLabel
+            placeholder="postgres"
             disabled={!canEdit}
             invalid={field.invalid}
             aria-describedby={field.describedBy}
@@ -363,9 +390,13 @@ function InstanceMetadataSection({ instance, canEdit, onSaved }: {
 /// 连接地址。一串要粘到别处去的长文本，所以它是只读输入框加一个复制按钮，
 /// 不是一行你得手动选中的文字。**里面没有口令**，密码不在界面上出现。
 function ConnectionAddress({ instance }: { instance: Instance }) {
-  const address = `${instance.host}:${instance.port}/${instance.database}`
+  // 库名跟在端点后面，是**建连接落在哪个库**，不是监控范围；没有 bootstrap 数据库
+  // 的引擎（MySQL）就只有端点。
+  const address = instance.database === undefined
+    ? `${instance.host}:${instance.port}`
+    : `${instance.host}:${instance.port}/${instance.database}`
   return (
-    <FormField label="连接地址" helperText="已保存的地址，不含账号与口令。">
+    <FormField label="连接地址" helperText="已保存的地址，末段是建连接用的库，不是监控范围；不含账号与口令。">
       {(field) => (
         <div className="settings-copy-row">
           <TextInput

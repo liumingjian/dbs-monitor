@@ -119,7 +119,7 @@ type ClientInterface interface {
 	GetAlertTriggerSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAlertRuleTemplates request
-	ListAlertRuleTemplates(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListAlertRuleTemplates(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateAlertRuleFromTemplateWithBody request with any body
 	CreateAlertRuleFromTemplateWithBody(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -183,12 +183,15 @@ type ClientInterface interface {
 	GetSchedulerDiagnostics(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListInstances request
-	ListInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListInstances(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateInstanceWithBody request with any body
 	CreateInstanceWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	CreateInstance(ctx context.Context, body CreateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetInstancesMetricSeries request
+	GetInstancesMetricSeries(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteInstance request
 	DeleteInstance(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -287,6 +290,9 @@ type ClientInterface interface {
 	// GetCurrentUser request
 	GetCurrentUser(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetMetricCatalog request
+	GetMetricCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetChannelFailures request
 	GetChannelFailures(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -373,6 +379,9 @@ type ClientInterface interface {
 	// GetNotificationPolicySettings request
 	GetNotificationPolicySettings(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetFleetOverview request
+	GetFleetOverview(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ChangeOwnPasswordWithBody request with any body
 	ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -383,6 +392,9 @@ type ClientInterface interface {
 
 	// ListPlatformEvents request
 	ListPlatformEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListTopSql request
+	ListTopSql(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListUsers request
 	ListUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -526,8 +538,8 @@ func (c *Client) GetAlertTriggerSnapshot(ctx context.Context, id openapi_types.U
 	return c.Client.Do(req)
 }
 
-func (c *Client) ListAlertRuleTemplates(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListAlertRuleTemplatesRequest(c.Server)
+func (c *Client) ListAlertRuleTemplates(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertRuleTemplatesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -802,8 +814,8 @@ func (c *Client) GetSchedulerDiagnostics(ctx context.Context, reqEditors ...Requ
 	return c.Client.Do(req)
 }
 
-func (c *Client) ListInstances(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListInstancesRequest(c.Server)
+func (c *Client) ListInstances(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListInstancesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -828,6 +840,18 @@ func (c *Client) CreateInstanceWithBody(ctx context.Context, contentType string,
 
 func (c *Client) CreateInstance(ctx context.Context, body CreateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateInstanceRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetInstancesMetricSeries(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetInstancesMetricSeriesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1258,6 +1282,18 @@ func (c *Client) GetCurrentUser(ctx context.Context, reqEditors ...RequestEditor
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetMetricCatalog(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMetricCatalogRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetChannelFailures(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetChannelFailuresRequest(c.Server)
 	if err != nil {
@@ -1642,6 +1678,18 @@ func (c *Client) GetNotificationPolicySettings(ctx context.Context, reqEditors .
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetFleetOverview(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetFleetOverviewRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ChangeOwnPasswordWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewChangeOwnPasswordRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -1680,6 +1728,18 @@ func (c *Client) GetPerformanceEvent(ctx context.Context, id openapi_types.UUID,
 
 func (c *Client) ListPlatformEvents(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListPlatformEventsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListTopSql(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListTopSqlRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2089,7 +2149,7 @@ func NewGetAlertTriggerSnapshotRequest(server string, id openapi_types.UUID) (*h
 }
 
 // NewListAlertRuleTemplatesRequest generates requests for ListAlertRuleTemplates
-func NewListAlertRuleTemplatesRequest(server string) (*http.Request, error) {
+func NewListAlertRuleTemplatesRequest(server string, params *ListAlertRuleTemplatesParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -2105,6 +2165,28 @@ func NewListAlertRuleTemplatesRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Engine != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "engine", runtime.ParamLocationQuery, *params.Engine); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -2806,7 +2888,7 @@ func NewGetSchedulerDiagnosticsRequest(server string) (*http.Request, error) {
 }
 
 // NewListInstancesRequest generates requests for ListInstances
-func NewListInstancesRequest(server string) (*http.Request, error) {
+func NewListInstancesRequest(server string, params *ListInstancesParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -2822,6 +2904,140 @@ func NewListInstancesRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Page != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page", runtime.ParamLocationQuery, *params.Page); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PageSize != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page_size", runtime.ParamLocationQuery, *params.PageSize); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "q", runtime.ParamLocationQuery, *params.Q); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Engine != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "engine", runtime.ParamLocationQuery, *params.Engine); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Status != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "status", runtime.ParamLocationQuery, *params.Status); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Flags != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "flags", runtime.ParamLocationQuery, *params.Flags); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Severity != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "severity", runtime.ParamLocationQuery, *params.Severity); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "sort", runtime.ParamLocationQuery, *params.Sort); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -2868,6 +3084,123 @@ func NewCreateInstanceRequestWithBody(server string, contentType string, body io
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetInstancesMetricSeriesRequest generates requests for GetInstancesMetricSeries
+func NewGetInstancesMetricSeriesRequest(server string, params *GetInstancesMetricSeriesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/instances/metrics/series")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance_id", runtime.ParamLocationQuery, params.InstanceId); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Metric != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "metric", runtime.ParamLocationQuery, *params.Metric); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Slot != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "slot", runtime.ParamLocationQuery, *params.Slot); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Step != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "step", runtime.ParamLocationQuery, *params.Step); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -3600,6 +3933,22 @@ func NewGetMetricSeriesRequest(server string, id openapi_types.UUID, params *Get
 
 		}
 
+		if params.ByDatabase != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "by_database", runtime.ParamLocationQuery, *params.ByDatabase); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -4095,6 +4444,33 @@ func NewGetCurrentUserRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/me")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetMetricCatalogRequest generates requests for GetMetricCatalog
+func NewGetMetricCatalogRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/metrics/catalog")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -4899,6 +5275,33 @@ func NewGetNotificationPolicySettingsRequest(server string) (*http.Request, erro
 	return req, nil
 }
 
+// NewGetFleetOverviewRequest generates requests for GetFleetOverview
+func NewGetFleetOverviewRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/overview")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewChangeOwnPasswordRequest calls the generic ChangeOwnPassword builder with application/json body
 func NewChangeOwnPasswordRequest(server string, body ChangeOwnPasswordJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4990,6 +5393,55 @@ func NewListPlatformEventsRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListTopSqlRequest generates requests for ListTopSql
+func NewListTopSqlRequest(server string, params *ListTopSqlParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/top-sql")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -5267,7 +5719,7 @@ type ClientWithResponsesInterface interface {
 	GetAlertTriggerSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetAlertTriggerSnapshotResponse, error)
 
 	// ListAlertRuleTemplatesWithResponse request
-	ListAlertRuleTemplatesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error)
+	ListAlertRuleTemplatesWithResponse(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error)
 
 	// CreateAlertRuleFromTemplateWithBodyWithResponse request with any body
 	CreateAlertRuleFromTemplateWithBodyWithResponse(ctx context.Context, id string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlertRuleFromTemplateResponse, error)
@@ -5331,12 +5783,15 @@ type ClientWithResponsesInterface interface {
 	GetSchedulerDiagnosticsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetSchedulerDiagnosticsResponse, error)
 
 	// ListInstancesWithResponse request
-	ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error)
+	ListInstancesWithResponse(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error)
 
 	// CreateInstanceWithBodyWithResponse request with any body
 	CreateInstanceWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateInstanceResponse, error)
 
 	CreateInstanceWithResponse(ctx context.Context, body CreateInstanceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateInstanceResponse, error)
+
+	// GetInstancesMetricSeriesWithResponse request
+	GetInstancesMetricSeriesWithResponse(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetInstancesMetricSeriesResponse, error)
 
 	// DeleteInstanceWithResponse request
 	DeleteInstanceWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*DeleteInstanceResponse, error)
@@ -5435,6 +5890,9 @@ type ClientWithResponsesInterface interface {
 	// GetCurrentUserWithResponse request
 	GetCurrentUserWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCurrentUserResponse, error)
 
+	// GetMetricCatalogWithResponse request
+	GetMetricCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMetricCatalogResponse, error)
+
 	// GetChannelFailuresWithResponse request
 	GetChannelFailuresWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetChannelFailuresResponse, error)
 
@@ -5521,6 +5979,9 @@ type ClientWithResponsesInterface interface {
 	// GetNotificationPolicySettingsWithResponse request
 	GetNotificationPolicySettingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetNotificationPolicySettingsResponse, error)
 
+	// GetFleetOverviewWithResponse request
+	GetFleetOverviewWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetFleetOverviewResponse, error)
+
 	// ChangeOwnPasswordWithBodyWithResponse request with any body
 	ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error)
 
@@ -5531,6 +5992,9 @@ type ClientWithResponsesInterface interface {
 
 	// ListPlatformEventsWithResponse request
 	ListPlatformEventsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPlatformEventsResponse, error)
+
+	// ListTopSqlWithResponse request
+	ListTopSqlWithResponse(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*ListTopSqlResponse, error)
 
 	// ListUsersWithResponse request
 	ListUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListUsersResponse, error)
@@ -6153,7 +6617,7 @@ func (r GetSchedulerDiagnosticsResponse) StatusCode() int {
 type ListInstancesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *[]Instance
+	JSON200      *InstanceListPage
 }
 
 // Status returns HTTPResponse.Status
@@ -6189,6 +6653,29 @@ func (r CreateInstanceResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r CreateInstanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetInstancesMetricSeriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *InstancesMetricSeriesResponse
+	JSON400      *Error
+}
+
+// Status returns HTTPResponse.Status
+func (r GetInstancesMetricSeriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetInstancesMetricSeriesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -6802,6 +7289,28 @@ func (r GetCurrentUserResponse) StatusCode() int {
 	return 0
 }
 
+type GetMetricCatalogResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MetricCatalog
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMetricCatalogResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMetricCatalogResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetChannelFailuresResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7303,6 +7812,28 @@ func (r GetNotificationPolicySettingsResponse) StatusCode() int {
 	return 0
 }
 
+type GetFleetOverviewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *FleetOverview
+}
+
+// Status returns HTTPResponse.Status
+func (r GetFleetOverviewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetFleetOverviewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ChangeOwnPasswordResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -7364,6 +7895,28 @@ func (r ListPlatformEventsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r ListPlatformEventsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListTopSqlResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TopSqlList
+}
+
+// Status returns HTTPResponse.Status
+func (r ListTopSqlResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListTopSqlResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -7577,8 +8130,8 @@ func (c *ClientWithResponses) GetAlertTriggerSnapshotWithResponse(ctx context.Co
 }
 
 // ListAlertRuleTemplatesWithResponse request returning *ListAlertRuleTemplatesResponse
-func (c *ClientWithResponses) ListAlertRuleTemplatesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error) {
-	rsp, err := c.ListAlertRuleTemplates(ctx, reqEditors...)
+func (c *ClientWithResponses) ListAlertRuleTemplatesWithResponse(ctx context.Context, params *ListAlertRuleTemplatesParams, reqEditors ...RequestEditorFn) (*ListAlertRuleTemplatesResponse, error) {
+	rsp, err := c.ListAlertRuleTemplates(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -7779,8 +8332,8 @@ func (c *ClientWithResponses) GetSchedulerDiagnosticsWithResponse(ctx context.Co
 }
 
 // ListInstancesWithResponse request returning *ListInstancesResponse
-func (c *ClientWithResponses) ListInstancesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error) {
-	rsp, err := c.ListInstances(ctx, reqEditors...)
+func (c *ClientWithResponses) ListInstancesWithResponse(ctx context.Context, params *ListInstancesParams, reqEditors ...RequestEditorFn) (*ListInstancesResponse, error) {
+	rsp, err := c.ListInstances(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -7802,6 +8355,15 @@ func (c *ClientWithResponses) CreateInstanceWithResponse(ctx context.Context, bo
 		return nil, err
 	}
 	return ParseCreateInstanceResponse(rsp)
+}
+
+// GetInstancesMetricSeriesWithResponse request returning *GetInstancesMetricSeriesResponse
+func (c *ClientWithResponses) GetInstancesMetricSeriesWithResponse(ctx context.Context, params *GetInstancesMetricSeriesParams, reqEditors ...RequestEditorFn) (*GetInstancesMetricSeriesResponse, error) {
+	rsp, err := c.GetInstancesMetricSeries(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetInstancesMetricSeriesResponse(rsp)
 }
 
 // DeleteInstanceWithResponse request returning *DeleteInstanceResponse
@@ -8111,6 +8673,15 @@ func (c *ClientWithResponses) GetCurrentUserWithResponse(ctx context.Context, re
 	return ParseGetCurrentUserResponse(rsp)
 }
 
+// GetMetricCatalogWithResponse request returning *GetMetricCatalogResponse
+func (c *ClientWithResponses) GetMetricCatalogWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetMetricCatalogResponse, error) {
+	rsp, err := c.GetMetricCatalog(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMetricCatalogResponse(rsp)
+}
+
 // GetChannelFailuresWithResponse request returning *GetChannelFailuresResponse
 func (c *ClientWithResponses) GetChannelFailuresWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetChannelFailuresResponse, error) {
 	rsp, err := c.GetChannelFailures(ctx, reqEditors...)
@@ -8389,6 +8960,15 @@ func (c *ClientWithResponses) GetNotificationPolicySettingsWithResponse(ctx cont
 	return ParseGetNotificationPolicySettingsResponse(rsp)
 }
 
+// GetFleetOverviewWithResponse request returning *GetFleetOverviewResponse
+func (c *ClientWithResponses) GetFleetOverviewWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetFleetOverviewResponse, error) {
+	rsp, err := c.GetFleetOverview(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetFleetOverviewResponse(rsp)
+}
+
 // ChangeOwnPasswordWithBodyWithResponse request with arbitrary body returning *ChangeOwnPasswordResponse
 func (c *ClientWithResponses) ChangeOwnPasswordWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ChangeOwnPasswordResponse, error) {
 	rsp, err := c.ChangeOwnPasswordWithBody(ctx, contentType, body, reqEditors...)
@@ -8422,6 +9002,15 @@ func (c *ClientWithResponses) ListPlatformEventsWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseListPlatformEventsResponse(rsp)
+}
+
+// ListTopSqlWithResponse request returning *ListTopSqlResponse
+func (c *ClientWithResponses) ListTopSqlWithResponse(ctx context.Context, params *ListTopSqlParams, reqEditors ...RequestEditorFn) (*ListTopSqlResponse, error) {
+	rsp, err := c.ListTopSql(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListTopSqlResponse(rsp)
 }
 
 // ListUsersWithResponse request returning *ListUsersResponse
@@ -9352,7 +9941,7 @@ func ParseListInstancesResponse(rsp *http.Response) (*ListInstancesResponse, err
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []Instance
+		var dest InstanceListPage
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -9383,6 +9972,39 @@ func ParseCreateInstanceResponse(rsp *http.Response) (*CreateInstanceResponse, e
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Error
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetInstancesMetricSeriesResponse parses an HTTP response from a GetInstancesMetricSeriesWithResponse call
+func ParseGetInstancesMetricSeriesResponse(rsp *http.Response) (*GetInstancesMetricSeriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetInstancesMetricSeriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest InstancesMetricSeriesResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest Error
@@ -10183,6 +10805,32 @@ func ParseGetCurrentUserResponse(rsp *http.Response) (*GetCurrentUserResponse, e
 	return response, nil
 }
 
+// ParseGetMetricCatalogResponse parses an HTTP response from a GetMetricCatalogWithResponse call
+func ParseGetMetricCatalogResponse(rsp *http.Response) (*GetMetricCatalogResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMetricCatalogResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MetricCatalog
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetChannelFailuresResponse parses an HTTP response from a GetChannelFailuresWithResponse call
 func ParseGetChannelFailuresResponse(rsp *http.Response) (*GetChannelFailuresResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -10874,6 +11522,32 @@ func ParseGetNotificationPolicySettingsResponse(rsp *http.Response) (*GetNotific
 	return response, nil
 }
 
+// ParseGetFleetOverviewResponse parses an HTTP response from a GetFleetOverviewWithResponse call
+func ParseGetFleetOverviewResponse(rsp *http.Response) (*GetFleetOverviewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFleetOverviewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FleetOverview
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseChangeOwnPasswordResponse parses an HTTP response from a ChangeOwnPasswordWithResponse call
 func ParseChangeOwnPasswordResponse(rsp *http.Response) (*ChangeOwnPasswordResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -10949,6 +11623,32 @@ func ParseListPlatformEventsResponse(rsp *http.Response) (*ListPlatformEventsRes
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []PlatformEvent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListTopSqlResponse parses an HTTP response from a ListTopSqlWithResponse call
+func ParseListTopSqlResponse(rsp *http.Response) (*ListTopSqlResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListTopSqlResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TopSqlList
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

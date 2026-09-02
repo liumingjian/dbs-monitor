@@ -28,8 +28,11 @@ SELECT max(first_triggered_at)::timestamptz AS last_triggered_at,
 FROM alert_instance
 WHERE rule_id = $1;
 
--- name: AlertRuleTargetInstanceExists :one
-SELECT EXISTS (SELECT 1 FROM instance WHERE id = $1);
+-- name: GetAlertRuleTargetInstance :one
+--
+-- 规则作用域按引擎过滤，所以这里问的不只是「这台实例在不在」，还有「它跑的是什么产品」：
+-- 一条建在引擎私有指标上的规则指派不到别的引擎的实例上，而拒绝要给得出理由（#222）。
+SELECT name, engine FROM instance WHERE id = $1;
 
 -- name: CreateAlertRule :one
 INSERT INTO alert_rule (
@@ -109,10 +112,25 @@ CROSS JOIN instance
 JOIN instance_collection_config collection_config
   ON collection_config.instance_id = instance.id
 LEFT JOIN LATERAL (
+    -- 规则的指标在这台实例的引擎上解析成哪个具体指标——与 metric.ResolveForEngine 同一条规则：
+    -- 引擎无关的指标（host.* / agent.* / collector.*）到哪儿都是它自己；填了语义位的指标解析到
+    -- 本引擎绑在这个位上的那一个（同引擎下就是它自己，所以 PostgreSQL 上一切照旧）；
+    -- 既不无关又没有位的是引擎私有指标，换个引擎就一行都不返回，这一对（规则，实例）不适用。
+    SELECT COALESCE(bound.metric_id, own.metric_id) AS metric_id
+    FROM metric_catalog own
+    LEFT JOIN metric_catalog bound
+      ON own.semantic_slot IS NOT NULL
+     AND own.engine <> 'AGNOSTIC'
+     AND bound.semantic_slot = own.semantic_slot
+     AND bound.engine = instance.engine
+    WHERE own.metric_id = rule.metric_id
+      AND (own.engine IN ('AGNOSTIC', instance.engine) OR bound.metric_id IS NOT NULL)
+) resolved ON true
+LEFT JOIN LATERAL (
     SELECT series.labels_key AS metric_dimension_key
     FROM metric_series series
     WHERE series.instance_id = instance.id
-      AND series.metric_id = rule.metric_id
+      AND series.metric_id = resolved.metric_id
     UNION
     SELECT alert.metric_dimension_key
     FROM alert_instance alert
@@ -127,6 +145,10 @@ LEFT JOIN alert_rule_evaluation_state evaluation_state
 WHERE rule.enabled
   AND rule.deleted_at IS NULL
   AND NOT collection_config.collection_paused
+  -- 引擎过滤：规则的指标在这台实例的引擎上解析不出具体指标时，这一对（规则，实例）根本不评估。
+  -- 目录里没有的指标 ID 不受这条约束——它照旧走到 NO_SAMPLES，行为与加这层解析之前一样。
+  AND (resolved.metric_id IS NOT NULL
+       OR NOT EXISTS (SELECT 1 FROM metric_catalog own WHERE own.metric_id = rule.metric_id))
   AND (rule.scope = 'ALL' OR EXISTS (
       SELECT 1
       FROM alert_rule_scope_instance scope_instance
@@ -139,7 +161,9 @@ ORDER BY instance.id, rule.id, COALESCE(metric_dimension.metric_dimension_key, '
 
 -- name: GetEvaluationTarget :one
 SELECT rule.id AS rule_id,
-       rule.metric_id,
+       -- 规则存下的是它被写下时的那个指标；真正评估的是这台实例的引擎在同一个语义位上绑定的
+       -- 那个指标。同一引擎下两者相同，所以 PostgreSQL 上的行为与从前逐字一致。
+       COALESCE(resolved.metric_id, rule.metric_id) AS metric_id,
        rule.aggregation,
        rule.operator,
        rule.threshold,
@@ -174,6 +198,19 @@ FROM alert_rule rule
 JOIN alert_rule_version version
   ON version.rule_id = rule.id AND version.version = rule.version
 CROSS JOIN instance
+LEFT JOIN LATERAL (
+    -- 与 ListEvaluationTargets 里那一段是同一条解析规则（那里写着它为什么长这样）。
+    -- 这里必须再解析一次：调度器给的是（规则，实例），判定读的是解析之后的那个指标。
+    SELECT COALESCE(bound.metric_id, own.metric_id) AS metric_id
+    FROM metric_catalog own
+    LEFT JOIN metric_catalog bound
+      ON own.semantic_slot IS NOT NULL
+     AND own.engine <> 'AGNOSTIC'
+     AND bound.semantic_slot = own.semantic_slot
+     AND bound.engine = instance.engine
+    WHERE own.metric_id = rule.metric_id
+      AND (own.engine IN ('AGNOSTIC', instance.engine) OR bound.metric_id IS NOT NULL)
+) resolved ON true
 LEFT JOIN instance_collection_config collection_config
   ON collection_config.instance_id = instance.id
 LEFT JOIN instance_collect_state collect_state
@@ -199,7 +236,13 @@ WHERE rule.id = sqlc.arg(rule_id)
   AND rule.deleted_at IS NULL;
 
 -- name: SamplesInRuleWindow :many
-SELECT sample.ts, sample.value
+--
+-- 告警判定只在实例级聚合值上进行（规范 #213「告警」一节，本轮不做按库告警），所以同一时刻
+-- 落在多个库上的那几条序列在这里先合成一个数：sum 就是目录里 SUM 那一档聚合。
+-- 实例级指标只有一条序列，sum 是恒等的。
+-- **加权平均的指标不走这条路**——它需要权重序列，走下面的 WeightedSamplesInRuleWindow。
+-- 调用方按目录里的聚合方式二选一（internal/evaluator/service.go）。
+SELECT sample.ts, sum(sample.value)::double precision AS value
 FROM metric_series series
 JOIN metric_sample sample ON sample.series_id = series.series_id
 WHERE series.instance_id = sqlc.arg(instance_id)
@@ -207,6 +250,35 @@ WHERE series.instance_id = sqlc.arg(instance_id)
   AND series.labels_key = sqlc.arg(metric_dimension_key)
   AND sample.ts > sqlc.arg(window_start)
   AND sample.ts <= sqlc.arg(window_end)
+GROUP BY sample.ts
+ORDER BY sample.ts DESC;
+
+-- name: WeightedSamplesInRuleWindow :many
+--
+-- 加权平均指标的实例级值：同一时刻的各库取值按权重指标（目录里的 aggregation_weight，
+-- 缓存命中率是 blks_hit + blks_read 的速率）加权，而不是求和也不是算术平均。
+-- 权重按「同一个库、同一个时刻」配对；配不上的库那一刻不参与——少一个库好过悄悄
+-- 退化成算术平均，那正是这条聚合规则要挡住的答案。
+-- HAVING 保证分母为正，所以除法不会碰到零：PostgreSQL 先过滤分组再算 SELECT 列表。
+SELECT sample.ts,
+       (sum(sample.value * weight_sample.value) / sum(weight_sample.value))::double precision AS value
+FROM metric_series series
+JOIN metric_sample sample ON sample.series_id = series.series_id
+JOIN metric_series weight_series
+  ON weight_series.instance_id = series.instance_id
+ AND weight_series.metric_id = sqlc.arg(weight_metric_id)
+ AND weight_series.database_name = series.database_name
+ AND weight_series.labels_key = series.labels_key
+JOIN metric_sample weight_sample
+  ON weight_sample.series_id = weight_series.series_id AND weight_sample.ts = sample.ts
+WHERE series.instance_id = sqlc.arg(instance_id)
+  AND series.metric_id = sqlc.arg(metric_id)
+  AND series.labels_key = sqlc.arg(metric_dimension_key)
+  AND sample.ts > sqlc.arg(window_start)
+  AND sample.ts <= sqlc.arg(window_end)
+  AND weight_sample.value >= 0
+GROUP BY sample.ts
+HAVING sum(weight_sample.value) > 0
 ORDER BY sample.ts DESC;
 
 -- name: SaveAlertSnapshot :one

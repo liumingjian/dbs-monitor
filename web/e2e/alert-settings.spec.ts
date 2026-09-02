@@ -51,7 +51,7 @@ test('[AC-04-S3] keeps all four alert settings pages reachable and read-only con
   await page.route('**/api/v1/notification-contact-groups', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/notification-policies', (route) => route.fulfill({ json: [defaultPolicy] }))
   await page.route('**/api/v1/maintenance-windows', (route) => route.fulfill({ json: [] }))
-  await page.route('**/api/v1/instances', (route) => route.fulfill({ json: [] }))
+  await page.route(/\/api\/v1\/instances(\?|$)/, (route) => route.fulfill({ json: { items: [], total: 0 } }))
 
   // 四个设置页已合并为 `/alert-settings` 一个多标签页面，旧地址改为重定向。
   await page.goto('/alert-settings/notifications')
@@ -96,7 +96,7 @@ test('[AC-04-S3] redirects every pre-merge alert settings address onto its tab',
   await page.route('**/api/v1/notification-policies', (route) => route.fulfill({ json: [] }))
   await page.route('**/api/v1/notification-policy-settings', (route) => route.fulfill({ json: { repeat_interval_minimum: 900 } }))
   await page.route('**/api/v1/maintenance-windows', (route) => route.fulfill({ json: [] }))
-  await page.route('**/api/v1/instances', (route) => route.fulfill({ json: [] }))
+  await page.route(/\/api\/v1\/instances(\?|$)/, (route) => route.fulfill({ json: { items: [], total: 0 } }))
 
   const mapping = [
     ['/alert-settings/notifications', 'channels', '通知渠道'],

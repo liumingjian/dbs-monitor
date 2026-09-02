@@ -29,7 +29,9 @@ export const overviewMetricGroups = {
   ],
   database: [
     'pg.connection.total',
+    'pg.connection.saturation_percent',
     'pg.connection.active',
+    'pg.cache.hit_ratio',
     'pg.tps',
     'pg.temp.bytes_per_sec',
     'pg.transaction.long_count',

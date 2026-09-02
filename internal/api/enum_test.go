@@ -32,21 +32,21 @@ var unavailabilityReconciliations = []unavailabilityReconciliation{
 		code:                api.NOSAMPLESYET,
 		owner:               defaultUnavailabilityOwner,
 		producerDescription: "metric series has not received its first sample",
-		producerReference:   "internal/httpapi/handler.go::api.NOSAMPLESYET",
+		producerReference:   "internal/httpapi/metric_series.go::api.NOSAMPLESYET",
 		evidenceReference:   issue60EvidenceReference,
 	},
 	{
 		code:                api.NODATAINRANGE,
 		owner:               defaultUnavailabilityOwner,
 		producerDescription: "metric series has no sample in the requested range",
-		producerReference:   "internal/httpapi/handler.go::api.NODATAINRANGE",
+		producerReference:   "internal/httpapi/metric_series.go::api.NODATAINRANGE",
 		evidenceReference:   issue60EvidenceReference,
 	},
 	{
 		code:                api.STALE,
 		owner:               defaultUnavailabilityOwner,
 		producerDescription: "latest metric sample is older than its freshness boundary",
-		producerReference:   "internal/httpapi/handler.go::api.STALE",
+		producerReference:   "internal/httpapi/metric_series.go::api.STALE",
 		evidenceReference:   issue60EvidenceReference,
 	},
 	{
@@ -60,7 +60,7 @@ var unavailabilityReconciliations = []unavailabilityReconciliation{
 		code:                api.DBUNREACHABLE,
 		owner:               defaultUnavailabilityOwner,
 		producerDescription: "the probe task reports that the monitored database is unreachable",
-		producerReference:   "internal/httpapi/handler.go::api.DBUNREACHABLE",
+		producerReference:   "internal/httpapi/metric_series.go::api.DBUNREACHABLE",
 		evidenceReference:   issue60EvidenceReference,
 	},
 	{
@@ -99,17 +99,24 @@ var unavailabilityReconciliations = []unavailabilityReconciliation{
 		evidenceReference:   issue60EvidenceReference,
 	},
 	{
+		code:                api.NOTAPPLICABLEENGINE,
+		owner:               defaultUnavailabilityOwner,
+		producerDescription: "the semantic slot has no binding on this instance's engine",
+		producerReference:   "internal/httpapi/metric_series.go::api.NOTAPPLICABLEENGINE",
+		evidenceReference:   "internal/httpapi/instance_list_integration_test.go::TestInstanceListPagingFilteringAndBatchedTrends",
+	},
+	{
 		code:                api.COUNTERRESET,
 		owner:               defaultUnavailabilityOwner,
 		producerDescription: "a cumulative source counter decreased between samples",
-		producerReference:   "internal/httpapi/handler.go::api.COUNTERRESET",
+		producerReference:   "internal/httpapi/metric_series.go::api.COUNTERRESET",
 		evidenceReference:   issue60EvidenceReference,
 	},
 	{
 		code:                api.COLLECTIONPAUSED,
 		owner:               collectionPauseOwner,
 		producerDescription: "the instance collection pause switch takes precedence over metric state",
-		producerReference:   "internal/httpapi/handler.go::api.COLLECTIONPAUSED",
+		producerReference:   "internal/httpapi/metric_series.go::api.COLLECTIONPAUSED",
 		evidenceReference:   "internal/httpapi/collection_pause_integration_test.go::COLLECTION_PAUSED",
 	},
 	{
@@ -133,7 +140,7 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 			api.COLLECTIONPAUSED: "", api.COLLECTIONFAILED: "", api.DBUNREACHABLE: "",
 			api.AGENTOFFLINE: "", api.PERMISSIONDENIED: "", api.EXTENSIONMISSING: "",
 			api.FEATUREDISABLED: "", api.VERSIONUNSUPPORTED: "", api.NOTAPPLICABLEROLE: "",
-			api.COUNTERRESET: "",
+			api.NOTAPPLICABLEENGINE: "", api.COUNTERRESET: "",
 		})},
 		{"AlertStatus", mapKeys(map[api.AlertStatus]string{
 			api.OK: "", api.PENDING: "", api.FIRING: "", api.NODATA: "", api.RECOVERED: "",
@@ -144,6 +151,9 @@ func TestRegisteredEnumsMatchSpec(t *testing.T) {
 		{"InstanceAgentStatus", mapKeys(map[api.InstanceAgentStatus]string{
 			api.InstanceAgentOffline: "", api.InstanceAgentOnline: "", api.InstanceAgentNotInstalled: "",
 			api.InstanceAgentPermissionDenied: "", api.InstanceAgentError: "",
+		})},
+		{"InstanceEngine", mapKeys(map[api.InstanceEngine]string{
+			api.InstanceEnginePostgreSQL: "",
 		})},
 		{"CapabilityStatus", mapKeys(map[api.CapabilityStatus]string{
 			api.PRESENT: "", api.MISSING: "", api.NOTAPPLICABLE: "", api.UNKNOWN: "",

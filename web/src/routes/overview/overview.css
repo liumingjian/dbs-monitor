@@ -1,0 +1,126 @@
+/*
+ * 机群总览的版式。纯 CSS（组件级样式表不能是 Sass，见 styles/index.scss 顶部），
+ * 颜色与间距一律走令牌，字体档位走 `.dbs-*` 类。
+ *
+ * 四块自上而下一列排开，不做两栏：1280px 下正文只有 974px，把「健康计数」与
+ * 「采集自监控」并排放会让每个数字分到不足 120px，中文标签一挤就折行。
+ * 一列排开的代价是要多滚一屏，换来的是任何宽度下都不横向滚动。
+ */
+
+.overview-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-05);
+  padding: var(--cds-spacing-06);
+  /* 页面自身不设 overflow-x：1280px 不横向滚动由各块的最小宽度保证，
+     加一条 overflow 只会把溢出藏起来。 */
+  max-inline-size: 100%;
+}
+
+.overview-page__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cds-spacing-05);
+}
+
+/* 计数条：每块最少 140px，装不下就换行，绝不横向滚动。 */
+.overview-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--cds-spacing-04);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-tile {
+  display: block;
+  padding: var(--cds-spacing-04);
+  border: 1px solid var(--cds-border-subtle);
+  text-decoration: none;
+  color: inherit;
+  background: var(--cds-layer);
+}
+
+.overview-tile:hover {
+  background: var(--cds-layer-hover);
+}
+
+.overview-tile:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+/* 容量水位：一行一台，两列自适应；十行在 974px 下正好一屏看完。 */
+.overview-storage-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--cds-spacing-04) var(--cds-spacing-06);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-storage-entry {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  min-inline-size: 0;
+}
+
+.overview-storage-entry:hover {
+  background: var(--cds-layer-hover);
+}
+
+.overview-storage-entry:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
+.overview-empty {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.overview-attention__health {
+  display: flex;
+  align-items: center;
+  gap: var(--cds-spacing-02);
+  min-inline-size: 0;
+}
+
+.overview-attention__counts {
+  white-space: nowrap;
+}
+
+/* Top SQL 前 5：一行一条语句，整行可点。等宽字形留给语句本身，
+   注解与耗时由指标条排版。 */
+.overview-top-sql {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cds-spacing-03);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-top-sql__row {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  min-inline-size: 0;
+}
+
+.overview-top-sql__row:hover {
+  background: var(--cds-layer-hover);
+}
+
+.overview-top-sql__row:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
+}
+
+.overview-top-sql__statement {
+  font-family: var(--dbs-font-mono);
+}

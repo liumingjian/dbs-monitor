@@ -45,16 +45,16 @@ WITH created_identity AS (
     VALUES ($1, $2)
     RETURNING id
 ), created AS (
-    INSERT INTO instance (id, name, host, port, database_name, username, password_ciphertext, password_key_version, created_by)
-    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8, $9
+    INSERT INTO instance (id, name, engine, host, port, database_name, username, password_ciphertext, password_key_version, created_by)
+    SELECT created_identity.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
     FROM created_identity
-    RETURNING id, name, host, port, database_name, username, agent_version, created_at
+    RETURNING id, name, engine, host, port, database_name, username, agent_version, created_at
 ), configured AS (
     INSERT INTO instance_collection_config (instance_id)
     SELECT id FROM created
     RETURNING instance_id
 )
-SELECT created.id, created.name, created.host, created.port, created.database_name, created.username, created.agent_version, created.created_at
+SELECT created.id, created.name, created.engine, created.host, created.port, created.database_name, created.username, created.agent_version, created.created_at
 FROM created
 JOIN configured ON configured.instance_id = created.id
 `
@@ -62,9 +62,10 @@ JOIN configured ON configured.instance_id = created.id
 type CreateInstanceParams struct {
 	ID                 pgtype.UUID
 	Name               string
+	Engine             string
 	Host               string
 	Port               int32
-	DatabaseName       string
+	DatabaseName       pgtype.Text
 	Username           string
 	PasswordCiphertext []byte
 	PasswordKeyVersion int32
@@ -74,9 +75,10 @@ type CreateInstanceParams struct {
 type CreateInstanceRow struct {
 	ID           pgtype.UUID
 	Name         string
+	Engine       string
 	Host         string
 	Port         int32
-	DatabaseName string
+	DatabaseName pgtype.Text
 	Username     string
 	AgentVersion pgtype.Text
 	CreatedAt    pgtype.Timestamptz
@@ -86,6 +88,7 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 	row := q.db.QueryRow(ctx, createInstance,
 		arg.ID,
 		arg.Name,
+		arg.Engine,
 		arg.Host,
 		arg.Port,
 		arg.DatabaseName,
@@ -98,6 +101,7 @@ func (q *Queries) CreateInstance(ctx context.Context, arg CreateInstanceParams) 
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Engine,
 		&i.Host,
 		&i.Port,
 		&i.DatabaseName,
@@ -214,7 +218,7 @@ func (q *Queries) GetCollectState(ctx context.Context, instanceID pgtype.UUID) (
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+SELECT instance.id, instance.name, instance.engine, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
        instance.agent_expected,
        config.agent_metrics_enabled,
@@ -238,9 +242,10 @@ WHERE instance.id = $1
 type GetInstanceRow struct {
 	ID                       pgtype.UUID
 	Name                     string
+	Engine                   string
 	Host                     string
 	Port                     int32
-	DatabaseName             string
+	DatabaseName             pgtype.Text
 	Username                 string
 	AgentVersion             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
@@ -263,6 +268,7 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Engine,
 		&i.Host,
 		&i.Port,
 		&i.DatabaseName,
@@ -285,16 +291,17 @@ func (q *Queries) GetInstance(ctx context.Context, id pgtype.UUID) (GetInstanceR
 }
 
 const getInstanceForUpdate = `-- name: GetInstanceForUpdate :one
-SELECT host, port, database_name, username, password_ciphertext, password_key_version
+SELECT engine, host, port, database_name, username, password_ciphertext, password_key_version
 FROM instance
 WHERE id = $1
 FOR UPDATE
 `
 
 type GetInstanceForUpdateRow struct {
+	Engine             string
 	Host               string
 	Port               int32
-	DatabaseName       string
+	DatabaseName       pgtype.Text
 	Username           string
 	PasswordCiphertext []byte
 	PasswordKeyVersion int32
@@ -304,6 +311,7 @@ func (q *Queries) GetInstanceForUpdate(ctx context.Context, id pgtype.UUID) (Get
 	row := q.db.QueryRow(ctx, getInstanceForUpdate, id)
 	var i GetInstanceForUpdateRow
 	err := row.Scan(
+		&i.Engine,
 		&i.Host,
 		&i.Port,
 		&i.DatabaseName,
@@ -326,7 +334,7 @@ type ListCollectionTargetsRow struct {
 	ID                 pgtype.UUID
 	Host               string
 	Port               int32
-	DatabaseName       string
+	DatabaseName       pgtype.Text
 	Username           string
 	PasswordCiphertext []byte
 	PasswordKeyVersion int32
@@ -395,8 +403,39 @@ func (q *Queries) ListCredentialsForKeyRotation(ctx context.Context) ([]ListCred
 	return items, nil
 }
 
+const listInstanceEngines = `-- name: ListInstanceEngines :many
+SELECT id, engine FROM instance WHERE id = ANY($1::uuid[])
+`
+
+type ListInstanceEnginesRow struct {
+	ID     pgtype.UUID
+	Engine string
+}
+
+// 一批实例各自跑的是哪个产品。批量时序端点按语义位取数时要用它：位是逐台按实例自己的
+// 引擎解析的，而一次请求里的实例可以跑在不同引擎上。只取两列——这里要的是引擎，不是实例。
+func (q *Queries) ListInstanceEngines(ctx context.Context, instanceIds []pgtype.UUID) ([]ListInstanceEnginesRow, error) {
+	rows, err := q.db.Query(ctx, listInstanceEngines, instanceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstanceEnginesRow
+	for rows.Next() {
+		var i ListInstanceEnginesRow
+		if err := rows.Scan(&i.ID, &i.Engine); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstances = `-- name: ListInstances :many
-SELECT instance.id, instance.name, instance.host, instance.port, instance.database_name,
+SELECT instance.id, instance.name, instance.engine, instance.host, instance.port, instance.database_name,
        instance.username, instance.agent_version, instance.created_at,
        instance.agent_expected,
        config.agent_metrics_enabled,
@@ -420,9 +459,10 @@ ORDER BY name, id
 type ListInstancesRow struct {
 	ID                       pgtype.UUID
 	Name                     string
+	Engine                   string
 	Host                     string
 	Port                     int32
-	DatabaseName             string
+	DatabaseName             pgtype.Text
 	Username                 string
 	AgentVersion             pgtype.Text
 	CreatedAt                pgtype.Timestamptz
@@ -451,6 +491,7 @@ func (q *Queries) ListInstances(ctx context.Context) ([]ListInstancesRow, error)
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.Engine,
 			&i.Host,
 			&i.Port,
 			&i.DatabaseName,
@@ -715,12 +756,12 @@ SET name = $2,
     port = $4,
     database_name = $5,
     credential_version = credential_version + CASE
-        WHEN host <> $3 OR port <> $4 OR database_name <> $5 THEN 1
+        WHEN host <> $3 OR port <> $4 OR database_name IS DISTINCT FROM $5 THEN 1
         ELSE 0
     END
 FROM updated_identity
 WHERE instance.id = updated_identity.id
-RETURNING instance.id, instance.name, instance.host, instance.port, instance.database_name,
+RETURNING instance.id, instance.name, instance.engine, instance.host, instance.port, instance.database_name,
           instance.username, instance.agent_version
 `
 
@@ -729,15 +770,16 @@ type UpdateInstanceMetadataParams struct {
 	Name         string
 	Host         string
 	Port         int32
-	DatabaseName string
+	DatabaseName pgtype.Text
 }
 
 type UpdateInstanceMetadataRow struct {
 	ID           pgtype.UUID
 	Name         string
+	Engine       string
 	Host         string
 	Port         int32
-	DatabaseName string
+	DatabaseName pgtype.Text
 	Username     string
 	AgentVersion pgtype.Text
 }
@@ -754,6 +796,7 @@ func (q *Queries) UpdateInstanceMetadata(ctx context.Context, arg UpdateInstance
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Engine,
 		&i.Host,
 		&i.Port,
 		&i.DatabaseName,

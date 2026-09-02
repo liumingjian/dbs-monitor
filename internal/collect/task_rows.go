@@ -53,9 +53,7 @@ func samplesForTaskRow(task metric.Task, row map[string]any) ([]collectedSample,
 			continue
 		}
 		var labels map[string]string
-		if len(yield.Dimensions) > 0 {
-			labels = make(map[string]string, len(yield.Dimensions))
-		}
+		databaseName := ""
 		for _, dimension := range yield.Dimensions {
 			rawLabel, exists := row[dimension]
 			if !exists || rawLabel == nil {
@@ -65,13 +63,23 @@ func samplesForTaskRow(task metric.Task, row map[string]any) ([]collectedSample,
 			if !ok {
 				return nil, fmt.Errorf("decode task %q metric %q: dimension %q has type %T", task.ID, yield.Metric, dimension, rawLabel)
 			}
+			// 库这一维走 metric_series.database_name，不进 labels：它是时序表上唯一的具名维度，
+			// 读取侧要靠它逐库展开、按目录里的聚合方式收敛成实例级值。其余维度（replica、slot）
+			// 与库正交，继续走通用 labels。
+			if dimension == metric.DimensionDatabase {
+				databaseName = label
+				continue
+			}
+			if labels == nil {
+				labels = make(map[string]string, len(yield.Dimensions))
+			}
 			labels[dimension] = label
 		}
 		value, err := metricValue(yield.Metric, rawValue)
 		if err != nil {
 			return nil, fmt.Errorf("decode task %q metric %q: %w", task.ID, yield.Metric, err)
 		}
-		samples = append(samples, collectedSample{metricID: yield.Metric, value: value, labels: labels})
+		samples = append(samples, collectedSample{metricID: yield.Metric, value: value, databaseName: databaseName, labels: labels})
 	}
 	return samples, nil
 }

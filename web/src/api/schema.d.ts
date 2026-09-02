@@ -36,6 +36,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getFleetOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/top-sql": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listTopSql"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances": {
         parameters: {
             query?: never;
@@ -104,6 +136,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instances/metrics/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getInstancesMetricSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/metrics/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getMetricCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instances/{id}/collection/tasks": {
         parameters: {
             query?: never;
@@ -164,7 +228,7 @@ export interface paths {
             header?: never;
             path: {
                 id: string;
-                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.settings" | "pg.database_size" | "pg.stat_statements";
             };
             cookie?: never;
         };
@@ -1116,13 +1180,28 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {string} */
-        Unavailability: "NO_SAMPLES_YET" | "NO_DATA_IN_RANGE" | "STALE" | "COLLECTION_PAUSED" | "COLLECTION_FAILED" | "DB_UNREACHABLE" | "AGENT_OFFLINE" | "PERMISSION_DENIED" | "EXTENSION_MISSING" | "FEATURE_DISABLED" | "VERSION_UNSUPPORTED" | "NOT_APPLICABLE_ROLE" | "COUNTER_RESET";
+        Unavailability: "NO_SAMPLES_YET" | "NO_DATA_IN_RANGE" | "STALE" | "COLLECTION_PAUSED" | "COLLECTION_FAILED" | "DB_UNREACHABLE" | "AGENT_OFFLINE" | "PERMISSION_DENIED" | "EXTENSION_MISSING" | "FEATURE_DISABLED" | "VERSION_UNSUPPORTED" | "NOT_APPLICABLE_ROLE" | "NOT_APPLICABLE_ENGINE" | "COUNTER_RESET";
         /** @enum {string} */
         AlertStatus: "OK" | "PENDING" | "FIRING" | "NO_DATA" | "RECOVERED";
         /** @enum {string} */
         HealthStatus: "CRITICAL" | "WARNING" | "UNKNOWN" | "HEALTHY" | "PAUSED";
         /** @enum {string} */
         InstanceAgentStatus: "offline" | "online" | "not_installed" | "permission_denied" | "error";
+        /**
+         * @description Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
+         * @enum {string}
+         */
+        InstanceEngine: "POSTGRESQL";
+        /**
+         * @description Orthogonal marker on an instance's health rollup or on its collection, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced. STALE_DATA and AGENT_OFFLINE describe collection itself rather than the alert rollup. They exist because the fleet overview's collection self-monitoring counts have to drill down into this same list, and a number that cannot be clicked through is a dead end.
+         * @enum {string}
+         */
+        InstanceFlag: "NO_DATA" | "MAINTENANCE" | "RECENTLY_RECOVERED" | "IGNORED" | "CONFIGURATION_MISSING" | "STALE_DATA" | "AGENT_OFFLINE";
+        /**
+         * @description Instance list ordering. health puts the rows that need handling first; stalest puts the instances whose collection is furthest behind first. Ties always fall back to name then id, so paging through the list never repeats or skips a row.
+         * @enum {string}
+         */
+        InstanceListSort: "health" | "name" | "-name" | "stalest";
         /** @enum {string} */
         CapabilityStatus: "PRESENT" | "MISSING" | "NOT_APPLICABLE" | "UNKNOWN";
         /** @enum {string} */
@@ -1213,11 +1292,14 @@ export interface components {
         AlertRuleEnabledInput: {
             enabled: boolean;
         };
+        /** @description A read-only built-in alert rule template. `engine` and `semantic_slot` are its engine ownership: a template that fills a semantic slot can create rules on every engine that binds that slot, an AGNOSTIC template (host/agent/collector metrics) is offered everywhere, and any other template is offered only on instances of its own engine. Pass `engine` to the listing endpoint to get exactly the templates offerable there. */
         AlertRuleTemplate: {
             id: string;
             version: number;
             name: string;
             metric_id: string;
+            engine: components["schemas"]["MetricEngine"];
+            semantic_slot: components["schemas"]["SemanticSlot"] | null;
             aggregation: components["schemas"]["AlertAggregation"];
             operator: components["schemas"]["AlertOperator"];
             /** Format: double */
@@ -1542,9 +1624,11 @@ export interface components {
         };
         InstanceCreateInput: {
             name: string;
+            engine?: components["schemas"]["InstanceEngine"];
             host: string;
             port: number;
-            database: string;
+            /** @description Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept. */
+            database?: string;
             username: string;
             password: string;
         };
@@ -1552,7 +1636,8 @@ export interface components {
             name: string;
             host: string;
             port: number;
-            database: string;
+            /** @description Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept. */
+            database?: string;
         };
         InstanceCredentialInput: {
             username: string;
@@ -1565,9 +1650,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            engine: components["schemas"]["InstanceEngine"];
             host: string;
             port: number;
-            database: string;
+            /** @description Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept. */
+            database?: string;
             username: string;
             /** @description Version reported by the Agent, when one has reported. */
             agent_version?: string;
@@ -1580,6 +1667,68 @@ export interface components {
             last_collected_at?: string;
             data_freshness_seconds?: number;
             collection_pause: components["schemas"]["CollectionPauseStatus"];
+        };
+        InstanceListPage: {
+            items: components["schemas"]["Instance"][];
+            /** @description Number of instances matching the filters, before paging. */
+            total: number;
+        };
+        /** @description The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, which disks are filling up, and which statements cost the most. */
+        FleetOverview: {
+            /** @description Number of monitored instances. */
+            total: number;
+            health: components["schemas"]["FleetHealthCounts"];
+            collection: components["schemas"]["FleetCollectionHealth"];
+            /** @description The instances that need handling first, ordered by health tier then alert severity. Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy and paused instances never appear here. */
+            attention: components["schemas"]["Instance"][];
+            /** @description The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty. */
+            storage: components["schemas"]["StorageUsageEntry"][];
+            /** @description The five statements costing the fleet the most elapsed time, highest first. The full ranking lives on the SQL insight page; five is what fits on a landing page without turning it into a second table. */
+            top_sql: components["schemas"]["TopSqlEntry"][];
+        };
+        /** @description How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size. */
+        FleetHealthCounts: {
+            critical: number;
+            warning: number;
+            unknown: number;
+            healthy: number;
+            paused: number;
+        };
+        /** @description Collection self-monitoring. These three overlap with the health tiers on purpose: an instance whose collection rotted silently is usually still HEALTHY, because no rule can fire on data that never arrived. */
+        FleetCollectionHealth: {
+            /** @description Instances whose collection is behind, or that were never collected at all. Paused instances are excluded: a paused instance is not rotting, it is switched off. Same predicate as the STALE_DATA instance-list flag. */
+            stale_data: number;
+            /** @description Instances whose Agent is expected but has stopped reporting. */
+            agent_offline: number;
+            /** @description Instances whose collection is paused. */
+            paused: number;
+        };
+        /** @description One instance's highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing. */
+        StorageUsageEntry: {
+            /** Format: uuid */
+            instance_id: string;
+            instance_name: string;
+            /** Format: double */
+            usage_percent: number;
+            /** Format: date-time */
+            sampled_at: string;
+        };
+        /** @description One normalised statement on one instance, aggregated across databases and users from that instance's most recent query-statistics snapshot. The text is the extension's normalised form, where literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here. */
+        TopSqlEntry: {
+            /** Format: uuid */
+            instance_id: string;
+            instance_name: string;
+            /** @description Native query identifier represented as a string to preserve int64 precision. */
+            queryid: string;
+            /** @description Normalised statement text, deduplicated per (instance, queryid). Absent when no text has been captured yet for that identifier — absent is not the same as empty. */
+            query_text?: string;
+            /** Format: int64 */
+            calls: number;
+            /** Format: double */
+            total_exec_time_ms: number;
+        };
+        TopSqlList: {
+            items: components["schemas"]["TopSqlEntry"][];
         };
         InstanceHealth: {
             status: components["schemas"]["HealthStatus"];
@@ -1609,7 +1758,7 @@ export interface components {
         };
         CollectionTaskState: {
             /** @enum {string} */
-            task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+            task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.settings" | "pg.database_size" | "pg.stat_statements";
             /** @enum {string} */
             kind: "probe" | "sql" | "agent-derived";
             interval_seconds: number;
@@ -1677,6 +1826,8 @@ export interface components {
         QueryStatisticsEntry: {
             /** @description Native PostgreSQL query identifier represented as a string to preserve int64 precision. */
             queryid: string;
+            /** @description Normalised statement text for this identifier, deduplicated per (instance, queryid). Literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here. Absent when no text has been captured yet for that identifier — absent is not the same as empty. */
+            query_text?: string;
             /** Format: int64 */
             database_oid: number;
             /** Format: int64 */
@@ -1704,23 +1855,77 @@ export interface components {
             updated_at?: string;
             reason?: string;
         };
+        /**
+         * @description Resolution asked of a series endpoint. auto lets the server pick from the range; raw returns stored samples untouched and is capped at six hours.
+         * @enum {string}
+         */
+        MetricStep: "auto" | "15s" | "1m" | "5m" | "raw";
+        /**
+         * @description A metric id from the catalogue. The list is shared by every series endpoint, so a new metric is declared once here instead of once per path.
+         * @enum {string}
+         */
+        MetricId: "pg.availability.reachable" | "pg.probe.latency_ms" | "collector.last_success_time" | "agent.status" | "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec" | "pg.connection.total" | "pg.connection.active" | "pg.connection.idle_in_transaction" | "pg.connection.max" | "pg.connection.saturation_percent" | "pg.tps" | "pg.xact.commit_per_sec" | "pg.xact.rollback_per_sec" | "pg.tuples.read_per_sec" | "pg.tuples.write_per_sec" | "pg.temp.files_per_sec" | "pg.temp.bytes_per_sec" | "pg.transaction.long_count" | "pg.transaction.max_duration_sec" | "pg.lock.waiting_count" | "pg.session.blocked_count" | "pg.query.long_running_count" | "pg.prepared_xacts.count" | "pg.replication.role" | "pg.replication.connection_state" | "pg.replication.replay_lag_ms" | "pg.replication.wal_lag_bytes" | "pg.replication_slot.retained_wal_bytes" | "pg.cache.hit_ratio" | "pg.cache.block_access_per_sec" | "pg.database.size_bytes" | "pg.deadlock.count";
+        /** @description One requested metric's series for one instance. Addressed by concrete metric id, `metric` is always present. Addressed by semantic slot, `slot` is always present and `metric` only when that instance's engine binds the slot: a slot with no binding is answered explicitly (`NOT_APPLICABLE_ENGINE`) rather than with an empty metric id. */
+        MetricSeriesEntry: {
+            metric?: string;
+            slot?: components["schemas"]["SemanticSlot"];
+            unit: string;
+            unavailability: components["schemas"]["Unavailability"] | null;
+            series: {
+                labels: {
+                    [key: string]: string;
+                };
+                points: (number | null)[][];
+            }[];
+        };
         MetricSeriesResponse: {
             /** Format: date-time */
             from: string;
             /** Format: date-time */
             to: string;
             step: string;
-            metrics: {
-                metric: string;
-                unit: string;
-                unavailability: components["schemas"]["Unavailability"] | null;
-                series: {
-                    labels: {
-                        [key: string]: string;
-                    };
-                    points: (number | null)[][];
-                }[];
-            }[];
+            metrics: components["schemas"]["MetricSeriesEntry"][];
+        };
+        InstanceMetricSeries: {
+            /** Format: uuid */
+            instance_id: string;
+            metrics: components["schemas"]["MetricSeriesEntry"][];
+        };
+        InstancesMetricSeriesResponse: {
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            to: string;
+            step: string;
+            instances: components["schemas"]["InstanceMetricSeries"][];
+        };
+        /**
+         * @description Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
+         * @enum {string}
+         */
+        MetricEngine: "POSTGRESQL" | "AGNOSTIC";
+        /** @enum {string} */
+        SemanticSlot: "throughput" | "connections" | "connection_saturation" | "probe_latency" | "rollback_rate" | "replication_lag" | "cache_hit_ratio" | "storage_usage" | "deadlocks";
+        /** @enum {string} */
+        MetricLevel: "INSTANCE" | "DATABASE";
+        /** @enum {string} */
+        MetricAggregation: "NONE" | "SUM" | "WEIGHTED_AVERAGE";
+        MetricCatalogEntry: {
+            metric_id: string;
+            engine: components["schemas"]["MetricEngine"];
+            unit: string;
+            display_name: string;
+            semantic_slot: components["schemas"]["SemanticSlot"] | null;
+            level: components["schemas"]["MetricLevel"];
+            aggregation: components["schemas"]["MetricAggregation"];
+        };
+        SemanticSlotDeclaration: {
+            slot_id: components["schemas"]["SemanticSlot"];
+            display_name: string;
+        };
+        MetricCatalog: {
+            metrics: components["schemas"]["MetricCatalogEntry"][];
+            semantic_slots: components["schemas"]["SemanticSlotDeclaration"][];
         };
         AgentReport: {
             /** Format: uuid */
@@ -2101,7 +2306,7 @@ export interface operations {
             };
         };
     };
-    listInstances: {
+    getFleetOverview: {
         parameters: {
             query?: never;
             header?: never;
@@ -2110,13 +2315,72 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Instances */
+            /** @description Fleet-wide aggregates for the overview page */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Instance"][];
+                    "application/json": components["schemas"]["FleetOverview"];
+                };
+            };
+        };
+    };
+    listTopSql: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cross-instance top statements ordered by total elapsed time */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopSqlList"];
+                };
+            };
+        };
+    };
+    listInstances: {
+        parameters: {
+            query?: {
+                /** @description 页码，从 1 开始。超出末页时返回空的 items 与真实的 total。 */
+                page?: number;
+                /** @description 每页条数。上限按机群规模给到 500，一次取全量是选实例的下拉框在用。 */
+                page_size?: number;
+                /** @description 搜索词，大小写不敏感的子串匹配，命中实例名或地址（主机与 host:port）。 地址不再单独占一列，但仍然留在搜索索引里。 */
+                q?: string;
+                /** @description 引擎筛选。可重复，多值之间是「或」。 */
+                engine?: components["schemas"]["InstanceEngine"][];
+                /** @description 健康档位筛选。可重复，多值之间是「或」。 */
+                status?: components["schemas"]["HealthStatus"][];
+                /** @description 正交标记筛选。可重复，多值之间是「与」——要的是同时带上这些标记的实例。 */
+                flags?: components["schemas"]["InstanceFlag"][];
+                /** @description 至少有一条该级别未恢复告警。可重复，多值之间是「或」。 */
+                severity?: components["schemas"]["AlertSeverity"][];
+                /** @description 排序，缺省 health。同序值内一律按名称、再按 id 定序，翻页因此稳定。 */
+                sort?: components["schemas"]["InstanceListSort"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of instances plus the total after filtering */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceListPage"];
                 };
             };
         };
@@ -2269,10 +2533,12 @@ export interface operations {
     getMetricSeries: {
         parameters: {
             query: {
-                metric: ("pg.availability.reachable" | "pg.probe.latency_ms" | "collector.last_success_time" | "agent.status" | "host.cpu.usage_percent" | "host.memory.usage_percent" | "host.disk.usage_percent" | "host.disk.free_bytes" | "host.disk.iops" | "host.disk.throughput_bytes_per_sec" | "host.network.bytes_per_sec" | "pg.connection.total" | "pg.connection.active" | "pg.connection.idle_in_transaction" | "pg.tps" | "pg.xact.commit_per_sec" | "pg.xact.rollback_per_sec" | "pg.tuples.read_per_sec" | "pg.tuples.write_per_sec" | "pg.temp.files_per_sec" | "pg.temp.bytes_per_sec" | "pg.transaction.long_count" | "pg.transaction.max_duration_sec" | "pg.lock.waiting_count" | "pg.session.blocked_count" | "pg.query.long_running_count" | "pg.prepared_xacts.count" | "pg.replication.role" | "pg.replication.connection_state" | "pg.replication.replay_lag_ms" | "pg.replication.wal_lag_bytes" | "pg.replication_slot.retained_wal_bytes")[];
+                metric: components["schemas"]["MetricId"][];
                 from: string;
                 to: string;
-                step?: "auto" | "15s" | "1m" | "5m" | "raw";
+                /** @description 缺省 auto。 */
+                step?: components["schemas"]["MetricStep"];
+                by_database?: boolean;
             };
             header?: never;
             path: {
@@ -2298,6 +2564,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getInstancesMetricSeries: {
+        parameters: {
+            query: {
+                /** @description 要取的实例，可重复。上限与列表页大小一致。 */
+                instance_id: string[];
+                /** @description 具体指标 ID，可重复。与 slot 至少给一个。 */
+                metric?: components["schemas"]["MetricId"][];
+                /** @description 语义位，可重复。逐台按实例自己的引擎解析成具体指标；该引擎没有绑定这个位时， 响应里那一条带着 slot 与 NOT_APPLICABLE_ENGINE，而不是一个空指标 ID。 */
+                slot?: components["schemas"]["SemanticSlot"][];
+                from: string;
+                to: string;
+                /** @description 缺省 auto。 */
+                step?: components["schemas"]["MetricStep"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metric series for every requested instance */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstancesMetricSeriesResponse"];
+                };
+            };
+            /** @description Invalid time range, step, instance list, or metric/slot selection */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMetricCatalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The metric catalogue and the semantic slots it fills */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricCatalog"];
                 };
             };
         };
@@ -2400,7 +2726,7 @@ export interface operations {
             header?: never;
             path: {
                 id: string;
-                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.stat_statements";
+                task_id: "pg.probe" | "pg.stat_database" | "pg.stat_activity" | "pg.replication" | "pg.replication_slot" | "pg.prepared_xacts" | "pg.role" | "pg.settings" | "pg.database_size" | "pg.stat_statements";
             };
             cookie?: never;
         };
@@ -2767,7 +3093,10 @@ export interface operations {
     };
     listAlertRuleTemplates: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Keep only the templates that can create a rule on an instance running this engine. Omit it to list every template. A template addressing a semantic slot survives every engine that binds the slot; an engine-private one survives only its own engine. */
+                engine?: components["schemas"]["InstanceEngine"];
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -157,9 +157,16 @@ func TestInstanceListHealthProjectionTracksAlertFacts(t *testing.T) {
 		if response.StatusCode != http.StatusOK {
 			t.Fatalf("list instances status = %d", response.StatusCode)
 		}
-		var instances []instanceProjectionResponse
-		if err := json.NewDecoder(response.Body).Decode(&instances); err != nil {
+		var page struct {
+			Items []instanceProjectionResponse `json:"items"`
+			Total int                          `json:"total"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&page); err != nil {
 			t.Fatalf("decode instances: %v", err)
+		}
+		instances := page.Items
+		if page.Total != len(instances) {
+			t.Fatalf("instance page total = %d, items = %d", page.Total, len(instances))
 		}
 		after := queryCounter.snapshot()
 		if got := after.subtract(before); got != wantListQueryCounts {

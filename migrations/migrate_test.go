@@ -315,6 +315,99 @@ func TestMigrationsAndPartitionFailureCode(t *testing.T) {
 	}
 }
 
+// 指标目录进表之后，metric_series.metric_id 的合法集合由 metric_catalog 的行说了算，
+// 而不再由一条写死的 CHECK 枚举说了算。这里断言的是外部可观察的两件事：目录被填满了，
+// 以及目录外的指标 ID 写不进去。
+func TestMetricCatalogIsSeededAndConstrainsSeries(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	admin := openDatabase(t, env("PGDATABASE", "dbs_monitor"))
+	defer admin.Close()
+	databaseName := fmt.Sprintf("dbs_monitor_metric_catalog_%d", os.Getpid())
+	identifier := pgx.Identifier{databaseName}.Sanitize()
+	admin.ExecContext(ctx, "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)")
+	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+identifier+" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'"); err != nil {
+		t.Fatalf("create test database: %v", err)
+	}
+	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+identifier+" WITH (FORCE)") })
+
+	database := openDatabase(t, databaseName)
+	defer database.Close()
+	credentialDirectory := filepath.Join(t.TempDir(), "credentials")
+	// 两遍迁移：目录的同步必须是幂等的，服务器每次启动都会跑一次。
+	for attempt := 0; attempt < 2; attempt++ {
+		if _, err := migrations.Up(ctx, database, credentialDirectory); err != nil {
+			t.Fatalf("migrate test database (attempt %d): %v", attempt+1, err)
+		}
+	}
+
+	rows, err := database.QueryContext(ctx, `SELECT metric_id, engine, unit, display_name,
+		coalesce(semantic_slot, ''), level, aggregation FROM metric_catalog`)
+	if err != nil {
+		t.Fatalf("read metric catalog: %v", err)
+	}
+	defer rows.Close()
+	type catalogRow struct {
+		engine, unit, displayName, slot, level, aggregation string
+	}
+	got := make(map[string]catalogRow)
+	for rows.Next() {
+		var id string
+		var row catalogRow
+		if err := rows.Scan(&id, &row.engine, &row.unit, &row.displayName, &row.slot, &row.level, &row.aggregation); err != nil {
+			t.Fatalf("scan metric catalog row: %v", err)
+		}
+		got[id] = row
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read metric catalog: %v", err)
+	}
+	if len(got) != len(metric.Metrics) {
+		t.Fatalf("metric_catalog has %d rows, want %d", len(got), len(metric.Metrics))
+	}
+	for _, item := range metric.Metrics {
+		want := catalogRow{
+			engine: string(item.Engine), unit: item.Unit, displayName: item.DisplayName,
+			slot: string(item.Slot), level: string(item.Level), aggregation: string(item.Aggregation),
+		}
+		if got[item.ID.String()] != want {
+			t.Errorf("metric_catalog[%q] = %+v, want %+v", item.ID, got[item.ID.String()], want)
+		}
+	}
+
+	var slotCount int
+	if err := database.QueryRowContext(ctx, "SELECT count(*) FROM metric_semantic_slot").Scan(&slotCount); err != nil {
+		t.Fatalf("count semantic slots: %v", err)
+	}
+	if slotCount != len(metric.SemanticSlots) {
+		t.Fatalf("metric_semantic_slot has %d rows, want %d", slotCount, len(metric.SemanticSlots))
+	}
+
+	if _, err := database.ExecContext(ctx, `INSERT INTO instance_identity (id, name)
+		VALUES ('00000000-0000-0000-0000-000000000002', 'catalog')`); err != nil {
+		t.Fatalf("create instance identity: %v", err)
+	}
+	if _, err := database.ExecContext(ctx, `INSERT INTO instance
+		(id, name, host, port, database_name, username, password_ciphertext, password_key_version)
+		VALUES ('00000000-0000-0000-0000-000000000002', 'catalog', 'localhost', 5432, 'postgres', 'postgres', '\\x01', 1)`); err != nil {
+		t.Fatalf("create instance: %v", err)
+	}
+	_, err = database.ExecContext(ctx, `INSERT INTO metric_series (instance_id, metric_id, labels_key, last_seen)
+		VALUES ('00000000-0000-0000-0000-000000000002', 'mysql.qps', '{}', now())`)
+	var pgError *pgconn.PgError
+	if !errors.As(err, &pgError) {
+		t.Fatalf("uncatalogued metric error = %v, want PgError", err)
+	}
+	if pgError.Code != "23503" {
+		t.Fatalf("uncatalogued metric SQLSTATE = %s, want 23503", pgError.Code)
+	}
+	if _, err := database.ExecContext(ctx, `INSERT INTO metric_series (instance_id, metric_id, labels_key, last_seen)
+		VALUES ('00000000-0000-0000-0000-000000000002', 'pg.connection.total', '{}', now())`); err != nil {
+		t.Fatalf("catalogued metric insert: %v", err)
+	}
+}
+
 func TestAlertingSeedsAreIdempotentAndTemplatesAreReplaced(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -438,10 +531,10 @@ func TestAlertingSeedsAreIdempotentAndTemplatesAreReplaced(t *testing.T) {
 		t.Fatalf("modify read-only template fixture: %v", err)
 	}
 	if _, err := database.ExecContext(ctx, `INSERT INTO alert_rule_template
-		(identifier, version, name, metric_id, aggregation, operator, threshold,
+		(identifier, version, name, metric_id, engine, semantic_slot, aggregation, operator, threshold,
 		recovery_operator, recovery_threshold, window_seconds, consecutive_count,
 		recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds)
-		SELECT 'obsolete', version, name, metric_id, aggregation, operator, threshold,
+		SELECT 'obsolete', version, name, metric_id, engine, semantic_slot, aggregation, operator, threshold,
 		recovery_operator, recovery_threshold, window_seconds, consecutive_count,
 		recovery_consecutive_count, severity, no_data_policy, evaluation_interval_seconds
 		FROM alert_rule_template LIMIT 1`); err != nil {

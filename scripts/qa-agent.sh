@@ -8,7 +8,7 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 state="${QA_STATE_DIR:-$HOME/.dbs-monitor-qa}"
 listen_port="${QA_PORT:-18443}"
 base_url="https://127.0.0.1:$listen_port"
-admin_password="${QA_ADMIN_PASSWORD:-qa-admin-password}"
+admin_password="${QA_ADMIN_PASSWORD:-admin}"
 ca="$state/server-tls/ca.crt"
 cookie="$state/cookie.txt"
 instance_name="${QA_INSTANCE_NAME:-QA target pg17}"
@@ -20,7 +20,7 @@ curl --noproxy '*' -sf --cacert "$ca" -c "$cookie" \
   --data "{\"username\":\"admin\",\"password\":\"$admin_password\"}" >/dev/null
 
 instance_id=$(api "$base_url/api/v1/instances" \
-  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b)||[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
+  | INSTANCE_NAME="$instance_name" node -e 'let b="";process.stdin.on("data",c=>b+=c).on("end",()=>{const i=(JSON.parse(b).items??[]).find(x=>x.name===process.env.INSTANCE_NAME);process.stdout.write(i?i.id:"")})')
 if [ -z "$instance_id" ]; then echo "instance not found: $instance_name" >&2; exit 1; fi
 
 # POST registration issues the token once; a re-run lands on 409, so rotate instead.

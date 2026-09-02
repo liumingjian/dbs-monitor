@@ -29,7 +29,7 @@ import { rootRoute } from '../root'
 import { severityLabel } from '../alerts'
 import { alertMonitoringSearch } from '../alerts/search'
 import { DispositionSection, TriggerSnapshotSection } from './alertEvidence'
-import { metricOptions } from './metricOptions'
+import { isMetricID, type MetricID } from './metricOptions'
 import './alertDetail.css'
 
 type AlertDetail = components['schemas']['AlertDetail']
@@ -77,9 +77,9 @@ function AlertDetailContent({ detail, routeInstanceID, onDispositionChanged }: {
   routeInstanceID: string
   onDispositionChanged: () => void
 }) {
-  const metric = metricOptions.find((option) => option.id === detail.metric_id)
+  const metric = isMetricID(detail.metric_id) ? detail.metric_id : undefined
   const monitoringSearch = metric ? alertMonitoringSearch({
-    metric_id: metric.id,
+    metric_id: metric,
     first_triggered_at: detail.first_triggered_at,
     recovered_at: detail.recovered_at,
     updated_at: detail.updated_at,
@@ -150,7 +150,7 @@ function AlertDetailContent({ detail, routeInstanceID, onDispositionChanged }: {
 
     <Panel title="触发指标" id="trigger-metric-heading">
       {metric && monitoringSearch
-        ? <AlertMetricChart detail={detail} metricID={metric.id} monitoringSearch={monitoringSearch} />
+        ? <AlertMetricChart detail={detail} metricID={metric} monitoringSearch={monitoringSearch} />
         : <div className="alert-detail__missing-metric">
           <NotificationBar tone="critical" title="告警指标不在指标字典中">
             没有对应的采集定义，因此画不出触发时的曲线。
@@ -256,7 +256,7 @@ function KeyValueList({ label, items, columns = 1 }: {
 
 function AlertMetricChart({ detail, metricID, monitoringSearch }: {
   detail: AlertDetail
-  metricID: (typeof metricOptions)[number]['id']
+  metricID: MetricID
   monitoringSearch: ReturnType<typeof alertMonitoringSearch>
 }) {
   const metrics = $api.useQuery('get', '/api/v1/instances/{id}/metrics/series', {

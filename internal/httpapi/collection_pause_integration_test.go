@@ -83,7 +83,8 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	if _, err := instanceQueries.CreateInstance(ctx, instance.CreateInstanceParams{
 		ID: pgtype.UUID{Bytes: instanceID, Valid: true}, Name: "pause target",
 		Host: env("PGHOST", "localhost"), Port: int32(envInt("PGPORT", 55432)),
-		DatabaseName: env("PGDATABASE", "dbs_monitor"), Username: env("PGUSER", "dbs_monitor"),
+		Engine: string(instance.EnginePostgreSQL),
+		DatabaseName: instance.BootstrapDatabaseColumn(env("PGDATABASE", "dbs_monitor")), Username: env("PGUSER", "dbs_monitor"),
 		PasswordCiphertext: ciphertext, PasswordKeyVersion: keyVersion,
 	}); err != nil {
 		t.Fatalf("create target instance: %v", err)
@@ -222,17 +223,20 @@ func TestCollectionPauseEndToEnd(t *testing.T) {
 	pausedRuleResponse.Body.Close()
 
 	instances := getResponse(t, client, server.URL+"/api/v1/instances")
-	var instanceList []struct {
-		CollectionPause struct {
-			Paused bool `json:"paused"`
-		} `json:"collection_pause"`
+	var instanceList struct {
+		Items []struct {
+			CollectionPause struct {
+				Paused bool `json:"paused"`
+			} `json:"collection_pause"`
+		} `json:"items"`
+		Total int `json:"total"`
 	}
 	if err := json.NewDecoder(instances.Body).Decode(&instanceList); err != nil {
 		t.Fatalf("decode instances: %v", err)
 	}
 	instances.Body.Close()
 	pausedCount := 0
-	for _, found := range instanceList {
+	for _, found := range instanceList.Items {
 		if found.CollectionPause.Paused {
 			pausedCount++
 		}

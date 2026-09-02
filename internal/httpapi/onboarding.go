@@ -16,8 +16,10 @@ import (
 const minimumTargetServerVersionNum = 130000
 
 type targetConnectionInput struct {
-	host     string
-	port     int
+	host string
+	port int
+	// database 是 bootstrap database：建连接用的库名，不限定被监控的范围。
+	// 到这里时它已经被归一过（`instance.ResolveBootstrapDatabase`），不再可能是空串。
 	database string
 	username string
 	password string

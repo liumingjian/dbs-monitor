@@ -55,18 +55,42 @@ func TestPGStatStatementsDeclaration(t *testing.T) {
 			t.Errorf("pg_stat_statements query is missing %q", fragment)
 		}
 	}
-	sqlTextColumnPattern := regexp.MustCompile(`(?i)\b(query|query_text|sql|sql_text)\b`)
-	if sqlTextColumnPattern.MatchString(task.SQL) {
-		t.Fatal("pg_stat_statements query selects SQL text")
+	// 这一条从前是反过来断言的（「不许取 SQL 文本」）。票 #221 把它翻了面：
+	// pg_stat_statements 的文本里字面量已经是占位符，这是该扩展的设计保证，落库的
+	// 隐私风险可控，而没有文本的排行只有 queryid，没人认得出那是什么语句。
+	// **翻面的只有这一个任务**：pg_stat_activity 的原文照旧一个字都不许取，
+	// 那条规则由上面的 TestPGStatActivityUsesSingleSnapshot 与
+	// statement_text_test.go 的全字典扫描一起守着。
+	if !regexp.MustCompile(`\bquery\b`).MatchString(task.SQL) {
+		t.Error("pg_stat_statements query no longer collects the normalised statement text")
+	}
+	if !strings.Contains(task.SQL, "AS query_text") {
+		t.Error("pg_stat_statements query does not expose query_text")
 	}
 }
 
+// pg_stat_database 一库一行，所以这条查询的行数是可变的，而且第一列是库名。
 func TestPGStatDatabaseShapeMatrix(t *testing.T) {
 	task, ok := taskByID(metric.TaskStatDatabase)
 	if !ok {
 		t.Fatalf("task %q is missing", metric.TaskStatDatabase)
 	}
-	assertTaskShapeMatrix(t, task, metricColumnShapes(task))
+	assertVariableRowsTaskShapeMatrix(t, task, metricColumnShapes(task))
+}
+
+// 库级指标的每一个 yield 都要声明库维度，否则采集出来的行会互相覆盖：
+// 序列的唯一键里有 database_name，声明漏了就等于把几十个库写进同一条序列。
+func TestDatabaseLevelYieldsDeclareTheDatabaseDimension(t *testing.T) {
+	for _, task := range metric.Tasks {
+		for _, yield := range task.Yields {
+			if metric.LevelFor(yield.Metric) != metric.LevelDatabase {
+				continue
+			}
+			if !slices.Contains(yield.Dimensions, metric.DimensionDatabase) {
+				t.Errorf("task %q yields database-level metric %q without the database dimension", task.ID, yield.Metric)
+			}
+		}
+	}
 }
 
 func TestPGStatActivityShapeMatrix(t *testing.T) {
@@ -160,6 +184,18 @@ func TestPGPreparedXactsShapeMatrix(t *testing.T) {
 	})
 }
 
+// max_connections 是配置项，一次一行；饱和度的分母就是它。
+func TestPGSettingsShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskSettings)
+	assertTaskShapeMatrix(t, task, metricColumnShapes(task))
+}
+
+// pg_database 一库一行，第一列是库名——体积也是库级指标。
+func TestPGDatabaseSizeShapeMatrix(t *testing.T) {
+	task := requiredTask(t, metric.TaskDatabaseSize)
+	assertVariableRowsTaskShapeMatrix(t, task, metricColumnShapes(task))
+}
+
 func TestPGRoleShapeMatrix(t *testing.T) {
 	task := requiredTask(t, metric.TaskRole)
 	assertTaskShapeMatrix(t, task, []taskColumnShape{{name: "role", oid: pgtype.TextOID}})
@@ -186,6 +222,11 @@ func metricColumnShapes(task metric.Task) []taskColumnShape {
 	columns := taskColumns(task)
 	shapes := make([]taskColumnShape, 0, len(columns))
 	for _, name := range columns {
+		// 库名是唯一一个不是 float8 的取值列：它是维度，不是度量。
+		if name == metric.DimensionDatabase {
+			shapes = append(shapes, taskColumnShape{name: name, oid: pgtype.TextOID})
+			continue
+		}
 		shapes = append(shapes, taskColumnShape{name: name, oid: pgtype.Float8OID})
 	}
 	return shapes

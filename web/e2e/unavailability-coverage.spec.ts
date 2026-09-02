@@ -17,10 +17,11 @@ const unavailabilityCases = [
   { code: 'FEATURE_DISABLED', title: '功能未启用', action: '启用数据库功能', destination: 'collection' },
   { code: 'VERSION_UNSUPPORTED', title: '版本不支持', action: '查看支持矩阵', destination: 'collection' },
   { code: 'NOT_APPLICABLE_ROLE', title: '当前角色不适用', action: '查看实例角色', destination: 'collection' },
+  { code: 'NOT_APPLICABLE_ENGINE', title: '当前引擎不适用', action: '查看指标目录', destination: 'collection' },
   { code: 'COUNTER_RESET', title: '计数器已重置', action: '等待下一个采集周期', destination: 'current' },
 ] as const
 
-test('all 13 backend codes render copy and canonical destinations without blank links', async ({ page }) => {
+test('all 14 backend codes render copy and canonical destinations without blank links', async ({ page }) => {
   await page.route('**/api/v1/me', (route) => route.fulfill({ json: { username: 'reader', role: 'READONLY' } }))
   await page.route(`**/api/v1/instances/${instanceID}`, (route) => route.fulfill({
     json: {
@@ -28,6 +29,7 @@ test('all 13 backend codes render copy and canonical destinations without blank 
       name: '生产库 primary',
       host: '10.20.1.15',
       port: 5432,
+      engine: 'POSTGRESQL',
       database: 'orders',
       username: 'monitor',
       alert_status: 'OK',

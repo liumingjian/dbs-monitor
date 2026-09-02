@@ -34,7 +34,10 @@ const (
 type collectedSample struct {
 	metricID metric.MetricID
 	value    float64
-	labels   map[string]string
+	// databaseName 是时序表上那一个具名维度：空串表示实例级，非空表示这个值量的是那一个库。
+	// 它不进 labels——labels 扛的是与库正交的 replica / slot。见 migrations 里 metric_series 的注释。
+	databaseName string
+	labels       map[string]string
 }
 
 type collectedBatch struct {
@@ -413,7 +416,8 @@ func insertCollectedSample(ctx context.Context, tx pgx.Tx, instanceID pgtype.UUI
 		return fmt.Errorf("encode metric labels: %w", err)
 	}
 	seriesID, err := metric.New(tx).UpsertSeries(ctx, metric.UpsertSeriesParams{
-		InstanceID: instanceID, MetricID: string(sample.metricID), Labels: encodedLabels, LabelsKey: string(encodedLabels),
+		InstanceID: instanceID, MetricID: string(sample.metricID), DatabaseName: sample.databaseName,
+		Labels: encodedLabels, LabelsKey: string(encodedLabels),
 		LastSeen: pgtype.Timestamptz{Time: observedAt, Valid: true},
 	})
 	if err != nil {

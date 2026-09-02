@@ -41,6 +41,7 @@ var statActivityMetricIDs = [...]metric.MetricID{
 	metric.MetricLockWaitingCount,
 	metric.MetricBlockedSessionCount,
 	metric.MetricLongRunningQueryCount,
+	metric.MetricConnectionSaturationPercent,
 }
 
 type Collector interface {
@@ -319,7 +320,7 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 		var sessionsTruncated, longQuerySamplesTruncated bool
 		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
 			&values[0], &values[1], &values[2], &values[3],
-			&values[4], &values[5], &values[6], &values[7],
+			&values[4], &values[5], &values[6], &values[7], &values[8],
 			&sampledAt, &sessionsJSON, &sessionCount, &sessionsTruncated,
 			&longQuerySamplesJSON, &longQuerySampleCount, &longQuerySamplesTruncated,
 		); err != nil {
@@ -338,19 +339,43 @@ func (service *Service) collectQueryTask(ctx context.Context, conn *monitorpg.Ta
 		}
 		return collectedBatch{samples: samples, statActivitySnapshot: &snapshot}, nil
 	case metric.TaskStatDatabase:
-		observation := statDatabaseSnapshot{observedAt: service.clock.Now().UTC()}
-		if err := conn.QueryRow(ctx, run.task.SQL).Scan(
-			&observation.counters[statDatabaseXactCommitIndex],
-			&observation.counters[statDatabaseXactRollbackIndex],
-			&observation.counters[statDatabaseTuplesReadIndex],
-			&observation.counters[statDatabaseTuplesWriteIndex],
-			&observation.counters[statDatabaseTempFilesIndex],
-			&observation.counters[statDatabaseTempBytesIndex],
-		); err != nil {
+		// 一库一行。这条任务不能走 collectDeclaredTask：它的值是计数器求差得来的速率，
+		// 需要上一轮的快照，而声明式路径是无状态的。
+		observation := statDatabaseSnapshot{
+			observedAt: service.clock.Now().UTC(),
+			databases:  make(map[string]statDatabaseCounters),
+		}
+		rows, err := conn.Query(ctx, run.task.SQL)
+		if err != nil {
 			return collectedBatch{}, err
 		}
+		defer rows.Close()
+		for rows.Next() {
+			var databaseName string
+			counters := statDatabaseCounters{}
+			if err := rows.Scan(
+				&databaseName,
+				&counters[statDatabaseXactCommitIndex],
+				&counters[statDatabaseXactRollbackIndex],
+				&counters[statDatabaseTuplesReadIndex],
+				&counters[statDatabaseTuplesWriteIndex],
+				&counters[statDatabaseTempFilesIndex],
+				&counters[statDatabaseTempBytesIndex],
+				&counters[statDatabaseBlocksHitIndex],
+				&counters[statDatabaseBlocksReadIndex],
+				&counters[statDatabaseDeadlocksIndex],
+			); err != nil {
+				return collectedBatch{}, err
+			}
+			observation.databases[databaseName] = counters
+		}
+		if err := rows.Err(); err != nil {
+			return collectedBatch{}, err
+		}
+		rows.Close()
 		return service.statDatabaseRates.observe(run.key.instanceID, observation), nil
-	case metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole:
+	case metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole,
+		metric.TaskSettings, metric.TaskDatabaseSize:
 		return collectDeclaredTask(ctx, conn, run.task)
 	case metric.TaskQueryStatistics:
 		snapshot, err := collectQueryStatistics(ctx, conn, run.task)
@@ -636,7 +661,7 @@ func scheduledTasks() []metric.Task {
 		switch task.ID {
 		case metric.TaskProbe, metric.TaskStatDatabase, metric.TaskStatActivity,
 			metric.TaskReplication, metric.TaskReplicationSlot, metric.TaskPreparedXacts, metric.TaskRole,
-			metric.TaskQueryStatistics:
+			metric.TaskSettings, metric.TaskDatabaseSize, metric.TaskQueryStatistics:
 			tasks = append(tasks, task)
 		}
 	}
@@ -724,7 +749,8 @@ func targetConnectionConfig(target instance.ListCollectionTargetsRow, password s
 	}
 	config.Host = target.Host
 	config.Port = uint16(target.Port)
-	config.Database = target.DatabaseName
+	// bootstrap database：建连接落在这个库上，但采集的范围是整条连接，不止这个库。
+	config.Database = target.DatabaseName.String
 	config.User = target.Username
 	config.Password = password
 	config.RuntimeParams["application_name"] = "dbs-monitor"

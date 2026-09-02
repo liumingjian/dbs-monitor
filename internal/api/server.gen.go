@@ -173,11 +173,13 @@ const (
 
 // Defines values for CollectionTaskStateTaskId.
 const (
+	PgDatabaseSize    CollectionTaskStateTaskId = "pg.database_size"
 	PgPreparedXacts   CollectionTaskStateTaskId = "pg.prepared_xacts"
 	PgProbe           CollectionTaskStateTaskId = "pg.probe"
 	PgReplication     CollectionTaskStateTaskId = "pg.replication"
 	PgReplicationSlot CollectionTaskStateTaskId = "pg.replication_slot"
 	PgRole            CollectionTaskStateTaskId = "pg.role"
+	PgSettings        CollectionTaskStateTaskId = "pg.settings"
 	PgStatActivity    CollectionTaskStateTaskId = "pg.stat_activity"
 	PgStatDatabase    CollectionTaskStateTaskId = "pg.stat_database"
 	PgStatStatements  CollectionTaskStateTaskId = "pg.stat_statements"
@@ -226,11 +228,105 @@ const (
 	InstanceAgentPermissionDenied InstanceAgentStatus = "permission_denied"
 )
 
+// Defines values for InstanceEngine.
+const (
+	InstanceEnginePostgreSQL InstanceEngine = "POSTGRESQL"
+)
+
+// Defines values for InstanceFlag.
+const (
+	InstanceFlagAgentOffline         InstanceFlag = "AGENT_OFFLINE"
+	InstanceFlagConfigurationMissing InstanceFlag = "CONFIGURATION_MISSING"
+	InstanceFlagIgnored              InstanceFlag = "IGNORED"
+	InstanceFlagMaintenance          InstanceFlag = "MAINTENANCE"
+	InstanceFlagNoData               InstanceFlag = "NO_DATA"
+	InstanceFlagRecentlyRecovered    InstanceFlag = "RECENTLY_RECOVERED"
+	InstanceFlagStaleData            InstanceFlag = "STALE_DATA"
+)
+
+// Defines values for InstanceListSort.
+const (
+	InstanceSortHealth         InstanceListSort = "health"
+	InstanceSortName           InstanceListSort = "name"
+	InstanceSortNameDescending InstanceListSort = "-name"
+	InstanceSortStalest        InstanceListSort = "stalest"
+)
+
 // Defines values for MaintenanceWindowStatus.
 const (
 	MaintenanceActive    MaintenanceWindowStatus = "ACTIVE"
 	MaintenanceEnded     MaintenanceWindowStatus = "ENDED"
 	MaintenanceScheduled MaintenanceWindowStatus = "SCHEDULED"
+)
+
+// Defines values for MetricAggregation.
+const (
+	MetricAggregationNone            MetricAggregation = "NONE"
+	MetricAggregationSum             MetricAggregation = "SUM"
+	MetricAggregationWeightedAverage MetricAggregation = "WEIGHTED_AVERAGE"
+)
+
+// Defines values for MetricEngine.
+const (
+	MetricEngineAgnostic   MetricEngine = "AGNOSTIC"
+	MetricEnginePostgreSQL MetricEngine = "POSTGRESQL"
+)
+
+// Defines values for MetricId.
+const (
+	MetricIdAgentStatus                       MetricId = "agent.status"
+	MetricIdCollectorLastSuccessTime          MetricId = "collector.last_success_time"
+	MetricIdHostCpuUsagePercent               MetricId = "host.cpu.usage_percent"
+	MetricIdHostDiskFreeBytes                 MetricId = "host.disk.free_bytes"
+	MetricIdHostDiskIops                      MetricId = "host.disk.iops"
+	MetricIdHostDiskThroughputBytesPerSec     MetricId = "host.disk.throughput_bytes_per_sec"
+	MetricIdHostDiskUsagePercent              MetricId = "host.disk.usage_percent"
+	MetricIdHostMemoryUsagePercent            MetricId = "host.memory.usage_percent"
+	MetricIdHostNetworkBytesPerSec            MetricId = "host.network.bytes_per_sec"
+	MetricIdPgAvailabilityReachable           MetricId = "pg.availability.reachable"
+	MetricIdPgCacheBlockAccessPerSec          MetricId = "pg.cache.block_access_per_sec"
+	MetricIdPgCacheHitRatio                   MetricId = "pg.cache.hit_ratio"
+	MetricIdPgConnectionActive                MetricId = "pg.connection.active"
+	MetricIdPgConnectionIdleInTransaction     MetricId = "pg.connection.idle_in_transaction"
+	MetricIdPgConnectionMax                   MetricId = "pg.connection.max"
+	MetricIdPgConnectionSaturationPercent     MetricId = "pg.connection.saturation_percent"
+	MetricIdPgConnectionTotal                 MetricId = "pg.connection.total"
+	MetricIdPgDatabaseSizeBytes               MetricId = "pg.database.size_bytes"
+	MetricIdPgDeadlockCount                   MetricId = "pg.deadlock.count"
+	MetricIdPgLockWaitingCount                MetricId = "pg.lock.waiting_count"
+	MetricIdPgPreparedXactsCount              MetricId = "pg.prepared_xacts.count"
+	MetricIdPgProbeLatencyMs                  MetricId = "pg.probe.latency_ms"
+	MetricIdPgQueryLongRunningCount           MetricId = "pg.query.long_running_count"
+	MetricIdPgReplicationConnectionState      MetricId = "pg.replication.connection_state"
+	MetricIdPgReplicationReplayLagMs          MetricId = "pg.replication.replay_lag_ms"
+	MetricIdPgReplicationRole                 MetricId = "pg.replication.role"
+	MetricIdPgReplicationSlotRetainedWalBytes MetricId = "pg.replication_slot.retained_wal_bytes"
+	MetricIdPgReplicationWalLagBytes          MetricId = "pg.replication.wal_lag_bytes"
+	MetricIdPgSessionBlockedCount             MetricId = "pg.session.blocked_count"
+	MetricIdPgTempBytesPerSec                 MetricId = "pg.temp.bytes_per_sec"
+	MetricIdPgTempFilesPerSec                 MetricId = "pg.temp.files_per_sec"
+	MetricIdPgTps                             MetricId = "pg.tps"
+	MetricIdPgTransactionLongCount            MetricId = "pg.transaction.long_count"
+	MetricIdPgTransactionMaxDurationSec       MetricId = "pg.transaction.max_duration_sec"
+	MetricIdPgTuplesReadPerSec                MetricId = "pg.tuples.read_per_sec"
+	MetricIdPgTuplesWritePerSec               MetricId = "pg.tuples.write_per_sec"
+	MetricIdPgXactCommitPerSec                MetricId = "pg.xact.commit_per_sec"
+	MetricIdPgXactRollbackPerSec              MetricId = "pg.xact.rollback_per_sec"
+)
+
+// Defines values for MetricLevel.
+const (
+	MetricLevelDatabase MetricLevel = "DATABASE"
+	MetricLevelInstance MetricLevel = "INSTANCE"
+)
+
+// Defines values for MetricStep.
+const (
+	Auto MetricStep = "auto"
+	N15s MetricStep = "15s"
+	N1m  MetricStep = "1m"
+	N5m  MetricStep = "5m"
+	Raw  MetricStep = "raw"
 )
 
 // Defines values for NoDataPolicy.
@@ -339,72 +435,41 @@ const (
 	SMTPStartTLS    SMTPTransportSecurity = "STARTTLS"
 )
 
+// Defines values for SemanticSlot.
+const (
+	SlotCacheHitRatio        SemanticSlot = "cache_hit_ratio"
+	SlotConnectionSaturation SemanticSlot = "connection_saturation"
+	SlotConnections          SemanticSlot = "connections"
+	SlotDeadlocks            SemanticSlot = "deadlocks"
+	SlotProbeLatency         SemanticSlot = "probe_latency"
+	SlotReplicationLag       SemanticSlot = "replication_lag"
+	SlotRollbackRate         SemanticSlot = "rollback_rate"
+	SlotStorageUsage         SemanticSlot = "storage_usage"
+	SlotThroughput           SemanticSlot = "throughput"
+)
+
 // Defines values for Unavailability.
 const (
-	AGENTOFFLINE       Unavailability = "AGENT_OFFLINE"
-	COLLECTIONFAILED   Unavailability = "COLLECTION_FAILED"
-	COLLECTIONPAUSED   Unavailability = "COLLECTION_PAUSED"
-	COUNTERRESET       Unavailability = "COUNTER_RESET"
-	DBUNREACHABLE      Unavailability = "DB_UNREACHABLE"
-	EXTENSIONMISSING   Unavailability = "EXTENSION_MISSING"
-	FEATUREDISABLED    Unavailability = "FEATURE_DISABLED"
-	NODATAINRANGE      Unavailability = "NO_DATA_IN_RANGE"
-	NOSAMPLESYET       Unavailability = "NO_SAMPLES_YET"
-	NOTAPPLICABLEROLE  Unavailability = "NOT_APPLICABLE_ROLE"
-	PERMISSIONDENIED   Unavailability = "PERMISSION_DENIED"
-	STALE              Unavailability = "STALE"
-	VERSIONUNSUPPORTED Unavailability = "VERSION_UNSUPPORTED"
+	AGENTOFFLINE        Unavailability = "AGENT_OFFLINE"
+	COLLECTIONFAILED    Unavailability = "COLLECTION_FAILED"
+	COLLECTIONPAUSED    Unavailability = "COLLECTION_PAUSED"
+	COUNTERRESET        Unavailability = "COUNTER_RESET"
+	DBUNREACHABLE       Unavailability = "DB_UNREACHABLE"
+	EXTENSIONMISSING    Unavailability = "EXTENSION_MISSING"
+	FEATUREDISABLED     Unavailability = "FEATURE_DISABLED"
+	NODATAINRANGE       Unavailability = "NO_DATA_IN_RANGE"
+	NOSAMPLESYET        Unavailability = "NO_SAMPLES_YET"
+	NOTAPPLICABLEENGINE Unavailability = "NOT_APPLICABLE_ENGINE"
+	NOTAPPLICABLEROLE   Unavailability = "NOT_APPLICABLE_ROLE"
+	PERMISSIONDENIED    Unavailability = "PERMISSION_DENIED"
+	STALE               Unavailability = "STALE"
+	VERSIONUNSUPPORTED  Unavailability = "VERSION_UNSUPPORTED"
 )
 
 // Defines values for DownloadAgentBinaryParamsArch.
 const (
 	Linuxamd64 DownloadAgentBinaryParamsArch = "linux/amd64"
 	Linuxarm64 DownloadAgentBinaryParamsArch = "linux/arm64"
-)
-
-// Defines values for GetMetricSeriesParamsMetric.
-const (
-	GetMetricSeriesParamsMetricAgentStatus                       GetMetricSeriesParamsMetric = "agent.status"
-	GetMetricSeriesParamsMetricCollectorLastSuccessTime          GetMetricSeriesParamsMetric = "collector.last_success_time"
-	GetMetricSeriesParamsMetricHostCpuUsagePercent               GetMetricSeriesParamsMetric = "host.cpu.usage_percent"
-	GetMetricSeriesParamsMetricHostDiskFreeBytes                 GetMetricSeriesParamsMetric = "host.disk.free_bytes"
-	GetMetricSeriesParamsMetricHostDiskIops                      GetMetricSeriesParamsMetric = "host.disk.iops"
-	GetMetricSeriesParamsMetricHostDiskThroughputBytesPerSec     GetMetricSeriesParamsMetric = "host.disk.throughput_bytes_per_sec"
-	GetMetricSeriesParamsMetricHostDiskUsagePercent              GetMetricSeriesParamsMetric = "host.disk.usage_percent"
-	GetMetricSeriesParamsMetricHostMemoryUsagePercent            GetMetricSeriesParamsMetric = "host.memory.usage_percent"
-	GetMetricSeriesParamsMetricHostNetworkBytesPerSec            GetMetricSeriesParamsMetric = "host.network.bytes_per_sec"
-	GetMetricSeriesParamsMetricPgAvailabilityReachable           GetMetricSeriesParamsMetric = "pg.availability.reachable"
-	GetMetricSeriesParamsMetricPgConnectionActive                GetMetricSeriesParamsMetric = "pg.connection.active"
-	GetMetricSeriesParamsMetricPgConnectionIdleInTransaction     GetMetricSeriesParamsMetric = "pg.connection.idle_in_transaction"
-	GetMetricSeriesParamsMetricPgConnectionTotal                 GetMetricSeriesParamsMetric = "pg.connection.total"
-	GetMetricSeriesParamsMetricPgLockWaitingCount                GetMetricSeriesParamsMetric = "pg.lock.waiting_count"
-	GetMetricSeriesParamsMetricPgPreparedXactsCount              GetMetricSeriesParamsMetric = "pg.prepared_xacts.count"
-	GetMetricSeriesParamsMetricPgProbeLatencyMs                  GetMetricSeriesParamsMetric = "pg.probe.latency_ms"
-	GetMetricSeriesParamsMetricPgQueryLongRunningCount           GetMetricSeriesParamsMetric = "pg.query.long_running_count"
-	GetMetricSeriesParamsMetricPgReplicationConnectionState      GetMetricSeriesParamsMetric = "pg.replication.connection_state"
-	GetMetricSeriesParamsMetricPgReplicationReplayLagMs          GetMetricSeriesParamsMetric = "pg.replication.replay_lag_ms"
-	GetMetricSeriesParamsMetricPgReplicationRole                 GetMetricSeriesParamsMetric = "pg.replication.role"
-	GetMetricSeriesParamsMetricPgReplicationSlotRetainedWalBytes GetMetricSeriesParamsMetric = "pg.replication_slot.retained_wal_bytes"
-	GetMetricSeriesParamsMetricPgReplicationWalLagBytes          GetMetricSeriesParamsMetric = "pg.replication.wal_lag_bytes"
-	GetMetricSeriesParamsMetricPgSessionBlockedCount             GetMetricSeriesParamsMetric = "pg.session.blocked_count"
-	GetMetricSeriesParamsMetricPgTempBytesPerSec                 GetMetricSeriesParamsMetric = "pg.temp.bytes_per_sec"
-	GetMetricSeriesParamsMetricPgTempFilesPerSec                 GetMetricSeriesParamsMetric = "pg.temp.files_per_sec"
-	GetMetricSeriesParamsMetricPgTps                             GetMetricSeriesParamsMetric = "pg.tps"
-	GetMetricSeriesParamsMetricPgTransactionLongCount            GetMetricSeriesParamsMetric = "pg.transaction.long_count"
-	GetMetricSeriesParamsMetricPgTransactionMaxDurationSec       GetMetricSeriesParamsMetric = "pg.transaction.max_duration_sec"
-	GetMetricSeriesParamsMetricPgTuplesReadPerSec                GetMetricSeriesParamsMetric = "pg.tuples.read_per_sec"
-	GetMetricSeriesParamsMetricPgTuplesWritePerSec               GetMetricSeriesParamsMetric = "pg.tuples.write_per_sec"
-	GetMetricSeriesParamsMetricPgXactCommitPerSec                GetMetricSeriesParamsMetric = "pg.xact.commit_per_sec"
-	GetMetricSeriesParamsMetricPgXactRollbackPerSec              GetMetricSeriesParamsMetric = "pg.xact.rollback_per_sec"
-)
-
-// Defines values for GetMetricSeriesParamsStep.
-const (
-	Auto GetMetricSeriesParamsStep = "auto"
-	N15s GetMetricSeriesParamsStep = "15s"
-	N1m  GetMetricSeriesParamsStep = "1m"
-	N5m  GetMetricSeriesParamsStep = "5m"
-	Raw  GetMetricSeriesParamsStep = "raw"
 )
 
 // AgentInstallation defines model for AgentInstallation.
@@ -688,23 +753,27 @@ type AlertRuleInput struct {
 // AlertRuleScope defines model for AlertRuleScope.
 type AlertRuleScope string
 
-// AlertRuleTemplate defines model for AlertRuleTemplate.
+// AlertRuleTemplate A read-only built-in alert rule template. `engine` and `semantic_slot` are its engine ownership: a template that fills a semantic slot can create rules on every engine that binds that slot, an AGNOSTIC template (host/agent/collector metrics) is offered everywhere, and any other template is offered only on instances of its own engine. Pass `engine` to the listing endpoint to get exactly the templates offerable there.
 type AlertRuleTemplate struct {
-	Aggregation               AlertAggregation `json:"aggregation"`
-	ConsecutiveCount          int              `json:"consecutive_count"`
-	EvaluationIntervalSeconds int              `json:"evaluation_interval_seconds"`
-	Id                        string           `json:"id"`
-	MetricId                  string           `json:"metric_id"`
-	Name                      string           `json:"name"`
-	NoDataPolicy              NoDataPolicy     `json:"no_data_policy"`
-	Operator                  AlertOperator    `json:"operator"`
-	RecoveryConsecutiveCount  int              `json:"recovery_consecutive_count"`
-	RecoveryOperator          AlertOperator    `json:"recovery_operator"`
-	RecoveryThreshold         float64          `json:"recovery_threshold"`
-	Severity                  AlertSeverity    `json:"severity"`
-	Threshold                 float64          `json:"threshold"`
-	Version                   int              `json:"version"`
-	WindowSeconds             int              `json:"window_seconds"`
+	Aggregation      AlertAggregation `json:"aggregation"`
+	ConsecutiveCount int              `json:"consecutive_count"`
+
+	// Engine Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
+	Engine                    MetricEngine                    `json:"engine"`
+	EvaluationIntervalSeconds int                             `json:"evaluation_interval_seconds"`
+	Id                        string                          `json:"id"`
+	MetricId                  string                          `json:"metric_id"`
+	Name                      string                          `json:"name"`
+	NoDataPolicy              NoDataPolicy                    `json:"no_data_policy"`
+	Operator                  AlertOperator                   `json:"operator"`
+	RecoveryConsecutiveCount  int                             `json:"recovery_consecutive_count"`
+	RecoveryOperator          AlertOperator                   `json:"recovery_operator"`
+	RecoveryThreshold         float64                         `json:"recovery_threshold"`
+	SemanticSlot              nullable.Nullable[SemanticSlot] `json:"semantic_slot"`
+	Severity                  AlertSeverity                   `json:"severity"`
+	Threshold                 float64                         `json:"threshold"`
+	Version                   int                             `json:"version"`
+	WindowSeconds             int                             `json:"window_seconds"`
 }
 
 // AlertRuleTemplateInstantiationInput defines model for AlertRuleTemplateInstantiationInput.
@@ -877,6 +946,48 @@ type Error struct {
 // ErrorErrorCode defines model for Error.Error.Code.
 type ErrorErrorCode string
 
+// FleetCollectionHealth Collection self-monitoring. These three overlap with the health tiers on purpose: an instance whose collection rotted silently is usually still HEALTHY, because no rule can fire on data that never arrived.
+type FleetCollectionHealth struct {
+	// AgentOffline Instances whose Agent is expected but has stopped reporting.
+	AgentOffline int `json:"agent_offline"`
+
+	// Paused Instances whose collection is paused.
+	Paused int `json:"paused"`
+
+	// StaleData Instances whose collection is behind, or that were never collected at all. Paused instances are excluded: a paused instance is not rotting, it is switched off. Same predicate as the STALE_DATA instance-list flag.
+	StaleData int `json:"stale_data"`
+}
+
+// FleetHealthCounts How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size.
+type FleetHealthCounts struct {
+	Critical int `json:"critical"`
+	Healthy  int `json:"healthy"`
+	Paused   int `json:"paused"`
+	Unknown  int `json:"unknown"`
+	Warning  int `json:"warning"`
+}
+
+// FleetOverview The fleet landing page in one request: how the fleet is doing, whether collection itself is healthy, who to look at now, which disks are filling up, and which statements cost the most.
+type FleetOverview struct {
+	// Attention The instances that need handling first, ordered by health tier then alert severity. Ten, not five hundred: a wall of five hundred tiles carries no information. Healthy and paused instances never appear here.
+	Attention []Instance `json:"attention"`
+
+	// Collection Collection self-monitoring. These three overlap with the health tiers on purpose: an instance whose collection rotted silently is usually still HEALTHY, because no rule can fire on data that never arrived.
+	Collection FleetCollectionHealth `json:"collection"`
+
+	// Health How many instances sit in each health tier. The five tiers are exhaustive and disjoint, so they always add up to the fleet size.
+	Health FleetHealthCounts `json:"health"`
+
+	// Storage The ten highest disk usages, highest first. Instances with no disk sample are absent rather than reported as 0 — never measured is not the same as empty.
+	Storage []StorageUsageEntry `json:"storage"`
+
+	// TopSql The five statements costing the fleet the most elapsed time, highest first. The full ranking lives on the SQL insight page; five is what fits on a landing page without turning it into a second table.
+	TopSql []TopSqlEntry `json:"top_sql"`
+
+	// Total Number of monitored instances.
+	Total int `json:"total"`
+}
+
 // HealthAlertCounts defines model for HealthAlertCounts.
 type HealthAlertCounts struct {
 	Critical int `json:"critical"`
@@ -916,14 +1027,19 @@ type Instance struct {
 	AlertStatus          AlertStatus           `json:"alert_status"`
 	CollectionPause      CollectionPauseStatus `json:"collection_pause"`
 	DataFreshnessSeconds *int                  `json:"data_freshness_seconds,omitempty"`
-	Database             string                `json:"database"`
-	Health               InstanceHealth        `json:"health"`
-	Host                 string                `json:"host"`
-	Id                   openapi_types.UUID    `json:"id"`
-	LastCollectedAt      *time.Time            `json:"last_collected_at,omitempty"`
-	Name                 string                `json:"name"`
-	Port                 int                   `json:"port"`
-	Username             string                `json:"username"`
+
+	// Database Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept.
+	Database string `json:"database,omitempty"`
+
+	// Engine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
+	Engine          InstanceEngine     `json:"engine"`
+	Health          InstanceHealth     `json:"health"`
+	Host            string             `json:"host"`
+	Id              openapi_types.UUID `json:"id"`
+	LastCollectedAt *time.Time         `json:"last_collected_at,omitempty"`
+	Name            string             `json:"name"`
+	Port            int                `json:"port"`
+	Username        string             `json:"username"`
 }
 
 // InstanceAgentStatus defines model for InstanceAgentStatus.
@@ -931,12 +1047,16 @@ type InstanceAgentStatus string
 
 // InstanceCreateInput defines model for InstanceCreateInput.
 type InstanceCreateInput struct {
-	Database string `json:"database"`
-	Host     string `json:"host"`
-	Name     string `json:"name"`
-	Password string `json:"password"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
+	// Database Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept.
+	Database string `json:"database,omitempty"`
+
+	// Engine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
+	Engine   *InstanceEngine `json:"engine,omitempty"`
+	Host     string          `json:"host"`
+	Name     string          `json:"name"`
+	Password string          `json:"password"`
+	Port     int             `json:"port"`
+	Username string          `json:"username"`
 }
 
 // InstanceCreated defines model for InstanceCreated.
@@ -955,6 +1075,12 @@ type InstanceCredentialUpdated struct {
 	Username string `json:"username"`
 }
 
+// InstanceEngine Database product a monitored instance runs. Decides which collection tasks apply and which metrics exist. Chosen at onboarding (defaults to POSTGRESQL when omitted) and fixed afterwards. Same vocabulary as MetricEngine, deliberately a narrower value set: an instance is always a connection to one concrete product, so AGNOSTIC is not offered here. Both map onto the one Go type internal/dbengine.Engine.
+type InstanceEngine string
+
+// InstanceFlag Orthogonal marker on an instance's health rollup or on its collection, as used by the instance list filter. These are not health statuses: an instance carries any combination of them alongside whatever status the alert counting produced. STALE_DATA and AGENT_OFFLINE describe collection itself rather than the alert rollup. They exist because the fleet overview's collection self-monitoring counts have to drill down into this same list, and a number that cannot be clicked through is a dead end.
+type InstanceFlag string
+
 // InstanceHealth defines model for InstanceHealth.
 type InstanceHealth struct {
 	Attribution *HealthAttribution `json:"attribution,omitempty"`
@@ -963,12 +1089,38 @@ type InstanceHealth struct {
 	Status      HealthStatus       `json:"status"`
 }
 
+// InstanceListPage defines model for InstanceListPage.
+type InstanceListPage struct {
+	Items []Instance `json:"items"`
+
+	// Total Number of instances matching the filters, before paging.
+	Total int `json:"total"`
+}
+
+// InstanceListSort Instance list ordering. health puts the rows that need handling first; stalest puts the instances whose collection is furthest behind first. Ties always fall back to name then id, so paging through the list never repeats or skips a row.
+type InstanceListSort string
+
 // InstanceMetadataInput defines model for InstanceMetadataInput.
 type InstanceMetadataInput struct {
-	Database string `json:"database"`
+	// Database Bootstrap database: the database used to open the connection. It does not delimit what is monitored. Omit it to let the server pick the engine default (PostgreSQL: postgres); MySQL has no such concept.
+	Database string `json:"database,omitempty"`
 	Host     string `json:"host"`
 	Name     string `json:"name"`
 	Port     int    `json:"port"`
+}
+
+// InstanceMetricSeries defines model for InstanceMetricSeries.
+type InstanceMetricSeries struct {
+	InstanceId openapi_types.UUID  `json:"instance_id"`
+	Metrics    []MetricSeriesEntry `json:"metrics"`
+}
+
+// InstancesMetricSeriesResponse defines model for InstancesMetricSeriesResponse.
+type InstancesMetricSeriesResponse struct {
+	From      time.Time              `json:"from"`
+	Instances []InstanceMetricSeries `json:"instances"`
+	Step      string                 `json:"step"`
+	To        time.Time              `json:"to"`
 }
 
 // LongQuerySample defines model for LongQuerySample.
@@ -1020,21 +1172,59 @@ type MaintenanceWindowInput struct {
 // MaintenanceWindowStatus defines model for MaintenanceWindowStatus.
 type MaintenanceWindowStatus string
 
+// MetricAggregation defines model for MetricAggregation.
+type MetricAggregation string
+
+// MetricCatalog defines model for MetricCatalog.
+type MetricCatalog struct {
+	Metrics       []MetricCatalogEntry      `json:"metrics"`
+	SemanticSlots []SemanticSlotDeclaration `json:"semantic_slots"`
+}
+
+// MetricCatalogEntry defines model for MetricCatalogEntry.
+type MetricCatalogEntry struct {
+	Aggregation MetricAggregation `json:"aggregation"`
+	DisplayName string            `json:"display_name"`
+
+	// Engine Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
+	Engine       MetricEngine                    `json:"engine"`
+	Level        MetricLevel                     `json:"level"`
+	MetricId     string                          `json:"metric_id"`
+	SemanticSlot nullable.Nullable[SemanticSlot] `json:"semantic_slot"`
+	Unit         string                          `json:"unit"`
+}
+
+// MetricEngine Database product a metric catalogue row belongs to. Same vocabulary as InstanceEngine plus AGNOSTIC, which no instance can ever be: host.*, agent.* and collector.* metrics hang off an instance but measure the host and the collection itself, not any database product. Both map onto the one Go type internal/dbengine.Engine.
+type MetricEngine string
+
+// MetricId A metric id from the catalogue. The list is shared by every series endpoint, so a new metric is declared once here instead of once per path.
+type MetricId string
+
+// MetricLevel defines model for MetricLevel.
+type MetricLevel string
+
+// MetricSeriesEntry One requested metric's series for one instance. Addressed by concrete metric id, `metric` is always present. Addressed by semantic slot, `slot` is always present and `metric` only when that instance's engine binds the slot: a slot with no binding is answered explicitly (`NOT_APPLICABLE_ENGINE`) rather than with an empty metric id.
+type MetricSeriesEntry struct {
+	Metric *string `json:"metric,omitempty"`
+	Series []struct {
+		Labels map[string]string `json:"labels"`
+		Points [][]*float64      `json:"points"`
+	} `json:"series"`
+	Slot           *SemanticSlot                     `json:"slot,omitempty"`
+	Unavailability nullable.Nullable[Unavailability] `json:"unavailability"`
+	Unit           string                            `json:"unit"`
+}
+
 // MetricSeriesResponse defines model for MetricSeriesResponse.
 type MetricSeriesResponse struct {
-	From    time.Time `json:"from"`
-	Metrics []struct {
-		Metric string `json:"metric"`
-		Series []struct {
-			Labels map[string]string `json:"labels"`
-			Points [][]*float64      `json:"points"`
-		} `json:"series"`
-		Unavailability nullable.Nullable[Unavailability] `json:"unavailability"`
-		Unit           string                            `json:"unit"`
-	} `json:"metrics"`
-	Step string    `json:"step"`
-	To   time.Time `json:"to"`
+	From    time.Time           `json:"from"`
+	Metrics []MetricSeriesEntry `json:"metrics"`
+	Step    string              `json:"step"`
+	To      time.Time           `json:"to"`
 }
+
+// MetricStep Resolution asked of a series endpoint. auto lets the server pick from the range; raw returns stored samples untouched and is capped at six hours.
+type MetricStep string
 
 // NoDataPolicy defines model for NoDataPolicy.
 type NoDataPolicy string
@@ -1262,6 +1452,9 @@ type QueryStatisticsEntry struct {
 	Calls       int64 `json:"calls"`
 	DatabaseOid int64 `json:"database_oid"`
 
+	// QueryText Normalised statement text for this identifier, deduplicated per (instance, queryid). Literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here. Absent when no text has been captured yet for that identifier — absent is not the same as empty.
+	QueryText *string `json:"query_text,omitempty"`
+
 	// Queryid Native PostgreSQL query identifier represented as a string to preserve int64 precision.
 	Queryid         string  `json:"queryid"`
 	TotalExecTimeMs float64 `json:"total_exec_time_ms"`
@@ -1319,6 +1512,15 @@ type SMTPTestInput struct {
 // SMTPTransportSecurity defines model for SMTPTransportSecurity.
 type SMTPTransportSecurity string
 
+// SemanticSlot defines model for SemanticSlot.
+type SemanticSlot string
+
+// SemanticSlotDeclaration defines model for SemanticSlotDeclaration.
+type SemanticSlotDeclaration struct {
+	DisplayName string       `json:"display_name"`
+	SlotId      SemanticSlot `json:"slot_id"`
+}
+
 // SessionSnapshot defines model for SessionSnapshot.
 type SessionSnapshot struct {
 	Items          []SessionSnapshotEntry `json:"items"`
@@ -1342,6 +1544,33 @@ type SessionSnapshotEntry struct {
 	Username              *string    `json:"username,omitempty"`
 	WaitEvent             *string    `json:"wait_event,omitempty"`
 	WaitEventType         *string    `json:"wait_event_type,omitempty"`
+}
+
+// StorageUsageEntry One instance's highest disk usage. The value is the worst mount on that host, not an average across mounts: a full mount is a full mount whatever the others are doing.
+type StorageUsageEntry struct {
+	InstanceId   openapi_types.UUID `json:"instance_id"`
+	InstanceName string             `json:"instance_name"`
+	SampledAt    time.Time          `json:"sampled_at"`
+	UsagePercent float64            `json:"usage_percent"`
+}
+
+// TopSqlEntry One normalised statement on one instance, aggregated across databases and users from that instance's most recent query-statistics snapshot. The text is the extension's normalised form, where literals are already placeholders; raw statement text with real literals is never stored, so it can never appear here.
+type TopSqlEntry struct {
+	Calls        int64              `json:"calls"`
+	InstanceId   openapi_types.UUID `json:"instance_id"`
+	InstanceName string             `json:"instance_name"`
+
+	// QueryText Normalised statement text, deduplicated per (instance, queryid). Absent when no text has been captured yet for that identifier — absent is not the same as empty.
+	QueryText *string `json:"query_text,omitempty"`
+
+	// Queryid Native query identifier represented as a string to preserve int64 precision.
+	Queryid         string  `json:"queryid"`
+	TotalExecTimeMs float64 `json:"total_exec_time_ms"`
+}
+
+// TopSqlList defines model for TopSqlList.
+type TopSqlList struct {
+	Items []TopSqlEntry `json:"items"`
 }
 
 // Unavailability defines model for Unavailability.
@@ -1411,6 +1640,12 @@ type DownloadAgentBinaryParams struct {
 // DownloadAgentBinaryParamsArch defines parameters for DownloadAgentBinary.
 type DownloadAgentBinaryParamsArch string
 
+// ListAlertRuleTemplatesParams defines parameters for ListAlertRuleTemplates.
+type ListAlertRuleTemplatesParams struct {
+	// Engine Keep only the templates that can create a rule on an instance running this engine. Omit it to list every template. A template addressing a semantic slot survives every engine that binds the slot; an engine-private one survives only its own engine.
+	Engine *InstanceEngine `form:"engine,omitempty" json:"engine,omitempty"`
+}
+
 // ListCurrentAlertsParams defines parameters for ListCurrentAlerts.
 type ListCurrentAlertsParams struct {
 	InstanceId    *openapi_types.UUID `form:"instance_id,omitempty" json:"instance_id,omitempty"`
@@ -1426,6 +1661,50 @@ type ListAlertHistoryParams struct {
 	Offset     *int                `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// ListInstancesParams defines parameters for ListInstances.
+type ListInstancesParams struct {
+	// Page 页码，从 1 开始。超出末页时返回空的 items 与真实的 total。
+	Page *int `form:"page,omitempty" json:"page,omitempty"`
+
+	// PageSize 每页条数。上限按机群规模给到 500，一次取全量是选实例的下拉框在用。
+	PageSize *int `form:"page_size,omitempty" json:"page_size,omitempty"`
+
+	// Q 搜索词，大小写不敏感的子串匹配，命中实例名或地址（主机与 host:port）。 地址不再单独占一列，但仍然留在搜索索引里。
+	Q *string `form:"q,omitempty" json:"q,omitempty"`
+
+	// Engine 引擎筛选。可重复，多值之间是「或」。
+	Engine *[]InstanceEngine `form:"engine,omitempty" json:"engine,omitempty"`
+
+	// Status 健康档位筛选。可重复，多值之间是「或」。
+	Status *[]HealthStatus `form:"status,omitempty" json:"status,omitempty"`
+
+	// Flags 正交标记筛选。可重复，多值之间是「与」——要的是同时带上这些标记的实例。
+	Flags *[]InstanceFlag `form:"flags,omitempty" json:"flags,omitempty"`
+
+	// Severity 至少有一条该级别未恢复告警。可重复，多值之间是「或」。
+	Severity *[]AlertSeverity `form:"severity,omitempty" json:"severity,omitempty"`
+
+	// Sort 排序，缺省 health。同序值内一律按名称、再按 id 定序，翻页因此稳定。
+	Sort *InstanceListSort `form:"sort,omitempty" json:"sort,omitempty"`
+}
+
+// GetInstancesMetricSeriesParams defines parameters for GetInstancesMetricSeries.
+type GetInstancesMetricSeriesParams struct {
+	// InstanceId 要取的实例，可重复。上限与列表页大小一致。
+	InstanceId []openapi_types.UUID `form:"instance_id" json:"instance_id"`
+
+	// Metric 具体指标 ID，可重复。与 slot 至少给一个。
+	Metric *[]MetricId `form:"metric,omitempty" json:"metric,omitempty"`
+
+	// Slot 语义位，可重复。逐台按实例自己的引擎解析成具体指标；该引擎没有绑定这个位时， 响应里那一条带着 slot 与 NOT_APPLICABLE_ENGINE，而不是一个空指标 ID。
+	Slot *[]SemanticSlot `form:"slot,omitempty" json:"slot,omitempty"`
+	From time.Time       `form:"from" json:"from"`
+	To   time.Time       `form:"to" json:"to"`
+
+	// Step 缺省 auto。
+	Step *MetricStep `form:"step,omitempty" json:"step,omitempty"`
+}
+
 // ListLongQuerySamplesParams defines parameters for ListLongQuerySamples.
 type ListLongQuerySamplesParams struct {
 	From   time.Time `form:"from" json:"from"`
@@ -1437,17 +1716,14 @@ type ListLongQuerySamplesParams struct {
 
 // GetMetricSeriesParams defines parameters for GetMetricSeries.
 type GetMetricSeriesParams struct {
-	Metric []GetMetricSeriesParamsMetric `form:"metric" json:"metric"`
-	From   time.Time                     `form:"from" json:"from"`
-	To     time.Time                     `form:"to" json:"to"`
-	Step   *GetMetricSeriesParamsStep    `form:"step,omitempty" json:"step,omitempty"`
+	Metric []MetricId `form:"metric" json:"metric"`
+	From   time.Time  `form:"from" json:"from"`
+	To     time.Time  `form:"to" json:"to"`
+
+	// Step 缺省 auto。
+	Step       *MetricStep `form:"step,omitempty" json:"step,omitempty"`
+	ByDatabase *bool       `form:"by_database,omitempty" json:"by_database,omitempty"`
 }
-
-// GetMetricSeriesParamsMetric defines parameters for GetMetricSeries.
-type GetMetricSeriesParamsMetric string
-
-// GetMetricSeriesParamsStep defines parameters for GetMetricSeries.
-type GetMetricSeriesParamsStep string
 
 // ListPerformanceEventsParams defines parameters for ListPerformanceEvents.
 type ListPerformanceEventsParams struct {
@@ -1468,6 +1744,11 @@ type CreateSessionJSONBody struct {
 
 // DeleteSessionJSONBody defines parameters for DeleteSession.
 type DeleteSessionJSONBody = map[string]interface{}
+
+// ListTopSqlParams defines parameters for ListTopSql.
+type ListTopSqlParams struct {
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
 // ReportAgentMetricsJSONRequestBody defines body for ReportAgentMetrics for application/json ContentType.
 type ReportAgentMetricsJSONRequestBody = AgentReport
@@ -1587,7 +1868,7 @@ type ServerInterface interface {
 	GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 
 	// (GET /api/v1/alert-rule-templates)
-	ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request)
+	ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request, params ListAlertRuleTemplatesParams)
 
 	// (POST /api/v1/alert-rule-templates/{id}/alert-rules)
 	CreateAlertRuleFromTemplate(w http.ResponseWriter, r *http.Request, id string)
@@ -1641,10 +1922,13 @@ type ServerInterface interface {
 	GetSchedulerDiagnostics(w http.ResponseWriter, r *http.Request)
 
 	// (GET /api/v1/instances)
-	ListInstances(w http.ResponseWriter, r *http.Request)
+	ListInstances(w http.ResponseWriter, r *http.Request, params ListInstancesParams)
 
 	// (POST /api/v1/instances)
 	CreateInstance(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/instances/metrics/series)
+	GetInstancesMetricSeries(w http.ResponseWriter, r *http.Request, params GetInstancesMetricSeriesParams)
 
 	// (DELETE /api/v1/instances/{id})
 	DeleteInstance(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1727,6 +2011,9 @@ type ServerInterface interface {
 	// (GET /api/v1/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
 
+	// (GET /api/v1/metrics/catalog)
+	GetMetricCatalog(w http.ResponseWriter, r *http.Request)
+
 	// (GET /api/v1/notification-channels/failures)
 	GetChannelFailures(w http.ResponseWriter, r *http.Request)
 
@@ -1793,6 +2080,9 @@ type ServerInterface interface {
 	// (GET /api/v1/notification-policy-settings)
 	GetNotificationPolicySettings(w http.ResponseWriter, r *http.Request)
 
+	// (GET /api/v1/overview)
+	GetFleetOverview(w http.ResponseWriter, r *http.Request)
+
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
 
@@ -1801,6 +2091,9 @@ type ServerInterface interface {
 
 	// (GET /api/v1/platform-events)
 	ListPlatformEvents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /api/v1/top-sql)
+	ListTopSql(w http.ResponseWriter, r *http.Request, params ListTopSqlParams)
 
 	// (GET /api/v1/users)
 	ListUsers(w http.ResponseWriter, r *http.Request)
@@ -2040,8 +2333,21 @@ func (siw *ServerInterfaceWrapper) GetAlertTriggerSnapshot(w http.ResponseWriter
 // ListAlertRuleTemplates operation middleware
 func (siw *ServerInterfaceWrapper) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertRuleTemplatesParams
+
+	// ------------- Optional query parameter "engine" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "engine", r.URL.Query(), &params.Engine)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "engine", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAlertRuleTemplates(w, r)
+		siw.Handler.ListAlertRuleTemplates(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2424,8 +2730,77 @@ func (siw *ServerInterfaceWrapper) GetSchedulerDiagnostics(w http.ResponseWriter
 // ListInstances operation middleware
 func (siw *ServerInterfaceWrapper) ListInstances(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListInstancesParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "page_size" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page_size", r.URL.Query(), &params.PageSize)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "engine" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "engine", r.URL.Query(), &params.Engine)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "engine", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "flags" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "flags", r.URL.Query(), &params.Flags)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "flags", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "severity" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "severity", r.URL.Query(), &params.Severity)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "severity", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "sort", r.URL.Query(), &params.Sort)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListInstances(w, r)
+		siw.Handler.ListInstances(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2440,6 +2815,94 @@ func (siw *ServerInterfaceWrapper) CreateInstance(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateInstance(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetInstancesMetricSeries operation middleware
+func (siw *ServerInterfaceWrapper) GetInstancesMetricSeries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetInstancesMetricSeriesParams
+
+	// ------------- Required query parameter "instance_id" -------------
+
+	if paramValue := r.URL.Query().Get("instance_id"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "instance_id"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "instance_id", r.URL.Query(), &params.InstanceId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "instance_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "metric" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "metric", r.URL.Query(), &params.Metric)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "metric", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "slot" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "slot", r.URL.Query(), &params.Slot)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slot", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "from" -------------
+
+	if paramValue := r.URL.Query().Get("from"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "from"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "from", r.URL.Query(), &params.From)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "from", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "to" -------------
+
+	if paramValue := r.URL.Query().Get("to"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "to"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "to", r.URL.Query(), &params.To)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "to", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "step" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "step", r.URL.Query(), &params.Step)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "step", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetInstancesMetricSeries(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2960,6 +3423,14 @@ func (siw *ServerInterfaceWrapper) GetMetricSeries(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// ------------- Optional query parameter "by_database" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "by_database", r.URL.Query(), &params.ByDatabase)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "by_database", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMetricSeries(w, r, id, params)
 	}))
@@ -3255,6 +3726,20 @@ func (siw *ServerInterfaceWrapper) GetCurrentUser(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetMetricCatalog operation middleware
+func (siw *ServerInterfaceWrapper) GetMetricCatalog(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetMetricCatalog(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3671,6 +4156,20 @@ func (siw *ServerInterfaceWrapper) GetNotificationPolicySettings(w http.Response
 	handler.ServeHTTP(w, r)
 }
 
+// GetFleetOverview operation middleware
+func (siw *ServerInterfaceWrapper) GetFleetOverview(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFleetOverview(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ChangeOwnPassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
@@ -3715,6 +4214,33 @@ func (siw *ServerInterfaceWrapper) ListPlatformEvents(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListPlatformEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTopSql operation middleware
+func (siw *ServerInterfaceWrapper) ListTopSql(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTopSqlParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTopSql(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3975,6 +4501,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/diagnostics/scheduler", wrapper.GetSchedulerDiagnostics)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances", wrapper.ListInstances)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/instances", wrapper.CreateInstance)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/metrics/series", wrapper.GetInstancesMetricSeries)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/instances/{id}", wrapper.DeleteInstance)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/instances/{id}", wrapper.GetInstance)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/instances/{id}", wrapper.UpdateInstance)
@@ -4002,6 +4529,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/maintenance-windows/{id}", wrapper.UpdateMaintenanceWindow)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/maintenance-windows/{id}/end", wrapper.EndMaintenanceWindow)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/me", wrapper.GetCurrentUser)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/metrics/catalog", wrapper.GetMetricCatalog)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/failures", wrapper.GetChannelFailures)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.GetSMTPChannel)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-channels/smtp", wrapper.UpdateSMTPChannel)
@@ -4024,9 +4552,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.DeleteNotificationPolicy)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/notification-policies/{id}", wrapper.UpdateNotificationPolicy)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/notification-policy-settings", wrapper.GetNotificationPolicySettings)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/overview", wrapper.GetFleetOverview)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/v1/password", wrapper.ChangeOwnPassword)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/performance-events/{id}", wrapper.GetPerformanceEvent)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/platform-events", wrapper.ListPlatformEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/api/v1/top-sql", wrapper.ListTopSql)
 	m.HandleFunc("GET "+options.BaseURL+"/api/v1/users", wrapper.ListUsers)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users", wrapper.CreateUser)
 	m.HandleFunc("POST "+options.BaseURL+"/api/v1/users/{id}/password", wrapper.ResetUserPassword)
@@ -4292,6 +4822,7 @@ func (response GetAlertTriggerSnapshot404JSONResponse) VisitGetAlertTriggerSnaps
 }
 
 type ListAlertRuleTemplatesRequestObject struct {
+	Params ListAlertRuleTemplatesParams
 }
 
 type ListAlertRuleTemplatesResponseObject interface {
@@ -4718,13 +5249,14 @@ func (response GetSchedulerDiagnostics200JSONResponse) VisitGetSchedulerDiagnost
 }
 
 type ListInstancesRequestObject struct {
+	Params ListInstancesParams
 }
 
 type ListInstancesResponseObject interface {
 	VisitListInstancesResponse(w http.ResponseWriter) error
 }
 
-type ListInstances200JSONResponse []Instance
+type ListInstances200JSONResponse InstanceListPage
 
 func (response ListInstances200JSONResponse) VisitListInstancesResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -4753,6 +5285,32 @@ func (response CreateInstance201JSONResponse) VisitCreateInstanceResponse(w http
 type CreateInstance400JSONResponse Error
 
 func (response CreateInstance400JSONResponse) VisitCreateInstanceResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetInstancesMetricSeriesRequestObject struct {
+	Params GetInstancesMetricSeriesParams
+}
+
+type GetInstancesMetricSeriesResponseObject interface {
+	VisitGetInstancesMetricSeriesResponse(w http.ResponseWriter) error
+}
+
+type GetInstancesMetricSeries200JSONResponse InstancesMetricSeriesResponse
+
+func (response GetInstancesMetricSeries200JSONResponse) VisitGetInstancesMetricSeriesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetInstancesMetricSeries400JSONResponse Error
+
+func (response GetInstancesMetricSeries400JSONResponse) VisitGetInstancesMetricSeriesResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
 
@@ -5394,6 +5952,22 @@ func (response GetCurrentUser200JSONResponse) VisitGetCurrentUserResponse(w http
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetMetricCatalogRequestObject struct {
+}
+
+type GetMetricCatalogResponseObject interface {
+	VisitGetMetricCatalogResponse(w http.ResponseWriter) error
+}
+
+type GetMetricCatalog200JSONResponse MetricCatalog
+
+func (response GetMetricCatalog200JSONResponse) VisitGetMetricCatalogResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetChannelFailuresRequestObject struct {
 }
 
@@ -5950,6 +6524,22 @@ func (response GetNotificationPolicySettings200JSONResponse) VisitGetNotificatio
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetFleetOverviewRequestObject struct {
+}
+
+type GetFleetOverviewResponseObject interface {
+	VisitGetFleetOverviewResponse(w http.ResponseWriter) error
+}
+
+type GetFleetOverview200JSONResponse FleetOverview
+
+func (response GetFleetOverview200JSONResponse) VisitGetFleetOverviewResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ChangeOwnPasswordRequestObject struct {
 	Body *ChangeOwnPasswordJSONRequestBody
 }
@@ -6011,6 +6601,23 @@ type ListPlatformEventsResponseObject interface {
 type ListPlatformEvents200JSONResponse []PlatformEvent
 
 func (response ListPlatformEvents200JSONResponse) VisitListPlatformEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListTopSqlRequestObject struct {
+	Params ListTopSqlParams
+}
+
+type ListTopSqlResponseObject interface {
+	VisitListTopSqlResponse(w http.ResponseWriter) error
+}
+
+type ListTopSql200JSONResponse TopSqlList
+
+func (response ListTopSql200JSONResponse) VisitListTopSqlResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 
@@ -6262,6 +6869,9 @@ type StrictServerInterface interface {
 	// (POST /api/v1/instances)
 	CreateInstance(ctx context.Context, request CreateInstanceRequestObject) (CreateInstanceResponseObject, error)
 
+	// (GET /api/v1/instances/metrics/series)
+	GetInstancesMetricSeries(ctx context.Context, request GetInstancesMetricSeriesRequestObject) (GetInstancesMetricSeriesResponseObject, error)
+
 	// (DELETE /api/v1/instances/{id})
 	DeleteInstance(ctx context.Context, request DeleteInstanceRequestObject) (DeleteInstanceResponseObject, error)
 
@@ -6343,6 +6953,9 @@ type StrictServerInterface interface {
 	// (GET /api/v1/me)
 	GetCurrentUser(ctx context.Context, request GetCurrentUserRequestObject) (GetCurrentUserResponseObject, error)
 
+	// (GET /api/v1/metrics/catalog)
+	GetMetricCatalog(ctx context.Context, request GetMetricCatalogRequestObject) (GetMetricCatalogResponseObject, error)
+
 	// (GET /api/v1/notification-channels/failures)
 	GetChannelFailures(ctx context.Context, request GetChannelFailuresRequestObject) (GetChannelFailuresResponseObject, error)
 
@@ -6409,6 +7022,9 @@ type StrictServerInterface interface {
 	// (GET /api/v1/notification-policy-settings)
 	GetNotificationPolicySettings(ctx context.Context, request GetNotificationPolicySettingsRequestObject) (GetNotificationPolicySettingsResponseObject, error)
 
+	// (GET /api/v1/overview)
+	GetFleetOverview(ctx context.Context, request GetFleetOverviewRequestObject) (GetFleetOverviewResponseObject, error)
+
 	// (PUT /api/v1/password)
 	ChangeOwnPassword(ctx context.Context, request ChangeOwnPasswordRequestObject) (ChangeOwnPasswordResponseObject, error)
 
@@ -6417,6 +7033,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/v1/platform-events)
 	ListPlatformEvents(ctx context.Context, request ListPlatformEventsRequestObject) (ListPlatformEventsResponseObject, error)
+
+	// (GET /api/v1/top-sql)
+	ListTopSql(ctx context.Context, request ListTopSqlRequestObject) (ListTopSqlResponseObject, error)
 
 	// (GET /api/v1/users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -6684,8 +7303,10 @@ func (sh *strictHandler) GetAlertTriggerSnapshot(w http.ResponseWriter, r *http.
 }
 
 // ListAlertRuleTemplates operation middleware
-func (sh *strictHandler) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListAlertRuleTemplates(w http.ResponseWriter, r *http.Request, params ListAlertRuleTemplatesParams) {
 	var request ListAlertRuleTemplatesRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListAlertRuleTemplates(ctx, request.(ListAlertRuleTemplatesRequestObject))
@@ -7167,8 +7788,10 @@ func (sh *strictHandler) GetSchedulerDiagnostics(w http.ResponseWriter, r *http.
 }
 
 // ListInstances operation middleware
-func (sh *strictHandler) ListInstances(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListInstances(w http.ResponseWriter, r *http.Request, params ListInstancesParams) {
 	var request ListInstancesRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListInstances(ctx, request.(ListInstancesRequestObject))
@@ -7214,6 +7837,32 @@ func (sh *strictHandler) CreateInstance(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateInstanceResponseObject); ok {
 		if err := validResponse.VisitCreateInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetInstancesMetricSeries operation middleware
+func (sh *strictHandler) GetInstancesMetricSeries(w http.ResponseWriter, r *http.Request, params GetInstancesMetricSeriesParams) {
+	var request GetInstancesMetricSeriesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInstancesMetricSeries(ctx, request.(GetInstancesMetricSeriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInstancesMetricSeries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetInstancesMetricSeriesResponseObject); ok {
+		if err := validResponse.VisitGetInstancesMetricSeriesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -7973,6 +8622,30 @@ func (sh *strictHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// GetMetricCatalog operation middleware
+func (sh *strictHandler) GetMetricCatalog(w http.ResponseWriter, r *http.Request) {
+	var request GetMetricCatalogRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetMetricCatalog(ctx, request.(GetMetricCatalogRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetMetricCatalog")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetMetricCatalogResponseObject); ok {
+		if err := validResponse.VisitGetMetricCatalogResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetChannelFailures operation middleware
 func (sh *strictHandler) GetChannelFailures(w http.ResponseWriter, r *http.Request) {
 	var request GetChannelFailuresRequestObject
@@ -8589,6 +9262,30 @@ func (sh *strictHandler) GetNotificationPolicySettings(w http.ResponseWriter, r 
 	}
 }
 
+// GetFleetOverview operation middleware
+func (sh *strictHandler) GetFleetOverview(w http.ResponseWriter, r *http.Request) {
+	var request GetFleetOverviewRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFleetOverview(ctx, request.(GetFleetOverviewRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFleetOverview")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFleetOverviewResponseObject); ok {
+		if err := validResponse.VisitGetFleetOverviewResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // ChangeOwnPassword operation middleware
 func (sh *strictHandler) ChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	var request ChangeOwnPasswordRequestObject
@@ -8663,6 +9360,32 @@ func (sh *strictHandler) ListPlatformEvents(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ListPlatformEventsResponseObject); ok {
 		if err := validResponse.VisitListPlatformEventsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTopSql operation middleware
+func (sh *strictHandler) ListTopSql(w http.ResponseWriter, r *http.Request, params ListTopSqlParams) {
+	var request ListTopSqlRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTopSql(ctx, request.(ListTopSqlRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTopSql")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTopSqlResponseObject); ok {
+		if err := validResponse.VisitListTopSqlResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
